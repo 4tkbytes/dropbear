@@ -5,6 +5,6 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 description = "A game engine made by 4tkbytes. Thats really it..."
 repository = "https://github.com/4tkbytes/dropbear-engine"
-readme = "README.md"
+readme = "../README.md"
 
 [dependencies]
