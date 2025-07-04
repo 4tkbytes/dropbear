@@ -8,3 +8,10 @@ repository = "https://github.com/4tkbytes/dropbear-engine"
 readme = "../README.md"
 
 [dependencies]
+anyhow = "1.0.98"
+winit = { version = "0.30", features = ["android-native-activity"] }
+env_logger = "0.11"
+log = "0.4"
+wgpu = "25"
+pollster = "0.4"
+
