@@ -1,6 +1,9 @@
+pub mod graphics;
 pub mod input;
 pub mod scene;
 
+use log::warn;
+use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
 pub use wgpu;
 pub use log;
@@ -9,23 +12,107 @@ use std::sync::Arc;
 
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::Window};
 
+use crate::graphics::Graphics;
+
 pub struct State {
+    surface: Surface<'static>,
+    device: Device,
+    queue: Queue,
+    config: SurfaceConfiguration,
+    is_surface_configured: bool,
     window: Arc<Window>,
 }
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+        let size = window.inner_size();
+
+        // create backend
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            ..Default::default()
+        });
+
+        let surface = instance.create_surface(window.clone()).unwrap();
+
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await?;
+
+        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: Default::default(),
+            trace: wgpu::Trace::Off
+        })
+        .await?;
+
+        let surface_caps = surface.get_capabilities(&adapter);
+
+        let surface_format = surface_caps.formats.iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(surface_caps.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
         Ok(Self {
+            surface,
+            device,
+            queue,
+            config,
+            is_surface_configured: false,
             window,
         })
     }
 
-    pub fn resize(&mut self, width: f32, height: f32) {
-        
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.config.width = width;
+            self.config.height = height;
+            self.surface.configure(&self.device, &self.config);
+            self.is_surface_configured = true;
+        }
     }
 
-    pub fn render(&mut self) {
+    fn update(&mut self) {
+
+    }
+
+    fn render(&mut self) -> anyhow::Result<()> {
         self.window.request_redraw();
+
+        if !self.is_surface_configured {
+            return Ok(())
+        }
+
+        let output = self.surface.get_current_texture()?;
+
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+        let graphics = Graphics::new(self, &view, &encoder)
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 }
 
@@ -100,7 +187,7 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => state.resize(size.width as f32, size.height as f32),
+            WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.scene_manager.update(0.016); // todo: get update to be calculated properly
                 self.scene_manager.render();
@@ -132,7 +219,7 @@ impl ApplicationHandler for App {
 }
 
 pub struct WindowConfiguration {
-    pub width: f32,
-    pub height: f32,
+    pub width: u32,
+    pub height: u32,
     pub title: &'static str,
 }

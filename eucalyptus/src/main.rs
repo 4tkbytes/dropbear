@@ -3,8 +3,8 @@ use dropbear_engine::{input, WindowConfiguration};
 
 fn main() {
     let config = WindowConfiguration {
-        width: 1280.0,
-        height: 720.0,
+        width: 1280 as u32,
+        height: 720 as u32,
         title: "Eucalyptus, built with dropbear"
     };
 
