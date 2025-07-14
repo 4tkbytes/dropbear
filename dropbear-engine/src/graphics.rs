@@ -20,7 +20,7 @@ impl<'a> Graphics<'a> {
         }
     }
 
-    pub fn start_rendering(&mut self, shader: &Shader, textures: Vec<&Texture>) -> RenderPipeline {
+    pub fn create_render_pipline(&mut self, shader: &Shader, textures: Vec<&Texture>) -> RenderPipeline {
         let mut layouts = Vec::new();
         for texture in textures {
             layouts.push(&texture.layout);
@@ -219,8 +219,6 @@ impl Texture {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    // This should match the filterable field of the
-                    // corresponding Texture entry above.
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },

@@ -27,15 +27,15 @@ impl TestingScene1 {
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.5,  0.5, 0.0], tex_coords: [0.0, 0.0] }, // Top-left
-    Vertex { position: [ 0.5,  0.5, 0.0], tex_coords: [1.0, 0.0] }, // Top-right
-    Vertex { position: [ 0.5, -0.5, 0.0], tex_coords: [1.0, 1.0] }, // Bottom-right
-    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 1.0] }, // Bottom-left
+    Vertex { position: [-0.5,  0.5, 0.0], tex_coords: [0.0, 1.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [ 0.5, -0.5, 0.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [ 0.5,  0.5, 0.0], tex_coords: [1.0, 1.0] },
 ];
 
 const INDICES: &[u16] = &[
-    0, 1, 2, // First triangle (top-left, top-right, bottom-right)
-    0, 2, 3, // Second triangle (top-left, bottom-right, bottom-left)
+    0, 1, 2,
+    2, 3, 0,
 ];
 
 impl Scene for TestingScene1 {
@@ -50,7 +50,7 @@ impl Scene for TestingScene1 {
         self.index_buffer = Some(graphics.create_index(INDICES));
         let texture = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
         
-        let pipeline = graphics.start_rendering(&shader, vec![&texture]);
+        let pipeline = graphics.create_render_pipline(&shader, vec![&texture]);
         self.render_pipeline = Some(pipeline);
         self.texture = Some(texture);
     }
