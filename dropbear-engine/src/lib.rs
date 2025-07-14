@@ -22,7 +22,7 @@ use winit::{
 use crate::graphics::Graphics;
 use crate::scene::SceneImpl;
 
-pub struct State{
+pub struct State {
     surface: Surface<'static>,
     device: Device,
     queue: Queue,
@@ -109,10 +109,14 @@ impl State {
         }
 
         let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
         scene_manager.render(&mut graphics);

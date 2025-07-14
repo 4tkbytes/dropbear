@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::graphics::Graphics;
+use std::collections::HashMap;
 
 pub trait Scene {
     fn load(&mut self);
@@ -75,13 +75,13 @@ impl Manager {
     pub fn has_scene(&self) -> bool {
         self.current_scene.is_some()
     }
-    
+
     pub fn get_current_scene(&self) -> Option<(&String, &SceneImpl)> {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get(scene_name) {
-                return Some((scene_name, scene))
+                return Some((scene_name, scene));
             }
-            return None
+            return None;
         }
         None
     }

@@ -1,3 +1,4 @@
+use dropbear_engine::graphics::Graphics;
 use dropbear_engine::{
     input::{Keyboard, Mouse},
     log::{self, debug},
@@ -8,7 +9,6 @@ use dropbear_engine::{
         keyboard::KeyCode,
     },
 };
-use dropbear_engine::graphics::Graphics;
 
 pub struct TestingScene1;
 
