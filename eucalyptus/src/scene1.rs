@@ -8,6 +8,7 @@ use dropbear_engine::{
         keyboard::KeyCode,
     },
 };
+use dropbear_engine::wgpu::Color;
 
 pub struct TestingScene1;
 
@@ -27,7 +28,12 @@ impl Scene for TestingScene1 {
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
-        graphics.clear_colour();
+        graphics.clear_colour(Color {
+            r: 0.1,
+            g: 0.2,
+            b: 0.3,
+            a: 1.0,
+        });
     }
 
     fn exit(&mut self) {
