@@ -2,19 +2,27 @@ pub mod graphics;
 pub mod input;
 pub mod scene;
 
+pub use log;
 use log::warn;
+pub use wgpu;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
-pub use wgpu;
-pub use log;
 
 use std::sync::Arc;
-
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::Window};
+use std::thread::current;
+use winit::{
+    application::ApplicationHandler,
+    dpi::PhysicalSize,
+    event::{KeyEvent, WindowEvent},
+    event_loop::{ActiveEventLoop, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
+    window::Window,
+};
 
 use crate::graphics::Graphics;
+use crate::scene::SceneImpl;
 
-pub struct State {
+pub struct State{
     surface: Surface<'static>,
     device: Device,
     queue: Queue,
@@ -43,18 +51,21 @@ impl State {
             })
             .await?;
 
-        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
-            memory_hints: Default::default(),
-            trace: wgpu::Trace::Off
-        })
-        .await?;
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: Default::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
 
-        let surface_format = surface_caps.formats.iter()
+        let surface_format = surface_caps
+            .formats
+            .iter()
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
@@ -88,26 +99,23 @@ impl State {
         }
     }
 
-    fn update(&mut self) {
+    fn update(&mut self) {}
 
-    }
-
-    fn render(&mut self) -> anyhow::Result<()> {
+    fn render(&mut self, scene_manager: &mut scene::Manager) -> anyhow::Result<()> {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
-            return Ok(())
+            return Ok(());
         }
 
         let output = self.surface.get_current_texture()?;
-
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
 
-        let graphics = Graphics::new(self, &view, &encoder)
+        let mut graphics = Graphics::new(self, &view, &mut encoder);
+        scene_manager.render(&mut graphics);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -120,12 +128,11 @@ pub struct App {
     config: WindowConfiguration,
     state: Option<State>,
     scene_manager: scene::Manager,
-    input_manager: input::Manager
+    input_manager: input::Manager,
 }
 
 impl App {
-    pub fn new(config: WindowConfiguration
-    ) -> Self {
+    pub fn new(config: WindowConfiguration) -> Self {
         Self {
             state: None,
             config,
@@ -135,7 +142,9 @@ impl App {
     }
 
     pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
-    where F: FnOnce(&mut scene::Manager, &mut input::Manager) {
+    where
+        F: FnOnce(&mut scene::Manager, &mut input::Manager),
+    {
         if cfg!(debug_assertions) {
             // let package_name = std::env::var("CARGO_BIN_NAME").unwrap();
             let log_config = format!("dropbear_engine=debug,{}=debug,warn", app_name);
@@ -146,7 +155,7 @@ impl App {
 
         let event_loop = EventLoop::with_user_event().build()?;
         let mut app = App::new(config);
-        
+
         setup(&mut app.scene_manager, &mut app.input_manager);
 
         event_loop.run_app(&mut app)?;
@@ -190,11 +199,11 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.scene_manager.update(0.016); // todo: get update to be calculated properly
-                self.scene_manager.render();
+                // self.scene_manager.render();
 
                 self.input_manager.update();
 
-                state.render();
+                state.render(&mut self.scene_manager).unwrap();
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -205,14 +214,20 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                self.input_manager.handle_key_input(code, key_state.is_pressed(), event_loop);
-            },
-            WindowEvent::MouseInput { button, state: button_state, .. } => {
-                self.input_manager.handle_mouse_input(button, button_state.is_pressed());
-            },
+                self.input_manager
+                    .handle_key_input(code, key_state.is_pressed(), event_loop);
+            }
+            WindowEvent::MouseInput {
+                button,
+                state: button_state,
+                ..
+            } => {
+                self.input_manager
+                    .handle_mouse_input(button, button_state.is_pressed());
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input_manager.handle_mouse_movement(position);
-            },
+            }
             _ => {}
         }
     }

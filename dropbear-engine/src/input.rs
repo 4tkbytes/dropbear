@@ -1,5 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use winit::{dpi::{PhysicalPosition, Position}, event::{self, MouseButton}, event_loop::{self, ActiveEventLoop, EventLoop}, keyboard::KeyCode};
+use winit::{
+    dpi::{PhysicalPosition, Position},
+    event::{self, MouseButton},
+    event_loop::{self, ActiveEventLoop, EventLoop},
+    keyboard::KeyCode,
+};
 
 use crate::State;
 
@@ -18,12 +23,12 @@ pub struct Manager {
     pressed_keys: HashSet<KeyCode>,
     just_pressed_keys: HashSet<KeyCode>,
     just_released_keys: HashSet<KeyCode>,
-    
+
     pressed_mouse_buttons: HashSet<MouseButton>,
     just_pressed_mouse_buttons: HashSet<MouseButton>,
     just_released_mouse_buttons: HashSet<MouseButton>,
     mouse_position: PhysicalPosition<f64>,
-    
+
     input_handlers: HashMap<String, Box<dyn Keyboard>>,
     mouse_handlers: HashMap<String, Box<dyn Mouse>>,
 }
