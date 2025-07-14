@@ -1,5 +1,5 @@
 use dropbear_engine::buffer::Vertex;
-use dropbear_engine::graphics::Graphics;
+use dropbear_engine::graphics::{Graphics, Texture, Shader};
 use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
 use dropbear_engine::{
     input::{Keyboard, Mouse},
@@ -12,6 +12,7 @@ pub struct TestingScene1 {
     render_pipeline: Option<RenderPipeline>,
     vertex_buffer: Option<Buffer>,
     index_buffer: Option<Buffer>,
+    texture: Option<Texture>,
 }
 
 impl TestingScene1 {
@@ -20,46 +21,38 @@ impl TestingScene1 {
             render_pipeline: None,
             vertex_buffer: None,
             index_buffer: None,
+            texture: None,
         }
     }
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // A
-    Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // B
-    Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // C
-    Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // E
+    Vertex { position: [-0.5,  0.5, 0.0], tex_coords: [0.0, 0.0] }, // Top-left
+    Vertex { position: [ 0.5,  0.5, 0.0], tex_coords: [1.0, 0.0] }, // Top-right
+    Vertex { position: [ 0.5, -0.5, 0.0], tex_coords: [1.0, 1.0] }, // Bottom-right
+    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 1.0] }, // Bottom-left
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+const INDICES: &[u16] = &[
+    0, 1, 2, // First triangle (top-left, top-right, bottom-right)
+    0, 2, 3, // Second triangle (top-left, bottom-right, bottom-left)
+];
 
 impl Scene for TestingScene1 {
     fn load(&mut self, graphics: &mut Graphics) {
-        let shader = graphics.new_shader(
+        let shader = Shader::new(
+            graphics,
             include_str!("../../dropbear-engine/src/resources/shaders/shader.wgsl"),
             Some("default"),
         );
-        let pipeline = graphics.start_rendering(&shader);
-        self.render_pipeline = Some(pipeline);
 
         self.vertex_buffer = Some(graphics.create_vertex(VERTICES));
         self.index_buffer = Some(graphics.create_index(INDICES));
+        let texture = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
+        
+        let pipeline = graphics.start_rendering(&shader, vec![&texture]);
+        self.render_pipeline = Some(pipeline);
+        self.texture = Some(texture);
     }
 
     fn update(&mut self, _dt: f32) {
@@ -77,6 +70,7 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &self.texture.as_ref().unwrap().diffuse, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(
                 self.index_buffer.as_ref().unwrap().slice(..),

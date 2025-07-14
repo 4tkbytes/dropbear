@@ -26,12 +26,12 @@ use winit::{
 use crate::graphics::Graphics;
 
 pub struct State {
-    surface: Surface<'static>,
-    device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
-    is_surface_configured: bool,
-    window: Arc<Window>,
+    pub surface: Surface<'static>,
+    pub device: Device,
+    pub queue: Queue,
+    pub config: SurfaceConfiguration,
+    pub is_surface_configured: bool,
+    pub window: Arc<Window>,
 }
 
 impl State {
