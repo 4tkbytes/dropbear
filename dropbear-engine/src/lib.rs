@@ -9,7 +9,7 @@ use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
 pub use bytemuck;
 
-use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::{sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -18,6 +18,7 @@ use winit::{
     keyboard::PhysicalKey,
     window::Window,
 };
+use spin_sleep::SpinSleeper;
 
 use crate::graphics::Graphics;
 
@@ -101,8 +102,6 @@ impl State {
     }
 
     fn render(&mut self, scene_manager: &mut scene::Manager, previous_dt: f32) -> anyhow::Result<()> {
-        self.window.request_redraw();
-
         if !self.is_surface_configured {
             return Ok(());
         }
@@ -142,6 +141,8 @@ pub struct App {
     scene_manager: scene::Manager,
     input_manager: input::Manager,
     delta_time: f32,
+    next_frame_time: Option<Instant>,
+    target_fps: u32,
 }
 
 impl App {
@@ -151,8 +152,14 @@ impl App {
             config,
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
-            delta_time: 0.0
+            delta_time: (1.0/60.0),
+            next_frame_time: None,
+            target_fps: 60,
         }
+    }
+
+    pub fn set_target_fps(&mut self, fps: u32) {
+        self.target_fps = fps.max(1);
     }
 
     pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
@@ -195,6 +202,8 @@ impl ApplicationHandler for App {
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
+
+        self.next_frame_time = Some(Instant::now());
     }
 
     fn window_event(
@@ -212,19 +221,28 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
-                let prev = get_current_time_as_ns();
+                let frame_start = Instant::now();
+
                 self.input_manager.update();
                 state.render(&mut self.scene_manager, self.delta_time).unwrap();
-                let now = get_current_time_as_ns();
-                self.delta_time = (now - prev) as f32 / 1_000_000_000.0;
-                let fps = if self.delta_time > 0.0 {
-                    (1.0 / self.delta_time).round() as u32
-                } else {
-                    0
-                };
-                let new_title = format!("{} | FPS: {}", self.config.title, fps);
-                state.window.set_title(&new_title);
-                // todo: cap rendering to 60 fps (figure it out)
+
+                let frame_elapsed = frame_start.elapsed();
+                let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);
+
+                if frame_elapsed < target_frame_time {
+                    SpinSleeper::default().sleep(target_frame_time - frame_elapsed);
+                }
+
+                let total_frame_time = frame_start.elapsed();
+                self.delta_time = total_frame_time.as_secs_f32();
+
+                if self.delta_time > 0.0 {
+                    let fps = (1.0 / self.delta_time).round() as u32;
+                    let new_title = format!("{} | FPS: {}", self.config.title, fps);
+                    state.window.set_title(&new_title);
+                }
+
+                state.window.request_redraw();
             }
             WindowEvent::KeyboardInput {
                 event:

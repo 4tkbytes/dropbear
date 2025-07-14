@@ -1,5 +1,6 @@
 use dropbear_engine::buffer::Vertex;
 use dropbear_engine::graphics::Graphics;
+use dropbear_engine::log;
 use dropbear_engine::{
     input::{Keyboard, Mouse},
     log::debug,
@@ -31,6 +32,10 @@ const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
 ];
 
+// const INDICES: &[u16] = &[
+
+// ]
+
 impl Scene for TestingScene1 {
     fn load(&mut self, graphics: &mut Graphics) {
         let shader = graphics.new_shader(
@@ -43,8 +48,8 @@ impl Scene for TestingScene1 {
         self.vertex_buffer = Some(graphics.create_buffer(VERTICES));
     }
 
-    fn update(&mut self, _dt: f32) {
-        // Scene update logic here
+    fn update(&mut self, dt: f32) {
+        log::info!("FPS: {}", 1.0 / dt)
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
