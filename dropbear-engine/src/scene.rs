@@ -2,7 +2,7 @@ use crate::graphics::Graphics;
 use std::collections::HashMap;
 
 pub trait Scene {
-    fn load(&mut self);
+    fn load(&mut self, graphics: &mut Graphics);
     fn update(&mut self, dt: f32);
     fn render(&mut self, graphics: &mut Graphics);
     fn exit(&mut self);
@@ -42,7 +42,7 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, graphics: &mut Graphics) {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene {
@@ -51,7 +51,7 @@ impl Manager {
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                scene.load();
+                scene.load(graphics);
             }
             self.current_scene = Some(next_scene_name);
         }

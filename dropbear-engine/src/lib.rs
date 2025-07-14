@@ -77,14 +77,16 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        Ok(Self {
+        let result = Self {
             surface,
             device,
             queue,
             config,
             is_surface_configured: false,
             window,
-        })
+        };
+
+        Ok(result)
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -116,6 +118,8 @@ impl State {
             });
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
+
+        scene_manager.update(0.016, &mut graphics);
         scene_manager.render(&mut graphics);
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -199,11 +203,7 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
-                self.scene_manager.update(0.016); // todo: get update to be calculated properly
-                // self.scene_manager.render();
-
                 self.input_manager.update();
-
                 state.render(&mut self.scene_manager).unwrap();
             }
             WindowEvent::KeyboardInput {
