@@ -22,7 +22,7 @@ impl Scene for TestingScene1 {
         debug!("TestingScene1 loaded!");
     }
 
-    fn update(&mut self, dt: f32) {
+    fn update(&mut self, _dt: f32) {
         // Scene update logic here
     }
 
@@ -44,7 +44,7 @@ impl Keyboard for TestingScene1 {
         }
     }
 
-    fn key_up(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
+    fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         debug!("Key released: {:?}", key);
     }
 }

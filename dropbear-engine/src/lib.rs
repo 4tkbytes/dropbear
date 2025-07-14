@@ -96,7 +96,7 @@ impl State {
         }
     }
 
-    fn update(&mut self) {}
+    // fn update(&mut self) {}
 
     fn render(&mut self, scene_manager: &mut scene::Manager) -> anyhow::Result<()> {
         self.window.request_redraw();
