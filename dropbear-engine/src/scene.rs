@@ -1,5 +1,5 @@
 use crate::graphics::Graphics;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub trait Scene {
     fn load(&mut self, graphics: &mut Graphics);
@@ -8,12 +8,12 @@ pub trait Scene {
     fn exit(&mut self);
 }
 
-pub type SceneImpl = Box<dyn Scene>;
+pub type SceneImpl = Rc<RefCell<dyn Scene>>;
 
 pub struct Manager {
     current_scene: Option<String>,
     next_scene: Option<String>,
-    scenes: HashMap<String, Box<dyn Scene>>,
+    scenes: HashMap<String, SceneImpl>,
     scene_input_map: HashMap<String, String>,
 }
 
@@ -33,7 +33,7 @@ impl Manager {
         }
     }
 
-    pub fn add(&mut self, name: &str, scene: Box<dyn Scene>) {
+    pub fn add(&mut self, name: &str, scene: Rc<RefCell<dyn Scene>>) {
         self.scenes.insert(name.to_string(), scene);
     }
 
@@ -47,11 +47,11 @@ impl Manager {
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene {
                 if let Some(scene) = self.scenes.get_mut(current_scene_name) {
-                    scene.exit();
+                    scene.borrow_mut().exit();
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                scene.load(graphics);
+                scene.borrow_mut().load(graphics);
             }
             self.current_scene = Some(next_scene_name);
         }
@@ -59,7 +59,7 @@ impl Manager {
         // update scene
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.update(dt);
+                scene.borrow_mut().update(dt);
             }
         }
     }
@@ -67,7 +67,7 @@ impl Manager {
     pub fn render(&mut self, graphics: &mut Graphics) {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.render(graphics);
+                scene.borrow_mut().render(graphics);
             }
         }
     }

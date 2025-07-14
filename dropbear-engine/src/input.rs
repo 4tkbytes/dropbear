@@ -1,7 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
+
+pub type KeyboardImpl = Rc<RefCell<dyn Keyboard>>;
+pub type MouseImpl = Rc<RefCell<dyn Mouse>>;
 
 pub trait Keyboard {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop);
@@ -24,8 +27,8 @@ pub struct Manager {
     just_released_mouse_buttons: HashSet<MouseButton>,
     mouse_position: PhysicalPosition<f64>,
 
-    input_handlers: HashMap<String, Box<dyn Keyboard>>,
-    mouse_handlers: HashMap<String, Box<dyn Mouse>>,
+    input_handlers: HashMap<String, KeyboardImpl>,
+    mouse_handlers: HashMap<String, MouseImpl>,
 }
 
 impl Manager {
@@ -43,11 +46,11 @@ impl Manager {
         }
     }
 
-    pub fn add_keyboard(&mut self, name: &str, handler: Box<dyn Keyboard>) {
+    pub fn add_keyboard(&mut self, name: &str, handler: KeyboardImpl) {
         self.input_handlers.insert(name.to_string(), handler);
     }
 
-    pub fn add_mouse(&mut self, name: &str, handler: Box<dyn Mouse>) {
+    pub fn add_mouse(&mut self, name: &str, handler: MouseImpl) {
         self.mouse_handlers.insert(name.to_string(), handler);
     }
 
@@ -57,7 +60,7 @@ impl Manager {
                 self.just_pressed_keys.insert(key);
                 // Notify all input handlers of key down
                 for handler in self.input_handlers.values_mut() {
-                    handler.key_down(key, event_loop);
+                    handler.borrow_mut().key_down(key, event_loop);
                 }
             }
             self.pressed_keys.insert(key);
@@ -66,7 +69,7 @@ impl Manager {
                 self.just_released_keys.insert(key);
                 // Notify all input handlers of key up
                 for handler in self.input_handlers.values_mut() {
-                    handler.key_up(key, event_loop);
+                    handler.borrow_mut().key_up(key, event_loop);
                 }
             }
             self.pressed_keys.remove(&key);
@@ -79,7 +82,7 @@ impl Manager {
                 self.just_pressed_mouse_buttons.insert(button);
                 // Notify all mouse handlers of button down
                 for handler in self.mouse_handlers.values_mut() {
-                    handler.mouse_down(button);
+                    handler.borrow_mut().mouse_down(button);
                 }
             }
             self.pressed_mouse_buttons.insert(button);
@@ -88,7 +91,7 @@ impl Manager {
                 self.just_released_mouse_buttons.insert(button);
                 // Notify all mouse handlers of button up
                 for handler in self.mouse_handlers.values_mut() {
-                    handler.mouse_up(button);
+                    handler.borrow_mut().mouse_up(button);
                 }
             }
             self.pressed_mouse_buttons.remove(&button);
@@ -99,7 +102,7 @@ impl Manager {
         self.mouse_position = position;
         // Notify all mouse handlers of movement
         for handler in self.mouse_handlers.values_mut() {
-            handler.mouse_move(position);
+            handler.borrow_mut().mouse_move(position);
         }
     }
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use dropbear_engine::buffer::Vertex;
 use dropbear_engine::graphics::{Graphics, Texture, Shader};
 use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
@@ -12,16 +14,20 @@ pub struct TestingScene1 {
     render_pipeline: Option<RenderPipeline>,
     vertex_buffer: Option<Buffer>,
     index_buffer: Option<Buffer>,
-    texture: Option<Texture>,
+    texture: HashMap<String, Texture>,
+
+    texture_toggle: bool,
 }
 
 impl TestingScene1 {
     pub fn new() -> Self {
+        debug!("TestingScene1 instance created");
         Self {
             render_pipeline: None,
             vertex_buffer: None,
             index_buffer: None,
-            texture: None,
+            texture: HashMap::new(),
+            texture_toggle: false,
         }
     }
 }
@@ -48,16 +54,21 @@ impl Scene for TestingScene1 {
 
         self.vertex_buffer = Some(graphics.create_vertex(VERTICES));
         self.index_buffer = Some(graphics.create_index(INDICES));
-        let texture = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
+        let texture1 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
+        let texture2 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/Autism.png"));
         
-        let pipeline = graphics.create_render_pipline(&shader, vec![&texture]);
+        // using one of them for now
+        let pipeline = graphics.create_render_pipline(&shader, vec![&texture1]);
+        
+
+        self.texture.insert("texture1".into(), texture1);
+        self.texture.insert("texture2".into(), texture2);
+
+        // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
-        self.texture = Some(texture);
     }
 
-    fn update(&mut self, _dt: f32) {
-        // log::info!("FPS: {}", 1.0 / dt)
-    }
+    fn update(&mut self, _dt: f32) {}
 
     fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
@@ -70,7 +81,14 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-            render_pass.set_bind_group(0, &self.texture.as_ref().unwrap().diffuse, &[]);
+            debug!("texture_toggle: {}", self.texture_toggle);
+            if self.texture_toggle {
+                debug!("Binding texture1");
+                render_pass.set_bind_group(0, &self.texture.get("texture1").as_ref().unwrap().bind_group, &[]);
+            } else {
+                debug!("Binding texture2");
+                render_pass.set_bind_group(0, &self.texture.get("texture2").as_ref().unwrap().bind_group, &[]);
+            }
             render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(
                 self.index_buffer.as_ref().unwrap().slice(..),
@@ -87,15 +105,19 @@ impl Scene for TestingScene1 {
 
 impl Keyboard for TestingScene1 {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
-        debug!("Key pressed: {:?}", key);
+        // debug!("Key pressed: {:?}", key);
         match key {
             KeyCode::Escape => event_loop.exit(),
+            KeyCode::Space => {
+                self.texture_toggle = !self.texture_toggle;
+                debug!("New: {}", self.texture_toggle);
+            }
             _ => {}
         }
     }
 
-    fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
-        debug!("Key released: {:?}", key);
+    fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {
+        // debug!("Key released: {:?}", key);
     }
 }
 

@@ -148,7 +148,7 @@ impl Shader {
 }
 
 pub struct Texture {
-    pub diffuse: wgpu::BindGroup,
+    pub bind_group: wgpu::BindGroup,
     pub layout: wgpu::BindGroupLayout,
 }
 
@@ -239,12 +239,12 @@ impl Texture {
                         resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
                     }
                 ],
-                label: Some("diffuse_bind_group"),
+                label: Some("texture_bind_group"),
             }
         );
         
         Self {
-            diffuse: diffuse_bind_group,
+            bind_group: diffuse_bind_group,
             layout: texture_bind_group_layout,
         }
     }
