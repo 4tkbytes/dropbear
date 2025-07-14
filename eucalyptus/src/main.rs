@@ -1,5 +1,5 @@
 mod scene1;
-use dropbear_engine::{WindowConfiguration, input};
+use dropbear_engine::WindowConfiguration;
 
 fn main() {
     let config = WindowConfiguration {

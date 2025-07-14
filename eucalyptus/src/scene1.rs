@@ -1,11 +1,10 @@
 use dropbear_engine::graphics::Graphics;
 use dropbear_engine::{
     input::{Keyboard, Mouse},
-    log::{self, debug},
+    log::debug,
     scene::Scene,
     winit::{
-        event,
-        event_loop::{self, ActiveEventLoop},
+        event_loop::ActiveEventLoop,
         keyboard::KeyCode,
     },
 };
