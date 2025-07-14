@@ -58,7 +58,8 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
+            render_pass.draw(0..VERTICES.len() as u32, 0..1);
         }
     }
 

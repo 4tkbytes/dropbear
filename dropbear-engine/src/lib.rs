@@ -7,6 +7,7 @@ pub use log;
 pub use wgpu;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
+pub use bytemuck;
 
 use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use winit::{
