@@ -3,13 +3,17 @@ pub mod graphics;
 pub mod input;
 pub mod scene;
 
+pub use bytemuck;
 pub use log;
 pub use wgpu;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
-pub use bytemuck;
 
-use std::{sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
+use spin_sleep::SpinSleeper;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -18,7 +22,6 @@ use winit::{
     keyboard::PhysicalKey,
     window::Window,
 };
-use spin_sleep::SpinSleeper;
 
 use crate::graphics::Graphics;
 
@@ -101,7 +104,11 @@ impl State {
         }
     }
 
-    fn render(&mut self, scene_manager: &mut scene::Manager, previous_dt: f32) -> anyhow::Result<()> {
+    fn render(
+        &mut self,
+        scene_manager: &mut scene::Manager,
+        previous_dt: f32,
+    ) -> anyhow::Result<()> {
         if !self.is_surface_configured {
             return Ok(());
         }
@@ -152,7 +159,7 @@ impl App {
             config,
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
-            delta_time: (1.0/60.0),
+            delta_time: (1.0 / 60.0),
             next_frame_time: None,
             target_fps: 60,
         }
@@ -224,7 +231,9 @@ impl ApplicationHandler for App {
                 let frame_start = Instant::now();
 
                 self.input_manager.update();
-                state.render(&mut self.scene_manager, self.delta_time).unwrap();
+                state
+                    .render(&mut self.scene_manager, self.delta_time)
+                    .unwrap();
 
                 let frame_elapsed = frame_start.elapsed();
                 let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);
