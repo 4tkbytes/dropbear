@@ -3,24 +3,21 @@ pub mod input;
 pub mod scene;
 
 pub use log;
-use log::warn;
 pub use wgpu;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
 
 use std::sync::Arc;
-use std::thread::current;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::PhysicalKey,
     window::Window,
 };
 
 use crate::graphics::Graphics;
-use crate::scene::SceneImpl;
 
 pub struct State {
     surface: Surface<'static>,

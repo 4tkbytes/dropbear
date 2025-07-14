@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use winit::{
-    dpi::{PhysicalPosition, Position},
-    event::{self, MouseButton},
-    event_loop::{self, ActiveEventLoop, EventLoop},
+    dpi::PhysicalPosition,
+    event::MouseButton,
+    event_loop::ActiveEventLoop,
     keyboard::KeyCode,
 };
 
-use crate::State;
 
 pub trait Keyboard {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop);
