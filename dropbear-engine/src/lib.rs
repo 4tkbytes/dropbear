@@ -1,3 +1,4 @@
+pub mod camera;
 pub mod buffer;
 pub mod graphics;
 pub mod input;
@@ -6,9 +7,10 @@ pub mod scene;
 pub use bytemuck;
 pub use log;
 pub use wgpu;
-use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
+pub use nalgebra;
 
+use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use spin_sleep::SpinSleeper;
 use std::{
     sync::Arc,

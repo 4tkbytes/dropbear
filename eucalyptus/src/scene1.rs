@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use dropbear_engine::buffer::Vertex;
+use dropbear_engine::camera::{Camera, CameraUniform};
 use dropbear_engine::graphics::{Graphics, Texture, Shader};
+use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
 use dropbear_engine::{
     input::{Keyboard, Mouse},
@@ -15,8 +17,8 @@ pub struct TestingScene1 {
     vertex_buffer: Option<Buffer>,
     index_buffer: Option<Buffer>,
     texture: HashMap<String, Texture>,
-
     texture_toggle: bool,
+    camera: Camera,
 }
 
 impl TestingScene1 {
@@ -28,6 +30,7 @@ impl TestingScene1 {
             index_buffer: None,
             texture: HashMap::new(),
             texture_toggle: false,
+            camera: Camera::default(),
         }
     }
 }
@@ -54,15 +57,29 @@ impl Scene for TestingScene1 {
 
         self.vertex_buffer = Some(graphics.create_vertex(VERTICES));
         self.index_buffer = Some(graphics.create_index(INDICES));
+
         let texture1 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
         let texture2 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/Autism.png"));
         
-        // using one of them for now
+        // using one of them for now since they are the same
         let pipeline = graphics.create_render_pipline(&shader, vec![&texture1]);
-        
-
         self.texture.insert("texture1".into(), texture1);
         self.texture.insert("texture2".into(), texture2);
+
+        self.camera = Camera {
+            eye: Point3::new(0.0, 1.0, 2.0),
+            target: Point3::new(0.0, 0.0, 0.0),
+            up: Vector3::y(),
+            aspect: (graphics.state.config.width / graphics.state.config.height) as f32,
+            fovy: 45.0,
+            znear: 0.1,
+            zfar: 100.0,
+        };
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&self.camera);
+
+        let camera_buffer = graphics.create_uniform(camera_uniform, Some("Camera Uniform"));
 
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
@@ -122,15 +139,15 @@ impl Keyboard for TestingScene1 {
 }
 
 impl Mouse for TestingScene1 {
-    fn mouse_down(&mut self, button: dropbear_engine::winit::event::MouseButton) {
+    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
         // debug!("Mouse button pressed: {:?}", button)
     }
 
-    fn mouse_up(&mut self, button: dropbear_engine::winit::event::MouseButton) {
+    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
         // debug!("Mouse button released: {:?}", button);
     }
 
-    fn mouse_move(&mut self, position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {
+    fn mouse_move(&mut self, _position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {
         // debug!("Mouse position: {}, {}", position.x, position.y)
     }
 }

@@ -1,9 +1,9 @@
 use image::GenericImageView;
 use wgpu::{
-    util::DeviceExt, Buffer, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor
+    util::{BufferInitDescriptor, DeviceExt}, Buffer, BufferUsages, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor
 };
 
-use crate::{State, buffer::Vertex};
+use crate::{buffer::Vertex, camera::CameraUniform, State};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -98,27 +98,29 @@ impl<'a> Graphics<'a> {
     }
 
     pub fn create_vertex(&self, vertices: &[Vertex]) -> Buffer {
-        let vertex_buffer =
-            self.state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-        vertex_buffer
+        self.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
     }
 
     pub fn create_index(&self, indices: &[u16]) -> Buffer {
-        let buffer = self
-            .state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-        buffer
+        self.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(indices),
+            usage: wgpu::BufferUsages::INDEX,
+        })
+    }
+
+    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer 
+    where T: bytemuck::Pod + bytemuck::Zeroable
+    {
+        self.state.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Camera uniform"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        })
     }
 }
 
