@@ -123,14 +123,14 @@ impl Keyboard for TestingScene1 {
 
 impl Mouse for TestingScene1 {
     fn mouse_down(&mut self, button: dropbear_engine::winit::event::MouseButton) {
-        debug!("Mouse button pressed: {:?}", button)
+        // debug!("Mouse button pressed: {:?}", button)
     }
 
     fn mouse_up(&mut self, button: dropbear_engine::winit::event::MouseButton) {
-        debug!("Mouse button released: {:?}", button);
+        // debug!("Mouse button released: {:?}", button);
     }
 
     fn mouse_move(&mut self, position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {
-        debug!("Mouse position: {}, {}", position.x, position.y)
+        // debug!("Mouse position: {}, {}", position.x, position.y)
     }
 }
