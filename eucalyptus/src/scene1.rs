@@ -1,3 +1,4 @@
+use dropbear_engine::buffer::Vertex;
 use dropbear_engine::graphics::Graphics;
 use dropbear_engine::{
     input::{Keyboard, Mouse},
@@ -8,19 +9,27 @@ use dropbear_engine::{
         keyboard::KeyCode,
     },
 };
-use dropbear_engine::wgpu::{Color, RenderPipeline};
+use dropbear_engine::wgpu::{Buffer, Color, RenderPipeline};
 
 pub struct TestingScene1 {
-    render_pipeline: Option<RenderPipeline>
+    render_pipeline: Option<RenderPipeline>,
+    vertex_buffer: Option<Buffer>,
 }
 
 impl TestingScene1 {
     pub fn new() -> Self {
         Self {
             render_pipeline: None,
+            vertex_buffer: None,
         }
     }
 }
+
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+];
 
 impl Scene for TestingScene1 {
     fn load(&mut self, graphics: &mut Graphics) {
@@ -28,8 +37,10 @@ impl Scene for TestingScene1 {
             include_str!("../../dropbear-engine/src/resources/shaders/shader.wgsl"),
             Some("default"),
         );
-        let pipeline = graphics.create_render_pipeline(&shader);
+        let pipeline = graphics.start_rendering(&shader);
         self.render_pipeline = Some(pipeline);
+
+        self.vertex_buffer = Some(graphics.create_buffer(VERTICES));
     }
 
     fn update(&mut self, _dt: f32) {

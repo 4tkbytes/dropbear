@@ -1,6 +1,6 @@
-use wgpu::{Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureView};
+use wgpu::{util::DeviceExt, Buffer, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureView};
 
-use crate::State;
+use crate::{buffer::Vertex, State};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -17,7 +17,7 @@ impl<'a> Graphics<'a> {
         }
     }
 
-    pub fn create_render_pipeline(&mut self, shader: &ShaderModule) -> RenderPipeline {
+    pub fn start_rendering(&mut self, shader: &ShaderModule) -> RenderPipeline {
         let render_pipeline_layout = self.state.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Descriptor"),
             bind_group_layouts: &[],
@@ -91,5 +91,16 @@ impl<'a> Graphics<'a> {
             occlusion_query_set: None,
             timestamp_writes: None,
         }).forget_lifetime()
+    }
+    
+    pub fn create_buffer(&self, vertices: &[Vertex]) -> Buffer {
+        let vertex_buffer = self.state.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        vertex_buffer
     }
 }

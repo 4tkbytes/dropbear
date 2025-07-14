@@ -1,3 +1,4 @@
+pub mod buffer;
 pub mod graphics;
 pub mod input;
 pub mod scene;
@@ -7,7 +8,7 @@ pub use wgpu;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 pub use winit;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -98,9 +99,7 @@ impl State {
         }
     }
 
-    // fn update(&mut self) {}
-
-    fn render(&mut self, scene_manager: &mut scene::Manager) -> anyhow::Result<()> {
+    fn render(&mut self, scene_manager: &mut scene::Manager, previous_dt: f32) -> anyhow::Result<()> {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
@@ -119,7 +118,7 @@ impl State {
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
-        scene_manager.update(0.016, &mut graphics);
+        scene_manager.update(previous_dt, &mut graphics);
         scene_manager.render(&mut graphics);
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -129,11 +128,19 @@ impl State {
     }
 }
 
+pub fn get_current_time_as_ns() -> u128 {
+    let now = SystemTime::now();
+    let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+    let timestamp_ns = duration_since_epoch.as_nanos();
+    timestamp_ns
+}
+
 pub struct App {
     config: WindowConfiguration,
     state: Option<State>,
     scene_manager: scene::Manager,
     input_manager: input::Manager,
+    delta_time: f32,
 }
 
 impl App {
@@ -143,6 +150,7 @@ impl App {
             config,
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
+            delta_time: 0.0
         }
     }
 
@@ -152,7 +160,7 @@ impl App {
     {
         if cfg!(debug_assertions) {
             // let package_name = std::env::var("CARGO_BIN_NAME").unwrap();
-            let log_config = format!("dropbear_engine=debug,{}=debug,warn", app_name);
+            let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_name);
             unsafe { std::env::set_var("RUST_LOG", log_config) };
         }
 
@@ -203,8 +211,19 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
+                let prev = get_current_time_as_ns();
                 self.input_manager.update();
-                state.render(&mut self.scene_manager).unwrap();
+                state.render(&mut self.scene_manager, self.delta_time).unwrap();
+                let now = get_current_time_as_ns();
+                self.delta_time = (now - prev) as f32 / 1_000_000_000.0;
+                let fps = if self.delta_time > 0.0 {
+                    (1.0 / self.delta_time).round() as u32
+                } else {
+                    0
+                };
+                let new_title = format!("{} | FPS: {}", self.config.title, fps);
+                state.window.set_title(&new_title);
+                // todo: cap rendering to 60 fps (figure it out)
             }
             WindowEvent::KeyboardInput {
                 event:
