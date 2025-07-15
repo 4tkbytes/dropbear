@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dropbear_engine::buffer::Vertex;
-use dropbear_engine::camera::{Camera, CameraUniform};
+use dropbear_engine::camera::Camera;
 use dropbear_engine::graphics::{Graphics, Texture, Shader};
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
@@ -60,27 +60,24 @@ impl Scene for TestingScene1 {
 
         let texture1 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
         let texture2 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/Autism.png"));
+
+        self.camera = Camera::new(
+            graphics,
+            Point3::new(0.0, 1.0, 2.0),
+            Point3::new(0.0, 0.0, 0.0),
+            Vector3::y(),
+            (graphics.state.config.width / graphics.state.config.height) as f32,
+            45.0,
+            0.1,
+            100.0,
+        );
+
+        let pipeline = graphics.create_render_pipline(&shader, &texture1.layout, &self.camera.layout.as_ref().unwrap());
         
         // using one of them for now since they are the same
-        let pipeline = graphics.create_render_pipline(&shader, vec![&texture1]);
         self.texture.insert("texture1".into(), texture1);
         self.texture.insert("texture2".into(), texture2);
-
-        self.camera = Camera {
-            eye: Point3::new(0.0, 1.0, 2.0),
-            target: Point3::new(0.0, 0.0, 0.0),
-            up: Vector3::y(),
-            aspect: (graphics.state.config.width / graphics.state.config.height) as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&self.camera);
-
-        let camera_buffer = graphics.create_uniform(camera_uniform, Some("Camera Uniform"));
-
+        
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
     }
@@ -98,14 +95,15 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-            debug!("texture_toggle: {}", self.texture_toggle);
+
             if self.texture_toggle {
-                debug!("Binding texture1");
                 render_pass.set_bind_group(0, &self.texture.get("texture1").as_ref().unwrap().bind_group, &[]);
             } else {
-                debug!("Binding texture2");
                 render_pass.set_bind_group(0, &self.texture.get("texture2").as_ref().unwrap().bind_group, &[]);
             }
+
+            render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
+
             render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(
                 self.index_buffer.as_ref().unwrap().slice(..),

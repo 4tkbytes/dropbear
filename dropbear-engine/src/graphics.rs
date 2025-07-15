@@ -1,9 +1,9 @@
 use image::GenericImageView;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, Buffer, BufferUsages, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor
+    util::{BufferInitDescriptor, DeviceExt}, BindGroupLayout, Buffer, BufferUsages, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor
 };
 
-use crate::{buffer::Vertex, camera::CameraUniform, State};
+use crate::{buffer::Vertex, State};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -20,17 +20,21 @@ impl<'a> Graphics<'a> {
         }
     }
 
-    pub fn create_render_pipline(&mut self, shader: &Shader, textures: Vec<&Texture>) -> RenderPipeline {
-        let mut layouts = Vec::new();
-        for texture in textures {
-            layouts.push(&texture.layout);
-        }
+    pub fn create_render_pipline(
+        &mut self,
+        shader: &Shader,
+        texture_bind_group_layout: &BindGroupLayout,
+        camera_bind_group_layout: &BindGroupLayout,
+    ) -> RenderPipeline {
         let render_pipeline_layout =
             self.state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Descriptor"),
-                    bind_group_layouts: layouts.as_slice(),
+                    bind_group_layouts: &[
+                        texture_bind_group_layout,
+                        camera_bind_group_layout,
+                    ],
                     push_constant_ranges: &[],
                 });
 
@@ -98,26 +102,31 @@ impl<'a> Graphics<'a> {
     }
 
     pub fn create_vertex(&self, vertices: &[Vertex]) -> Buffer {
-        self.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        })
+        self.state
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            })
     }
 
     pub fn create_index(&self, indices: &[u16]) -> Buffer {
-        self.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        })
+        self.state
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            })
     }
 
-    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer 
-    where T: bytemuck::Pod + bytemuck::Zeroable
+    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable,
     {
         self.state.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Camera uniform"),
+            label,
             contents: bytemuck::cast_slice(&[uniform]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         })
@@ -126,7 +135,7 @@ impl<'a> Graphics<'a> {
 
 pub struct Shader {
     pub label: String,
-    pub module: ShaderModule
+    pub module: ShaderModule,
 }
 
 impl Shader {
@@ -138,13 +147,13 @@ impl Shader {
                 label,
                 source: wgpu::ShaderSource::Wgsl(shader_file_contents.into()),
             });
-            
+
         Self {
             label: match label {
                 Some(label) => label.into(),
-                None => "shader".into()
+                None => "shader".into(),
             },
-            module
+            module,
         }
     }
 }
@@ -166,8 +175,10 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let diffuse_texture = graphics.state.device.create_texture(
-            &wgpu::TextureDescriptor {
+        let diffuse_texture = graphics
+            .state
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
                 label: Some("diffuse_texture"),
                 size: texture_size,
                 mip_level_count: 1,
@@ -176,8 +187,7 @@ impl Texture {
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
                 view_formats: &[],
-            }
-        );
+            });
 
         graphics.state.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -196,55 +206,64 @@ impl Texture {
         );
 
         let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
-        let diffuse_sampler = graphics.state.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let diffuse_sampler = graphics
+            .state
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
 
-        let texture_bind_group_layout = graphics.state.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
-        });
+        let texture_bind_group_layout =
+            graphics
+                .state
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                    label: Some("texture_bind_group_layout"),
+                });
 
-        let diffuse_bind_group = graphics.state.device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    }
-                ],
-                label: Some("texture_bind_group"),
-            }
-        );
-        
+        let diffuse_bind_group =
+            graphics
+                .state
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &texture_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                        },
+                    ],
+                    label: Some("texture_bind_group"),
+                });
+
         Self {
             bind_group: diffuse_bind_group,
             layout: texture_bind_group_layout,
