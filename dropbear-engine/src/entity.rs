@@ -1,5 +1,5 @@
 use nalgebra::{Matrix4, Vector3};
-use wgpu::{naga::proc::index, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages};
+use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages};
 
 use crate::{buffer::Vertex, graphics::{Graphics, Texture}};
 
