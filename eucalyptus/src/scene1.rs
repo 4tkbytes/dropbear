@@ -20,7 +20,7 @@ use dropbear_engine::{
 #[derive(Default)]
 pub struct TestingScene1 {
     render_pipeline: Option<RenderPipeline>,
-    mesh1: Option<Mesh>,
+    mesh1: Mesh,
     camera: Camera,
     pressed_keys: HashSet<KeyCode>,
     is_cursor_locked: bool,
@@ -72,11 +72,16 @@ impl Scene for TestingScene1 {
             0.002,
         );
 
-        let pipeline = graphics.create_render_pipline(&shader, &mesh.texture.layout, camera.layout.as_ref().unwrap());
+        let pipeline = graphics.create_render_pipline(&shader, vec![
+                &mesh.texture().layout, 
+                camera.layout(), 
+                mesh.layout()
+            ]
+        );
         
         self.camera = camera;
         self.window = Some(graphics.state.window.clone());
-        self.mesh1 = Some(mesh);
+        self.mesh1 = mesh;
 
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
@@ -96,6 +101,12 @@ impl Scene for TestingScene1 {
             }
         }
         if !self.is_cursor_locked {self.window.as_mut().unwrap().set_cursor_visible(true);}
+        self.mesh1.rotate_x(2.0_f32.to_radians());
+        self.mesh1.rotate_y(2.0_f32.to_radians());
+        self.mesh1.rotate_z(2.0_f32.to_radians());
+        self.mesh1.translate(Vector3::new(0.5, 0.0, 0.0));
+
+        self.mesh1.update(graphics);
         self.camera.update(graphics);
     }
 
@@ -110,13 +121,15 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-            render_pass.set_bind_group(0, &self.mesh1.as_ref().unwrap().texture.bind_group, &[]);
+            render_pass.set_bind_group(0, &self.mesh1.texture().bind_group, &[]);
 
             render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, self.mesh1.as_ref().unwrap().vertex_buffer.slice(..));
+            render_pass.set_bind_group(2, self.mesh1.bind_group(), &[]);
+
+            render_pass.set_vertex_buffer(0, self.mesh1.vertex_buffer().slice(..));
             render_pass.set_index_buffer(
-                    self.mesh1.as_ref().unwrap().index_buffer.slice(..),
+                    self.mesh1.index_buffer().slice(..),
                 IndexFormat::Uint16,
             );
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);

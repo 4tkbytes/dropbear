@@ -61,6 +61,18 @@ impl Camera {
         camera
     }
 
+    pub fn uniform_buffer(&self) -> &Buffer {
+        self.buffer.as_ref().unwrap()
+    }
+
+    pub fn layout(&self) -> &BindGroupLayout {
+        self.layout.as_ref().unwrap()
+    }
+
+    pub fn bind_group(&self) -> &BindGroup {
+        self.bind_group.as_ref().unwrap()
+    }
+
     fn build_vp(&self) -> Matrix4<f32> {
         let view = Matrix4::<f32>::look_at_rh(&self.eye, &self.target, &self.up);
         let proj = Perspective3::new(self.aspect, self.fov_y.to_radians(), self.znear, self.zfar);

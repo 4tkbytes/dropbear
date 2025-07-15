@@ -23,18 +23,14 @@ impl<'a> Graphics<'a> {
     pub fn create_render_pipline(
         &mut self,
         shader: &Shader,
-        texture_bind_group_layout: &BindGroupLayout,
-        camera_bind_group_layout: &BindGroupLayout,
+        bind_group_layouts: Vec<&BindGroupLayout>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
             self.state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Descriptor"),
-                    bind_group_layouts: &[
-                        texture_bind_group_layout,
-                        camera_bind_group_layout,
-                    ],
+                    bind_group_layouts: bind_group_layouts.as_slice(),
                     push_constant_ranges: &[],
                 });
 
