@@ -58,7 +58,6 @@ impl Manager {
         if pressed {
             if !self.pressed_keys.contains(&key) {
                 self.just_pressed_keys.insert(key);
-                // Notify all input handlers of key down
                 for handler in self.input_handlers.values_mut() {
                     handler.borrow_mut().key_down(key, event_loop);
                 }
@@ -67,7 +66,6 @@ impl Manager {
         } else {
             if self.pressed_keys.contains(&key) {
                 self.just_released_keys.insert(key);
-                // Notify all input handlers of key up
                 for handler in self.input_handlers.values_mut() {
                     handler.borrow_mut().key_up(key, event_loop);
                 }
@@ -80,7 +78,6 @@ impl Manager {
         if pressed {
             if !self.pressed_mouse_buttons.contains(&button) {
                 self.just_pressed_mouse_buttons.insert(button);
-                // Notify all mouse handlers of button down
                 for handler in self.mouse_handlers.values_mut() {
                     handler.borrow_mut().mouse_down(button);
                 }
@@ -89,7 +86,6 @@ impl Manager {
         } else {
             if self.pressed_mouse_buttons.contains(&button) {
                 self.just_released_mouse_buttons.insert(button);
-                // Notify all mouse handlers of button up
                 for handler in self.mouse_handlers.values_mut() {
                     handler.borrow_mut().mouse_up(button);
                 }
@@ -100,7 +96,6 @@ impl Manager {
 
     pub fn handle_mouse_movement(&mut self, position: PhysicalPosition<f64>) {
         self.mouse_position = position;
-        // Notify all mouse handlers of movement
         for handler in self.mouse_handlers.values_mut() {
             handler.borrow_mut().mouse_move(position);
         }

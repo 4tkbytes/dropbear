@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub trait Scene {
     fn load(&mut self, graphics: &mut Graphics);
-    fn update(&mut self, dt: f32);
+    fn update(&mut self, dt: f32, graphics: &mut Graphics);
     fn render(&mut self, graphics: &mut Graphics);
     fn exit(&mut self);
 }
@@ -59,7 +59,7 @@ impl Manager {
         // update scene
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().update(dt);
+                scene.borrow_mut().update(dt, graphics);
             }
         }
     }

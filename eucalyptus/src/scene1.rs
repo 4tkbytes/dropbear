@@ -1,10 +1,14 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use dropbear_engine::buffer::Vertex;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::graphics::{Graphics, Texture, Shader};
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
+use dropbear_engine::winit::dpi::PhysicalPosition;
+use dropbear_engine::winit::event::MouseButton;
+use dropbear_engine::winit::window::Window;
 use dropbear_engine::{
     input::{Keyboard, Mouse},
     log::debug,
@@ -19,6 +23,9 @@ pub struct TestingScene1 {
     texture: HashMap<String, Texture>,
     texture_toggle: bool,
     camera: Camera,
+    pressed_keys: HashSet<KeyCode>,
+    is_cursor_locked: bool,
+    window: Option<Arc<Window>>,
 }
 
 impl TestingScene1 {
@@ -31,6 +38,9 @@ impl TestingScene1 {
             texture: HashMap::new(),
             texture_toggle: false,
             camera: Camera::default(),
+            pressed_keys: HashSet::new(),
+            is_cursor_locked: true,
+            window: None,
         }
     }
 }
@@ -61,7 +71,7 @@ impl Scene for TestingScene1 {
         let texture1 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
         let texture2 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/Autism.png"));
 
-        self.camera = Camera::new(
+        let camera = Camera::new(
             graphics,
             Point3::new(0.0, 1.0, 2.0),
             Point3::new(0.0, 0.0, 0.0),
@@ -70,19 +80,38 @@ impl Scene for TestingScene1 {
             45.0,
             0.1,
             100.0,
+            0.125,
+            0.002,
         );
 
-        let pipeline = graphics.create_render_pipline(&shader, &texture1.layout, &self.camera.layout.as_ref().unwrap());
+        let pipeline = graphics.create_render_pipline(&shader, &texture1.layout, camera.layout.as_ref().unwrap());
         
         // using one of them for now since they are the same
         self.texture.insert("texture1".into(), texture1);
         self.texture.insert("texture2".into(), texture2);
+        self.camera = camera;
         
+        self.window = Some(graphics.state.window.clone());
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
     }
 
-    fn update(&mut self, _dt: f32) {}
+    fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
+        // hold down movement
+        for key in &self.pressed_keys {
+            match key {
+                KeyCode::KeyW => self.camera.move_forwards(),
+                KeyCode::KeyA => self.camera.move_left(),
+                KeyCode::KeyD => self.camera.move_right(),
+                KeyCode::KeyS => self.camera.move_back(),
+                KeyCode::ShiftLeft => self.camera.move_down(),
+                KeyCode::Space => self.camera.move_up(),
+                _ => {}
+            }
+        }
+        if !self.is_cursor_locked {self.window.as_mut().unwrap().set_cursor_visible(true);}
+        self.camera.update(graphics);
+    }
 
     fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
@@ -111,6 +140,7 @@ impl Scene for TestingScene1 {
             );
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
         }
+        self.window = Some(graphics.state.window.clone());
     }
 
     fn exit(&mut self) {
@@ -123,29 +153,47 @@ impl Keyboard for TestingScene1 {
         // debug!("Key pressed: {:?}", key);
         match key {
             KeyCode::Escape => event_loop.exit(),
-            KeyCode::Space => {
+            KeyCode::Slash => {
                 self.texture_toggle = !self.texture_toggle;
                 debug!("New: {}", self.texture_toggle);
+            },
+            KeyCode::F1 => {
+                self.is_cursor_locked = !self.is_cursor_locked
             }
-            _ => {}
+            _ => {
+                self.pressed_keys.insert(key);
+            }
         }
     }
 
-    fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {
+    fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         // debug!("Key released: {:?}", key);
+        self.pressed_keys.remove(&key);
     }
 }
 
 impl Mouse for TestingScene1 {
-    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
+    fn mouse_down(&mut self, _button: MouseButton) {
         // debug!("Mouse button pressed: {:?}", button)
     }
 
-    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
+    fn mouse_up(&mut self, _button: MouseButton) {
         // debug!("Mouse button released: {:?}", button);
     }
 
-    fn mouse_move(&mut self, _position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {
-        // debug!("Mouse position: {}, {}", position.x, position.y)
+    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
+        if self.is_cursor_locked {
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                let center = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+
+                let dx = position.x - center.x;
+                let dy = position.y - center.y;
+                self.camera.track_mouse_delta(dx as f32, dy as f32);
+
+                window.set_cursor_position(center).ok();
+                window.set_cursor_visible(false);
+            }
+        }
     }
 }

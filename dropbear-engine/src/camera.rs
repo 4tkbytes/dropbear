@@ -1,5 +1,6 @@
 use nalgebra::{Matrix4, Perspective3, Point3, Vector3};
 use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages};
+use winit::dpi::PhysicalPosition;
 
 use crate::graphics::Graphics;
 
@@ -20,16 +21,23 @@ pub struct Camera {
     pub fov_y: f32,
     pub znear: f32,
     pub zfar: f32,
+    pub yaw: f32,
+    pub pitch: f32,
 
     pub uniform: CameraUniform,
     pub buffer: Option<Buffer>,
 
     pub layout: Option<BindGroupLayout>,
     pub bind_group: Option<BindGroup>,
+
+    pub speed: f32,
+    pub sensitivity: f32,
+
+    last_pos: PhysicalPosition<f64>,
 }
 
 impl Camera {
-    pub fn new(graphics: &Graphics, eye: Point3<f32>, target: Point3<f32>, up: Vector3<f32>, aspect: f32, fov_y: f32, znear: f32, zfar: f32) -> Self {
+    pub fn new(graphics: &Graphics, eye: Point3<f32>, target: Point3<f32>, up: Vector3<f32>, aspect: f32, fov_y: f32, znear: f32, zfar: f32, speed: f32, sensitivity: f32) -> Self {
         let uniform = CameraUniform::new();
         let mut camera = Self {
             eye,
@@ -43,6 +51,11 @@ impl Camera {
             buffer: None,
             layout: None,
             bind_group: None,
+            speed,
+            yaw: 0.0,
+            pitch: 0.0,
+            sensitivity,
+            ..Default::default()
         };
         camera.update_view_proj();
         let buffer = graphics.create_uniform(camera.uniform, Some("Camera Uniform"));
@@ -51,7 +64,7 @@ impl Camera {
         camera
     }
 
-    pub fn build_vp(&self) -> Matrix4<f32> {
+    fn build_vp(&self) -> Matrix4<f32> {
         let view = Matrix4::<f32>::look_at_rh(&self.eye, &self.target, &self.up);
         let proj = Perspective3::new(self.aspect, self.fov_y.to_radians(), self.znear, self.zfar);
         return OPENGL_TO_WGPU_MATRIX * proj.to_homogeneous() * view;
@@ -88,9 +101,66 @@ impl Camera {
         self.bind_group = Some(camera_bind_group);
     }
 
+    pub fn update(&mut self, graphics: &Graphics) {
+        self.update_view_proj();
+        graphics.state.queue.write_buffer(&self.buffer.as_ref().unwrap(), 0, bytemuck::cast_slice(&[self.uniform]));
+    }
+
     pub fn update_view_proj(&mut self) {
         let mvp = self.build_vp();
         self.uniform.view_proj = mvp.into();
+    }
+
+    pub fn move_forwards(&mut self) {
+        let forward = (self.target - self.eye).normalize();
+        self.eye += forward * self.speed;
+        self.target += forward * self.speed;
+    }
+
+    pub fn move_back(&mut self) {
+        let forward = (self.target - self.eye).normalize();
+        self.eye -= forward * self.speed;
+        self.target -= forward * self.speed;
+    }
+
+    pub fn move_right(&mut self) {
+        let forward = (self.target - self.eye).normalize();
+        let right = forward.cross(&self.up).normalize();
+        self.eye += right * self.speed;
+        self.target += right * self.speed;
+    }
+
+    pub fn move_left(&mut self) {
+        let forward = (self.target - self.eye).normalize();
+        let right = forward.cross(&self.up).normalize();
+        self.eye -= right * self.speed;
+        self.target -= right * self.speed;
+    }
+
+    pub fn move_up(&mut self) {
+        let up = self.up.normalize();
+        self.eye += up * self.speed;
+        self.target += up * self.speed;
+    }
+
+    pub fn move_down(&mut self) {
+        let up = self.up.normalize();
+        self.eye -= up * self.speed;
+        self.target -= up * self.speed;
+    }
+
+    pub fn track_mouse_delta(&mut self, dx: f32, dy: f32) {
+        let sensitivity = self.sensitivity;
+        self.yaw   += dx * sensitivity;
+        self.pitch -= dy * sensitivity;
+        let max_pitch = std::f32::consts::FRAC_PI_2 - 0.01;
+        self.pitch = self.pitch.clamp(-max_pitch, max_pitch);
+        let dir = Vector3::new(
+            self.yaw.cos() * self.pitch.cos(),
+            self.pitch.sin(),
+            self.yaw.sin() * self.pitch.cos(),
+        );
+        self.target = self.eye + dir;
     }
 }
 
