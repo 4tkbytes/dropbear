@@ -64,7 +64,7 @@ impl<'a> Graphics<'a> {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: Some(wgpu::Face::Back),
+                        cull_mode: None,    // todo: change for improved performance
                         polygon_mode: wgpu::PolygonMode::Fill,
                         unclipped_depth: false,
                         conservative: false,
@@ -159,6 +159,9 @@ impl Shader {
 }
 
 pub struct Texture {
+    pub texture: wgpu::Texture,
+    pub sampler: wgpu::Sampler,
+    pub size: wgpu::Extent3d,
     pub bind_group: wgpu::BindGroup,
     pub layout: wgpu::BindGroupLayout,
 }
@@ -267,6 +270,9 @@ impl Texture {
         Self {
             bind_group: diffuse_bind_group,
             layout: texture_bind_group_layout,
+            texture: diffuse_texture,
+            sampler: diffuse_sampler,
+            size: texture_size,
         }
     }
 }

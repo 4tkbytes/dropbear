@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use dropbear_engine::buffer::Vertex;
 use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::Mesh;
 use dropbear_engine::graphics::{Graphics, Texture, Shader};
 use dropbear_engine::nalgebra::{Point3, Vector3};
-use dropbear_engine::wgpu::{Buffer, Color, IndexFormat, RenderPipeline};
+use dropbear_engine::wgpu::{Color, IndexFormat, RenderPipeline};
 use dropbear_engine::winit::dpi::PhysicalPosition;
 use dropbear_engine::winit::event::MouseButton;
 use dropbear_engine::winit::window::Window;
@@ -16,12 +17,10 @@ use dropbear_engine::{
     winit::{event_loop::ActiveEventLoop, keyboard::KeyCode},
 };
 
+#[derive(Default)]
 pub struct TestingScene1 {
     render_pipeline: Option<RenderPipeline>,
-    vertex_buffer: Option<Buffer>,
-    index_buffer: Option<Buffer>,
-    texture: HashMap<String, Texture>,
-    texture_toggle: bool,
+    mesh1: Option<Mesh>,
     camera: Camera,
     pressed_keys: HashSet<KeyCode>,
     is_cursor_locked: bool,
@@ -32,15 +31,8 @@ impl TestingScene1 {
     pub fn new() -> Self {
         debug!("TestingScene1 instance created");
         Self {
-            render_pipeline: None,
-            vertex_buffer: None,
-            index_buffer: None,
-            texture: HashMap::new(),
-            texture_toggle: false,
-            camera: Camera::default(),
-            pressed_keys: HashSet::new(),
             is_cursor_locked: true,
-            window: None,
+            ..Default::default()
         }
     }
 }
@@ -65,11 +57,7 @@ impl Scene for TestingScene1 {
             Some("default"),
         );
 
-        self.vertex_buffer = Some(graphics.create_vertex(VERTICES));
-        self.index_buffer = Some(graphics.create_index(INDICES));
-
-        let texture1 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
-        let texture2 = Texture::new(graphics, include_bytes!("../../dropbear-engine/src/resources/textures/Autism.png"));
+        let mesh = Mesh::new(&graphics, VERTICES, INDICES, include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"));
 
         let camera = Camera::new(
             graphics,
@@ -84,14 +72,12 @@ impl Scene for TestingScene1 {
             0.002,
         );
 
-        let pipeline = graphics.create_render_pipline(&shader, &texture1.layout, camera.layout.as_ref().unwrap());
+        let pipeline = graphics.create_render_pipline(&shader, &mesh.texture.layout, camera.layout.as_ref().unwrap());
         
-        // using one of them for now since they are the same
-        self.texture.insert("texture1".into(), texture1);
-        self.texture.insert("texture2".into(), texture2);
         self.camera = camera;
-        
         self.window = Some(graphics.state.window.clone());
+        self.mesh1 = Some(mesh);
+
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
     }
@@ -124,18 +110,13 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-
-            if self.texture_toggle {
-                render_pass.set_bind_group(0, &self.texture.get("texture1").as_ref().unwrap().bind_group, &[]);
-            } else {
-                render_pass.set_bind_group(0, &self.texture.get("texture2").as_ref().unwrap().bind_group, &[]);
-            }
+            render_pass.set_bind_group(0, &self.mesh1.as_ref().unwrap().texture.bind_group, &[]);
 
             render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
+            render_pass.set_vertex_buffer(0, self.mesh1.as_ref().unwrap().vertex_buffer.slice(..));
             render_pass.set_index_buffer(
-                self.index_buffer.as_ref().unwrap().slice(..),
+                    self.mesh1.as_ref().unwrap().index_buffer.slice(..),
                 IndexFormat::Uint16,
             );
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
@@ -153,10 +134,6 @@ impl Keyboard for TestingScene1 {
         // debug!("Key pressed: {:?}", key);
         match key {
             KeyCode::Escape => event_loop.exit(),
-            KeyCode::Slash => {
-                self.texture_toggle = !self.texture_toggle;
-                debug!("New: {}", self.texture_toggle);
-            },
             KeyCode::F1 => {
                 self.is_cursor_locked = !self.is_cursor_locked
             }

@@ -1,6 +1,5 @@
 use nalgebra::{Matrix4, Perspective3, Point3, Vector3};
 use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages};
-use winit::dpi::PhysicalPosition;
 
 use crate::graphics::Graphics;
 
@@ -32,8 +31,6 @@ pub struct Camera {
 
     pub speed: f32,
     pub sensitivity: f32,
-
-    last_pos: PhysicalPosition<f64>,
 }
 
 impl Camera {

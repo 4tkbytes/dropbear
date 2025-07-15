@@ -3,6 +3,7 @@ pub mod buffer;
 pub mod graphics;
 pub mod input;
 pub mod scene;
+pub mod entity;
 
 pub use bytemuck;
 pub use log;
