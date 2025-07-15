@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dropbear_engine::buffer::Vertex;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::Mesh;
-use dropbear_engine::graphics::{Graphics, Texture, Shader};
+use dropbear_engine::graphics::{Graphics, Shader};
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::wgpu::{Color, IndexFormat, RenderPipeline};
 use dropbear_engine::winit::dpi::PhysicalPosition;
