@@ -334,6 +334,12 @@ impl Instance {
     pub fn buffer(&self) -> &Buffer {
         self.buffer.as_ref().unwrap()
     }
+
+    pub fn from_matrix(mat: Matrix4<f32>) -> Self {
+        let position = mat.fixed_view::<3, 1>(0, 3).into();
+        let rotation = UnitQuaternion::from_matrix(&mat.fixed_view::<3, 3>(0, 0).into_owned());
+        Instance { position, rotation, buffer: None }
+    }
 }
 
 #[repr(C)]

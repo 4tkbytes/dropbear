@@ -147,6 +147,7 @@ impl Model {
                 material: mesh.material_index as usize, // Only one material for now
             });
         }
+        log::debug!("Successfully loaded model");
         Ok(Model {
             meshes,
             materials,

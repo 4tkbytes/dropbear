@@ -25,6 +25,7 @@ pub struct TestingScene1 {
     is_cursor_locked: bool,
     window: Option<Arc<Window>>,
     horse: Entity,
+    maxwell: Entity,
     spawn_new_mesh: bool,
 }
 
@@ -52,6 +53,12 @@ impl Scene for TestingScene1 {
         ).unwrap(),
         Some("horse"));
 
+        let maxwell = Entity::adopt(&graphics, Model::load(
+            graphics,
+        "models/maxwell_the_cat.glb",
+        ).unwrap(),
+        Some("maxwell"));
+
         let camera = Camera::new(
             graphics,
             Point3::new(0.0, 1.0, 2.0),
@@ -76,6 +83,7 @@ impl Scene for TestingScene1 {
         self.camera = camera;
         self.window = Some(graphics.state.window.clone());
         self.horse = horse;
+        self.maxwell = maxwell;
 
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
@@ -99,6 +107,9 @@ impl Scene for TestingScene1 {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
 
+        self.maxwell.rotate_y(2.0_f32.to_radians());
+        self.maxwell.update(graphics);
+
         self.camera.update(graphics);
     }
 
@@ -114,6 +125,7 @@ impl Scene for TestingScene1 {
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
             self.horse.render(&mut render_pass, &self.camera);
+            self.maxwell.render(&mut render_pass, &self.camera);
         }
         self.window = Some(graphics.state.window.clone());
     }
