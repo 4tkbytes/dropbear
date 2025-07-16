@@ -3,7 +3,7 @@ use std::{mem, ops::Range};
 use russimp::{material::{DataContent, TextureType}, scene::{PostProcess, Scene}, Vector3D};
 use wgpu::{util::DeviceExt, BufferAddress, VertexAttribute, VertexBufferLayout};
 
-use crate::{graphics::{Graphics, Texture}, resources::load_string};
+use crate::graphics::{Graphics, Texture};
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -111,7 +111,7 @@ impl Model {
         let mut meshes = Vec::new();
         for mesh in &scene.meshes {
             let vertices: Vec<ModelVertex> = mesh.vertices.iter().enumerate().map(|(i, v)| {
-                let normal = mesh.normals.get(i).copied().unwrap_or({/*log::warn!("Unable to get normal")*/; Vector3D { x: 0.0, y: 1.0, z: 0.0 }});
+                let normal = mesh.normals.get(i).copied().unwrap_or(Vector3D { x: 0.0, y: 1.0, z: 0.0 });
                 let tex_coords = mesh.texture_coords
                                     .get(0)
                                     .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
@@ -123,10 +123,6 @@ impl Model {
                     normal: [normal.x, normal.y, normal.z],
                 }
             }).collect();
-
-            // let vertices = mesh.vertices.iter().enumerate().map(|i, v| {
-            //     let normal = mesh.normals.get(i)
-            // })
 
             let indices: Vec<u32> = mesh.faces.iter()
                 .flat_map(|f| f.0.iter().copied())
@@ -227,109 +223,3 @@ where
         }
     }
 }
-
-    // pub async fn old_load(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Model> {
-    //     let (path, obj_text) = load_string(file_name).await?;
-    //     let obj_cursor = Cursor::new(obj_text);
-    //     let mut obj_reader = BufReader::new(obj_cursor);
-
-    //     let (models, obj_materials) = tobj::load_obj_buf(
-    //         &mut obj_reader,
-    //         &tobj::LoadOptions {
-    //             triangulate: true,
-    //             single_index: true,
-    //             ..Default::default()
-    //         },
-    //         |p| {
-    //             log::debug!("Loading material loader: {}", p.to_str().unwrap());
-    //             let mat_text = match std::fs::read_to_string(p) {
-    //                 Ok(val) => val,
-    //                 Err(e) => {
-    //                     log::error!("Unable to load material [{}] for file {} because of error: {}", p.to_str().unwrap(), file_name, e);
-    //                     String::new()
-    //                 }
-    //             };
-    //             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
-    //         }
-    //     )?;
-
-    //     let mut materials = Vec::new();
-    //     // iterate through materials
-    //     for m in obj_materials? {
-    //         // create new diffuse texture for each
-    //         let diffuse_texture = Texture::load_texture(graphics, &m.diffuse_texture.as_ref().unwrap()).await?;
-    //         // "create" each bind group (by just taking it)
-    //         let bind_group = diffuse_texture.bind_group().to_owned();
-            
-    //         // add to materials vec
-    //         materials.push(Material {
-    //             name: m.name,
-    //             diffuse_texture,
-    //             bind_group: bind_group
-    //         })
-    //     }
-
-    //     // iterate through meshes
-    //     let meshes = models
-    //     .into_iter()
-    //     .map(|m| {
-    //         // for each model
-    //         // get vertices
-    //         let vertices = (0..m.mesh.positions.len() / 3)
-    //             .map(|i| {
-    //                 if m.mesh.normals.is_empty() {
-    //                     ModelVertex {
-    //                         position: [
-    //                             m.mesh.positions[i * 3],
-    //                             m.mesh.positions[i * 3 + 1],
-    //                             m.mesh.positions[i * 3 + 2],
-    //                         ],
-    //                         tex_coords: [m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1]],
-    //                         normal: [0.0, 0.0, 0.0],
-    //                     }
-    //                 } else {
-    //                     ModelVertex {
-    //                         position: [
-    //                             m.mesh.positions[i * 3],
-    //                             m.mesh.positions[i * 3 + 1],
-    //                             m.mesh.positions[i * 3 + 2],
-    //                         ],
-    //                         tex_coords: [m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1]],
-    //                         normal: [
-    //                             m.mesh.normals[i * 3],
-    //                             m.mesh.normals[i * 3 + 1],
-    //                             m.mesh.normals[i * 3 + 2],
-    //                         ],
-    //                     }
-    //                 }
-    //             }).collect::<Vec<_>>();
-            
-    //         // create buffers for them
-    //         let vertex_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-    //             label: Some(&format!("{:?} Vertex Buffer", file_name)),
-    //             contents: bytemuck::cast_slice(&vertices),
-    //             usage: wgpu::BufferUsages::VERTEX,
-    //         });
-    //         let index_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-    //             label: Some(&format!("{:?} Index Buffer", file_name)),
-    //             contents: bytemuck::cast_slice(&m.mesh.indices),
-    //             usage: wgpu::BufferUsages::INDEX,
-    //         });
-            
-    //         // add to mesh struct
-    //         Mesh {
-    //             name: file_name.to_string(),
-    //             vertex_buffer,
-    //             index_buffer,
-    //             num_elements: m.mesh.indices.len() as u32,
-    //             material: m.mesh.material_id.unwrap_or(0),
-    //         }
-    //     })
-    //     .collect::<Vec<_>>();
-
-    //     // create new model struct
-    //     Ok(Model {
-    //         meshes,
-    //         materials
-    //     })
-    // }

@@ -212,6 +212,7 @@ pub struct Entity {
     model: Option<Model>,
     uniform: ModelUniform,
     uniform_buffer: Option<Buffer>,
+    #[allow(unused)]
     instance: Instance,
     instance_buffer: Option<Buffer>,
 }
