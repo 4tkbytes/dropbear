@@ -1,3 +1,4 @@
+pub mod model;
 pub mod buffer;
 pub mod camera;
 pub mod entity;
@@ -14,8 +15,7 @@ pub use winit;
 
 use spin_sleep::SpinSleeper;
 use std::{
-    sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    fmt::{self, Display, Formatter}, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}, u32
 };
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use winit::{
@@ -27,7 +27,7 @@ use winit::{
     window::Window,
 };
 
-use crate::graphics::Graphics;
+use crate::graphics::{Graphics, Texture};
 
 pub struct State {
     pub surface: Surface<'static>,
@@ -35,6 +35,7 @@ pub struct State {
     pub queue: Queue,
     pub config: SurfaceConfiguration,
     pub is_surface_configured: bool,
+    pub depth_texture: Texture,
     pub window: Arc<Window>,
 }
 
@@ -68,6 +69,28 @@ impl State {
             })
             .await?;
 
+        let info = adapter.get_info();
+println!(
+    "==================== BACKEND INFO ====================
+Backend: {}
+
+Hardware:
+    Adapter Name: {}
+    Vendor: {}
+    Device: {}
+    Type: {:?}
+    Driver: {}
+    Driver Info: {}
+
+",
+    info.backend.to_string(),
+    info.name,
+    info.vendor,
+    info.device,
+    info.device_type,
+    info.driver,
+    info.driver_info,
+);
         let surface_caps = surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps
@@ -87,12 +110,15 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
+        let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
+
         let result = Self {
             surface,
             device,
             queue,
             config,
             is_surface_configured: false,
+            depth_texture,
             window,
         };
 
@@ -106,6 +132,8 @@ impl State {
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
         }
+
+        self.depth_texture = Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
     }
 
     fn render(
@@ -170,6 +198,9 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
+    const NO_FPS_CAP: u32 = u32::MAX;
+
     pub fn set_target_fps(&mut self, fps: u32) {
         self.target_fps = fps.max(1);
     }
@@ -190,7 +221,7 @@ impl App {
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
         let mut app = App::new(config);
-        log::debug!("Configured app with details: {:#?}", app.config);
+        log::debug!("Configured app with details: {}", app.config);
         
         log::debug!("Running through setup");
         setup(&mut app.scene_manager, &mut app.input_manager);
@@ -297,3 +328,11 @@ pub struct WindowConfiguration {
     pub height: u32,
     pub title: &'static str,
 }
+
+impl Display for WindowConfiguration {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "width: {}, height: {}, title: {}", self.width, self.height, self.title)
+    }
+}
+
+

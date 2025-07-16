@@ -92,7 +92,7 @@ impl Scene for TestingScene1 {
         let pipeline = graphics.create_render_pipline(
             &shader,
             vec![
-                &self.mesh.mesh.texture().layout,
+                &self.mesh.mesh.texture().layout(),
                 camera.layout(),
                 self.mesh.mesh.layout(),
             ],

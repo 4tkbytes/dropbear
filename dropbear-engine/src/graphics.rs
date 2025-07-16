@@ -1,13 +1,10 @@
 use image::GenericImageView;
 use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
-    BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, RenderPass,
-    RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor,
-    VertexBufferLayout,
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout
 };
 
-use crate::{State, buffer::Vertex};
+use crate::{buffer::Vertex, State};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -69,7 +66,13 @@ impl<'a> Graphics<'a> {
                         unclipped_depth: false,
                         conservative: false,
                     },
-                    depth_stencil: None,
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: Texture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: CompareFunction::Less,
+                        stencil: StencilState::default(),
+                        bias: DepthBiasState::default(),
+                    }),
                     multisample: wgpu::MultisampleState {
                         count: 1,
                         mask: !0,
@@ -95,7 +98,14 @@ impl<'a> Graphics<'a> {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.state.depth_texture.view,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             })
@@ -163,13 +173,69 @@ impl Shader {
 
 pub struct Texture {
     pub texture: wgpu::Texture,
-    pub sampler: wgpu::Sampler,
-    pub size: wgpu::Extent3d,
-    pub bind_group: wgpu::BindGroup,
-    pub layout: wgpu::BindGroupLayout,
+    pub sampler: Sampler,
+    pub size: Extent3d,
+    pub view: TextureView,
+    pub bind_group: Option<BindGroup>,
+    pub layout: Option<BindGroupLayout>,
 }
 
 impl Texture {
+    pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
+
+    pub fn create_depth_texture(config: &SurfaceConfiguration, device: &Device, label: Option<&str>) -> Self {
+        let size = Extent3d {
+            width: config.width.max(1),
+            height: config.height.max(1),
+            depth_or_array_layers: 1,
+        };
+
+        let desc = TextureDescriptor {
+            label: label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let texture = device.create_texture(&desc);
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(
+            &wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                lod_min_clamp: 0.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            }
+        );
+
+        Self {
+            texture,
+            sampler,
+            view,
+            size,
+            bind_group: None,
+            layout: None,
+        }
+    }
+
+    pub fn layout(&self) -> &BindGroupLayout {
+        self.layout.as_ref().unwrap()
+    }
+
+    pub fn bind_group(&self) -> &BindGroup {
+        self.bind_group.as_ref().unwrap()
+    }
+
     pub fn new(graphics: &Graphics, diffuse_bytes: &[u8]) -> Self {
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
         let diffuse_rgba = diffuse_image.to_rgba8();
@@ -271,11 +337,12 @@ impl Texture {
                 });
 
         Self {
-            bind_group: diffuse_bind_group,
-            layout: texture_bind_group_layout,
+            bind_group: Some(diffuse_bind_group),
+            layout: Some(texture_bind_group_layout),
             texture: diffuse_texture,
             sampler: diffuse_sampler,
             size: texture_size,
+            view: diffuse_texture_view,
         }
     }
 }
