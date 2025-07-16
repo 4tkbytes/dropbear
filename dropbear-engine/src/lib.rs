@@ -1,22 +1,23 @@
-pub mod camera;
 pub mod buffer;
+pub mod camera;
+pub mod entity;
 pub mod graphics;
 pub mod input;
 pub mod scene;
-pub mod entity;
 
 pub use bytemuck;
 pub use log;
+pub use nalgebra;
+pub use num_traits;
 pub use wgpu;
 pub use winit;
-pub use nalgebra;
 
-use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use spin_sleep::SpinSleeper;
 use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -157,6 +158,7 @@ pub struct App {
 
 impl App {
     pub fn new(config: WindowConfiguration) -> Self {
+        log::debug!("Created new instance of app");
         Self {
             state: None,
             config,
@@ -177,6 +179,7 @@ impl App {
         F: FnOnce(&mut scene::Manager, &mut input::Manager),
     {
         if cfg!(debug_assertions) {
+            log::info!("Running in dev mode");
             // let package_name = std::env::var("CARGO_BIN_NAME").unwrap();
             let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_name);
             unsafe { std::env::set_var("RUST_LOG", log_config) };
@@ -185,10 +188,14 @@ impl App {
         env_logger::init();
 
         let event_loop = EventLoop::with_user_event().build()?;
+        log::debug!("Created new event loop");
         let mut app = App::new(config);
-
+        log::debug!("Configured app with details: {:#?}", app.config);
+        
+        log::debug!("Running through setup");
         setup(&mut app.scene_manager, &mut app.input_manager);
 
+        log::debug!("Running app");
         event_loop.run_app(&mut app)?;
 
         Ok(())
@@ -284,6 +291,7 @@ impl ApplicationHandler for App {
     }
 }
 
+#[derive(Debug)]
 pub struct WindowConfiguration {
     pub width: u32,
     pub height: u32,

@@ -1,9 +1,13 @@
 use image::GenericImageView;
+use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, BindGroupLayout, Buffer, BufferUsages, Color, CommandEncoder, RenderPass, RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor
+    BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, RenderPass,
+    RenderPipeline, ShaderModule, TextureUsages, TextureView, TextureViewDescriptor,
+    VertexBufferLayout,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
-use crate::{buffer::Vertex, State};
+use crate::{State, buffer::Vertex};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -43,7 +47,7 @@ impl<'a> Graphics<'a> {
                     vertex: wgpu::VertexState {
                         module: &shader.module,
                         entry_point: Some("vs_main"),
-                        buffers: &[Vertex::desc()],
+                        buffers: &[Vertex::desc(), InstanceRaw::desc()],
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                     },
                     fragment: Some(wgpu::FragmentState {
@@ -60,7 +64,7 @@ impl<'a> Graphics<'a> {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,    // todo: change for improved performance
+                        cull_mode: None, // todo: change for improved performance
                         polygon_mode: wgpu::PolygonMode::Fill,
                         unclipped_depth: false,
                         conservative: false,
@@ -74,6 +78,7 @@ impl<'a> Graphics<'a> {
                     multiview: None,
                     cache: None,
                 });
+        log::debug!("Created new render pipeline");
         render_pipeline
     }
 
@@ -143,6 +148,8 @@ impl Shader {
                 label,
                 source: wgpu::ShaderSource::Wgsl(shader_file_contents.into()),
             });
+        
+        log::debug!("Created new shader under the label: {:?}", label);
 
         Self {
             label: match label {
@@ -269,6 +276,75 @@ impl Texture {
             texture: diffuse_texture,
             sampler: diffuse_sampler,
             size: texture_size,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct Instance {
+    pub position: Vector3<f32>,
+    pub rotation: UnitQuaternion<f32>,
+
+    buffer: Option<Buffer>,
+}
+
+impl Instance {
+    pub fn new(position: Vector3<f32>, rotation: UnitQuaternion<f32>) -> Self {
+        Self {
+            position,
+            rotation,
+            buffer: None,
+        }
+    }
+
+    pub fn to_raw(&self) -> InstanceRaw {
+        let rotation = self.rotation;
+        let model_matrix = Matrix4::new_translation(&self.position) * rotation.to_homogeneous();
+        InstanceRaw {
+            model: model_matrix.into(),
+        }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        self.buffer.as_ref().unwrap()
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    model: [[f32; 4]; 4],
+}
+
+impl InstanceRaw {
+    fn desc() -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: size_of::<InstanceRaw>() as BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials, we'll
+                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5, not conflict with them later
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
         }
     }
 }

@@ -17,6 +17,7 @@ pollster = "0.4"
 bytemuck = { version = "1.23", features = ["derive"] }
 spin_sleep = "1.3"
 nalgebra = "0.33"
+num-traits = "0.2"
 
 [dependencies.image]
 version = "0.25"
