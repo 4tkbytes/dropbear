@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use dropbear_engine::buffer::Vertex;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{InstancedMesh, Mesh};
-use dropbear_engine::graphics::{Graphics, Instance, Shader};
+use dropbear_engine::entity::Entity;
+use dropbear_engine::graphics::{Graphics, Shader};
+use dropbear_engine::model::Model;
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::wgpu::{Color, RenderPipeline};
 use dropbear_engine::winit::dpi::PhysicalPosition;
@@ -20,11 +20,11 @@ use dropbear_engine::{
 #[derive(Default)]
 pub struct TestingScene1 {
     render_pipeline: Option<RenderPipeline>,
-    mesh: InstancedMesh,
     camera: Camera,
     pressed_keys: HashSet<KeyCode>,
     is_cursor_locked: bool,
     window: Option<Arc<Window>>,
+    horse: Entity,
     spawn_new_mesh: bool,
 }
 
@@ -38,41 +38,19 @@ impl TestingScene1 {
     }
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.5, 0.5, 0.0],
-        tex_coords: [0.0, 1.0],
-    },
-    Vertex {
-        position: [-0.5, -0.5, 0.0],
-        tex_coords: [0.0, 0.0],
-    },
-    Vertex {
-        position: [0.5, -0.5, 0.0],
-        tex_coords: [1.0, 0.0],
-    },
-    Vertex {
-        position: [0.5, 0.5, 0.0],
-        tex_coords: [1.0, 1.0],
-    },
-];
-
-const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
-
 impl Scene for TestingScene1 {
     fn load(&mut self, graphics: &mut Graphics) {
         let shader = Shader::new(
             graphics,
-            include_str!("../../dropbear-engine/src/resources/shaders/shader.wgsl"),
+            include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
             Some("default"),
         );
 
-        let mesh = Mesh::new(
-            &graphics,
-            VERTICES,
-            INDICES,
-            include_bytes!("../../dropbear-engine/src/resources/textures/no-texture.png"),
-        );
+        let horse = Entity::adopt(&graphics, Model::load(
+            graphics,
+        "models/horse_obj.obj",
+        ).unwrap(),
+        Some("horse"));
 
         let camera = Camera::new(
             graphics,
@@ -87,19 +65,17 @@ impl Scene for TestingScene1 {
             0.002,
         );
 
-        self.mesh = InstancedMesh::new(mesh, graphics);
-
         let pipeline = graphics.create_render_pipline(
             &shader,
             vec![
-                &self.mesh.mesh.texture().layout(),
+                &graphics.state.texture_bind_layout,
                 camera.layout(),
-                self.mesh.mesh.layout(),
             ],
         );
 
         self.camera = camera;
         self.window = Some(graphics.state.window.clone());
+        self.horse = horse;
 
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
@@ -123,17 +99,6 @@ impl Scene for TestingScene1 {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
 
-        if self.spawn_new_mesh {
-            let forward = self.camera.forward();
-            let cam_pos = self.camera.position();
-            let spawn_distance = 2.0;
-            let spawn_pos = cam_pos + forward * spawn_distance;
-            let instance = Instance::new(spawn_pos.coords, self.camera.rotation());
-            self.mesh.insert_instance(instance, graphics);
-            self.spawn_new_mesh = false;
-        }
-
-        self.mesh.update(graphics);
         self.camera.update(graphics);
     }
 
@@ -148,7 +113,7 @@ impl Scene for TestingScene1 {
 
         if let Some(pipeline) = &self.render_pipeline {
             render_pass.set_pipeline(pipeline);
-            self.mesh.render(&mut render_pass, &self.camera);
+            self.horse.render(&mut render_pass, &self.camera);
         }
         self.window = Some(graphics.state.window.clone());
     }

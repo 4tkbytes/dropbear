@@ -1,3 +1,4 @@
+pub mod resources;
 pub mod model;
 pub mod buffer;
 pub mod camera;
@@ -12,12 +13,13 @@ pub use nalgebra;
 pub use num_traits;
 pub use wgpu;
 pub use winit;
+pub use pollster;
 
 use spin_sleep::SpinSleeper;
 use std::{
     fmt::{self, Display, Formatter}, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}, u32
 };
-use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
+use wgpu::{BindGroupLayout, Device, Queue, Surface, SurfaceConfiguration};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -36,6 +38,8 @@ pub struct State {
     pub config: SurfaceConfiguration,
     pub is_surface_configured: bool,
     pub depth_texture: Texture,
+    pub texture_bind_layout: BindGroupLayout,
+
     pub window: Arc<Window>,
 }
 
@@ -112,6 +116,30 @@ Hardware:
 
         let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
 
+        let texture_bind_group_layout =
+            device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                    label: Some("texture_bind_group_layout"),
+                });
+
         let result = Self {
             surface,
             device,
@@ -119,6 +147,7 @@ Hardware:
             config,
             is_surface_configured: false,
             depth_texture,
+            texture_bind_layout: texture_bind_group_layout,
             window,
         };
 

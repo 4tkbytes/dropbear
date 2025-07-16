@@ -4,7 +4,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout
 };
 
-use crate::{buffer::Vertex, State};
+use crate::{model::{self, Vertex}, resources::load_binary, State};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -44,7 +44,7 @@ impl<'a> Graphics<'a> {
                     vertex: wgpu::VertexState {
                         module: &shader.module,
                         entry_point: Some("vs_main"),
-                        buffers: &[Vertex::desc(), InstanceRaw::desc()],
+                        buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                     },
                     fragment: Some(wgpu::FragmentState {
@@ -110,26 +110,6 @@ impl<'a> Graphics<'a> {
                 timestamp_writes: None,
             })
             .forget_lifetime()
-    }
-
-    pub fn create_vertex(&self, vertices: &[Vertex]) -> Buffer {
-        self.state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            })
-    }
-
-    pub fn create_index(&self, indices: &[u16]) -> Buffer {
-        self.state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
-            })
     }
 
     pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
@@ -291,38 +271,12 @@ impl Texture {
                 ..Default::default()
             });
 
-        let texture_bind_group_layout =
-            graphics
-                .state
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                    label: Some("texture_bind_group_layout"),
-                });
-
         let diffuse_bind_group =
             graphics
                 .state
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &texture_bind_group_layout,
+                    layout: &graphics.state.texture_bind_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -338,12 +292,17 @@ impl Texture {
 
         Self {
             bind_group: Some(diffuse_bind_group),
-            layout: Some(texture_bind_group_layout),
+            layout: Some(graphics.state.texture_bind_layout.clone()),
             texture: diffuse_texture,
             sampler: diffuse_sampler,
             size: texture_size,
             view: diffuse_texture_view,
         }
+    }
+
+    pub async fn load_texture(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Texture> {
+        let (_, data) = load_binary(file_name).await?;
+        Ok(Self::new(graphics, &data))
     }
 }
 

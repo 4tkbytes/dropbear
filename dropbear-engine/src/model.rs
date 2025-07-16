@@ -1,4 +1,9 @@
-use wgpu::VertexBufferLayout;
+use std::{mem, ops::Range};
+
+use russimp::{material::{DataContent, TextureType}, scene::{PostProcess, Scene}, Vector3D};
+use wgpu::{util::DeviceExt, BufferAddress, VertexAttribute, VertexBufferLayout};
+
+use crate::{graphics::{Graphics, Texture}, resources::load_string};
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -14,6 +19,317 @@ pub struct ModelVertex {
 
 impl Vertex for ModelVertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
-        todo!();
+        VertexBufferLayout {
+            array_stride: mem::size_of::<ModelVertex>() as BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
     }
 }
+
+pub struct Model {
+    pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
+}
+
+pub struct Material {
+    pub name: String,
+    pub diffuse_texture: Texture,
+    pub bind_group: wgpu::BindGroup,
+}
+
+pub struct Mesh {
+    pub name: String,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub material: usize,
+}
+
+impl Model {
+    pub fn load(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Model> {
+        let path = std::path::Path::new(env!("OUT_DIR"))
+            .join("resources")
+            .join(file_name);
+
+        let scene = Scene::from_file(
+        path.to_str().unwrap(), 
+        vec![
+                    PostProcess::Triangulate,
+                    PostProcess::FlipUVs,
+                    PostProcess::GenerateNormals,
+                ],
+        )?;
+
+        let mut materials = Vec::new();
+        for m in &scene.materials {
+            let mut name = String::new();
+            let diffuse_bytes_opt = m.textures.iter()
+                .find(|(t_type, _)| **t_type == TextureType::Diffuse)
+                .and_then(|(_, tex)| {
+                    name = tex.borrow().filename.clone();
+                    match &tex.borrow().data {
+                        DataContent::Bytes(b) => Some(b.clone()),
+                        DataContent::Texel(_) => {
+                            log::warn!("Skipping texel-based texture for material '{}'", &name);
+                            None
+                        }
+                    }
+                });
+
+            let diffuse_texture = if let Some(bytes) = diffuse_bytes_opt {
+                Texture::new(graphics, &bytes)
+            } else {
+                log::warn!("Using default texture");
+                Texture::new(graphics, include_bytes!("../resources/textures/no-texture.png"))
+            };
+
+            let bind_group = diffuse_texture.bind_group().to_owned();
+            materials.push(Material {
+                name: name,
+                diffuse_texture,
+                bind_group,
+            });
+        }
+
+        let mut meshes = Vec::new();
+        for mesh in &scene.meshes {
+            let vertices: Vec<ModelVertex> = mesh.vertices.iter().enumerate().map(|(i, v)| {
+                let normal = mesh.normals.get(i).copied().unwrap_or({/*log::warn!("Unable to get normal")*/; Vector3D { x: 0.0, y: 1.0, z: 0.0 }});
+                let tex_coords = mesh.texture_coords
+                                    .get(0)
+                                    .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
+                                    .map(|tc| [tc.x, tc.y])
+                                    .unwrap_or([0.0, 0.0]);
+                ModelVertex {
+                    position: [v.x, v.y, v.z],
+                    tex_coords,
+                    normal: [normal.x, normal.y, normal.z],
+                }
+            }).collect();
+
+            // let vertices = mesh.vertices.iter().enumerate().map(|i, v| {
+            //     let normal = mesh.normals.get(i)
+            // })
+
+            let indices: Vec<u32> = mesh.faces.iter()
+                .flat_map(|f| f.0.iter().copied())
+                .collect();
+
+            let vertex_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("{:?} Vertex Buffer", file_name)),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("{:?} Index Buffer", file_name)),
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+            meshes.push(Mesh {
+                name: mesh.name.clone(),
+                vertex_buffer,
+                index_buffer,
+                num_elements: indices.len() as u32,
+                material: mesh.material_index as usize, // Only one material for now
+            });
+        }
+        Ok(Model {
+            meshes,
+            materials,
+        })
+    }
+}
+
+pub trait DrawModel<'a> {
+    #[allow(unused)]
+    fn draw_mesh(
+        &mut self,
+        mesh: &'a Mesh,
+        material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+    fn draw_mesh_instanced(
+        &mut self,
+        mesh: &'a Mesh,
+        material: &'a Material,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+
+    #[allow(unused)]
+    fn draw_model(&mut self, model: &'a Model, camera_bind_group: &'a wgpu::BindGroup);
+    fn draw_model_instanced(
+        &mut self,
+        model: &'a Model,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+}
+
+impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a,
+{
+    fn draw_mesh(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        self.draw_mesh_instanced(mesh, material, 0..1, camera_bind_group);
+    }
+
+    fn draw_mesh_instanced(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_bind_group(0, &material.bind_group, &[]);
+        self.set_bind_group(1, camera_bind_group, &[]);
+        self.draw_indexed(0..mesh.num_elements, 0, instances);
+    }
+
+    fn draw_model(&mut self, model: &'b Model, camera_bind_group: &'b wgpu::BindGroup) {
+        self.draw_model_instanced(model, 0..1, camera_bind_group);
+    }
+
+    fn draw_model_instanced(
+        &mut self,
+        model: &'b Model,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        for mesh in &model.meshes {
+            let material = &model.materials[mesh.material];
+            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+        }
+    }
+}
+
+    // pub async fn old_load(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Model> {
+    //     let (path, obj_text) = load_string(file_name).await?;
+    //     let obj_cursor = Cursor::new(obj_text);
+    //     let mut obj_reader = BufReader::new(obj_cursor);
+
+    //     let (models, obj_materials) = tobj::load_obj_buf(
+    //         &mut obj_reader,
+    //         &tobj::LoadOptions {
+    //             triangulate: true,
+    //             single_index: true,
+    //             ..Default::default()
+    //         },
+    //         |p| {
+    //             log::debug!("Loading material loader: {}", p.to_str().unwrap());
+    //             let mat_text = match std::fs::read_to_string(p) {
+    //                 Ok(val) => val,
+    //                 Err(e) => {
+    //                     log::error!("Unable to load material [{}] for file {} because of error: {}", p.to_str().unwrap(), file_name, e);
+    //                     String::new()
+    //                 }
+    //             };
+    //             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
+    //         }
+    //     )?;
+
+    //     let mut materials = Vec::new();
+    //     // iterate through materials
+    //     for m in obj_materials? {
+    //         // create new diffuse texture for each
+    //         let diffuse_texture = Texture::load_texture(graphics, &m.diffuse_texture.as_ref().unwrap()).await?;
+    //         // "create" each bind group (by just taking it)
+    //         let bind_group = diffuse_texture.bind_group().to_owned();
+            
+    //         // add to materials vec
+    //         materials.push(Material {
+    //             name: m.name,
+    //             diffuse_texture,
+    //             bind_group: bind_group
+    //         })
+    //     }
+
+    //     // iterate through meshes
+    //     let meshes = models
+    //     .into_iter()
+    //     .map(|m| {
+    //         // for each model
+    //         // get vertices
+    //         let vertices = (0..m.mesh.positions.len() / 3)
+    //             .map(|i| {
+    //                 if m.mesh.normals.is_empty() {
+    //                     ModelVertex {
+    //                         position: [
+    //                             m.mesh.positions[i * 3],
+    //                             m.mesh.positions[i * 3 + 1],
+    //                             m.mesh.positions[i * 3 + 2],
+    //                         ],
+    //                         tex_coords: [m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1]],
+    //                         normal: [0.0, 0.0, 0.0],
+    //                     }
+    //                 } else {
+    //                     ModelVertex {
+    //                         position: [
+    //                             m.mesh.positions[i * 3],
+    //                             m.mesh.positions[i * 3 + 1],
+    //                             m.mesh.positions[i * 3 + 2],
+    //                         ],
+    //                         tex_coords: [m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1]],
+    //                         normal: [
+    //                             m.mesh.normals[i * 3],
+    //                             m.mesh.normals[i * 3 + 1],
+    //                             m.mesh.normals[i * 3 + 2],
+    //                         ],
+    //                     }
+    //                 }
+    //             }).collect::<Vec<_>>();
+            
+    //         // create buffers for them
+    //         let vertex_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //             label: Some(&format!("{:?} Vertex Buffer", file_name)),
+    //             contents: bytemuck::cast_slice(&vertices),
+    //             usage: wgpu::BufferUsages::VERTEX,
+    //         });
+    //         let index_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //             label: Some(&format!("{:?} Index Buffer", file_name)),
+    //             contents: bytemuck::cast_slice(&m.mesh.indices),
+    //             usage: wgpu::BufferUsages::INDEX,
+    //         });
+            
+    //         // add to mesh struct
+    //         Mesh {
+    //             name: file_name.to_string(),
+    //             vertex_buffer,
+    //             index_buffer,
+    //             num_elements: m.mesh.indices.len() as u32,
+    //             material: m.mesh.material_id.unwrap_or(0),
+    //         }
+    //     })
+    //     .collect::<Vec<_>>();
+
+    //     // create new model struct
+    //     Ok(Model {
+    //         meshes,
+    //         materials
+    //     })
+    // }
