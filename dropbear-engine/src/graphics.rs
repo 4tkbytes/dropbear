@@ -87,6 +87,15 @@ impl<'a> Graphics<'a> {
         render_pipeline
     }
 
+    pub fn create_new_ui<F>(&mut self, title_name: &str, function: F)
+    where
+        F: FnOnce(&mut egui::Ui),
+    {
+        egui::Window::new(title_name).show(self.state.egui_renderer.context(), |ui| {
+            function(ui);
+        });
+    }
+
     pub fn clear_colour(&mut self, color: Color) -> RenderPass<'static> {
         self.encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {

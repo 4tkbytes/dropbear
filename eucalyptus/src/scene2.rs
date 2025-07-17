@@ -52,7 +52,7 @@ impl Scene for TestingScene1 {
 
         let horse = Entity::adopt(&graphics, Model::load(
             graphics,
-        "models/vpc0sdfhwkoyyz8o.glb",
+        "models/horse_obj.obj",
         ).unwrap(),
         Some("horse"));
 
@@ -122,12 +122,12 @@ impl Scene for TestingScene1 {
         self.window = Some(graphics.state.window.clone());
     }
 
-    fn exit(&mut self) {
-        debug!("TestingScene1 exited!");
-    }
-
     fn requested_switch(&mut self) -> Option<String> {
         self.switch_to.take()
+    }
+
+    fn exit(&mut self) {
+        debug!("TestingScene1 exited!");
     }
 }
 
@@ -137,7 +137,7 @@ impl Keyboard for TestingScene1 {
         match key {
             KeyCode::Escape => event_loop.exit(),
             KeyCode::F1 => self.is_cursor_locked = !self.is_cursor_locked,
-            KeyCode::F2 => self.switch_to = Some("testing_scene_2".into()),
+            // KeyCode::F2 => self.switch_to = Some("testing_scene_1".into()),
             _ => {
                 self.pressed_keys.insert(key);
             }

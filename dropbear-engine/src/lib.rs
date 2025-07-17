@@ -21,7 +21,7 @@ use spin_sleep::SpinSleeper;
 use std::{
     fmt::{self, Display, Formatter}, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}, u32
 };
-use wgpu::{BindGroupLayout, Device, Instance, InstanceDescriptor, Queue, Surface, SurfaceConfiguration};
+use wgpu::{BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -49,8 +49,6 @@ pub struct State {
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-        let instance = Instance::new(&InstanceDescriptor::default());
-
         let size = window.inner_size();
 
         // create backend
@@ -200,7 +198,7 @@ Hardware:
             });
 
         self.egui_renderer.begin_frame(&self.window);
-        
+
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
         scene_manager.update(previous_dt, &mut graphics);
@@ -255,7 +253,7 @@ impl App {
 
     pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
-        F: FnOnce(&mut scene::Manager, &mut input::Manager),
+        F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
         if cfg!(debug_assertions) {
             log::info!("Running in dev mode");
@@ -268,12 +266,14 @@ impl App {
 
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
-        let mut app = App::new(config);
+        let mut app = Box::new(App::new(config));
         log::debug!("Configured app with details: {}", app.config);
         
         log::debug!("Running through setup");
-        setup(&mut app.scene_manager, &mut app.input_manager);
 
+        let (new_scene, new_input) = setup(app.scene_manager, app.input_manager);
+        app.scene_manager = new_scene;
+        app.input_manager = new_input;
         log::debug!("Running app");
         event_loop.run_app(&mut app)?;
 

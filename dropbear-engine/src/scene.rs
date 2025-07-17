@@ -1,4 +1,4 @@
-use crate::graphics::Graphics;
+use crate::{graphics::Graphics, input};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub trait Scene {
@@ -6,10 +6,12 @@ pub trait Scene {
     fn update(&mut self, dt: f32, graphics: &mut Graphics);
     fn render(&mut self, graphics: &mut Graphics);
     fn exit(&mut self);
+    fn requested_switch(&mut self) -> Option<String> { None }
 }
 
 pub type SceneImpl = Rc<RefCell<dyn Scene>>;
 
+#[derive(Clone)]
 pub struct Manager {
     current_scene: Option<String>,
     next_scene: Option<String>,
@@ -30,6 +32,9 @@ impl Manager {
     pub fn switch(&mut self, name: &str) {
         if self.scenes.contains_key(name) {
             self.next_scene = Some(name.to_string());
+            log::debug!("Switching to scene: {}", name)
+        } else {
+            log::warn!("No such scene as {}, not switching", name);
         }
     }
 
@@ -60,7 +65,14 @@ impl Manager {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
                 scene.borrow_mut().update(dt, graphics);
+                let target = scene.borrow_mut().requested_switch();
+                let _ = scene;
+
+                if let Some(target) = target {
+                    self.switch(&target);
+                }
             }
+
         }
     }
 
@@ -85,4 +97,17 @@ impl Manager {
         }
         None
     }
+}
+
+pub fn add_scene_with_input<S: 'static + Scene + input::Keyboard + input::Mouse>(
+    scene_manager: &mut Manager,
+    input_manager: &mut input::Manager,
+    scene: Rc<RefCell<S>>,
+    scene_name: &str,
+) {
+    scene_manager.add(scene_name, scene.clone());
+    input_manager.add_keyboard(&format!("{}_keyboard", scene_name), scene.clone());
+    input_manager.add_mouse(&format!("{}_mouse", scene_name), scene.clone());
+    scene_manager.attach_input(scene_name, &format!("{}_keyboard", scene_name));
+    scene_manager.attach_input(scene_name, &format!("{}_mouse", scene_name));
 }
