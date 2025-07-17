@@ -3,7 +3,7 @@ mod scene2;
 
 use std::{cell::RefCell, rc::Rc};
 
-use dropbear_engine::{input, scene, WindowConfiguration};
+use dropbear_engine::{scene, WindowConfiguration};
 
 use crate::scene1::TestingScene1;
 
