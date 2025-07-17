@@ -1,3 +1,5 @@
+use winit::event_loop::ActiveEventLoop;
+
 use crate::{graphics::Graphics, input};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -5,7 +7,7 @@ pub trait Scene {
     fn load(&mut self, graphics: &mut Graphics);
     fn update(&mut self, dt: f32, graphics: &mut Graphics);
     fn render(&mut self, graphics: &mut Graphics);
-    fn exit(&mut self);
+    fn exit(&mut self, event_loop: &ActiveEventLoop);
     fn requested_switch(&mut self) -> Option<String> { None }
 }
 
@@ -47,12 +49,12 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub fn update(&mut self, dt: f32, graphics: &mut Graphics) {
+    pub fn update(&mut self, dt: f32, graphics: &mut Graphics, event_loop: &ActiveEventLoop) {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene {
                 if let Some(scene) = self.scenes.get_mut(current_scene_name) {
-                    scene.borrow_mut().exit();
+                    scene.borrow_mut().exit(event_loop);
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {

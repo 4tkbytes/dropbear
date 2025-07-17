@@ -119,15 +119,16 @@ impl Scene for TestingScene1 {
             render_pass.set_pipeline(pipeline);
             self.horse.render(&mut render_pass, &self.camera);
         }
-        self.window = Some(graphics.state.window.clone());
-    }
 
-    fn exit(&mut self) {
-        debug!("TestingScene1 exited!");
+        self.window = Some(graphics.state.window.clone());
     }
 
     fn requested_switch(&mut self) -> Option<String> {
         self.switch_to.take()
+    }
+    
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {
+        
     }
 }
 
@@ -137,7 +138,7 @@ impl Keyboard for TestingScene1 {
         match key {
             KeyCode::Escape => event_loop.exit(),
             KeyCode::F1 => self.is_cursor_locked = !self.is_cursor_locked,
-            KeyCode::F2 => self.switch_to = Some("testing_scene_2".into()),
+            // KeyCode::F2 => self.switch_to = Some("testing_scene_2".into()),
             _ => {
                 self.pressed_keys.insert(key);
             }

@@ -1,3 +1,4 @@
+use egui::Context;
 use image::GenericImageView;
 use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
@@ -87,13 +88,8 @@ impl<'a> Graphics<'a> {
         render_pipeline
     }
 
-    pub fn create_new_ui<F>(&mut self, title_name: &str, function: F)
-    where
-        F: FnOnce(&mut egui::Ui),
-    {
-        egui::Window::new(title_name).show(self.state.egui_renderer.context(), |ui| {
-            function(ui);
-        });
+    pub fn get_egui_context(&mut self) -> &Context {
+        self.state.egui_renderer.context()
     }
 
     pub fn clear_colour(&mut self, color: Color) -> RenderPass<'static> {

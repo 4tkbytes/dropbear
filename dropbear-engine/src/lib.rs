@@ -16,6 +16,7 @@ pub use num_traits;
 pub use wgpu;
 pub use winit;
 pub use pollster;
+pub use egui;
 
 use spin_sleep::SpinSleeper;
 use std::{
@@ -177,6 +178,7 @@ Hardware:
         &mut self,
         scene_manager: &mut scene::Manager,
         previous_dt: f32,
+        event_loop: &ActiveEventLoop,
     ) -> anyhow::Result<()> {
         if !self.is_surface_configured {
             return Ok(());
@@ -201,7 +203,7 @@ Hardware:
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
-        scene_manager.update(previous_dt, &mut graphics);
+        scene_manager.update(previous_dt, &mut graphics, event_loop);
         scene_manager.render(&mut graphics);
 
         self.egui_renderer.end_frame_and_draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor);
@@ -323,7 +325,7 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update();
                 state
-                    .render(&mut self.scene_manager, self.delta_time)
+                    .render(&mut self.scene_manager, self.delta_time, event_loop)
                     .unwrap();
 
                 let frame_elapsed = frame_start.elapsed();
