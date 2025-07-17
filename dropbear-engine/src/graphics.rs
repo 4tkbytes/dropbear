@@ -12,6 +12,8 @@ pub struct Graphics<'a> {
     pub encoder: &'a mut CommandEncoder,
 }
 
+pub const NO_TEXTURE: &'static [u8] = include_bytes!("../resources/textures/no-texture.png");
+
 impl<'a> Graphics<'a> {
     pub fn new(state: &'a State, view: &'a TextureView, encoder: &'a mut CommandEncoder) -> Self {
         Self {
@@ -91,7 +93,6 @@ impl<'a> Graphics<'a> {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.view,
-                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(color),

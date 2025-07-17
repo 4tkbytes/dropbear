@@ -1,3 +1,4 @@
+pub mod egui_renderer;
 pub mod resources;
 pub mod model;
 pub mod buffer;
@@ -8,6 +9,7 @@ pub mod input;
 pub mod scene;
 
 pub use bytemuck;
+use egui_wgpu::ScreenDescriptor;
 pub use log;
 pub use nalgebra;
 pub use num_traits;
@@ -19,7 +21,7 @@ use spin_sleep::SpinSleeper;
 use std::{
     fmt::{self, Display, Formatter}, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}, u32
 };
-use wgpu::{BindGroupLayout, Device, Queue, Surface, SurfaceConfiguration};
+use wgpu::{BindGroupLayout, Device, Instance, InstanceDescriptor, Queue, Surface, SurfaceConfiguration};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -29,7 +31,7 @@ use winit::{
     window::Window,
 };
 
-use crate::graphics::{Graphics, Texture};
+use crate::{egui_renderer::EguiRenderer, graphics::{Graphics, Texture}};
 
 pub struct State {
     pub surface: Surface<'static>,
@@ -39,12 +41,16 @@ pub struct State {
     pub is_surface_configured: bool,
     pub depth_texture: Texture,
     pub texture_bind_layout: BindGroupLayout,
+    pub egui_renderer: EguiRenderer,
+    pub instance: Instance,
 
     pub window: Arc<Window>,
 }
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+        let instance = Instance::new(&InstanceDescriptor::default());
+
         let size = window.inner_size();
 
         // create backend
@@ -139,7 +145,9 @@ Hardware:
                     ],
                     label: Some("texture_bind_group_layout"),
                 });
-
+        
+        let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
+        
         let result = Self {
             surface,
             device,
@@ -149,6 +157,8 @@ Hardware:
             depth_texture,
             texture_bind_layout: texture_bind_group_layout,
             window,
+            instance,
+            egui_renderer,
         };
 
         Ok(result)
@@ -174,6 +184,11 @@ Hardware:
             return Ok(());
         }
 
+        let screen_descriptor = ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: self.window.scale_factor() as f32,
+        };
+
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -184,10 +199,14 @@ Hardware:
                 label: Some("Render Encoder"),
             });
 
+        self.egui_renderer.begin_frame(&self.window);
+        
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
         scene_manager.update(previous_dt, &mut graphics);
         scene_manager.render(&mut graphics);
+
+        self.egui_renderer.end_frame_and_draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -293,6 +312,8 @@ impl ApplicationHandler for App {
             Some(canvas) => canvas,
             None => return,
         };
+        
+        state.egui_renderer.handle_input(&state.window, &event);
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),

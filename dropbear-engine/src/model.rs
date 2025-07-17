@@ -3,7 +3,7 @@ use std::{mem, ops::Range};
 use russimp::{material::{DataContent, TextureType}, scene::{PostProcess, Scene}, Vector3D};
 use wgpu::{util::DeviceExt, BufferAddress, VertexAttribute, VertexBufferLayout};
 
-use crate::graphics::{Graphics, Texture};
+use crate::graphics::{Graphics, Texture, NO_TEXTURE};
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -64,6 +64,7 @@ pub struct Mesh {
 
 impl Model {
     pub fn load(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Model> {
+        log::debug!("Loading model [{}]", file_name);
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("resources")
             .join(file_name);
@@ -96,8 +97,12 @@ impl Model {
             let diffuse_texture = if let Some(bytes) = diffuse_bytes_opt {
                 Texture::new(graphics, &bytes)
             } else {
-                log::warn!("Using default texture");
-                Texture::new(graphics, include_bytes!("../resources/textures/no-texture.png"))
+                if !name.is_empty() {
+                    log::warn!("Error loading material {}, using default missing texture", name);
+                } else {
+                    log::warn!("Error loading material, using default missing texture");
+                }
+                Texture::new(graphics, NO_TEXTURE)
             };
 
             let bind_group = diffuse_texture.bind_group().to_owned();
@@ -144,10 +149,10 @@ impl Model {
                 vertex_buffer,
                 index_buffer,
                 num_elements: indices.len() as u32,
-                material: mesh.material_index as usize, // Only one material for now
+                material: mesh.material_index as usize,
             });
         }
-        log::debug!("Successfully loaded model");
+        log::debug!("Successfully loaded model [{}]", file_name);
         Ok(Model {
             meshes,
             materials,
