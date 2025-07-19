@@ -30,11 +30,6 @@ impl Default for SceneCommand {
     }
 }
 
-
-impl SceneCommand {
-    
-}
-
 pub type SceneImpl = Rc<RefCell<dyn Scene>>;
 
 #[derive(Clone)]

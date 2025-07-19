@@ -21,6 +21,7 @@ pub use egui;
 pub use tokio;
 pub use async_trait;
 pub use gilrs;
+pub use hecs;
 
 use spin_sleep::SpinSleeper;
 use std::{
@@ -307,6 +308,8 @@ impl App {
         }
 
         env_logger::init();
+
+        log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
 
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");

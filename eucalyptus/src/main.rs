@@ -11,7 +11,7 @@ use crate::scene1::TestingScene1;
 async fn main() {
     let config = WindowConfiguration {
         title: "Eucalyptus, built with dropbear",
-        windowed_mode: dropbear_engine::WindowedModes::Fullscreen,
+        windowed_mode: dropbear_engine::WindowedModes::Windowed(1280, 720),
         read_from_config: None,
     };
 

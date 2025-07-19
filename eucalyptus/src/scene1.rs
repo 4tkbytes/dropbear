@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use dropbear_engine::async_trait::async_trait;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::Entity;
-use dropbear_engine::gilrs;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::hecs::World;
+use dropbear_engine::{gilrs, hecs};
 use dropbear_engine::graphics::{Graphics, Shader};
 use dropbear_engine::input::Controller;
-use dropbear_engine::model::Model;
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::scene::SceneCommand;
 use dropbear_engine::wgpu::{Color, RenderPipeline};
@@ -22,12 +22,12 @@ use dropbear_engine::{
 };
 
 pub struct TestingScene1 {
+    world: hecs::World,
     render_pipeline: Option<RenderPipeline>,
     camera: Camera,
     pressed_keys: HashSet<KeyCode>,
     is_cursor_locked: bool,
     window: Option<Arc<Window>>,
-    horse: Entity,
     scene_command: SceneCommand,
 }
 
@@ -35,12 +35,12 @@ impl TestingScene1 {
     pub fn new() -> Self {
         debug!("TestingScene1 instance created");
         Self {
+            world: World::new(),
             is_cursor_locked: true,
             render_pipeline: None,
             camera: Camera::default(),
             pressed_keys: Default::default(),
             window: Default::default(),
-            horse: Default::default(),
             scene_command: Default::default(),
         }
     }
@@ -55,11 +55,16 @@ impl Scene for TestingScene1 {
             Some("default"),
         );
 
-        let horse = Entity::adopt(&graphics, Model::load(
-            graphics,
-        "models/maxwell_the_cat.glb",
-        ).unwrap(),
-        Some("horse"));
+        let horse_model = AdoptedEntity::new(
+            graphics, 
+            "models/low_poly_horse.glb", 
+            Some("horse")
+        ).unwrap();
+
+        self.world.spawn((
+            horse_model,
+            Transform::default()
+        ));
 
         let camera = Camera::new(
             graphics,
@@ -84,7 +89,6 @@ impl Scene for TestingScene1 {
 
         self.camera = camera;
         self.window = Some(graphics.state.window.clone());
-        self.horse = horse;
 
         // ensure that this is the last line
         self.render_pipeline = Some(pipeline);
@@ -108,21 +112,27 @@ impl Scene for TestingScene1 {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
 
+        let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
+        for (_, (entity, transform)) in query {
+            entity.update(&graphics, transform);
+        }
+
         self.camera.update(graphics);
     }
 
     async fn render(&mut self, graphics: &mut Graphics) {
-        let color = Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 1.0,
-        };
-        let mut render_pass = graphics.clear_colour(color);
+        let color = Color { r: 0.1, g: 0.2, b: 0.3, a: 1.0 };
 
         if let Some(pipeline) = &self.render_pipeline {
-            render_pass.set_pipeline(pipeline);
-            self.horse.render(&mut render_pass, &self.camera);
+            {
+                let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
+                let mut render_pass = graphics.clear_colour(color);
+                render_pass.set_pipeline(pipeline);
+
+                for (_, (entity, _)) in query.iter() {
+                    entity.render(&mut render_pass, &self.camera);
+                }
+            }
         }
 
         self.window = Some(graphics.state.window.clone());
