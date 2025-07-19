@@ -1,4 +1,9 @@
 use std::path::PathBuf;
+use std::sync::LazyLock;
+
+pub static RESOURCES_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::path::Path::new(env!("OUT_DIR")).join("resources")
+});
 
 pub async fn load_binary(file_name: &str) -> anyhow::Result<(PathBuf, Vec<u8>)> {
     let path = std::path::Path::new(env!("OUT_DIR"))

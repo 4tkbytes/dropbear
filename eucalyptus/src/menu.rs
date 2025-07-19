@@ -1,4 +1,4 @@
-use dropbear_engine::{async_trait::async_trait, egui, gilrs, input::{Controller, Keyboard, Mouse}, log::debug, scene::{Scene, SceneCommand}};
+use dropbear_engine::{async_trait::async_trait, egui::{self, FontId, Frame, Id, TextStyle, UiBuilder, WidgetText}, egui_extras, gilrs, input::{Controller, Keyboard, Mouse}, log::debug, resources::RESOURCES_PATH, scene::{Scene, SceneCommand}};
 
 #[derive(Default)]
 pub struct MainMenu {
@@ -24,22 +24,27 @@ impl Scene for MainMenu {
     }
 
     async fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
-        egui::CentralPanel::default().show(graphics.get_egui_context(), |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(100.0);
-                ui.heading("Welcome to Eucalyptus!");
-                ui.add_space(40.0);
+        // egui::CentralPanel::default().show(graphics.get_egui_context(), |ui| {
+        //     ui.vertical_centered(|ui| {
+        //         ui.add_space(100.0);
+        //         ui.heading("Welcome to Eucalyptus!");
+        //         ui.add_space(40.0);
 
-                let button_size = egui::vec2(300.0, 60.0); // width, height
+        //         let button_size = egui::vec2(300.0, 60.0); // width, height
 
-                if ui.add_sized(button_size, egui::Button::new("Start")).clicked() {
-                    self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
-                }
-                ui.add_space(20.0);
-                if ui.add_sized(button_size, egui::Button::new("Quit")).clicked() {
-                    self.scene_command = SceneCommand::Quit
-                }
-            });
+        //         if ui.add_sized(button_size, egui::Button::new("Start")).clicked() {
+        //             self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
+        //         }
+        //         ui.add_space(20.0);
+        //         if ui.add_sized(button_size, egui::Button::new("Quit")).clicked() {
+        //             self.scene_command = SceneCommand::Quit
+        //         }
+        //     });
+        // });
+        egui_extras::install_image_loaders(graphics.get_egui_context());
+        egui::CentralPanel::default().frame(Frame::new()).show(graphics.get_egui_context(), |ui| {
+            ui.label("Hello World!");
+            ui.image(format!("file://{}/textures/no-texture.png", RESOURCES_PATH.to_str().unwrap())).highlight();
         });
     }
     

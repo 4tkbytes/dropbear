@@ -22,6 +22,7 @@ pub use tokio;
 pub use async_trait;
 pub use gilrs;
 pub use hecs;
+pub use egui_extras;
 
 use spin_sleep::SpinSleeper;
 use std::{
