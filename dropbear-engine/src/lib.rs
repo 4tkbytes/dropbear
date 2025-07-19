@@ -36,6 +36,7 @@ use winit::{
 
 use crate::{egui_renderer::EguiRenderer, graphics::{Graphics, Texture}};
 
+/// The backend information, such as the device, queue, config, surface, renderer, window and more. 
 pub struct State {
     pub surface: Surface<'static>,
     pub device: Device,
@@ -51,6 +52,7 @@ pub struct State {
 }
 
 impl State {
+    /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.  
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
@@ -165,6 +167,7 @@ Hardware:
         Ok(result)
     }
 
+    /// A helper function that changes the surface config when resized (+ depth texture). 
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.config.width = width;
@@ -176,6 +179,7 @@ Hardware:
         self.depth_texture = Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
     }
 
+    /// Asynchronously renders the scene and the egui renderer. I don't know what else to say. 
     async fn render(
         &mut self,
         scene_manager: &mut scene::Manager,
@@ -217,6 +221,7 @@ Hardware:
     }
 }
 
+/// Fetches the current time as nanoseconds. Purely just a helper function, but use if you wish. 
 pub fn get_current_time_as_ns() -> u128 {
     let now = SystemTime::now();
     let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
@@ -224,18 +229,31 @@ pub fn get_current_time_as_ns() -> u128 {
     timestamp_ns
 }
 
+/// A struct storing the information about the application/game that is using the engine. 
 pub struct App {
+    /// The configuration of the window. 
     config: WindowConfiguration,
+    /// The graphics backend
     state: Option<State>,
+    /// The scene manager, manages and orchestrates the switching of scenes
     scene_manager: scene::Manager,
+    /// The input manager, manages any inputs and their actions
     input_manager: input::Manager,
+    /// The amount of time it took to render the last frame.
+    /// To find the FPS: just do `1.0/delta_time`. 
     delta_time: f32,
+    /// Internal
     next_frame_time: Option<Instant>,
+    /// The fps the app should aim to hit / the max fps. 
+    /// It is possible to aim it at 60 fps, 120 fps, or even no limit
+    /// with the const variable [`App::NO_FPS_CAP`]
     target_fps: u32,
 }
 
 impl App {
-    pub fn new(config: WindowConfiguration) -> Self {
+    /// Creates a new instance of the application. It only sets the default for the struct + the 
+    /// window config. 
+    fn new(config: WindowConfiguration) -> Self {
         log::debug!("Created new instance of app");
         Self {
             state: None,
@@ -249,12 +267,28 @@ impl App {
     }
 
     #[allow(dead_code)]
+    /// A constant that lets you not have any fps count. 
+    /// It is just the max value of an unsigned 32 bit number lol. 
     const NO_FPS_CAP: u32 = u32::MAX;
 
+    /// Helper function that sets the target frames per second. Can be used mid game to increase FPS. 
     pub fn set_target_fps(&mut self, fps: u32) {
         self.target_fps = fps.max(1);
     }
 
+    /// The run function. This function runs the app into gear.
+    /// 
+    /// ## Warning
+    /// It is not recommended to use this function to start up the app due to the mandatory app_name
+    /// parameter. Use the [`run_app!`] macro instead, which does not require
+    /// for you to pass in the app name (it automatically does it for you). 
+    /// 
+    /// # Parameters:
+    /// - config: The window configuration, such as the title, and window dimensions. 
+    /// - app_name: A string to the app name for debugging.
+    /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself. 
+    /// It takes an input of a scene manager and an input manager, and expects you to return back the changed 
+    /// managers. 
     pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
@@ -286,6 +320,13 @@ impl App {
 }
 
 #[macro_export]
+/// The macro to run the app/game. The difference between this and [`App::run()`] is that
+/// this automatically fetches the package name during compilation.
+/// 
+/// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life 
+/// easier by not having to guess your package name if it changes).
+///  
+/// See also the docs for a further run down on the parameters of how it is run: [`App::run()`]
 macro_rules! run_app {
     ($config:expr, $setup:expr) => {
         $crate::App::run($config, env!("CARGO_PKG_NAME"), $setup)
@@ -376,6 +417,10 @@ impl ApplicationHandler for App {
     }
 }
 
+/// The window configuration of the app/game. 
+/// 
+/// This struct is primitive but has purpose in the way that it sets the initial specs of the window. 
+/// Thats all it does. And it can also display. But thats about it. 
 #[derive(Debug)]
 pub struct WindowConfiguration {
     pub width: u32,
@@ -389,4 +434,19 @@ impl Display for WindowConfiguration {
     }
 }
 
-
+/// This enum represents the status of any asset, whether its IO, asset rendering,
+/// scene loading and more.
+/// 
+/// # Representation
+/// It's pretty simple really:
+///- [`Status::Idle`]: Has not been loaded, and is the default value for anything
+///- [`Status::Loading`]: In the process of loading. 
+///- [`Status::Completed`]: Loading has been completed.   
+pub enum Status {
+    /// Has not been loaded, and is the default value for anything
+    Idle,
+    /// In the process of loading
+    Loading,
+    /// Loading has been completed
+    Completed
+}
