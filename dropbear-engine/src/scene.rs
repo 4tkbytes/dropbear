@@ -22,6 +22,7 @@ pub enum SceneCommand {
     None,
     Quit,
     SwitchScene(String),
+    DebugMessage(String),
 }
 
 impl Default for SceneCommand {
@@ -93,7 +94,8 @@ impl Manager {
                         log::info!("Exiting app!");
                         event_loop.exit();
                     }
-                    SceneCommand::None => {}
+                    SceneCommand::None => {},
+                    SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
                 }
             }
         }
