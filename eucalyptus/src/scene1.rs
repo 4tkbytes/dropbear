@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use dropbear_engine::async_trait::async_trait;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::Entity;
 use dropbear_engine::graphics::{Graphics, Shader};
@@ -42,8 +43,9 @@ impl TestingScene1 {
     }
 }
 
+#[async_trait]
 impl Scene for TestingScene1 {
-    fn load(&mut self, graphics: &mut Graphics) {
+    async fn load(&mut self, graphics: &mut Graphics) {
         let shader = Shader::new(
             graphics,
             include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
@@ -52,7 +54,7 @@ impl Scene for TestingScene1 {
 
         let horse = Entity::adopt(&graphics, Model::load(
             graphics,
-        "models/vpc0sdfhwkoyyz8o.glb",
+        "models/maxwell_the_cat.glb",
         ).unwrap(),
         Some("horse"));
 
@@ -85,7 +87,7 @@ impl Scene for TestingScene1 {
         self.render_pipeline = Some(pipeline);
     }
 
-    fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
+    async fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
         // hold down movement
         for key in &self.pressed_keys {
             match key {
@@ -106,7 +108,7 @@ impl Scene for TestingScene1 {
         self.camera.update(graphics);
     }
 
-    fn render(&mut self, graphics: &mut Graphics) {
+    async fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
             r: 0.1,
             g: 0.2,
@@ -127,7 +129,7 @@ impl Scene for TestingScene1 {
         self.switch_to.take()
     }
     
-    fn exit(&mut self, _event_loop: &ActiveEventLoop) {
+    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {
         
     }
 }

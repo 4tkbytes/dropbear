@@ -1,4 +1,4 @@
-use dropbear_engine::{egui, input::{Keyboard, Mouse}, scene::Scene};
+use dropbear_engine::{async_trait::async_trait, egui, input::{Keyboard, Mouse}, scene::Scene};
 
 #[derive(Default)]
 pub struct MainMenu {
@@ -14,16 +14,17 @@ impl MainMenu {
     }
 }
 
+#[async_trait]
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {
 
     }
 
-    fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {
         
     }
 
-    fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
         egui::CentralPanel::default().show(graphics.get_egui_context(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(100.0);
@@ -43,7 +44,7 @@ impl Scene for MainMenu {
         });
     }
     
-    fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
+    async fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
 
     fn requested_switch(&mut self) -> Option<String> {
         self.switch_to.take()

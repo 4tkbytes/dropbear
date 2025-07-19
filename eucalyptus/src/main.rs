@@ -3,11 +3,12 @@ mod menu;
 
 use std::{cell::RefCell, rc::Rc};
 
-use dropbear_engine::{scene, WindowConfiguration};
+use dropbear_engine::{scene, tokio, WindowConfiguration};
 
 use crate::scene1::TestingScene1;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let config = WindowConfiguration {
         width: 1280u32,
         height: 720u32,

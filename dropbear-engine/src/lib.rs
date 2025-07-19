@@ -10,13 +10,15 @@ pub mod scene;
 
 pub use bytemuck;
 use egui_wgpu::ScreenDescriptor;
+use futures::FutureExt;
 pub use log;
 pub use nalgebra;
 pub use num_traits;
 pub use wgpu;
 pub use winit;
-pub use pollster;
 pub use egui;
+pub use tokio;
+pub use async_trait;
 
 use spin_sleep::SpinSleeper;
 use std::{
@@ -174,7 +176,7 @@ Hardware:
         self.depth_texture = Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
     }
 
-    fn render(
+    async fn render(
         &mut self,
         scene_manager: &mut scene::Manager,
         previous_dt: f32,
@@ -203,8 +205,8 @@ Hardware:
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
-        scene_manager.update(previous_dt, &mut graphics, event_loop);
-        scene_manager.render(&mut graphics);
+        scene_manager.update(previous_dt, &mut graphics, event_loop).await;
+        scene_manager.render(&mut graphics).await;
 
         self.egui_renderer.end_frame_and_draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor);
 
@@ -324,9 +326,9 @@ impl ApplicationHandler for App {
                 let frame_start = Instant::now();
 
                 self.input_manager.update();
-                state
-                    .render(&mut self.scene_manager, self.delta_time, event_loop)
-                    .unwrap();
+                if let Some(result) = state.render(&mut self.scene_manager, self.delta_time, event_loop).now_or_never() {
+                    result.unwrap();
+                }
 
                 let frame_elapsed = frame_start.elapsed();
                 let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);

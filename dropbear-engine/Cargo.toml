@@ -14,6 +14,11 @@ env_logger = "0.11"
 log = "0.4"
 wgpu = "25"
 pollster = "0.4"
+# Never block on with async, use tokio instead...
+# Note to self: use pollster only for state blocking, any resource loading should not be blocked. 
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
 bytemuck = { version = "1.23", features = ["derive"] }
 spin_sleep = "1.3"
 nalgebra = "0.33"
@@ -22,6 +27,7 @@ russimp = { version = "3.2", features = ["prebuilt"] }
 egui = "0.32"
 egui-winit = "0.32"
 egui-wgpu = { version = "0.32", features = ["winit"] }
+egui_extras = "0.32"
 
 [dependencies.image]
 version = "0.25"
