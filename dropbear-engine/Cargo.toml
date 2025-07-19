@@ -28,6 +28,7 @@ egui = "0.32"
 egui-winit = "0.32"
 egui-wgpu = { version = "0.32", features = ["winit"] }
 egui_extras = "0.32"
+gilrs = "0.11"
 
 [dependencies.image]
 version = "0.25"

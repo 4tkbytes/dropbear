@@ -4,9 +4,12 @@ use std::sync::Arc;
 use dropbear_engine::async_trait::async_trait;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::Entity;
+use dropbear_engine::gilrs;
 use dropbear_engine::graphics::{Graphics, Shader};
+use dropbear_engine::input::Controller;
 use dropbear_engine::model::Model;
 use dropbear_engine::nalgebra::{Point3, Vector3};
+use dropbear_engine::scene::SceneCommand;
 use dropbear_engine::wgpu::{Color, RenderPipeline};
 use dropbear_engine::winit::dpi::PhysicalPosition;
 use dropbear_engine::winit::event::MouseButton;
@@ -25,7 +28,7 @@ pub struct TestingScene1 {
     is_cursor_locked: bool,
     window: Option<Arc<Window>>,
     horse: Entity,
-    switch_to: Option<String>,
+    scene_command: SceneCommand,
 }
 
 impl TestingScene1 {
@@ -38,7 +41,7 @@ impl TestingScene1 {
             pressed_keys: Default::default(),
             window: Default::default(),
             horse: Default::default(),
-            switch_to: None,
+            scene_command: Default::default(),
         }
     }
 }
@@ -124,13 +127,11 @@ impl Scene for TestingScene1 {
 
         self.window = Some(graphics.state.window.clone());
     }
-
-    fn requested_switch(&mut self) -> Option<String> {
-        self.switch_to.take()
-    }
     
-    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {
-        
+    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+
+    fn run_command(&mut self) -> SceneCommand {
+        std::mem::replace(&mut self.scene_command, SceneCommand::None)
     }
 }
 
@@ -177,5 +178,32 @@ impl Mouse for TestingScene1 {
                 window.set_cursor_visible(false);
             }
         }
+    }
+}
+
+
+impl Controller for TestingScene1 {
+    fn button_down(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
+        debug!("Controller button {:?} pressed! [{}]", button, id);
+    }
+
+    fn button_up(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
+        debug!("Controller button {:?} released! [{}]", button, id);
+    }
+
+    fn left_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
+        debug!("Left stick changed: x = {} | y = {} | id = {}", x, y, id);
+    }
+
+    fn right_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
+        debug!("Right stick changed: x = {} | y = {} | id = {}", x, y, id);
+    }
+
+    fn on_connect(&mut self, id: gilrs::GamepadId) {
+        debug!("Controller connected [{}]", id);
+    }
+
+    fn on_disconnect(&mut self, id: gilrs::GamepadId) {
+        debug!("Controller disconnected [{}]", id);
     }
 }

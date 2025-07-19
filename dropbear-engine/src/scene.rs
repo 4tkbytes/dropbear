@@ -10,7 +10,29 @@ pub trait Scene {
     async fn update(&mut self, dt: f32, graphics: &mut Graphics);
     async fn render(&mut self, graphics: &mut Graphics);
     async fn exit(&mut self, event_loop: &ActiveEventLoop);
-    fn requested_switch(&mut self) -> Option<String> { None }
+    /// By far a mess of a trait however it works. 
+    /// 
+    /// This struct allows you to add in a SceneCommand enum and send it to the scene management for them
+    /// to parse through.
+    fn run_command(&mut self) -> SceneCommand { SceneCommand::None }
+}
+
+#[derive(Clone)]
+pub enum SceneCommand {
+    None,
+    Quit,
+    SwitchScene(String),
+}
+
+impl Default for SceneCommand {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+
+impl SceneCommand {
+    
 }
 
 pub type SceneImpl = Rc<RefCell<dyn Scene>>;
@@ -69,11 +91,14 @@ impl Manager {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
                 scene.borrow_mut().update(dt, graphics).await;
-                let target = scene.borrow_mut().requested_switch();
-                let _ = scene;
-
-                if let Some(target) = target {
-                    self.switch(&target);
+                let command = scene.borrow_mut().run_command();
+                match command {
+                    SceneCommand::SwitchScene(target) => self.switch(&target),
+                    SceneCommand::Quit => {
+                        log::info!("Exiting app!");
+                        event_loop.exit();
+                    }
+                    SceneCommand::None => {}
                 }
             }
         }
@@ -102,7 +127,7 @@ impl Manager {
     }
 }
 
-pub fn add_scene_with_input<S: 'static + Scene + input::Keyboard + input::Mouse>(
+pub fn add_scene_with_input<S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller>(
     scene_manager: &mut Manager,
     input_manager: &mut input::Manager,
     scene: Rc<RefCell<S>>,
@@ -111,6 +136,8 @@ pub fn add_scene_with_input<S: 'static + Scene + input::Keyboard + input::Mouse>
     scene_manager.add(scene_name, scene.clone());
     input_manager.add_keyboard(&format!("{}_keyboard", scene_name), scene.clone());
     input_manager.add_mouse(&format!("{}_mouse", scene_name), scene.clone());
+    input_manager.add_controller(&format!("{}_controller", scene_name), scene.clone());
     scene_manager.attach_input(scene_name, &format!("{}_keyboard", scene_name));
     scene_manager.attach_input(scene_name, &format!("{}_mouse", scene_name));
+    scene_manager.attach_input(scene_name, &format!("{}_controller", scene_name));
 }

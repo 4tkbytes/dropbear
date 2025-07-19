@@ -11,6 +11,7 @@ pub mod scene;
 pub use bytemuck;
 use egui_wgpu::ScreenDescriptor;
 use futures::FutureExt;
+use gilrs::{Gilrs, GilrsBuilder};
 pub use log;
 pub use nalgebra;
 pub use num_traits;
@@ -19,6 +20,7 @@ pub use winit;
 pub use egui;
 pub use tokio;
 pub use async_trait;
+pub use gilrs;
 
 use spin_sleep::SpinSleeper;
 use std::{
@@ -30,7 +32,7 @@ use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::PhysicalKey,
+    keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
 
@@ -248,6 +250,8 @@ pub struct App {
     /// It is possible to aim it at 60 fps, 120 fps, or even no limit
     /// with the const variable [`App::NO_FPS_CAP`]
     target_fps: u32,
+    /// The library used for polling controllers, specifically the instance of that. 
+    gilrs: Gilrs,
 }
 
 impl App {
@@ -263,6 +267,8 @@ impl App {
             delta_time: (1.0 / 60.0),
             next_frame_time: None,
             target_fps: 60,
+            // default settings for now
+            gilrs: GilrsBuilder::new().build().unwrap()
         }
     }
 
@@ -335,13 +341,21 @@ macro_rules! run_app {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes()
-            .with_title(self.config.title)
-            .with_inner_size(PhysicalSize::new(self.config.width, self.config.height));
+            .with_title(self.config.title);
+
+        if self.config.windowed_mode.is_windowed() {
+            if let Some((width, height)) = self.config.windowed_mode.windowed_size() {
+                window_attributes = window_attributes.with_inner_size(PhysicalSize::new(width, height));
+            }
+        } else if self.config.windowed_mode.is_maximised() {
+            window_attributes = window_attributes.with_maximized(true);
+        } else if self.config.windowed_mode.is_fullscreen() {
+            window_attributes = window_attributes.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        }
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-
+        
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
 
         self.next_frame_time = Some(Instant::now());
@@ -366,7 +380,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let frame_start = Instant::now();
 
-                self.input_manager.update();
+                self.input_manager.update(&mut self.gilrs);
                 if let Some(result) = state.render(&mut self.scene_manager, self.delta_time, event_loop).now_or_never() {
                     result.unwrap();
                 }
@@ -398,6 +412,35 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
+                if code == KeyCode::F11 && key_state.is_pressed() {
+                    if let Some(state) = &self.state {
+                        match self.config.windowed_mode {
+                            WindowedModes::Windowed(_, _) => {
+                                if state.window.fullscreen().is_some() {
+                                    state.window.set_fullscreen(None);
+                                    let _ = state.window.request_inner_size(PhysicalSize::new(1280, 720));
+                                    state.window.set_maximized(false);
+                                } else {
+                                    state.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                                }
+                            }
+                            WindowedModes::Maximised => {
+                                if state.window.fullscreen().is_some() {
+                                    state.window.set_fullscreen(None);
+                                    state.window.set_maximized(true);
+                                } else {
+                                    state.window.set_maximized(false);
+                                    state.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                                }
+                            }
+                            WindowedModes::Fullscreen => {
+                                state.window.set_fullscreen(None);
+                                let _ = state.window.request_inner_size(PhysicalSize::new(1280, 720));                                    
+                                state.window.set_maximized(false);
+                            }
+                        }
+                    }
+                }
                 self.input_manager
                     .handle_key_input(code, key_state.is_pressed(), event_loop);
             }
@@ -423,14 +466,67 @@ impl ApplicationHandler for App {
 /// Thats all it does. And it can also display. But thats about it. 
 #[derive(Debug)]
 pub struct WindowConfiguration {
-    pub width: u32,
-    pub height: u32,
+    pub windowed_mode: WindowedModes,
     pub title: &'static str,
+    /// This reads from a config file. 
+    /// This will read from a client config file under {exe}/client.props, and on game exit will save the properties to the file. 
+    /// 
+    /// As of right now, it has not been implemented yet :(
+    // TODO: Implement config reading. 
+    pub read_from_config: Option<String>,
+}
+
+/// An enum displaying the different modes on initial startup
+#[derive(PartialEq, Debug)]
+pub enum WindowedModes {
+    Windowed(u32, u32),
+    Maximised,
+    Fullscreen
+}
+
+impl WindowedModes {
+    /// Checks if the config is windowed and returns a bool. Use [`WindowedModes::windowed_size`]
+    /// to fetch the values. 
+    pub fn is_windowed(&self) -> bool {
+        matches!(self, WindowedModes::Windowed(_, _))
+    }
+
+    /// Checks if the config is maximised and returns a bool
+    pub fn is_maximised(&self) -> bool {
+        matches!(self, WindowedModes::Maximised)
+    }
+
+    /// Checks if the config is fullscreen and returns a bool. 
+    pub fn is_fullscreen(&self) -> bool {
+        matches!(self, WindowedModes::Fullscreen)
+    }
+
+    /// Fetches the config windowed width and height in an option in the case
+    /// that it is run on a mode like fullscreen or maximised. 
+    pub fn windowed_size(&self) -> Option<(u32, u32)> {
+        if let WindowedModes::Windowed(w, h) = *self {
+            Some((w, h))
+        } else {
+            None
+        }
+    }
 }
 
 impl Display for WindowConfiguration {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "width: {}, height: {}, title: {}", self.width, self.height, self.title)
+        if self.windowed_mode.is_windowed() {
+            if let Some((width, height)) = self.windowed_mode.windowed_size() {
+                write!(f, "width: {}, height: {}, title: {}", width, height, self.title)
+            } else {
+                write!(f, "yo how the fuck you get to here huh???")
+            }
+        } else if self.windowed_mode.is_maximised() {
+            write!(f, "window is maximised: title: {}", self.title)
+        } else if self.windowed_mode.is_fullscreen() {
+            write!(f, "window is fullscreen: title: {}", self.title)
+        } else {
+            write!(f, "dude i think the code is broken can you lowk dm the dev about this thanks!")
+        }
     }
 }
 

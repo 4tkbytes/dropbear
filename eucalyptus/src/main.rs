@@ -10,9 +10,9 @@ use crate::scene1::TestingScene1;
 #[tokio::main]
 async fn main() {
     let config = WindowConfiguration {
-        width: 1280u32,
-        height: 720u32,
         title: "Eucalyptus, built with dropbear",
+        windowed_mode: dropbear_engine::WindowedModes::Fullscreen,
+        read_from_config: None,
     };
 
     let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
