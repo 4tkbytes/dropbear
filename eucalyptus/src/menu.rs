@@ -1,4 +1,12 @@
-use dropbear_engine::{async_trait::async_trait, egui::{self, Frame, Image}, egui_extras, gilrs, input::{Controller, Keyboard, Mouse}, log::{self, debug}, resources::RESOURCES_PATH, scene::{Scene, SceneCommand}};
+use dropbear_engine::{
+    async_trait::async_trait,
+    egui::{self, FontId, Frame, Image, RichText},
+    egui_extras, gilrs,
+    input::{Controller, Keyboard, Mouse},
+    log::{self, debug},
+    resources::RESOURCES_PATH,
+    scene::{Scene, SceneCommand},
+};
 
 #[derive(Default)]
 pub struct MainMenu {
@@ -15,58 +23,58 @@ impl MainMenu {
 
 #[async_trait]
 impl Scene for MainMenu {
-    async fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 
-    }
-
-    async fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {
-        
-    }
+    async fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 
     async fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
-        // egui::CentralPanel::default().show(graphics.get_egui_context(), |ui| {
-        //     ui.vertical_centered(|ui| {
-        //         ui.add_space(100.0);
-        //         ui.heading("Welcome to Eucalyptus!");
-        //         ui.add_space(40.0);
-
-        //         let button_size = egui::vec2(300.0, 60.0); // width, height
-
-        //         if ui.add_sized(button_size, egui::Button::new("Start")).clicked() {
-        //             self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
-        //         }
-        //         ui.add_space(20.0);
-        //         if ui.add_sized(button_size, egui::Button::new("Quit")).clicked() {
-        //             self.scene_command = SceneCommand::Quit
-        //         }
-        //     });
-        // });
         egui_extras::install_image_loaders(graphics.get_egui_context());
-        egui::CentralPanel::default().frame(Frame::new()).show(graphics.get_egui_context(), |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(100.0);
-                ui.heading("Eucalyptus");
-                ui.add_space(40.0);
+        egui::CentralPanel::default()
+            .frame(Frame::new())
+            .show(graphics.get_egui_context(), |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(100.0);
+                    ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
+                    ui.add_space(40.0);
 
-                let button_size = egui::vec2(300.0, 60.0); // width, height
+                    let button_size = egui::vec2(300.0, 60.0);
 
-                if ui.add_sized(button_size, egui::Button::new("Start")).clicked() {
-                    self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
-                }
-                ui.add_space(20.0);
-                if ui.add_sized(button_size, egui::Button::new("Quit")).clicked() {
-                    self.scene_command = SceneCommand::Quit
-                }
-                ui.add_space(20.0);
-                let image = egui::ImageButton::new(Image::new(format!("file://{}/textures/no-texture.png", RESOURCES_PATH.to_str().unwrap())));
-                let image_button = ui.add_sized(egui::vec2(100.0, 100.0), image);
-                if image_button.clicked() {
-                    log::debug!("Image has been clicked!");
-                }
+                    if ui
+                        .add_sized(button_size, egui::Button::new("New Project"))
+                        .clicked()
+                    {
+                        // self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
+                        log::debug!("Creating new project (not implemented)");
+                    }
+                    ui.add_space(20.0);
+
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Open Project"))
+                        .clicked()
+                    {
+                        log::debug!("Opening project (not implemented)");
+                    }
+                    ui.add_space(20.0);
+
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Settings"))
+                        .clicked()
+                    {
+                        log::debug!("Settings");
+                    }
+                    ui.add_space(20.0);
+
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Quit"))
+                        .clicked()
+                    {
+                        self.scene_command = SceneCommand::Quit
+                    }
+                    ui.add_space(20.0);
+                });
             });
-        });
     }
-    
+
     async fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
@@ -75,29 +83,30 @@ impl Scene for MainMenu {
 }
 
 impl Keyboard for MainMenu {
-    fn key_down(&mut self, key: dropbear_engine::winit::keyboard::KeyCode, event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {
+    fn key_down(
+        &mut self,
+        key: dropbear_engine::winit::keyboard::KeyCode,
+        event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+    ) {
         if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
             event_loop.exit();
         }
     }
 
-    fn key_up(&mut self, _key: dropbear_engine::winit::keyboard::KeyCode, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {
-
+    fn key_up(
+        &mut self,
+        _key: dropbear_engine::winit::keyboard::KeyCode,
+        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+    ) {
     }
 }
 
 impl Mouse for MainMenu {
-    fn mouse_move(&mut self, _position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {
+    fn mouse_move(&mut self, _position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {}
 
-    }
+    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
 
-    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
-
-    }
-
-    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {
-
-    }
+    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
 }
 
 impl Controller for MainMenu {
