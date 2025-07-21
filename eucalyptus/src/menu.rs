@@ -1,7 +1,7 @@
 use dropbear_engine::{
     async_trait::async_trait,
     egui::{self, FontId, Frame, RichText},
-    egui_extras, gilrs,
+    gilrs,
     input::{Controller, Keyboard, Mouse},
     log::{self, debug},
     scene::{Scene, SceneCommand},
@@ -10,6 +10,9 @@ use dropbear_engine::{
 #[derive(Default)]
 pub struct MainMenu {
     scene_command: SceneCommand,
+    show_new_project: bool,
+    project_name: String,
+    project_path: Option<std::path::PathBuf>,
 }
 
 impl MainMenu {
@@ -27,12 +30,17 @@ impl Scene for MainMenu {
     async fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 
     async fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
-        egui_extras::install_image_loaders(graphics.get_egui_context());
+        let screen_size: (f32, f32) = (
+            graphics.state.window.inner_size().width as f32 - 100.0,
+            graphics.state.window.inner_size().height as f32 - 100.0,
+        );
+        let egui_ctx = graphics.get_egui_context();
+
         egui::CentralPanel::default()
             .frame(Frame::new())
-            .show(graphics.get_egui_context(), |ui| {
+            .show(egui_ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(100.0);
+                    ui.add_space(64.0);
                     ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
                     ui.add_space(40.0);
 
@@ -43,7 +51,7 @@ impl Scene for MainMenu {
                         .clicked()
                     {
                         log::debug!("Creating new project");
-                        
+                        self.show_new_project = true;
                     }
                     ui.add_space(20.0);
 
@@ -70,6 +78,39 @@ impl Scene for MainMenu {
                         self.scene_command = SceneCommand::Quit
                     }
                     ui.add_space(20.0);
+                });
+            });
+
+        egui::Window::new("Create new project")
+            .open(&mut self.show_new_project)
+            .resizable(true)
+            .collapsible(false)
+            .fixed_size(screen_size)
+            .show(egui_ctx, |ui| {
+                ui.vertical(|ui| {
+                    ui.label("Project Name:");
+                    ui.add_space(5.0);
+                    ui.text_edit_singleline(&mut self.project_name);
+                    ui.add_space(10.0);
+                    ui.label(format!("\"{}\" Project Location", self.project_name));
+                    ui.add_space(5.0);
+
+                    if let Some(ref path) = self.project_path {
+                        ui.label(format!("Chosen location: {}", path.display()));
+                        ui.add_space(5.0);
+                    }
+
+                    ui.add_space(5.0);
+                    if ui.button("Choose Location").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_title("Save Project")
+                            .set_file_name(&self.project_name)
+                            .pick_folder()
+                        {
+                            self.project_path = Some(path);
+                            log::debug!("Project will be saved at: {:?}", self.project_path);
+                        }
+                    }
                 });
             });
     }

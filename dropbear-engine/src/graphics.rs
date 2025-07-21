@@ -11,6 +11,7 @@ pub struct Graphics<'a> {
     pub state: &'a State,
     pub view: &'a TextureView,
     pub encoder: &'a mut CommandEncoder,
+    pub screen_size: (f32, f32),
 }
 
 pub const NO_TEXTURE: &'static [u8] = include_bytes!("../resources/textures/no-texture.png");
@@ -21,6 +22,7 @@ impl<'a> Graphics<'a> {
             state,
             view,
             encoder,
+            screen_size: (state.config.width as f32, state.config.height as f32),
         }
     }
 

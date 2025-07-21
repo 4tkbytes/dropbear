@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 dropbear-engine = { path = "../dropbear-engine" }
+rfd = "0.15.4"

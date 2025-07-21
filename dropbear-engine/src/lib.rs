@@ -1,32 +1,36 @@
-pub mod egui_renderer;
-pub mod resources;
-pub mod model;
 pub mod buffer;
 pub mod camera;
+pub mod egui_renderer;
 pub mod entity;
 pub mod graphics;
 pub mod input;
+pub mod model;
+pub mod resources;
 pub mod scene;
 
+pub use async_trait;
 pub use bytemuck;
+pub use egui;
+pub use egui_extras;
 use egui_wgpu::ScreenDescriptor;
 use futures::FutureExt;
+pub use gilrs;
 use gilrs::{Gilrs, GilrsBuilder};
+pub use hecs;
 pub use log;
 pub use nalgebra;
 pub use num_traits;
+pub use pollster::block_on;
+pub use tokio;
 pub use wgpu;
 pub use winit;
-pub use egui;
-pub use tokio;
-pub use async_trait;
-pub use gilrs;
-pub use hecs;
-pub use egui_extras;
 
 use spin_sleep::SpinSleeper;
 use std::{
-    fmt::{self, Display, Formatter}, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}, u32
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    u32,
 };
 use wgpu::{BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration};
 use winit::{
@@ -38,9 +42,12 @@ use winit::{
     window::Window,
 };
 
-use crate::{egui_renderer::EguiRenderer, graphics::{Graphics, Texture}};
+use crate::{
+    egui_renderer::EguiRenderer,
+    graphics::{Graphics, Texture},
+};
 
-/// The backend information, such as the device, queue, config, surface, renderer, window and more. 
+/// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
     pub surface: Surface<'static>,
     pub device: Device,
@@ -56,7 +63,7 @@ pub struct State {
 }
 
 impl State {
-    /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.  
+    /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
@@ -87,8 +94,8 @@ impl State {
             .await?;
 
         let info = adapter.get_info();
-println!(
-    "==================== BACKEND INFO ====================
+        println!(
+            "==================== BACKEND INFO ====================
 Backend: {}
 
 Hardware:
@@ -100,14 +107,14 @@ Hardware:
     Driver Info: {}
 
 ",
-    info.backend.to_string(),
-    info.name,
-    info.vendor,
-    info.device,
-    info.device_type,
-    info.driver,
-    info.driver_info,
-);
+            info.backend.to_string(),
+            info.name,
+            info.vendor,
+            info.device,
+            info.device_type,
+            info.driver,
+            info.driver_info,
+        );
         let surface_caps = surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps
@@ -130,31 +137,30 @@ Hardware:
         let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
 
         let texture_bind_group_layout =
-            device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                    label: Some("texture_bind_group_layout"),
-                });
-        
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            });
+
         let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
-        
+
         let result = Self {
             surface,
             device,
@@ -171,7 +177,7 @@ Hardware:
         Ok(result)
     }
 
-    /// A helper function that changes the surface config when resized (+ depth texture). 
+    /// A helper function that changes the surface config when resized (+ depth texture).
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.config.width = width;
@@ -180,10 +186,11 @@ Hardware:
             self.is_surface_configured = true;
         }
 
-        self.depth_texture = Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
+        self.depth_texture =
+            Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
     }
 
-    /// Asynchronously renders the scene and the egui renderer. I don't know what else to say. 
+    /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
     async fn render(
         &mut self,
         scene_manager: &mut scene::Manager,
@@ -213,10 +220,19 @@ Hardware:
 
         let mut graphics = Graphics::new(self, &view, &mut encoder);
 
-        scene_manager.update(previous_dt, &mut graphics, event_loop).await;
+        scene_manager
+            .update(previous_dt, &mut graphics, event_loop)
+            .await;
         scene_manager.render(&mut graphics).await;
 
-        self.egui_renderer.end_frame_and_draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor);
+        self.egui_renderer.end_frame_and_draw(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &self.window,
+            &view,
+            screen_descriptor,
+        );
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -225,7 +241,7 @@ Hardware:
     }
 }
 
-/// Fetches the current time as nanoseconds. Purely just a helper function, but use if you wish. 
+/// Fetches the current time as nanoseconds. Purely just a helper function, but use if you wish.
 pub fn get_current_time_as_ns() -> u128 {
     let now = SystemTime::now();
     let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
@@ -233,9 +249,9 @@ pub fn get_current_time_as_ns() -> u128 {
     timestamp_ns
 }
 
-/// A struct storing the information about the application/game that is using the engine. 
+/// A struct storing the information about the application/game that is using the engine.
 pub struct App {
-    /// The configuration of the window. 
+    /// The configuration of the window.
     config: WindowConfiguration,
     /// The graphics backend
     state: Option<State>,
@@ -244,21 +260,21 @@ pub struct App {
     /// The input manager, manages any inputs and their actions
     input_manager: input::Manager,
     /// The amount of time it took to render the last frame.
-    /// To find the FPS: just do `1.0/delta_time`. 
+    /// To find the FPS: just do `1.0/delta_time`.
     delta_time: f32,
     /// Internal
     next_frame_time: Option<Instant>,
-    /// The fps the app should aim to hit / the max fps. 
+    /// The fps the app should aim to hit / the max fps.
     /// It is possible to aim it at 60 fps, 120 fps, or even no limit
     /// with the const variable [`App::NO_FPS_CAP`]
     target_fps: u32,
-    /// The library used for polling controllers, specifically the instance of that. 
+    /// The library used for polling controllers, specifically the instance of that.
     gilrs: Gilrs,
 }
 
 impl App {
-    /// Creates a new instance of the application. It only sets the default for the struct + the 
-    /// window config. 
+    /// Creates a new instance of the application. It only sets the default for the struct + the
+    /// window config.
     fn new(config: WindowConfiguration) -> Self {
         log::debug!("Created new instance of app");
         Self {
@@ -270,33 +286,33 @@ impl App {
             next_frame_time: None,
             target_fps: 60,
             // default settings for now
-            gilrs: GilrsBuilder::new().build().unwrap()
+            gilrs: GilrsBuilder::new().build().unwrap(),
         }
     }
 
     #[allow(dead_code)]
-    /// A constant that lets you not have any fps count. 
-    /// It is just the max value of an unsigned 32 bit number lol. 
+    /// A constant that lets you not have any fps count.
+    /// It is just the max value of an unsigned 32 bit number lol.
     const NO_FPS_CAP: u32 = u32::MAX;
 
-    /// Helper function that sets the target frames per second. Can be used mid game to increase FPS. 
+    /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
     pub fn set_target_fps(&mut self, fps: u32) {
         self.target_fps = fps.max(1);
     }
 
     /// The run function. This function runs the app into gear.
-    /// 
+    ///
     /// ## Warning
     /// It is not recommended to use this function to start up the app due to the mandatory app_name
     /// parameter. Use the [`run_app!`] macro instead, which does not require
-    /// for you to pass in the app name (it automatically does it for you). 
-    /// 
+    /// for you to pass in the app name (it automatically does it for you).
+    ///
     /// # Parameters:
-    /// - config: The window configuration, such as the title, and window dimensions. 
+    /// - config: The window configuration, such as the title, and window dimensions.
     /// - app_name: A string to the app name for debugging.
-    /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself. 
-    /// It takes an input of a scene manager and an input manager, and expects you to return back the changed 
-    /// managers. 
+    /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
+    /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
+    /// managers.
     pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
@@ -316,7 +332,7 @@ impl App {
         log::debug!("Created new event loop");
         let mut app = Box::new(App::new(config));
         log::debug!("Configured app with details: {}", app.config);
-        
+
         log::debug!("Running through setup");
 
         let (new_scene, new_input) = setup(app.scene_manager, app.input_manager);
@@ -332,10 +348,10 @@ impl App {
 #[macro_export]
 /// The macro to run the app/game. The difference between this and [`App::run()`] is that
 /// this automatically fetches the package name during compilation.
-/// 
-/// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life 
+///
+/// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life
 /// easier by not having to guess your package name if it changes).
-///  
+///
 /// See also the docs for a further run down on the parameters of how it is run: [`App::run()`]
 macro_rules! run_app {
     ($config:expr, $setup:expr) => {
@@ -345,21 +361,22 @@ macro_rules! run_app {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut window_attributes = Window::default_attributes()
-            .with_title(self.config.title);
+        let mut window_attributes = Window::default_attributes().with_title(self.config.title);
 
         if self.config.windowed_mode.is_windowed() {
             if let Some((width, height)) = self.config.windowed_mode.windowed_size() {
-                window_attributes = window_attributes.with_inner_size(PhysicalSize::new(width, height));
+                window_attributes =
+                    window_attributes.with_inner_size(PhysicalSize::new(width, height));
             }
         } else if self.config.windowed_mode.is_maximised() {
             window_attributes = window_attributes.with_maximized(true);
         } else if self.config.windowed_mode.is_fullscreen() {
-            window_attributes = window_attributes.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            window_attributes = window_attributes
+                .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-        
+
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
 
         self.next_frame_time = Some(Instant::now());
@@ -375,7 +392,7 @@ impl ApplicationHandler for App {
             Some(canvas) => canvas,
             None => return,
         };
-        
+
         state.egui_renderer.handle_input(&state.window, &event);
 
         match event {
@@ -385,7 +402,10 @@ impl ApplicationHandler for App {
                 let frame_start = Instant::now();
 
                 self.input_manager.update(&mut self.gilrs);
-                if let Some(result) = state.render(&mut self.scene_manager, self.delta_time, event_loop).now_or_never() {
+                if let Some(result) = state
+                    .render(&mut self.scene_manager, self.delta_time, event_loop)
+                    .now_or_never()
+                {
                     result.unwrap();
                 }
 
@@ -422,10 +442,14 @@ impl ApplicationHandler for App {
                             WindowedModes::Windowed(_, _) => {
                                 if state.window.fullscreen().is_some() {
                                     state.window.set_fullscreen(None);
-                                    let _ = state.window.request_inner_size(PhysicalSize::new(1280, 720));
+                                    let _ = state
+                                        .window
+                                        .request_inner_size(PhysicalSize::new(1280, 720));
                                     state.window.set_maximized(false);
                                 } else {
-                                    state.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                                    state.window.set_fullscreen(Some(
+                                        winit::window::Fullscreen::Borderless(None),
+                                    ));
                                 }
                             }
                             WindowedModes::Maximised => {
@@ -434,12 +458,16 @@ impl ApplicationHandler for App {
                                     state.window.set_maximized(true);
                                 } else {
                                     state.window.set_maximized(false);
-                                    state.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                                    state.window.set_fullscreen(Some(
+                                        winit::window::Fullscreen::Borderless(None),
+                                    ));
                                 }
                             }
                             WindowedModes::Fullscreen => {
                                 state.window.set_fullscreen(None);
-                                let _ = state.window.request_inner_size(PhysicalSize::new(1280, 720));                                    
+                                let _ = state
+                                    .window
+                                    .request_inner_size(PhysicalSize::new(1280, 720));
                                 state.window.set_maximized(false);
                             }
                         }
@@ -464,19 +492,19 @@ impl ApplicationHandler for App {
     }
 }
 
-/// The window configuration of the app/game. 
-/// 
-/// This struct is primitive but has purpose in the way that it sets the initial specs of the window. 
-/// Thats all it does. And it can also display. But thats about it. 
+/// The window configuration of the app/game.
+///
+/// This struct is primitive but has purpose in the way that it sets the initial specs of the window.
+/// Thats all it does. And it can also display. But thats about it.
 #[derive(Debug)]
 pub struct WindowConfiguration {
     pub windowed_mode: WindowedModes,
     pub title: &'static str,
-    /// This reads from a config file. 
-    /// This will read from a client config file under {exe}/client.props, and on game exit will save the properties to the file. 
-    /// 
+    /// This reads from a config file.
+    /// This will read from a client config file under {exe}/client.props, and on game exit will save the properties to the file.
+    ///
     /// As of right now, it has not been implemented yet :(
-    // TODO: Implement config reading. 
+    // TODO: Implement config reading.
     pub read_from_config: Option<String>,
 }
 
@@ -485,12 +513,12 @@ pub struct WindowConfiguration {
 pub enum WindowedModes {
     Windowed(u32, u32),
     Maximised,
-    Fullscreen
+    Fullscreen,
 }
 
 impl WindowedModes {
     /// Checks if the config is windowed and returns a bool. Use [`WindowedModes::windowed_size`]
-    /// to fetch the values. 
+    /// to fetch the values.
     pub fn is_windowed(&self) -> bool {
         matches!(self, WindowedModes::Windowed(_, _))
     }
@@ -500,13 +528,13 @@ impl WindowedModes {
         matches!(self, WindowedModes::Maximised)
     }
 
-    /// Checks if the config is fullscreen and returns a bool. 
+    /// Checks if the config is fullscreen and returns a bool.
     pub fn is_fullscreen(&self) -> bool {
         matches!(self, WindowedModes::Fullscreen)
     }
 
     /// Fetches the config windowed width and height in an option in the case
-    /// that it is run on a mode like fullscreen or maximised. 
+    /// that it is run on a mode like fullscreen or maximised.
     pub fn windowed_size(&self) -> Option<(u32, u32)> {
         if let WindowedModes::Windowed(w, h) = *self {
             Some((w, h))
@@ -520,7 +548,11 @@ impl Display for WindowConfiguration {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         if self.windowed_mode.is_windowed() {
             if let Some((width, height)) = self.windowed_mode.windowed_size() {
-                write!(f, "width: {}, height: {}, title: {}", width, height, self.title)
+                write!(
+                    f,
+                    "width: {}, height: {}, title: {}",
+                    width, height, self.title
+                )
             } else {
                 write!(f, "yo how the fuck you get to here huh???")
             }
@@ -529,24 +561,27 @@ impl Display for WindowConfiguration {
         } else if self.windowed_mode.is_fullscreen() {
             write!(f, "window is fullscreen: title: {}", self.title)
         } else {
-            write!(f, "dude i think the code is broken can you lowk dm the dev about this thanks!")
+            write!(
+                f,
+                "dude i think the code is broken can you lowk dm the dev about this thanks!"
+            )
         }
     }
 }
 
 /// This enum represents the status of any asset, whether its IO, asset rendering,
 /// scene loading and more.
-/// 
+///
 /// # Representation
 /// It's pretty simple really:
 ///- [`Status::Idle`]: Has not been loaded, and is the default value for anything
-///- [`Status::Loading`]: In the process of loading. 
-///- [`Status::Completed`]: Loading has been completed.   
+///- [`Status::Loading`]: In the process of loading.
+///- [`Status::Completed`]: Loading has been completed.
 pub enum Status {
     /// Has not been loaded, and is the default value for anything
     Idle,
     /// In the process of loading
     Loading,
     /// Loading has been completed
-    Completed
+    Completed,
 }
