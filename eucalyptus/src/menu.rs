@@ -1,10 +1,9 @@
 use dropbear_engine::{
     async_trait::async_trait,
-    egui::{self, FontId, Frame, Image, RichText},
+    egui::{self, FontId, Frame, RichText},
     egui_extras, gilrs,
     input::{Controller, Keyboard, Mouse},
     log::{self, debug},
-    resources::RESOURCES_PATH,
     scene::{Scene, SceneCommand},
 };
 
@@ -43,8 +42,8 @@ impl Scene for MainMenu {
                         .add_sized(button_size, egui::Button::new("New Project"))
                         .clicked()
                     {
-                        // self.scene_command = SceneCommand::SwitchScene("testing_scene_1".to_string());
-                        log::debug!("Creating new project (not implemented)");
+                        log::debug!("Creating new project");
+                        
                     }
                     ui.add_space(20.0);
 
