@@ -6,10 +6,11 @@ use dropbear_engine::{
     egui::{self, FontId, Frame, RichText},
     gilrs,
     input::{Controller, Keyboard, Mouse},
-    log::{self, debug},
+    log::{self, debug, error},
     scene::{Scene, SceneCommand},
 };
 use git2::Repository;
+use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default)]
@@ -87,10 +88,12 @@ impl MainMenu {
                 } else if folder == "src2" {
                     if let Some(path) = &self.project_path {
                         let config = ProjectConfig::from(self.project_name.clone(), path);
-                        match ron::ser::to_string(&config) {
+                        match ron::ser::to_string_pretty(&config, PrettyConfig::default()) {
                             Ok(ron_str) => {
-                                let config_path =
-                                    path.join(format!("{}.euc", self.project_name.clone()));
+                                let config_path = path.join(format!(
+                                    "{}.euc",
+                                    self.project_name.clone().to_lowercase()
+                                ));
                                 fs::write(&config_path, ron_str)
                                     .map(|_| ())
                                     .map_err(|e| e.to_string())
@@ -119,8 +122,14 @@ impl MainMenu {
         self.show_progress = true;
         if self.project_created {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
+        } else {
+            for error in self.project_error.as_ref().unwrap() {
+                log::error!("Error: {}", error);
+            }
         }
     }
+
+    fn open_project(&mut self) {}
 }
 
 #[async_trait]
@@ -159,7 +168,22 @@ impl Scene for MainMenu {
                         .add_sized(button_size, egui::Button::new("Open Project"))
                         .clicked()
                     {
-                        log::debug!("Opening project (not implemented)");
+                        log::debug!("Opening project");
+                        if let Some(path) = rfd::FileDialog::new()
+                            .add_filter("Eucalyptus Configuration Files", &["euc"])
+                            .pick_file()
+                        {
+                            let ron_str = fs::read_to_string(path)
+                                .map_err(|e| log::error!("Error while reading from file: {}", e))
+                                .unwrap();
+                            let config: ProjectConfig = ron::de::from_str(&ron_str.as_str())
+                                .map_err(|e| log::error!("RON deserialisation error: {}", e))
+                                .unwrap();
+                            log::info!("Loaded project!");
+                            println!("Loaded config info: {:#?}", config);
+                        } else {
+                            log::error!("File dialog returned \"None\"");
+                        }
                     }
                     ui.add_space(20.0);
 
@@ -167,7 +191,7 @@ impl Scene for MainMenu {
                         .add_sized(button_size, egui::Button::new("Settings"))
                         .clicked()
                     {
-                        log::debug!("Settings");
+                        log::debug!("Settings (not implemented)");
                     }
                     ui.add_space(20.0);
 
