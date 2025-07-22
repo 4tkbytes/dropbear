@@ -4,9 +4,8 @@ use std::sync::Arc;
 use dropbear_engine::async_trait::async_trait;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
-use dropbear_engine::hecs::World;
-use dropbear_engine::{gilrs, hecs};
 use dropbear_engine::graphics::{Graphics, Shader};
+use dropbear_engine::hecs::World;
 use dropbear_engine::input::Controller;
 use dropbear_engine::nalgebra::{Point3, Vector3};
 use dropbear_engine::scene::SceneCommand;
@@ -14,6 +13,7 @@ use dropbear_engine::wgpu::{Color, RenderPipeline};
 use dropbear_engine::winit::dpi::PhysicalPosition;
 use dropbear_engine::winit::event::MouseButton;
 use dropbear_engine::winit::window::Window;
+use dropbear_engine::{gilrs, hecs};
 use dropbear_engine::{
     input::{Keyboard, Mouse},
     log::debug,
@@ -55,16 +55,10 @@ impl Scene for TestingScene1 {
             Some("default"),
         );
 
-        let horse_model = AdoptedEntity::new(
-            graphics, 
-            "models/low_poly_horse.glb", 
-            Some("horse")
-        ).unwrap();
+        let horse_model =
+            AdoptedEntity::new(graphics, "models/low_poly_horse.glb", Some("horse")).unwrap();
 
-        self.world.spawn((
-            horse_model,
-            Transform::default()
-        ));
+        self.world.spawn((horse_model, Transform::default()));
 
         let camera = Camera::new(
             graphics,
@@ -81,10 +75,7 @@ impl Scene for TestingScene1 {
 
         let pipeline = graphics.create_render_pipline(
             &shader,
-            vec![
-                &graphics.state.texture_bind_layout,
-                camera.layout(),
-            ],
+            vec![&graphics.state.texture_bind_layout, camera.layout()],
         );
 
         self.camera = camera;
@@ -108,6 +99,8 @@ impl Scene for TestingScene1 {
             }
         }
 
+        graphics.state.surface.get_current_texture();
+
         if !self.is_cursor_locked {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
@@ -121,7 +114,12 @@ impl Scene for TestingScene1 {
     }
 
     async fn render(&mut self, graphics: &mut Graphics) {
-        let color = Color { r: 0.1, g: 0.2, b: 0.3, a: 1.0 };
+        let color = Color {
+            r: 0.1,
+            g: 0.2,
+            b: 0.3,
+            a: 1.0,
+        };
 
         if let Some(pipeline) = &self.render_pipeline {
             {
@@ -137,7 +135,7 @@ impl Scene for TestingScene1 {
 
         self.window = Some(graphics.state.window.clone());
     }
-    
+
     async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
@@ -190,7 +188,6 @@ impl Mouse for TestingScene1 {
         }
     }
 }
-
 
 impl Controller for TestingScene1 {
     fn button_down(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
