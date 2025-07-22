@@ -128,8 +128,6 @@ impl MainMenu {
             }
         }
     }
-
-    fn open_project(&mut self) {}
 }
 
 #[async_trait]
@@ -182,6 +180,7 @@ impl Scene for MainMenu {
                             log::info!("Loaded project!");
                             println!("Loaded config info: {:#?}", config);
                             // TODO: Load config into scene...
+                            self.scene_command = SceneCommand::SwitchScene(String::from("editor"));
                         } else {
                             log::error!("File dialog returned \"None\"");
                         }

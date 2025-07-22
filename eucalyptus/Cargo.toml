@@ -12,6 +12,7 @@ anyhow = "1.0.98"
 ron = "0.10.1"
 chrono = "0.4.41"
 egui-toast = "0.17.0"
+egui_dock = { git = "https://github.com/Adanos020/egui_dock" }
 
 [dependencies.rhai]
 version = "*"
