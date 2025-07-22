@@ -32,24 +32,23 @@ pub enum EditorTab {
 
 impl Editor {
     pub fn new() -> Self {
-            let mut dock_state = DockState::new(vec![EditorTab::Viewport]);
-    
-            let surface = dock_state.main_surface_mut();
-            
-            let [left, center_right] = 
-                surface.split_left(NodeIndex::root(), 0.15, vec![EditorTab::ResourceInspector]);
+        let tabs = vec![
+            EditorTab::Viewport,
+        ];
+        let mut dock_state = DockState::new(tabs);
 
-            let [center, right] = 
-                surface.split_right(center_right, 0.176, vec![EditorTab::ModelEntityList]);
-            
-            let [_viewport, _bottom] = 
-                surface.split_below(center, 0.7, vec![EditorTab::AssetViewer]);
-    
-            Self {
-                scene_command: SceneCommand::None,
-                dock_state,
-            }
+        let surface = dock_state.main_surface_mut();
+        let [_old, right] =
+            surface.split_right(NodeIndex::root(), 0.25, vec![EditorTab::ModelEntityList]);
+        let [_old, bottom] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
+        let [_old, left] =
+            surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
+
+        Self {
+            scene_command: SceneCommand::None,
+            dock_state,
         }
+    }
 
     pub fn show_ui(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
