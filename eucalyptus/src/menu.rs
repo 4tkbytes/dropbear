@@ -181,6 +181,7 @@ impl Scene for MainMenu {
                                 .unwrap();
                             log::info!("Loaded project!");
                             println!("Loaded config info: {:#?}", config);
+                            // TODO: Load config into scene...
                         } else {
                             log::error!("File dialog returned \"None\"");
                         }
