@@ -1,4 +1,4 @@
-use std::fs;
+use std::{env, fs, path::PathBuf, process::Command};
 
 use anyhow::anyhow;
 use dropbear_engine::{
@@ -50,6 +50,7 @@ impl MainMenu {
             ("git", 0.1, "Creating a git folder..."),
             ("src", 0.2, "Creating src folder..."),
             ("resources/models", 0.4, "Creating models folder..."),
+            ("scripts", 0.5, "Initialising Python environment"),
             ("resources/shaders", 0.6, "Creating shaders folder..."),
             ("resources/textures", 0.8, "Creating textures folder..."),
             ("src2", 0.9, "Creating project config file..."),
@@ -76,6 +77,36 @@ impl MainMenu {
                     } else {
                         Err(anyhow!("Project path not found"))
                     }
+                } else if folder == "scripts" {
+                    let venv_path = full_path;
+                    if !&venv_path.exists() {
+                        let status = Command::new("python3")
+                            .args(["-m", "venv", venv_path.to_str().unwrap()])
+                            .status();
+                        match status {
+                            Ok(s) if s.success() => (),
+                            Ok(s) => errors
+                                .push(anyhow!("Python venv creation failed with exit code: {}", s)),
+                            Err(e) => errors.push(anyhow!("Failed to run python3: {}", e)),
+                        }
+                    }
+                    unsafe {
+                        env::set_var("VIRTUAL_ENV", &venv_path);
+                    }
+
+                    match Command::new(&venv_path.join("bin/python"))
+                        .args(["-m", "pip", "install", "--upgrade", "pip", "3d-to-image"])
+                        .status()
+                    {
+                        Ok(s) if s.success() => (),
+                        Ok(s) => {
+                            errors.push(anyhow!("Installing related dependencies failed: {}", s))
+                        }
+                        Err(e) => {
+                            errors.push(anyhow!("Installing python dependencies failed: {}", e))
+                        }
+                    }
+                    Ok(())
                 } else {
                     fs::create_dir_all(&full_path)
                         .map_err(|e| anyhow!(e))

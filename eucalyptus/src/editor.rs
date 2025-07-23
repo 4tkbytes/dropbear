@@ -232,6 +232,20 @@ impl Scene for Editor {
             self.is_cursor_locked = true;
         }
 
+        if self.is_cursor_locked {
+            for key in &self.pressed_keys {
+                match key {
+                    KeyCode::KeyW => self.camera.move_forwards(),
+                    KeyCode::KeyA => self.camera.move_left(),
+                    KeyCode::KeyD => self.camera.move_right(),
+                    KeyCode::KeyS => self.camera.move_back(),
+                    KeyCode::ShiftLeft => self.camera.move_down(),
+                    KeyCode::Space => self.camera.move_up(),
+                    _ => {}
+                }
+            }
+        }
+
         if !self.is_cursor_locked {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
@@ -342,9 +356,13 @@ impl Controller for Editor {
     ) {
     }
 
-    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {}
+    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {
+        // used for moving the camera
+    }
 
-    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {}
+    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {
+        // used for moving the player
+    }
 
     fn on_connect(&mut self, _id: dropbear_engine::gilrs::GamepadId) {}
 

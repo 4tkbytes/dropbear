@@ -25,6 +25,7 @@ pub struct ProjectConfig {
     pub project_path: String,
     pub date_created: String,
     pub date_last_accessed: String,
+    pub
 }
 
 impl ProjectConfig {
