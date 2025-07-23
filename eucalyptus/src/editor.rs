@@ -3,6 +3,7 @@ use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
 use dropbear_engine::{
     async_trait::async_trait,
     camera::Camera,
+    egui,
     graphics::{Graphics, Shader},
     input::{Controller, Keyboard, Mouse},
     log,
@@ -12,10 +13,8 @@ use dropbear_engine::{
         dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window,
     },
 };
-use egui_dock::{
-    DockArea, DockState, NodeIndex, Style, TabViewer,
-    egui::{self, TextureId, Ui, WidgetText},
-};
+use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
+use egui_toast::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
 use crate::states::PROJECT;
@@ -23,11 +22,12 @@ use crate::states::PROJECT;
 pub struct Editor {
     scene_command: SceneCommand,
     dock_state: DockState<EditorTab>,
-    texture_id: Option<TextureId>,
+    texture_id: Option<egui::TextureId>,
     size: Extent3d,
     render_pipeline: Option<RenderPipeline>,
     camera: Camera,
     color: Color,
+    toasts: Toasts,
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
@@ -68,6 +68,9 @@ impl Editor {
             pressed_keys: HashSet::new(),
             is_cursor_locked: false,
             window: None,
+            toasts: egui_toast::Toasts::new()
+                .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+                .direction(egui::Direction::BottomUp),
         }
     }
 
@@ -87,9 +90,25 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
+                                self.toasts.add(egui_toast::Toast {
+                                    kind: egui_toast::ToastKind::Error,
+                                    text: format!("Error saving project: {}", e).into(),
+                                    options: ToastOptions::default()
+                                        .duration_in_seconds(5.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
                             }
                         }
                         log::info!("Successfully saved project");
+                        self.toasts.add(egui_toast::Toast {
+                            kind: egui_toast::ToastKind::Success,
+                            text: format!("Successfully saved project").into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
                     }
                     ui.menu_button("Settings", |ui| {
                         let project_name = {
@@ -109,6 +128,14 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
+                                self.toasts.add(egui_toast::Toast {
+                                    kind: egui_toast::ToastKind::Error,
+                                    text: format!("Error saving project: {}", e).into(),
+                                    options: ToastOptions::default()
+                                        .duration_in_seconds(5.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
                             }
                         }
                         log::info!("Successfully saved project");
@@ -139,13 +166,13 @@ impl Editor {
 }
 
 pub struct EditorTabViewer {
-    pub view: TextureId,
+    pub view: egui::TextureId,
 }
 
 impl TabViewer for EditorTabViewer {
     type Tab = EditorTab;
 
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
         match tab {
             EditorTab::Viewport => "Viewport".into(),
             EditorTab::ModelEntityList => "Model/Entity List".into(),
@@ -154,7 +181,7 @@ impl TabViewer for EditorTabViewer {
         }
     }
 
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         match tab {
             EditorTab::Viewport => {
                 let size = ui.available_size();
@@ -208,6 +235,10 @@ impl Scene for Editor {
         if !self.is_cursor_locked {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
+
+        self.toasts = egui_toast::Toasts::new()
+            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+            .direction(egui::Direction::BottomUp);
     }
 
     async fn render(&mut self, graphics: &mut Graphics) {
@@ -229,6 +260,7 @@ impl Scene for Editor {
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
         self.window = Some(graphics.state.window.clone());
+        self.toasts.show(graphics.get_egui_context());
     }
 
     async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

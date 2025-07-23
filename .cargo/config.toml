@@ -1,0 +1,9 @@
+[build]
+jobs = 8 
+
+[profile.dev]
+opt-level = 0
+debug = true
+codegen-units = 16
+incremental = true
+lto = false
