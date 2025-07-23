@@ -1,6 +1,8 @@
+pub(crate) mod assets;
 mod editor;
 mod menu;
 mod scene1;
+pub(crate) mod states;
 
 use std::{cell::RefCell, rc::Rc};
 

@@ -1,10 +1,11 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
 
 use dropbear_engine::{
     async_trait::async_trait,
     camera::Camera,
     graphics::{Graphics, Shader},
     input::{Controller, Keyboard, Mouse},
+    log,
     scene::{Scene, SceneCommand},
     wgpu::{Color, Extent3d, RenderPipeline},
     winit::{
@@ -16,6 +17,8 @@ use egui_dock::{
     egui::{self, TextureId, Ui, WidgetText},
 };
 use serde::{Deserialize, Serialize};
+
+use crate::states::PROJECT;
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -74,12 +77,42 @@ impl Editor {
                 ui.menu_button("File", |ui| {
                     ui.label("New");
                     ui.label("Open");
-                    ui.label("Save");
+                    if ui.button("Save").clicked() {
+                        let project_path = {
+                            let config = PROJECT.read().unwrap();
+                            config.project_path.clone()
+                        };
+                        let mut config = PROJECT.write().unwrap();
+                        match config.write_to(&PathBuf::from_str(&project_path).unwrap()) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                log::error!("Error saving project: {}", e);
+                            }
+                        }
+                        log::info!("Successfully saved project");
+                    }
                     ui.menu_button("Settings", |ui| {
-                        ui.label("Project");
-                        ui.label("Eucalyptus");
+                        let project_name = {
+                            let config = PROJECT.read().unwrap();
+                            config.project_name.clone()
+                        };
+                        ui.label(format!("{} config", project_name));
+                        ui.label("Eucalyptus Editor");
                     });
-                    ui.label("Quit");
+                    if ui.button("Quit").clicked() {
+                        let project_path = {
+                            let config = PROJECT.read().unwrap();
+                            config.project_path.clone()
+                        };
+                        let mut config = PROJECT.write().unwrap();
+                        match config.write_to(&PathBuf::from_str(&project_path).unwrap()) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                log::error!("Error saving project: {}", e);
+                            }
+                        }
+                        log::info!("Successfully saved project");
+                    }
                 });
                 ui.menu_button("Edit", |ui| {
                     ui.label("Undo");

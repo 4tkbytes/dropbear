@@ -9,6 +9,30 @@ pub enum ItemType {
     Entity(Entity),
 }
 
+// technically the root node of everything.
+pub struct Assets {
+    nodes: Vec<Nodes>,
+}
+
+// node can either be file or folder
+pub enum Node {
+    File(File),
+    Folder(Folder),
+}
+
+// File is only a file, but it derives nodes
+pub struct File {
+    pub name: String,
+    pub path: PathBuf, // can be just a reference from the root node
+                       // contents/metadata
+}
+
+// Folder can contain either a file or another folder, but it derives nodes
+pub struct Folder {
+    name: String,
+    nodes: Vec<Nodes>,
+}
+
 pub enum LightType {
     Directional,
     Point,

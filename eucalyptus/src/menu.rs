@@ -1,6 +1,6 @@
-use std::{fs, path::PathBuf};
+use std::fs;
 
-use chrono::Utc;
+use anyhow::anyhow;
 use dropbear_engine::{
     async_trait::async_trait,
     egui::{self, FontId, Frame, RichText},
@@ -10,8 +10,8 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use git2::Repository;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
+
+use crate::states::{PROJECT, ProjectConfig};
 
 #[derive(Default)]
 pub struct MainMenu {
@@ -25,25 +25,6 @@ pub struct MainMenu {
     show_progress: bool,
     progress: f32,
     progress_message: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ProjectConfig {
-    project_name: String,
-    project_path: String,
-    date_created: String,
-}
-
-impl ProjectConfig {
-    pub fn from(project_name: String, project_path: &PathBuf) -> Self {
-        let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        let project_path = project_path.to_str().unwrap().to_string();
-        Self {
-            project_name,
-            project_path,
-            date_created,
-        }
-    }
 }
 
 impl MainMenu {
@@ -79,32 +60,26 @@ impl MainMenu {
                 self.progress_message = message.to_string();
                 self.progress = progress;
                 let full_path = path.join(folder);
-                let result: Result<(), String> = if folder == "src" {
-                    fs::create_dir(&full_path).map_err(|e| e.to_string())
-                } else if folder == "git" {
-                    Repository::init(path)
+                let result: anyhow::Result<()> = if folder == "src" {
+                    fs::create_dir(&full_path)
+                        .map_err(|e| anyhow!(e))
                         .map(|_| ())
-                        .map_err(|e| e.to_string())
+                } else if folder == "git" {
+                    Repository::init(path).map_err(|e| anyhow!(e)).map(|_| ())
                 } else if folder == "src2" {
                     if let Some(path) = &self.project_path {
-                        let config = ProjectConfig::from(self.project_name.clone(), path);
-                        match ron::ser::to_string_pretty(&config, PrettyConfig::default()) {
-                            Ok(ron_str) => {
-                                let config_path = path.join(format!(
-                                    "{}.euc",
-                                    self.project_name.clone().to_lowercase()
-                                ));
-                                fs::write(&config_path, ron_str)
-                                    .map(|_| ())
-                                    .map_err(|e| e.to_string())
-                            }
-                            Err(e) => Err(format!("RON serialization error: {}", e)),
-                        }
+                        let mut config = ProjectConfig::new(self.project_name.clone(), &path);
+                        let _ = config.write_to(&path);
+                        let mut global = PROJECT.write().unwrap();
+                        *global = config;
+                        Ok(())
                     } else {
-                        Err("Project path not found".to_string())
+                        Err(anyhow!("Project path not found"))
                     }
                 } else {
-                    fs::create_dir_all(&full_path).map_err(|e| e.to_string())
+                    fs::create_dir_all(&full_path)
+                        .map_err(|e| anyhow!(e))
+                        .map(|_| ())
                 };
                 if let Err(e) = result {
                     errors.push(e);
@@ -116,7 +91,7 @@ impl MainMenu {
                 self.project_created = true;
             } else {
                 self.project_created = false;
-                self.project_error = Some(errors);
+                self.project_error = Some(errors.iter().map(|e| e.to_string()).collect::<Vec<_>>());
             }
         }
         self.show_progress = true;
@@ -171,15 +146,11 @@ impl Scene for MainMenu {
                             .add_filter("Eucalyptus Configuration Files", &["euc"])
                             .pick_file()
                         {
-                            let ron_str = fs::read_to_string(path)
-                                .map_err(|e| log::error!("Error while reading from file: {}", e))
-                                .unwrap();
-                            let config: ProjectConfig = ron::de::from_str(&ron_str.as_str())
-                                .map_err(|e| log::error!("RON deserialisation error: {}", e))
-                                .unwrap();
+                            let config = ProjectConfig::read_from(&path).unwrap();
                             log::info!("Loaded project!");
-                            println!("Loaded config info: {:#?}", config);
-                            // TODO: Load config into scene...
+                            let mut global = PROJECT.write().unwrap();
+                            *global = config;
+                            println!("Loaded config info: {:#?}", global);
                             self.scene_command = SceneCommand::SwitchScene(String::from("editor"));
                         } else {
                             log::error!("File dialog returned \"None\"");
@@ -255,7 +226,7 @@ impl Scene for MainMenu {
 
         if self.show_progress {
             egui::Window::new("Creating Project...")
-                .collapsible(false)
+                .collapsible(true)
                 .resizable(false)
                 .fixed_size([400.0, 120.0])
                 .show(egui_ctx, |ui| {
