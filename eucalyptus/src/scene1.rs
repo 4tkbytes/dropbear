@@ -99,8 +99,6 @@ impl Scene for TestingScene1 {
             }
         }
 
-        graphics.state.surface.get_current_texture();
-
         if !self.is_cursor_locked {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }

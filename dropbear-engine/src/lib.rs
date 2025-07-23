@@ -11,6 +11,7 @@ pub mod scene;
 pub use async_trait;
 pub use bytemuck;
 pub use egui;
+use egui::TextureId;
 pub use egui_extras;
 use egui_wgpu::ScreenDescriptor;
 use futures::FutureExt;
@@ -58,6 +59,8 @@ pub struct State {
     pub texture_bind_layout: BindGroupLayout,
     pub egui_renderer: EguiRenderer,
     pub instance: Instance,
+    pub viewport_texture: Texture,
+    pub texture_id: TextureId,
 
     pub window: Arc<Window>,
 }
@@ -135,6 +138,8 @@ Hardware:
         };
 
         let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
+        let viewport_texture =
+            Texture::create_viewport_texture(&config, &device, Some("viewport texture"));
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -159,7 +164,13 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
+        let mut egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
+
+        let texture_id = egui_renderer.renderer().register_native_texture(
+            &device,
+            &viewport_texture.view,
+            wgpu::FilterMode::Linear,
+        );
 
         let result = Self {
             surface,
@@ -172,6 +183,8 @@ Hardware:
             window,
             instance,
             egui_renderer,
+            viewport_texture,
+            texture_id,
         };
 
         Ok(result)
@@ -188,6 +201,13 @@ Hardware:
 
         self.depth_texture =
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
+        self.viewport_texture =
+            Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
+        self.texture_id = self.egui_renderer.renderer().register_native_texture(
+            &self.device,
+            &self.viewport_texture.view,
+            wgpu::FilterMode::Linear,
+        );
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
@@ -216,9 +236,11 @@ Hardware:
                 label: Some("Render Encoder"),
             });
 
+        let viewport_view = &self.viewport_texture.view;
+
         self.egui_renderer.begin_frame(&self.window);
 
-        let mut graphics = Graphics::new(self, &view, &mut encoder);
+        let mut graphics = Graphics::new(self, &viewport_view, &mut encoder);
 
         scene_manager
             .update(previous_dt, &mut graphics, event_loop)

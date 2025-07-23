@@ -1,6 +1,6 @@
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
+use egui_wgpu::{Renderer, ScreenDescriptor, wgpu};
 use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -14,6 +14,10 @@ pub struct EguiRenderer {
 impl EguiRenderer {
     pub fn context(&self) -> &Context {
         self.state.egui_ctx()
+    }
+
+    pub fn renderer(&mut self) -> &mut Renderer {
+        &mut self.renderer
     }
 
     pub fn new(

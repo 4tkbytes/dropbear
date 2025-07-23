@@ -8,18 +8,25 @@ use dropbear_engine::{
     camera::Camera,
     graphics::{Graphics, Shader},
     input::{Controller, Keyboard, Mouse},
-    nalgebra::{Point3, Vector3},
     scene::{Scene, SceneCommand},
+    wgpu::{Color, Extent3d, RenderPipeline},
     winit::event_loop::ActiveEventLoop,
 };
 use egui_dock::{
     DockArea, DockState, NodeIndex, Style, TabViewer,
-    egui::{self, CentralPanel, TopBottomPanel, Ui, WidgetText},
+    egui::{self, CentralPanel, Image, TextureId, TopBottomPanel, Ui, WidgetText},
 };
 
 pub struct Editor {
     scene_command: SceneCommand,
     dock_state: DockState<EditorTab>,
+    texture_id: Option<TextureId>,
+    size: Extent3d,
+    render_pipeline: Option<RenderPipeline>,
+    camera: Camera,
+    color: Color,
+
+    is_viewport_focused: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -32,9 +39,7 @@ pub enum EditorTab {
 
 impl Editor {
     pub fn new() -> Self {
-        let tabs = vec![
-            EditorTab::Viewport,
-        ];
+        let tabs = vec![EditorTab::Viewport];
         let mut dock_state = DockState::new(tabs);
 
         let surface = dock_state.main_surface_mut();
@@ -47,6 +52,12 @@ impl Editor {
         Self {
             scene_command: SceneCommand::None,
             dock_state,
+            texture_id: None,
+            size: Extent3d::default(),
+            render_pipeline: None,
+            camera: Camera::default(),
+            color: Color::default(),
+            is_viewport_focused: false,
         }
     }
 
@@ -69,14 +80,24 @@ impl Editor {
         egui::CentralPanel::default().show(ctx, |ui| {
             DockArea::new(&mut self.dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
-                .show_inside(ui, &mut EditorTabViewer);
+                .show_inside(
+                    ui,
+                    &mut EditorTabViewer {
+                        view: self.texture_id.unwrap(),
+                        // texture: self.viewport,
+                        size: self.size,
+                    },
+                );
 
             // todo: render wgpu viewport
         });
     }
 }
 
-pub struct EditorTabViewer;
+pub struct EditorTabViewer {
+    pub view: TextureId,
+    pub size: Extent3d,
+}
 
 impl TabViewer for EditorTabViewer {
     type Tab = EditorTab;
@@ -93,7 +114,8 @@ impl TabViewer for EditorTabViewer {
     fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
         match tab {
             EditorTab::Viewport => {
-                ui.label("render scene viewport");
+                let size = ui.available_size();
+                ui.image((self.view, size));
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
@@ -110,9 +132,53 @@ impl TabViewer for EditorTabViewer {
 
 #[async_trait]
 impl Scene for Editor {
-    async fn load(&mut self, graphics: &mut Graphics) {}
+    async fn load(&mut self, graphics: &mut Graphics) {
+        let shader = Shader::new(
+            graphics,
+            include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
+            Some("viewport_shader"),
+        );
+
+        let camera = Camera::predetermined(graphics);
+
+        let pipeline = graphics.create_render_pipline(
+            &shader,
+            vec![&graphics.state.texture_bind_layout, camera.layout()],
+        );
+
+        self.camera = camera;
+        self.render_pipeline = Some(pipeline);
+    }
     async fn update(&mut self, dt: f32, graphics: &mut Graphics) {}
     async fn render(&mut self, graphics: &mut Graphics) {
+        let color = Color {
+            r: if self.color.r < 1.0 {
+                self.color.r + 0.1
+            } else {
+                0.1
+            },
+            g: if self.color.g < 1.0 {
+                self.color.g + 0.1
+            } else {
+                0.2
+            },
+            b: if self.color.b < 1.0 {
+                self.color.b + 0.1
+            } else {
+                0.3
+            },
+            a: 1.0,
+        };
+        self.color = color.clone();
+
+        let mut pass = graphics.clear_colour(color);
+        if let Some(pipeline) = &self.render_pipeline {
+            pass.set_pipeline(pipeline);
+        }
+
+        self.texture_id = Some(graphics.state.texture_id);
+        // self.viewport = Some(graphics.state.viewport_texture);
+        self.size = graphics.state.viewport_texture.size;
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
     }

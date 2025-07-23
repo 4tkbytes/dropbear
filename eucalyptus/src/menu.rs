@@ -6,7 +6,7 @@ use dropbear_engine::{
     egui::{self, FontId, Frame, RichText},
     gilrs,
     input::{Controller, Keyboard, Mouse},
-    log::{self, debug, error},
+    log::{self, debug},
     scene::{Scene, SceneCommand},
 };
 use git2::Repository;

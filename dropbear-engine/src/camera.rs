@@ -76,6 +76,21 @@ impl Camera {
         camera
     }
 
+    pub fn predetermined(graphics: &Graphics) -> Self {
+        Self::new(
+            graphics,
+            Point3::new(0.0, 1.0, 2.0),
+            Point3::new(0.0, 0.0, 0.0),
+            Vector3::y(),
+            (graphics.state.config.width / graphics.state.config.height) as f32,
+            45.0,
+            0.1,
+            100.0,
+            0.125,
+            0.002,
+        )
+    }
+
     pub fn rotation(&self) -> UnitQuaternion<f32> {
         let yaw = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.yaw);
         let pitch = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.pitch);

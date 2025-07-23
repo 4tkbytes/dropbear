@@ -2,10 +2,19 @@ use egui::Context;
 use image::GenericImageView;
 use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout
+    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
+    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass,
+    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState,
+    SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor, VertexBufferLayout,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
-use crate::{model::{self, Vertex}, resources::load_binary, State};
+use crate::{
+    State,
+    model::{self, Vertex},
+    resources::load_binary,
+};
 
 pub struct Graphics<'a> {
     pub state: &'a State,
@@ -56,7 +65,7 @@ impl<'a> Graphics<'a> {
                         module: &shader.module,
                         entry_point: Some("fs_main"),
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: self.state.config.format,
+                            format: wgpu::TextureFormat::Rgba8UnormSrgb,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
@@ -146,7 +155,7 @@ impl Shader {
                 label,
                 source: wgpu::ShaderSource::Wgsl(shader_file_contents.into()),
             });
-        
+
         log::debug!("Created new shader under the label: {:?}", label);
 
         Self {
@@ -171,7 +180,11 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
-    pub fn create_depth_texture(config: &SurfaceConfiguration, device: &Device, label: Option<&str>) -> Self {
+    pub fn create_depth_texture(
+        config: &SurfaceConfiguration,
+        device: &Device,
+        label: Option<&str>,
+    ) -> Self {
         let size = Extent3d {
             width: config.width.max(1),
             height: config.height.max(1),
@@ -191,20 +204,54 @@ impl Texture {
         let texture = device.create_texture(&desc);
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(
-            &wgpu::SamplerDescriptor {
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                compare: Some(wgpu::CompareFunction::LessEqual),
-                lod_min_clamp: 0.0,
-                lod_max_clamp: 100.0,
-                ..Default::default()
-            }
-        );
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            sampler,
+            view,
+            size,
+            bind_group: None,
+            layout: None,
+        }
+    }
+
+    pub fn create_viewport_texture(
+        config: &SurfaceConfiguration,
+        device: &Device,
+        label: Option<&str>,
+    ) -> Self {
+        let size = Extent3d {
+            width: config.width.max(1),
+            height: config.height.max(1),
+            depth_or_array_layers: 1,
+        };
+
+        let desc = TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let texture = device.create_texture(&desc);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
         Self {
             texture,
@@ -346,7 +393,11 @@ impl Instance {
     pub fn from_matrix(mat: Matrix4<f32>) -> Self {
         let position = mat.fixed_view::<3, 1>(0, 3).into();
         let rotation = UnitQuaternion::from_matrix(&mat.fixed_view::<3, 3>(0, 0).into_owned());
-        Instance { position, rotation, buffer: None }
+        Instance {
+            position,
+            rotation,
+            buffer: None,
+        }
     }
 }
 
