@@ -17,3 +17,10 @@ egui_dock = { git = "https://github.com/Adanos020/egui_dock" }
 [dependencies.rhai]
 version = "*"
 features = ["std"]
+
+[profile.dev]
+opt-level = 0
+debug = true
+codegen-units = 16
+incremental = true
+lto = false

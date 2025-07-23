@@ -1,7 +1,4 @@
-use std::{
-    cell::OnceCell,
-    sync::{LazyLock, OnceLock},
-};
+use std::{collections::HashSet, sync::Arc};
 
 use dropbear_engine::{
     async_trait::async_trait,
@@ -10,12 +7,15 @@ use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
     wgpu::{Color, Extent3d, RenderPipeline},
-    winit::event_loop::ActiveEventLoop,
+    winit::{
+        dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window,
+    },
 };
 use egui_dock::{
     DockArea, DockState, NodeIndex, Style, TabViewer,
-    egui::{self, CentralPanel, Image, TextureId, TopBottomPanel, Ui, WidgetText},
+    egui::{self, TextureId, Ui, WidgetText},
 };
+use serde::{Deserialize, Serialize};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -27,9 +27,13 @@ pub struct Editor {
     color: Color,
 
     is_viewport_focused: bool,
+    pressed_keys: HashSet<KeyCode>,
+    is_cursor_locked: bool,
+
+    window: Option<Arc<Window>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum EditorTab {
     AssetViewer,       // bottom side,
     ResourceInspector, // left side,
@@ -45,9 +49,9 @@ impl Editor {
         let surface = dock_state.main_surface_mut();
         let [_old, right] =
             surface.split_right(NodeIndex::root(), 0.25, vec![EditorTab::ModelEntityList]);
-        let [_old, bottom] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
-        let [_old, left] =
+        let [_old, _] =
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
+        let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
         Self {
             scene_command: SceneCommand::None,
@@ -58,6 +62,9 @@ impl Editor {
             camera: Camera::default(),
             color: Color::default(),
             is_viewport_focused: false,
+            pressed_keys: HashSet::new(),
+            is_cursor_locked: false,
+            window: None,
         }
     }
 
@@ -68,11 +75,19 @@ impl Editor {
                     ui.label("New");
                     ui.label("Open");
                     ui.label("Save");
+                    ui.menu_button("Settings", |ui| {
+                        ui.label("Project");
+                        ui.label("Eucalyptus");
+                    });
+                    ui.label("Quit");
                 });
                 ui.menu_button("Edit", |ui| {
                     ui.label("Undo");
                     ui.label("Redo");
                 });
+                ui.menu_button("Window", |_ui| {
+                    // ui.menu
+                })
                 // todo: add more stuff and give it purpose this is too bland :(
             });
         });
@@ -84,19 +99,14 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        // texture: self.viewport,
-                        size: self.size,
                     },
                 );
-
-            // todo: render wgpu viewport
         });
     }
 }
 
 pub struct EditorTabViewer {
     pub view: TextureId,
-    pub size: Extent3d,
 }
 
 impl TabViewer for EditorTabViewer {
@@ -148,25 +158,30 @@ impl Scene for Editor {
 
         self.camera = camera;
         self.render_pipeline = Some(pipeline);
+        self.window = Some(graphics.state.window.clone());
     }
-    async fn update(&mut self, dt: f32, graphics: &mut Graphics) {}
+
+    async fn update(&mut self, _dt: f32, _graphics: &mut Graphics) {
+        if let Some((_, tab)) = self.dock_state.find_active_focused() {
+            self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
+        } else {
+            self.is_viewport_focused = false;
+        }
+
+        if self.is_viewport_focused {
+            self.is_cursor_locked = true;
+        }
+
+        if !self.is_cursor_locked {
+            self.window.as_mut().unwrap().set_cursor_visible(true);
+        }
+    }
+
     async fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
-            r: if self.color.r < 1.0 {
-                self.color.r + 0.1
-            } else {
-                0.1
-            },
-            g: if self.color.g < 1.0 {
-                self.color.g + 0.1
-            } else {
-                0.2
-            },
-            b: if self.color.b < 1.0 {
-                self.color.b + 0.1
-            } else {
-                0.3
-            },
+            r: 0.1,
+            g: 0.2,
+            b: 0.3,
             a: 1.0,
         };
         self.color = color.clone();
@@ -177,12 +192,13 @@ impl Scene for Editor {
         }
 
         self.texture_id = Some(graphics.state.texture_id);
-        // self.viewport = Some(graphics.state.viewport_texture);
         self.size = graphics.state.viewport_texture.size;
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
+        self.window = Some(graphics.state.window.clone());
     }
-    async fn exit(&mut self, event_loop: &ActiveEventLoop) {}
+
+    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)
@@ -195,44 +211,77 @@ impl Keyboard for Editor {
         key: dropbear_engine::winit::keyboard::KeyCode,
         event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
     ) {
+        match key {
+            KeyCode::Escape => event_loop.exit(),
+            KeyCode::F1 => {
+                self.is_cursor_locked = !self.is_cursor_locked;
+                if !self.is_cursor_locked {
+                    if let Some((surface_idx, node_idx, _)) =
+                        self.dock_state.find_tab(&EditorTab::AssetViewer)
+                    {
+                        self.dock_state
+                            .set_focused_node_and_surface((surface_idx, node_idx));
+                    }
+                }
+            }
+            _ => {
+                self.pressed_keys.insert(key);
+            }
+        }
     }
 
     fn key_up(
         &mut self,
         key: dropbear_engine::winit::keyboard::KeyCode,
-        event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
     ) {
+        self.pressed_keys.remove(&key);
     }
 }
 
 impl Mouse for Editor {
-    fn mouse_move(&mut self, position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {}
+    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
+        if self.is_cursor_locked {
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                let center =
+                    PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
 
-    fn mouse_down(&mut self, button: dropbear_engine::winit::event::MouseButton) {}
+                let dx = position.x - center.x;
+                let dy = position.y - center.y;
+                self.camera.track_mouse_delta(dx as f32, dy as f32);
 
-    fn mouse_up(&mut self, button: dropbear_engine::winit::event::MouseButton) {}
+                window.set_cursor_position(center).ok();
+                window.set_cursor_visible(false);
+            }
+        }
+    }
+
+    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
+
+    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
 }
 
 impl Controller for Editor {
     fn button_down(
         &mut self,
-        button: dropbear_engine::gilrs::Button,
-        id: dropbear_engine::gilrs::GamepadId,
+        _button: dropbear_engine::gilrs::Button,
+        _id: dropbear_engine::gilrs::GamepadId,
     ) {
     }
 
     fn button_up(
         &mut self,
-        button: dropbear_engine::gilrs::Button,
-        id: dropbear_engine::gilrs::GamepadId,
+        _button: dropbear_engine::gilrs::Button,
+        _id: dropbear_engine::gilrs::GamepadId,
     ) {
     }
 
-    fn left_stick_changed(&mut self, x: f32, y: f32, id: dropbear_engine::gilrs::GamepadId) {}
+    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {}
 
-    fn right_stick_changed(&mut self, x: f32, y: f32, id: dropbear_engine::gilrs::GamepadId) {}
+    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {}
 
-    fn on_connect(&mut self, id: dropbear_engine::gilrs::GamepadId) {}
+    fn on_connect(&mut self, _id: dropbear_engine::gilrs::GamepadId) {}
 
-    fn on_disconnect(&mut self, id: dropbear_engine::gilrs::GamepadId) {}
+    fn on_disconnect(&mut self, _id: dropbear_engine::gilrs::GamepadId) {}
 }
