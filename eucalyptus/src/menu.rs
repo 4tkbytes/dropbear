@@ -9,6 +9,7 @@ use dropbear_engine::{
     log::{self, debug},
     scene::{Scene, SceneCommand},
 };
+use egui_toast::{ToastOptions, Toasts};
 use git2::Repository;
 
 use crate::states::{PROJECT, ProjectConfig};
@@ -25,12 +26,16 @@ pub struct MainMenu {
     show_progress: bool,
     progress: f32,
     progress_message: String,
+    toast: Toasts,
 }
 
 impl MainMenu {
     pub fn new() -> Self {
         Self {
             show_progress: false,
+            toast: egui_toast::Toasts::new()
+                .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+                .direction(egui::Direction::BottomUp),
             ..Default::default()
         }
     }
@@ -143,15 +148,29 @@ impl Scene for MainMenu {
                     {
                         log::debug!("Opening project");
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("Eucalyptus Configuration Files", &["euc"])
+                            .add_filter("Eucalyptus Configuration Files", &["eucp"])
                             .pick_file()
                         {
-                            let config = ProjectConfig::read_from(&path).unwrap();
-                            log::info!("Loaded project!");
-                            let mut global = PROJECT.write().unwrap();
-                            *global = config;
-                            println!("Loaded config info: {:#?}", global);
-                            self.scene_command = SceneCommand::SwitchScene(String::from("editor"));
+                            match ProjectConfig::read_from(&path) {
+                                Ok(config) => {
+                                    log::info!("Loaded project!");
+                                    let mut global = PROJECT.write().unwrap();
+                                    *global = config;
+                                    println!("Loaded config info: {:#?}", global);
+                                    self.scene_command =
+                                        SceneCommand::SwitchScene(String::from("editor"));
+                                }
+                                Err(e) => if e.to_string().contains("missing field") {
+                                    self.toast.add(egui_toast::Toast {
+                                        kind: egui_toast::ToastKind::Error,
+                                        text: format!("Your project version is not up to date with the current project version. To fix this, // TODO: create a way to backup").into(),
+                                        options: ToastOptions::default()
+                                            .duration_in_seconds(5.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                            };
                         } else {
                             log::error!("File dialog returned \"None\"");
                         }
@@ -242,6 +261,8 @@ impl Scene for MainMenu {
                     }
                 });
         }
+
+        self.toast.show(graphics.get_egui_context());
     }
 
     async fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}

@@ -1,5 +1,5 @@
 //! In this module, it will describe all the different types for
-//! storing configuration files (.euc).
+//! storing configuration files (.eucp for project and .eucc for config files for subdirectories).
 //!
 //! There is a singleton that is used for other crates to access,
 //! as well as public structs related to that config and docs (hopefully).
@@ -8,9 +8,12 @@ use std::{fs, path::PathBuf, sync::RwLock};
 
 use chrono::Utc;
 use dropbear_engine::log;
+use egui_dock::DockState;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+
+use crate::editor::EditorTab;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -18,13 +21,14 @@ pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
 /// The root config file, responsible for building and other metadata.
 ///
 /// # Location
-/// This file is {project_name}.euc and is located at {project_dir}/
+/// This file is {project_name}.eucp and is located at {project_dir}/
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub project_name: String,
     pub project_path: String,
     pub date_created: String,
     pub date_last_accessed: String,
+    pub dock_layout: Option<DockState<EditorTab>>,
 }
 
 impl ProjectConfig {
@@ -39,6 +43,7 @@ impl ProjectConfig {
             project_path,
             date_created,
             date_last_accessed,
+            dock_layout: None,
         }
     }
 
@@ -51,7 +56,7 @@ impl ProjectConfig {
         self.date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.join(format!("{}.euc", self.project_name.clone().to_lowercase()));
+        let config_path = path.join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
     }

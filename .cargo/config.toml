@@ -1,5 +1,5 @@
 [build]
-jobs = 8 
+jobs = 8
 
 [profile.dev]
 opt-level = 0

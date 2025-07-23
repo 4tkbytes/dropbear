@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use dropbear_engine::{
     async_trait::async_trait,
@@ -74,6 +74,21 @@ impl Editor {
         }
     }
 
+    pub fn save_project_config(&self) -> anyhow::Result<()> {
+        let mut config = PROJECT.write().unwrap();
+        config.dock_layout = Some(self.dock_state.clone());
+        let project_path = config.project_path.clone();
+        config.write_to(&PathBuf::from(project_path))
+    }
+
+    pub fn load_project_config(&mut self) -> anyhow::Result<()> {
+        let config = PROJECT.read().unwrap();
+        if let Some(layout) = &config.dock_layout {
+            self.dock_state = layout.clone();
+        }
+        Ok(())
+    }
+
     pub fn show_ui(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -81,12 +96,7 @@ impl Editor {
                     ui.label("New");
                     ui.label("Open");
                     if ui.button("Save").clicked() {
-                        let project_path = {
-                            let config = PROJECT.read().unwrap();
-                            config.project_path.clone()
-                        };
-                        let mut config = PROJECT.write().unwrap();
-                        match config.write_to(&PathBuf::from_str(&project_path).unwrap()) {
+                        match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
@@ -119,12 +129,7 @@ impl Editor {
                         ui.label("Eucalyptus Editor");
                     });
                     if ui.button("Quit").clicked() {
-                        let project_path = {
-                            let config = PROJECT.read().unwrap();
-                            config.project_path.clone()
-                        };
-                        let mut config = PROJECT.write().unwrap();
-                        match config.write_to(&PathBuf::from_str(&project_path).unwrap()) {
+                        match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
@@ -139,6 +144,15 @@ impl Editor {
                             }
                         }
                         log::info!("Successfully saved project");
+                        self.toasts.add(egui_toast::Toast {
+                            kind: egui_toast::ToastKind::Success,
+                            text: format!("Successfully saved project").into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                        self.scene_command = SceneCommand::Quit;
                     }
                 });
                 ui.menu_button("Edit", |ui| {
@@ -203,6 +217,8 @@ impl TabViewer for EditorTabViewer {
 #[async_trait]
 impl Scene for Editor {
     async fn load(&mut self, graphics: &mut Graphics) {
+        let _ = self.load_project_config();
+
         let shader = Shader::new(
             graphics,
             include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
