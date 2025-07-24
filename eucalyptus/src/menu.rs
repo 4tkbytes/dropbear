@@ -201,6 +201,7 @@ impl MainMenu {
                         }
                     };
                     if let Err(e) = result {
+                        tx.send(ProjectProgress::Error(e.to_string())).ok();
                         errors.push(e);
                     }
                 }
