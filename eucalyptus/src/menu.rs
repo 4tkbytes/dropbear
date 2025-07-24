@@ -1,4 +1,8 @@
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{
+    fs,
+    process::Command,
+    sync::mpsc::{self, Receiver},
+};
 
 use anyhow::anyhow;
 use dropbear_engine::{
@@ -20,13 +24,24 @@ pub struct MainMenu {
     show_new_project: bool,
     project_name: String,
     project_path: Option<std::path::PathBuf>,
-    project_created: bool,
     project_error: Option<Vec<String>>,
+
+    progress_rx: Option<Receiver<ProjectProgress>>,
 
     show_progress: bool,
     progress: f32,
     progress_message: String,
     toast: Toasts,
+}
+
+pub enum ProjectProgress {
+    Step {
+        progress: f32,
+        message: String,
+    },
+    #[allow(dead_code)]
+    Error(String),
+    Done,
 }
 
 impl MainMenu {
@@ -41,103 +56,132 @@ impl MainMenu {
     }
 
     fn start_project_creation(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        let project_name = self.project_name.clone();
+        let project_path = self.project_path.clone();
+
+        self.progress_rx = Some(rx);
         self.show_progress = true;
         self.progress = 0.0;
         self.progress_message = "Starting project creation...".to_string();
-        self.project_created = false;
-        self.project_error = None;
-        log::debug!("Starting project creation");
-    }
 
-    fn create_new_project(&mut self) {
-        let mut errors = Vec::new();
-        let folders = [
-            ("git", 0.1, "Creating a git folder..."),
-            ("src", 0.2, "Creating src folder..."),
-            ("resources/models", 0.4, "Creating models folder..."),
-            ("scripts", 0.5, "Initialising Python environment"),
-            ("resources/shaders", 0.6, "Creating shaders folder..."),
-            ("resources/textures", 0.8, "Creating textures folder..."),
-            ("src2", 0.9, "Creating project config file..."),
-        ];
+        std::thread::spawn(move || {
+            let mut errors = Vec::new();
+            let folders = [
+                ("git", 0.1, "Creating a git folder..."),
+                ("src", 0.2, "Creating src folder..."),
+                ("resources/models", 0.4, "Creating models folder..."),
+                ("scripts", 0.5, "Initializing Python environment"),
+                (
+                    "deps",
+                    0.55,
+                    "Installing python dependencies into environment",
+                ),
+                ("resources/shaders", 0.6, "Creating shader folder..."),
+                ("resources/textures", 0.8, "Creating textures folder..."),
+                ("src2", 0.9, "Creating project config file..."),
+            ];
 
-        if let Some(path) = &self.project_path {
-            for (folder, progress, message) in folders {
-                self.progress_message = message.to_string();
-                self.progress = progress;
-                let full_path = path.join(folder);
-                let result: anyhow::Result<()> = if folder == "src" {
-                    fs::create_dir(&full_path)
-                        .map_err(|e| anyhow!(e))
-                        .map(|_| ())
-                } else if folder == "git" {
-                    Repository::init(path).map_err(|e| anyhow!(e)).map(|_| ())
-                } else if folder == "src2" {
-                    if let Some(path) = &self.project_path {
-                        let mut config = ProjectConfig::new(self.project_name.clone(), &path);
-                        let _ = config.write_to(&path);
-                        let mut global = PROJECT.write().unwrap();
-                        *global = config;
-                        Ok(())
+            if let Some(path) = &project_path {
+                for (folder, progress, message) in folders {
+                    tx.send(ProjectProgress::Step {
+                        progress,
+                        message: message.to_string(),
+                    })
+                    .ok();
+
+                    let full_path = path.join(folder);
+                    let result: anyhow::Result<()> = if folder == "src" {
+                        if !full_path.exists() {
+                            fs::create_dir(&full_path)
+                                .map_err(|e| anyhow::anyhow!(e))
+                                .map(|_| ())
+                        } else {
+                            Ok(())
+                        }
+                    } else if folder == "git" {
+                        match Repository::init(path) {
+                            Ok(_) => Ok(()),
+                            Err(e) => {
+                                if matches!(e.code(), git2::ErrorCode::Exists) {
+                                    log::warn!("Git repository already exists");
+                                    Ok(())
+                                } else {
+                                    Err(anyhow!(e))
+                                }
+                            }
+                        }
+                    } else if folder == "src2" {
+                        if let Some(path) = &project_path {
+                            let mut config = ProjectConfig::new(project_name.clone(), &path);
+                            let _ = config.write_to(&path);
+                            let mut global = PROJECT.write().unwrap();
+                            *global = config;
+                            Ok(())
+                        } else {
+                            Err(anyhow!("Project path not found"))
+                        }
+                    } else if folder == "scripts" || folder == "deps" {
+                        let venv_path = full_path;
+                        if folder == "scripts" {
+                            if !Command::new("poetry").args(["--version"]).output().is_ok() {
+                                errors.push(anyhow!(
+                                        "Poetry is not installed. Please install it using pipx or the official poetry website"
+                                        ));
+                                Ok(())
+                            } else {
+                                Ok(())
+                            }
+                        } else {
+                            if !&venv_path.exists() {
+                                let status = Command::new("poetry")
+                                    .args(["new", project_name.as_str()])
+                                    .current_dir(path)
+                                    .status();
+                                match status {
+                                    Ok(s) if s.success() => (),
+                                    Ok(s) => errors.push(anyhow!(
+                                        "Python venv creation failed with exit code: {}",
+                                        s
+                                    )),
+                                    Err(e) => errors.push(anyhow!("Failed to run python3: {}", e)),
+                                }
+                            }
+
+                            let status = Command::new("poetry")
+                                .args(["add", "3d-to-image"])
+                                .current_dir(&venv_path)
+                                .status();
+                            match status {
+                                Ok(_) => Ok(()),
+                                Err(e) => Err(anyhow!(e)),
+                            }
+                        }
                     } else {
-                        Err(anyhow!("Project path not found"))
-                    }
-                } else if folder == "scripts" {
-                    let venv_path = full_path;
-                    if !&venv_path.exists() {
-                        let status = Command::new("python3")
-                            .args(["-m", "venv", venv_path.to_str().unwrap()])
-                            .status();
-                        match status {
-                            Ok(s) if s.success() => (),
-                            Ok(s) => errors
-                                .push(anyhow!("Python venv creation failed with exit code: {}", s)),
-                            Err(e) => errors.push(anyhow!("Failed to run python3: {}", e)),
+                        if !full_path.exists() {
+                            fs::create_dir_all(&full_path)
+                                .map_err(|e| anyhow!(e))
+                                .map(|_| ())
+                        } else {
+                            log::warn!("{:?} already exists", full_path);
+                            Ok(())
                         }
+                    };
+                    if let Err(e) = result {
+                        errors.push(e);
                     }
-                    unsafe {
-                        env::set_var("VIRTUAL_ENV", &venv_path);
-                    }
-
-                    match Command::new(&venv_path.join("bin/python"))
-                        .args(["-m", "pip", "install", "--upgrade", "pip", "3d-to-image"])
-                        .status()
-                    {
-                        Ok(s) if s.success() => (),
-                        Ok(s) => {
-                            errors.push(anyhow!("Installing related dependencies failed: {}", s))
-                        }
-                        Err(e) => {
-                            errors.push(anyhow!("Installing python dependencies failed: {}", e))
-                        }
-                    }
-                    Ok(())
-                } else {
-                    fs::create_dir_all(&full_path)
-                        .map_err(|e| anyhow!(e))
-                        .map(|_| ())
-                };
-                if let Err(e) = result {
-                    errors.push(e);
                 }
+                tx.send(ProjectProgress::Step {
+                    progress: 1.0,
+                    message: "Project creation complete!".to_string(),
+                })
+                .ok();
+
+                tx.send(ProjectProgress::Done).ok();
             }
-            self.progress = 1.0;
-            self.progress_message = "Project creation complete!".to_string();
-            if errors.is_empty() {
-                self.project_created = true;
-            } else {
-                self.project_created = false;
-                self.project_error = Some(errors.iter().map(|e| e.to_string()).collect::<Vec<_>>());
-            }
-        }
-        self.show_progress = true;
-        if self.project_created {
-            self.scene_command = SceneCommand::SwitchScene("editor".to_string());
-        } else {
-            for error in self.project_error.as_ref().unwrap() {
-                log::error!("Error: {}", error);
-            }
-        }
+        });
+
+        log::debug!("Starting project creation");
     }
 }
 
@@ -155,76 +199,76 @@ impl Scene for MainMenu {
         let egui_ctx = graphics.get_egui_context();
 
         egui::CentralPanel::default()
-            .frame(Frame::new())
-            .show(egui_ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(64.0);
-                    ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
-                    ui.add_space(40.0);
+                .frame(Frame::new())
+                .show(egui_ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(64.0);
+                        ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
+                        ui.add_space(40.0);
 
-                    let button_size = egui::vec2(300.0, 60.0);
+                        let button_size = egui::vec2(300.0, 60.0);
 
-                    if ui
-                        .add_sized(button_size, egui::Button::new("New Project"))
-                        .clicked()
-                    {
-                        log::debug!("Creating new project");
-                        self.show_new_project = true;
-                    }
-                    ui.add_space(20.0);
-
-                    if ui
-                        .add_sized(button_size, egui::Button::new("Open Project"))
-                        .clicked()
-                    {
-                        log::debug!("Opening project");
-                        if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("Eucalyptus Configuration Files", &["eucp"])
-                            .pick_file()
+                        if ui
+                            .add_sized(button_size, egui::Button::new("New Project"))
+                            .clicked()
                         {
-                            match ProjectConfig::read_from(&path) {
-                                Ok(config) => {
-                                    log::info!("Loaded project!");
-                                    let mut global = PROJECT.write().unwrap();
-                                    *global = config;
-                                    println!("Loaded config info: {:#?}", global);
-                                    self.scene_command =
-                                        SceneCommand::SwitchScene(String::from("editor"));
-                                }
-                                Err(e) => if e.to_string().contains("missing field") {
-                                    self.toast.add(egui_toast::Toast {
-                                        kind: egui_toast::ToastKind::Error,
-                                        text: format!("Your project version is not up to date with the current project version. To fix this, // TODO: create a way to backup").into(),
-                                        options: ToastOptions::default()
-                                            .duration_in_seconds(5.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-                            };
-                        } else {
-                            log::error!("File dialog returned \"None\"");
+                            log::debug!("Creating new project");
+                            self.show_new_project = true;
                         }
-                    }
-                    ui.add_space(20.0);
+                        ui.add_space(20.0);
 
-                    if ui
-                        .add_sized(button_size, egui::Button::new("Settings"))
-                        .clicked()
-                    {
-                        log::debug!("Settings (not implemented)");
-                    }
-                    ui.add_space(20.0);
+                        if ui
+                            .add_sized(button_size, egui::Button::new("Open Project"))
+                            .clicked()
+                        {
+                            log::debug!("Opening project");
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Eucalyptus Configuration Files", &["eucp"])
+                                .pick_file()
+                            {
+                                match ProjectConfig::read_from(&path) {
+                                    Ok(config) => {
+                                        log::info!("Loaded project!");
+                                        let mut global = PROJECT.write().unwrap();
+                                        *global = config;
+                                        println!("Loaded config info: {:#?}", global);
+                                        self.scene_command =
+                                            SceneCommand::SwitchScene(String::from("editor"));
+                                    }
+                                    Err(e) => if e.to_string().contains("missing field") {
+                                        self.toast.add(egui_toast::Toast {
+                                            kind: egui_toast::ToastKind::Error,
+                                            text: format!("Your project version is not up to date with the current project version. To fix this, // TODO: create a way to backup").into(),
+                                            options: ToastOptions::default()
+                                                .duration_in_seconds(5.0)
+                                                .show_progress(true),
+                                            ..Default::default()
+                                        });
+                                    }
+                                };
+                            } else {
+                                log::error!("File dialog returned \"None\"");
+                            }
+                        }
+                        ui.add_space(20.0);
 
-                    if ui
-                        .add_sized(button_size, egui::Button::new("Quit"))
-                        .clicked()
-                    {
-                        self.scene_command = SceneCommand::Quit
-                    }
-                    ui.add_space(20.0);
+                        if ui
+                            .add_sized(button_size, egui::Button::new("Settings"))
+                            .clicked()
+                        {
+                            log::debug!("Settings (not implemented)");
+                        }
+                        ui.add_space(20.0);
+
+                        if ui
+                            .add_sized(button_size, egui::Button::new("Quit"))
+                            .clicked()
+                        {
+                            self.scene_command = SceneCommand::Quit
+                        }
+                        ui.add_space(20.0);
+                    });
                 });
-            });
 
         let mut show_new_project = self.show_new_project;
         egui::Window::new("Create new project")
@@ -267,12 +311,29 @@ impl Scene for MainMenu {
                     {
                         log::info!("Creating new project at {:?}", self.project_path);
                         self.start_project_creation();
-                        self.create_new_project();
                         ui.ctx().request_repaint();
                     }
                 });
             });
         self.show_new_project = show_new_project;
+
+        if let Some(rx) = self.progress_rx.as_mut() {
+            while let Ok(progress) = rx.try_recv() {
+                match progress {
+                    ProjectProgress::Step { progress, message } => {
+                        self.progress = progress;
+                        self.progress_message = message;
+                    }
+                    ProjectProgress::Error(err) => {
+                        self.project_error.get_or_insert_with(Vec::new).push(err);
+                    }
+                    ProjectProgress::Done if self.project_error.is_none() => {
+                        self.scene_command = SceneCommand::SwitchScene("editor".to_string());
+                    }
+                    ProjectProgress::Done => {}
+                }
+            }
+        }
 
         if self.show_progress {
             egui::Window::new("Creating Project...")
