@@ -48,7 +48,7 @@ impl TestingScene1 {
 
 #[async_trait]
 impl Scene for TestingScene1 {
-    async fn load(&mut self, graphics: &mut Graphics) {
+    fn load(&mut self, graphics: &mut Graphics) {
         let shader = Shader::new(
             graphics,
             include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
@@ -85,7 +85,7 @@ impl Scene for TestingScene1 {
         self.render_pipeline = Some(pipeline);
     }
 
-    async fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
+    fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
         // hold down movement
         for key in &self.pressed_keys {
             match key {
@@ -111,7 +111,7 @@ impl Scene for TestingScene1 {
         self.camera.update(graphics);
     }
 
-    async fn render(&mut self, graphics: &mut Graphics) {
+    fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
             r: 0.1,
             g: 0.2,
@@ -134,7 +134,7 @@ impl Scene for TestingScene1 {
         self.window = Some(graphics.state.window.clone());
     }
 
-    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)

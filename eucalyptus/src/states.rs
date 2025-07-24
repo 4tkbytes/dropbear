@@ -4,7 +4,11 @@
 //! There is a singleton that is used for other crates to access,
 //! as well as public structs related to that config and docs (hopefully).
 
-use std::{fs, path::PathBuf, sync::RwLock};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::RwLock,
+};
 
 use chrono::Utc;
 use dropbear_engine::log;
@@ -28,8 +32,10 @@ pub struct ProjectConfig {
     pub project_path: String,
     pub date_created: String,
     pub date_last_accessed: String,
+    #[serde(default)]
     pub dock_layout: Option<DockState<EditorTab>>,
-    // pub assets: Assets,
+    #[serde(default)]
+    pub assets: Assets,
 }
 
 impl ProjectConfig {
@@ -37,15 +43,15 @@ impl ProjectConfig {
     /// a new project, with it creating new defaults for everything.
     pub fn new(project_name: String, project_path: &PathBuf) -> Self {
         let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        let project_path = project_path.to_str().unwrap().to_string();
+        let project_path_str = project_path.to_str().unwrap().to_string();
         let date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         Self {
             project_name,
-            project_path,
+            project_path: project_path_str,
             date_created,
             date_last_accessed,
             dock_layout: None,
-            // assets: Assets::new(),
+            assets: Assets::walk(&project_path),
         }
     }
 
@@ -56,6 +62,7 @@ impl ProjectConfig {
     /// * path - The root **folder** of the project.
     pub fn write_to(&mut self, path: &PathBuf) -> anyhow::Result<()> {
         self.date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
+        self.assets = Assets::walk(path);
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
         let config_path = path.join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
@@ -75,56 +82,120 @@ impl ProjectConfig {
         log::debug!("Loaded config info: {:#?}", config);
         log::debug!("Updating with new content");
         config.write_to(&path.parent().unwrap().to_path_buf())?;
+        config.assets = Assets::walk(&path.parent().unwrap().to_path_buf());
         log::debug!("Successfully updated!");
         Ok(config)
     }
 }
 
-// #[derive(Default, Serialize, Deserialize)]
-// pub struct Assets {
-//     nodes: Vec<Node>,
-// }
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct Assets {
+    nodes: Vec<Node>,
+}
 
-// impl Assets {
-//     pub fn walk() -> Self {}
-// }
+pub(crate) fn path_contains_folder(path: &PathBuf, folder: &str) -> bool {
+    path.components().any(|comp| comp.as_os_str() == folder)
+}
 
-// #[derive(Serialize, Deserialize)]
-// pub enum Node {
-//     File(File),
-//     Folder(Folder),
-// }
+impl Assets {
+    /// This function goes into your project directory and "walks" (recursively) / fetches other configuration files
+    /// and other assets/scripts for the .eucp project file to look for.
+    ///
+    /// If there are config files missing, it will generate the config file and populate it, then
+    /// create a reference to that folder config file (.eucc) to the .eucp project config file.
+    pub fn walk(project_path: &PathBuf) -> Self {
+        fn locate_config_in_dir(path: &Path) -> Vec<Node> {
+            let mut nodes = Vec::new();
 
-// impl Default for Node {
-//     fn default() -> Self {
-//         Node::Folder(Folder::default())
-//     }
-// }
+            if let Ok(entries) = fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    let entry_path = entry.path();
+                    let name = entry_path.file_name().unwrap().to_str().unwrap();
+                    if path_contains_folder(&entry_path, ".git") {
+                        continue;
+                    }
 
-// #[derive(Default, Serialize, Deserialize)]
-// pub struct File {
-//     pub name: String,
-//     /// A reference from the root node
-//     pub path: PathBuf,
-// }
+                    if entry_path.is_dir() {
+                        let config_path = entry_path.join(format!("{}.eucc", name));
+                        let mut folder = Folder {
+                            name: String::from(name),
+                            path: entry_path.clone(),
+                            nodes: locate_config_in_dir(&entry_path),
+                        };
 
-// fn thing() {
-//     let horse = File {
-//         name: String::from("horse"),
-//         path: PathBuf::new().join("resources/models/horse.glb"),
-//     };
+                        if config_path.exists() {
+                            folder.nodes.push(Node::File(File {
+                                name: format!("{}.eucc", name),
+                                path: config_path.clone(),
+                            }));
+                        }
 
-//     Folder {
-//         name: String::from("models"),
-//         path: PathBuf::new().join("resources/models/"),
-//         nodes: vec![horse],
-//     }
-// }
+                        nodes.push(Node::Folder(folder));
+                    } else if entry_path.extension().map_or(false, |ext| ext == "eucc") {
+                        let parent = entry_path
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .map(|n| n.to_str().unwrap());
+                        let expected_name = parent.map(|n| format!("{}.eucc", n));
+                        if Some(name) != expected_name.as_deref() {
+                            nodes.push(Node::File(File {
+                                name: String::from(name),
+                                path: entry_path.clone(),
+                            }));
+                        }
+                    }
+                }
+            }
 
-// /// The related video is
-// #[derive(Default)]
-// pub struct Folder {
-//     pub name: String,
-//     pub path: PathBuf,
-//     pub nodes: Vec<Node>,
-// }
+            nodes
+        }
+
+        Assets {
+            nodes: locate_config_in_dir(project_path),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Node {
+    File(File),
+    Folder(Folder),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ConfigType {
+    None,
+    Project(ProjectConfig),
+    Resource(ResourceConfig),
+    Source(SourceCodeConfig),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceConfig {
+    pub nodes: Vec<Node>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SourceCodeConfig {
+    pub nodes: Vec<Node>,
+}
+
+impl Default for ConfigType {
+    fn default() -> Self {
+        ConfigType::None
+    }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct File {
+    pub name: String,
+    /// A reference from the root node
+    pub path: PathBuf,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct Folder {
+    pub name: String,
+    pub path: PathBuf,
+    pub nodes: Vec<Node>,
+}

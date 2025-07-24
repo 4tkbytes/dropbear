@@ -220,11 +220,11 @@ impl MainMenu {
 
 #[async_trait]
 impl Scene for MainMenu {
-    async fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {}
+    fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 
-    async fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
+    fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 
-    async fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
+    fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
         let screen_size: (f32, f32) = (
             graphics.state.window.inner_size().width as f32 - 100.0,
             graphics.state.window.inner_size().height as f32 - 100.0,
@@ -390,7 +390,7 @@ impl Scene for MainMenu {
         self.toast.show(graphics.get_egui_context());
     }
 
-    async fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
+    fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)

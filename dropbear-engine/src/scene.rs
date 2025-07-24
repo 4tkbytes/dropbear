@@ -4,17 +4,18 @@ use winit::event_loop::ActiveEventLoop;
 use crate::{graphics::Graphics, input};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-#[async_trait]
 pub trait Scene {
-    async fn load(&mut self, graphics: &mut Graphics);
-    async fn update(&mut self, dt: f32, graphics: &mut Graphics);
-    async fn render(&mut self, graphics: &mut Graphics);
-    async fn exit(&mut self, event_loop: &ActiveEventLoop);
-    /// By far a mess of a trait however it works. 
-    /// 
+    fn load(&mut self, graphics: &mut Graphics);
+    fn update(&mut self, dt: f32, graphics: &mut Graphics);
+    fn render(&mut self, graphics: &mut Graphics);
+    fn exit(&mut self, event_loop: &ActiveEventLoop);
+    /// By far a mess of a trait however it works.
+    ///
     /// This struct allows you to add in a SceneCommand enum and send it to the scene management for them
     /// to parse through.
-    fn run_command(&mut self) -> SceneCommand { SceneCommand::None }
+    fn run_command(&mut self) -> SceneCommand {
+        SceneCommand::None
+    }
 }
 
 #[derive(Clone)]
@@ -69,16 +70,21 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub async fn update(&mut self, dt: f32, graphics: &mut Graphics<'_>, event_loop: &ActiveEventLoop) {
+    pub async fn update(
+        &mut self,
+        dt: f32,
+        graphics: &mut Graphics<'_>,
+        event_loop: &ActiveEventLoop,
+    ) {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene {
                 if let Some(scene) = self.scenes.get_mut(current_scene_name) {
-                    scene.borrow_mut().exit(event_loop).await;
+                    scene.borrow_mut().exit(event_loop);
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                scene.borrow_mut().load(graphics).await;
+                scene.borrow_mut().load(graphics);
             }
             self.current_scene = Some(next_scene_name);
         }
@@ -86,7 +92,7 @@ impl Manager {
         // update scene
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().update(dt, graphics).await;
+                scene.borrow_mut().update(dt, graphics);
                 let command = scene.borrow_mut().run_command();
                 match command {
                     SceneCommand::SwitchScene(target) => self.switch(&target),
@@ -94,7 +100,7 @@ impl Manager {
                         log::info!("Exiting app!");
                         event_loop.exit();
                     }
-                    SceneCommand::None => {},
+                    SceneCommand::None => {}
                     SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
                 }
             }
@@ -104,7 +110,7 @@ impl Manager {
     pub async fn render(&mut self, graphics: &mut Graphics<'_>) {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().render(graphics).await;
+                scene.borrow_mut().render(graphics);
             }
         }
     }
@@ -124,7 +130,9 @@ impl Manager {
     }
 }
 
-pub fn add_scene_with_input<S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller>(
+pub fn add_scene_with_input<
+    S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller,
+>(
     scene_manager: &mut Manager,
     input_manager: &mut input::Manager,
     scene: Rc<RefCell<S>>,

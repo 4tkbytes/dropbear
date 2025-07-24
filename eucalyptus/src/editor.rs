@@ -214,9 +214,8 @@ impl TabViewer for EditorTabViewer {
     }
 }
 
-#[async_trait]
 impl Scene for Editor {
-    async fn load(&mut self, graphics: &mut Graphics) {
+    fn load(&mut self, graphics: &mut Graphics) {
         let _ = self.load_project_config();
 
         let shader = Shader::new(
@@ -237,7 +236,7 @@ impl Scene for Editor {
         self.window = Some(graphics.state.window.clone());
     }
 
-    async fn update(&mut self, _dt: f32, _graphics: &mut Graphics) {
+    fn update(&mut self, _dt: f32, _graphics: &mut Graphics) {
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
@@ -271,7 +270,7 @@ impl Scene for Editor {
             .direction(egui::Direction::BottomUp);
     }
 
-    async fn render(&mut self, graphics: &mut Graphics) {
+    fn render(&mut self, graphics: &mut Graphics) {
         let color = Color {
             r: 0.1,
             g: 0.2,
@@ -293,7 +292,7 @@ impl Scene for Editor {
         self.toasts.show(graphics.get_egui_context());
     }
 
-    async fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)
@@ -317,6 +316,43 @@ impl Keyboard for Editor {
                         self.dock_state
                             .set_focused_node_and_surface((surface_idx, node_idx));
                     }
+                }
+            }
+            KeyCode::KeyS => {
+                #[cfg(not(target_os = "macos"))]
+                let ctrl_pressed = self.pressed_keys.contains(&KeyCode::ControlLeft)
+                    || self.pressed_keys.contains(&KeyCode::ControlRight);
+                #[cfg(target_os = "macos")]
+                let ctrl_pressed = self.pressed_keys.contains(&KeyCode::SuperLeft)
+                    || self.pressed_keys.contains(&KeyCode::SuperRight);
+
+                if ctrl_pressed {
+                    match self.save_project_config() {
+                        Ok(_) => {
+                            log::info!("Successfully saved project");
+                            self.toasts.add(egui_toast::Toast {
+                                kind: egui_toast::ToastKind::Success,
+                                text: format!("Successfully saved project").into(),
+                                options: egui_toast::ToastOptions::default()
+                                    .duration_in_seconds(5.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
+                        Err(e) => {
+                            log::error!("Error saving project: {}", e);
+                            self.toasts.add(egui_toast::Toast {
+                                kind: egui_toast::ToastKind::Error,
+                                text: format!("Error saving project: {}", e).into(),
+                                options: egui_toast::ToastOptions::default()
+                                    .duration_in_seconds(5.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
                 }
             }
             _ => {
