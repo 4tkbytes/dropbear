@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs, io,
+    path::Path,
     process::Command,
     sync::mpsc::{self, Receiver},
 };
@@ -55,6 +56,61 @@ impl MainMenu {
         }
     }
 
+    fn setup_poetry_project(project_path: &Path) -> anyhow::Result<()> {
+        if !Command::new("poetry").args(["--version"]).output().is_ok() {
+            return Err(anyhow!(
+                "Poetry is not installed. Please install it using pipx or the official poetry website"
+            ));
+        }
+
+        let status = Command::new("poetry")
+            .args(&["new", "scripts"])
+            .current_dir(project_path)
+            .status()
+            .expect("Failed to run poetry new");
+        if !status.success() {
+            return Err(anyhow!(io::Error::new(
+                io::ErrorKind::Other,
+                "Poetry project creation failed",
+            )));
+        }
+
+        let scripts_path = project_path.join("scripts");
+        if scripts_path.exists() && scripts_path.is_dir() {
+            for entry in fs::read_dir(&scripts_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                let file_name = path.file_name().unwrap();
+                let dest = project_path.join(file_name);
+                fs::rename(&path, &dest)?;
+            }
+        }
+
+        if scripts_path.exists() {
+            fs::remove_dir_all(&scripts_path)?;
+        }
+
+        let tests_path = project_path.join("tests");
+        if tests_path.exists() {
+            fs::remove_dir_all(&tests_path)?;
+        }
+
+        log::debug!("Running poetry install in {:?}", project_path);
+        let status = Command::new("poetry")
+            .arg("install")
+            .current_dir(project_path)
+            .status()
+            .expect("Failed to run poetry install");
+        if !status.success() {
+            return Err(anyhow!(io::Error::new(
+                io::ErrorKind::Other,
+                "Poetry install failed",
+            )));
+        }
+
+        Ok(())
+    }
+
     fn start_project_creation(&mut self) {
         let (tx, rx) = mpsc::channel();
         let project_name = self.project_name.clone();
@@ -71,7 +127,7 @@ impl MainMenu {
                 ("git", 0.1, "Creating a git folder..."),
                 ("src", 0.2, "Creating src folder..."),
                 ("resources/models", 0.4, "Creating models folder..."),
-                ("scripts", 0.5, "Initializing Python environment"),
+                ("scripts", 0.5, "Initialising Python environment"),
                 (
                     "deps",
                     0.55,
@@ -122,35 +178,12 @@ impl MainMenu {
                             Err(anyhow!("Project path not found"))
                         }
                     } else if folder == "scripts" || folder == "deps" {
-                        let venv_path = full_path;
                         if folder == "scripts" {
-                            if !Command::new("poetry").args(["--version"]).output().is_ok() {
-                                errors.push(anyhow!(
-                                        "Poetry is not installed. Please install it using pipx or the official poetry website"
-                                        ));
-                                Ok(())
-                            } else {
-                                Ok(())
-                            }
+                            Self::setup_poetry_project(path)
                         } else {
-                            if !&venv_path.exists() {
-                                let status = Command::new("poetry")
-                                    .args(["new", project_name.as_str()])
-                                    .current_dir(path)
-                                    .status();
-                                match status {
-                                    Ok(s) if s.success() => (),
-                                    Ok(s) => errors.push(anyhow!(
-                                        "Python venv creation failed with exit code: {}",
-                                        s
-                                    )),
-                                    Err(e) => errors.push(anyhow!("Failed to run python3: {}", e)),
-                                }
-                            }
-
                             let status = Command::new("poetry")
                                 .args(["add", "3d-to-image"])
-                                .current_dir(&venv_path)
+                                .current_dir(path)
                                 .status();
                             match status {
                                 Ok(_) => Ok(()),

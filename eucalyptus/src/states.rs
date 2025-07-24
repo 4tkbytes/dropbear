@@ -29,6 +29,7 @@ pub struct ProjectConfig {
     pub date_created: String,
     pub date_last_accessed: String,
     pub dock_layout: Option<DockState<EditorTab>>,
+    // pub assets: Assets,
 }
 
 impl ProjectConfig {
@@ -44,6 +45,7 @@ impl ProjectConfig {
             date_created,
             date_last_accessed,
             dock_layout: None,
+            // assets: Assets::new(),
         }
     }
 
@@ -77,3 +79,52 @@ impl ProjectConfig {
         Ok(config)
     }
 }
+
+// #[derive(Default, Serialize, Deserialize)]
+// pub struct Assets {
+//     nodes: Vec<Node>,
+// }
+
+// impl Assets {
+//     pub fn walk() -> Self {}
+// }
+
+// #[derive(Serialize, Deserialize)]
+// pub enum Node {
+//     File(File),
+//     Folder(Folder),
+// }
+
+// impl Default for Node {
+//     fn default() -> Self {
+//         Node::Folder(Folder::default())
+//     }
+// }
+
+// #[derive(Default, Serialize, Deserialize)]
+// pub struct File {
+//     pub name: String,
+//     /// A reference from the root node
+//     pub path: PathBuf,
+// }
+
+// fn thing() {
+//     let horse = File {
+//         name: String::from("horse"),
+//         path: PathBuf::new().join("resources/models/horse.glb"),
+//     };
+
+//     Folder {
+//         name: String::from("models"),
+//         path: PathBuf::new().join("resources/models/"),
+//         nodes: vec![horse],
+//     }
+// }
+
+// /// The related video is
+// #[derive(Default)]
+// pub struct Folder {
+//     pub name: String,
+//     pub path: PathBuf,
+//     pub nodes: Vec<Node>,
+// }
