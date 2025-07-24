@@ -9,8 +9,8 @@ readme = "README.md"
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
-# dropbear-engine = { path = "../dropbear-engine" }
-dropbear-engine = "0.1.2"
+dropbear-engine = { path = "../dropbear-engine" }
+# dropbear-engine = "0.1.2"
 rfd = "0.15.4"
 git2 = "0.20.2"
 anyhow = "1.0.98"
