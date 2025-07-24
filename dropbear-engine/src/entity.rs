@@ -1,7 +1,13 @@
-use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{util::DeviceExt, Buffer, RenderPass};
+use std::path::PathBuf;
 
-use crate::{camera::Camera, graphics::{Graphics, Instance}, model::{DrawModel, Model}};
+use nalgebra::{Matrix4, UnitQuaternion, Vector3};
+use wgpu::{Buffer, RenderPass, util::DeviceExt};
+
+use crate::{
+    camera::Camera,
+    graphics::{Graphics, Instance},
+    model::{DrawModel, Model},
+};
 
 #[derive(Default)]
 pub struct AdoptedEntity {
@@ -38,7 +44,7 @@ impl Transform {
             scale: Vector3::new(1.0, 1.0, 1.0),
         }
     }
-    
+
     pub fn matrix(&self) -> Matrix4<f32> {
         Matrix4::new_translation(&self.position)
             * self.rotation.to_homogeneous()
@@ -67,32 +73,36 @@ impl Transform {
 }
 
 impl AdoptedEntity {
-    pub fn new(graphics: &Graphics, file_name: &str, label: Option<&str>) -> anyhow::Result<Self> {
-        let model = Model::load(graphics, file_name)?;
+    pub fn new(graphics: &Graphics, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
+        let model = Model::load(graphics, path)?;
         Ok(Self::adopt(graphics, model, label))
     }
 
     pub fn adopt(graphics: &Graphics, model: Model, label: Option<&str>) -> Self {
         let uniform = ModelUniform::new();
         let uniform_buffer = graphics.create_uniform(uniform, Some("Entity Model Uniform"));
-        
-        let instance = Instance::new(
-            Vector3::identity(),
-            UnitQuaternion::identity()
-        );
 
-        let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: match label { Some(_) => label, None => Some("instance buffer")},
-            contents: bytemuck::cast_slice(&[instance.to_raw()]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        let instance = Instance::new(Vector3::identity(), UnitQuaternion::identity());
+
+        let instance_buffer =
+            graphics
+                .state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: match label {
+                        Some(_) => label,
+                        None => Some("instance buffer"),
+                    },
+                    contents: bytemuck::cast_slice(&[instance.to_raw()]),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
         log::debug!("Successfully adopted Model");
         Self {
             model: Some(model),
             uniform,
             uniform_buffer: Some(uniform_buffer),
             instance,
-            instance_buffer: Some(instance_buffer)
+            instance_buffer: Some(instance_buffer),
         }
     }
 
@@ -100,11 +110,10 @@ impl AdoptedEntity {
         self.uniform.model = transform.matrix().into();
 
         if let Some(buffer) = &self.uniform_buffer {
-            graphics.state.queue.write_buffer(
-                buffer,
-                0,
-                bytemuck::cast_slice(&[self.uniform]),
-            );
+            graphics
+                .state
+                .queue
+                .write_buffer(buffer, 0, bytemuck::cast_slice(&[self.uniform]));
         }
 
         self.instance = Instance::from_matrix(transform.matrix());
@@ -113,8 +122,8 @@ impl AdoptedEntity {
             let instance_raw = self.instance.to_raw();
             graphics.state.queue.write_buffer(
                 instance_buffer,
-                0, 
-                bytemuck::cast_slice(&[instance_raw])
+                0,
+                bytemuck::cast_slice(&[instance_raw]),
             );
         }
     }

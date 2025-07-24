@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dropbear-engine", "eucalyptus"]
+members = ["dropbear-engine", "eucalyptus", "redback"]
 
 [profile.dev]
 opt-level = 0

@@ -1,4 +1,4 @@
-use std::{mem, ops::Range};
+use std::{mem, ops::Range, path::PathBuf};
 
 use russimp::{material::{DataContent, TextureType}, scene::{PostProcess, Scene}, Vector3D};
 use wgpu::{util::DeviceExt, BufferAddress, VertexAttribute, VertexBufferLayout};
@@ -63,11 +63,9 @@ pub struct Mesh {
 }
 
 impl Model {
-    pub fn load(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Model> {
+    pub fn load(graphics: &Graphics<'_>, path: &PathBuf) -> anyhow::Result<Model> {
+        let file_name = path.file_name().unwrap().to_str().unwrap();
         log::debug!("Loading model [{}]", file_name);
-        let path = std::path::Path::new(env!("OUT_DIR"))
-            .join("resources")
-            .join(file_name);
 
         let scene = Scene::from_file(
         path.to_str().unwrap(), 

@@ -1,7 +1,6 @@
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use dropbear_engine::{
-    async_trait::async_trait,
     camera::Camera,
     egui,
     graphics::{Graphics, Shader},
@@ -13,8 +12,8 @@ use dropbear_engine::{
         dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window,
     },
 };
-use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
-use egui_toast::{ToastOptions, Toasts};
+use egui_dock_fork::{DockArea, DockState, NodeIndex, Style, TabViewer};
+use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
 use crate::states::PROJECT;
@@ -68,7 +67,7 @@ impl Editor {
             pressed_keys: HashSet::new(),
             is_cursor_locked: false,
             window: None,
-            toasts: egui_toast::Toasts::new()
+            toasts: egui_toast_fork::Toasts::new()
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
         }
@@ -100,8 +99,8 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
-                                self.toasts.add(egui_toast::Toast {
-                                    kind: egui_toast::ToastKind::Error,
+                                self.toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Error,
                                     text: format!("Error saving project: {}", e).into(),
                                     options: ToastOptions::default()
                                         .duration_in_seconds(5.0)
@@ -111,8 +110,8 @@ impl Editor {
                             }
                         }
                         log::info!("Successfully saved project");
-                        self.toasts.add(egui_toast::Toast {
-                            kind: egui_toast::ToastKind::Success,
+                        self.toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Success,
                             text: format!("Successfully saved project").into(),
                             options: ToastOptions::default()
                                 .duration_in_seconds(5.0)
@@ -133,8 +132,8 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
-                                self.toasts.add(egui_toast::Toast {
-                                    kind: egui_toast::ToastKind::Error,
+                                self.toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Error,
                                     text: format!("Error saving project: {}", e).into(),
                                     options: ToastOptions::default()
                                         .duration_in_seconds(5.0)
@@ -144,8 +143,8 @@ impl Editor {
                             }
                         }
                         log::info!("Successfully saved project");
-                        self.toasts.add(egui_toast::Toast {
-                            kind: egui_toast::ToastKind::Success,
+                        self.toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Success,
                             text: format!("Successfully saved project").into(),
                             options: ToastOptions::default()
                                 .duration_in_seconds(5.0)
@@ -220,7 +219,7 @@ impl Scene for Editor {
 
         let shader = Shader::new(
             graphics,
-            include_str!("../../dropbear-engine/resources/shaders/shader.wgsl"),
+            include_str!("shader.wgsl"),
             Some("viewport_shader"),
         );
 
@@ -265,7 +264,7 @@ impl Scene for Editor {
             self.window.as_mut().unwrap().set_cursor_visible(true);
         }
 
-        self.toasts = egui_toast::Toasts::new()
+        self.toasts = egui_toast_fork::Toasts::new()
             .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
             .direction(egui::Direction::BottomUp);
     }
@@ -330,10 +329,10 @@ impl Keyboard for Editor {
                     match self.save_project_config() {
                         Ok(_) => {
                             log::info!("Successfully saved project");
-                            self.toasts.add(egui_toast::Toast {
-                                kind: egui_toast::ToastKind::Success,
+                            self.toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Success,
                                 text: format!("Successfully saved project").into(),
-                                options: egui_toast::ToastOptions::default()
+                                options: egui_toast_fork::ToastOptions::default()
                                     .duration_in_seconds(5.0)
                                     .show_progress(true),
                                 ..Default::default()
@@ -341,10 +340,10 @@ impl Keyboard for Editor {
                         }
                         Err(e) => {
                             log::error!("Error saving project: {}", e);
-                            self.toasts.add(egui_toast::Toast {
-                                kind: egui_toast::ToastKind::Error,
+                            self.toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Error,
                                 text: format!("Error saving project: {}", e).into(),
-                                options: egui_toast::ToastOptions::default()
+                                options: egui_toast_fork::ToastOptions::default()
                                     .duration_in_seconds(5.0)
                                     .show_progress(true),
                                 ..Default::default()

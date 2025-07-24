@@ -1,0 +1,10 @@
+[package]
+name = "redback"
+version = "0.1.1"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "The build tool used by eucalyptus game engine"
+repository = "https://github.com/4tkbytes/dropbear-engine"
+readme = "README.md"
+
+[dependencies]

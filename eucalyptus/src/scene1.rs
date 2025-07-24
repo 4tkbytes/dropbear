@@ -21,6 +21,8 @@ use dropbear_engine::{
     winit::{event_loop::ActiveEventLoop, keyboard::KeyCode},
 };
 
+// this file purely exists as reference. do not add to module, and probably will be deleted sooner or later
+
 pub struct TestingScene1 {
     world: hecs::World,
     render_pipeline: Option<RenderPipeline>,

@@ -348,7 +348,7 @@ impl App {
 
         env_logger::init();
 
-        log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
+        // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
 
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::{graphics::Graphics, input};

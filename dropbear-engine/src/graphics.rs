@@ -1,3 +1,5 @@
+use std::{fs, path::PathBuf};
+
 use egui::Context;
 use image::GenericImageView;
 use nalgebra::{Matrix4, UnitQuaternion, Vector3};
@@ -13,7 +15,6 @@ use wgpu::{
 use crate::{
     State,
     model::{self, Vertex},
-    resources::load_binary,
 };
 
 pub struct Graphics<'a> {
@@ -23,7 +24,7 @@ pub struct Graphics<'a> {
     pub screen_size: (f32, f32),
 }
 
-pub const NO_TEXTURE: &'static [u8] = include_bytes!("../resources/textures/no-texture.png");
+pub const NO_TEXTURE: &'static [u8] = include_bytes!("no-texture.png");
 
 impl<'a> Graphics<'a> {
     pub fn new(state: &'a State, view: &'a TextureView, encoder: &'a mut CommandEncoder) -> Self {
@@ -355,8 +356,8 @@ impl Texture {
         }
     }
 
-    pub async fn load_texture(graphics: &Graphics<'_>, file_name: &str) -> anyhow::Result<Texture> {
-        let (_, data) = load_binary(file_name).await?;
+    pub async fn load_texture(graphics: &Graphics<'_>, path: &PathBuf) -> anyhow::Result<Texture> {
+        let data = fs::read(path)?;
         Ok(Self::new(graphics, &data))
     }
 }

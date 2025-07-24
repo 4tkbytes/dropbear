@@ -1,6 +1,6 @@
 [package]
 name = "dropbear-engine"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "A game engine made by 4tkbytes. Thats really it..."
@@ -14,8 +14,6 @@ env_logger = "0.11"
 log = "0.4"
 wgpu = "25"
 pollster = "0.4"
-# Never block on with async, use tokio instead...
-# Note to self: use pollster only for state blocking, any resource loading should not be blocked.
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
@@ -35,15 +33,3 @@ hecs = "0.10"
 version = "0.25"
 default-features = false
 features = ["png", "jpeg"]
-
-[build-dependencies]
-anyhow = "1.0"
-fs_extra = "1.3"
-glob = "0.3"
-
-[profile.dev]
-opt-level = 0
-debug = true
-codegen-units = 16
-incremental = true
-lto = false
