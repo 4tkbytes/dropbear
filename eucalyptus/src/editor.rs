@@ -2,8 +2,8 @@ use std::{collections::HashSet, sync::Arc};
 
 use dropbear_engine::{
     camera::Camera,
-    egui,
-    graphics::{Graphics, Shader},
+    egui, egui_extras,
+    graphics::{Graphics, NO_TEXTURE, Shader},
     input::{Controller, Keyboard, Mouse},
     log,
     scene::{Scene, SceneCommand},
@@ -207,7 +207,82 @@ impl TabViewer for EditorTabViewer {
                 ui.label("Model/Entity List");
             }
             EditorTab::AssetViewer => {
-                
+                egui_extras::install_image_loaders(ui.ctx());
+
+                let assets: Vec<(egui::Image, String)> = (0..30)
+                    .map(|i| {
+                        let image =
+                            egui::Image::from_bytes(format!("no texture {}", i), NO_TEXTURE);
+                        (image, format!("no texture {}", i))
+                    })
+                    .collect::<Vec<_>>();
+
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let columns = 6;
+                    let available_width = ui.available_width();
+                    let min_spacing = 8.0;
+                    let max_spacing = 30.0;
+                    let label_height = 20.0;
+                    let padding = 8.0; // check it out
+
+                    let card_width = ((available_width - max_spacing * (columns as f32 - 1.0))
+                        / columns as f32)
+                        .max(32.0);
+                    let image_size = card_width - label_height;
+                    let spacing = ((available_width - columns as f32 * card_width)
+                        / (columns as f32 - 1.0))
+                        .clamp(min_spacing, max_spacing);
+                    let card_height = image_size + label_height + padding;
+
+                    egui::Grid::new("asset_grid")
+                        .num_columns(columns)
+                        .min_col_width(card_width)
+                        .max_col_width(card_width)
+                        .spacing([spacing, spacing])
+                        .show(ui, |ui| {
+                            for (i, (image, asset_name)) in assets.iter().enumerate() {
+                                // Allocate the card area and get a response for hover/click
+                                let card_size = egui::vec2(card_width, card_height);
+                                let (rect, card_response) =
+                                    ui.allocate_exact_size(card_size, egui::Sense::click());
+
+                                // Check if either the card or the image is hovered
+                                let is_hovered = card_response.hovered();
+
+                                // Paint highlight if hovered
+                                if is_hovered {
+                                    ui.painter().rect_filled(
+                                        rect,
+                                        6.0, // corner radius
+                                        egui::Color32::from_rgb(60, 60, 80),
+                                    );
+                                }
+
+                                let mut card_ui = ui.new_child(
+                                    egui::UiBuilder::new()
+                                        .max_rect(rect)
+                                        .layout(egui::Layout::top_down(egui::Align::Center)),
+                                );
+                                let image_response = card_ui.add_sized(
+                                    [image_size, image_size],
+                                    egui::ImageButton::new(image.clone()).frame(false),
+                                );
+                                // Combine hover states
+                                let is_hovered = is_hovered || image_response.hovered();
+
+                                // Center the label below the image
+                                card_ui.label(
+                                    egui::RichText::new(asset_name)
+                                        .strong()
+                                        .color(egui::Color32::WHITE),
+                                );
+
+                                if (i + 1) % columns == 0 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                });
             }
             EditorTab::ResourceInspector => {
                 ui.label("Resource Inspector");
@@ -353,7 +428,6 @@ impl Keyboard for Editor {
                             });
                         }
                     }
-                    
                 } else {
                     self.pressed_keys.insert(key);
                 }
