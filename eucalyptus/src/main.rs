@@ -3,6 +3,7 @@ mod editor;
 mod menu;
 // mod scene1;
 pub(crate) mod states;
+pub mod utils;
 
 use std::{cell::RefCell, rc::Rc};
 

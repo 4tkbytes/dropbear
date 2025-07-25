@@ -95,19 +95,6 @@ impl MainMenu {
             fs::remove_dir_all(&tests_path)?;
         }
 
-        log::debug!("Running poetry install in {:?}", project_path);
-        let status = Command::new("poetry")
-            .arg("install")
-            .current_dir(project_path)
-            .status()
-            .expect("Failed to run poetry install");
-        if !status.success() {
-            return Err(anyhow!(io::Error::new(
-                io::ErrorKind::Other,
-                "Poetry install failed",
-            )));
-        }
-
         Ok(())
     }
 
@@ -135,6 +122,7 @@ impl MainMenu {
                 ),
                 ("resources/shaders", 0.6, "Creating shader folder..."),
                 ("resources/textures", 0.8, "Creating textures folder..."),
+                ("scripts2", 0.85, "Copying python scripts to folder"),
                 ("src2", 0.9, "Creating project config file..."),
             ];
 
@@ -170,7 +158,8 @@ impl MainMenu {
                     } else if folder == "src2" {
                         if let Some(path) = &project_path {
                             let mut config = ProjectConfig::new(project_name.clone(), &path);
-                            let _ = config.write_to(&path);
+                            // let _ = config.write_to(&path);
+                            let _ = config.write_to_all();
                             let mut global = PROJECT.write().unwrap();
                             *global = config;
                             Ok(())
@@ -189,6 +178,16 @@ impl MainMenu {
                                 Ok(_) => Ok(()),
                                 Err(e) => Err(anyhow!(e)),
                             }
+                        }
+                    } else if folder == "scripts2" {
+                        if path.join("src/scripts").exists() {
+                            fs::write(
+                                &path.join("src/scripts/convert_model_to_image.py"),
+                                include_str!("scripts/convert_model_to_image.py"),
+                            )
+                            .map_err(|e| anyhow!(e))
+                        } else {
+                            Err(anyhow!("The src/scripts folder does not exist"))
                         }
                     } else {
                         if !full_path.exists() {
@@ -401,12 +400,12 @@ impl Scene for MainMenu {
 impl Keyboard for MainMenu {
     fn key_down(
         &mut self,
-        key: dropbear_engine::winit::keyboard::KeyCode,
-        event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        _key: dropbear_engine::winit::keyboard::KeyCode,
+        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
     ) {
-        if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
-            event_loop.exit();
-        }
+        // if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
+        //     event_loop.exit();
+        // }
     }
 
     fn key_up(

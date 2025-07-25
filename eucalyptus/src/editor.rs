@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use dropbear_engine::{
     camera::Camera,
@@ -76,8 +76,9 @@ impl Editor {
     pub fn save_project_config(&self) -> anyhow::Result<()> {
         let mut config = PROJECT.write().unwrap();
         config.dock_layout = Some(self.dock_state.clone());
-        let project_path = config.project_path.clone();
-        config.write_to(&PathBuf::from(project_path))
+        // let project_path = config.project_path.clone();
+        // config.write_to(&PathBuf::from(project_path))
+        config.write_to_all()
     }
 
     pub fn load_project_config(&mut self) -> anyhow::Result<()> {
@@ -175,6 +176,8 @@ impl Editor {
                     },
                 );
         });
+
+        self.toasts.show(ctx);
     }
 }
 
@@ -204,7 +207,7 @@ impl TabViewer for EditorTabViewer {
                 ui.label("Model/Entity List");
             }
             EditorTab::AssetViewer => {
-                ui.label("Asset Viewer");
+                
             }
             EditorTab::ResourceInspector => {
                 ui.label("Resource Inspector");
@@ -302,10 +305,10 @@ impl Keyboard for Editor {
     fn key_down(
         &mut self,
         key: dropbear_engine::winit::keyboard::KeyCode,
-        event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
     ) {
         match key {
-            KeyCode::Escape => event_loop.exit(),
+            // KeyCode::Escape => event_loop.exit(),
             KeyCode::F1 => {
                 self.is_cursor_locked = !self.is_cursor_locked;
                 if !self.is_cursor_locked {
@@ -350,6 +353,7 @@ impl Keyboard for Editor {
                             });
                         }
                     }
+                    
                 } else {
                     self.pressed_keys.insert(key);
                 }

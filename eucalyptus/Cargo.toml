@@ -6,6 +6,7 @@ license = "GPL-3.0-or-later"
 description = "A visual game editor for the dropbear game engine"
 repository = "https://github.com/4tkbytes/dropbear-engine"
 readme = "README.md"
+default-run = "eucalyptus"
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
@@ -19,7 +20,6 @@ chrono = "0.4.41"
 egui-toast-fork = "0.18.0"
 egui_dock-fork = { version = "0.17", features = ["serde"] }
 once_cell = "1.21"
-pyo3 = { version = "0.25", features = ["auto-initialize"] }
 
 [dependencies.rhai]
 version = "1.22"
