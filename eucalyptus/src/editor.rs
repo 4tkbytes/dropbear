@@ -241,15 +241,26 @@ impl TabViewer for EditorTabViewer {
                         .spacing([spacing, spacing])
                         .show(ui, |ui| {
                             for (i, (image, asset_name)) in assets.iter().enumerate() {
-                                // Allocate the card area and get a response for hover/click
                                 let card_size = egui::vec2(card_width, card_height);
                                 let (rect, card_response) =
                                     ui.allocate_exact_size(card_size, egui::Sense::click());
 
-                                // Check if either the card or the image is hovered
-                                let is_hovered = card_response.hovered();
+                                let mut card_ui = ui.new_child(
+                                    egui::UiBuilder::new()
+                                        .max_rect(rect)
+                                        .layout(egui::Layout::top_down(egui::Align::Center)),
+                                );
 
-                                // Paint highlight if hovered
+                                let image_response = card_ui.add(
+                                    egui::ImageButton::new(
+                                        image.clone().max_size([image_size, image_size].into()),
+                                    )
+                                    .frame(false),
+                                );
+
+                                let is_hovered =
+                                    card_response.hovered() || image_response.hovered();
+
                                 if is_hovered {
                                     ui.painter().rect_filled(
                                         rect,
@@ -258,24 +269,13 @@ impl TabViewer for EditorTabViewer {
                                     );
                                 }
 
-                                let mut card_ui = ui.new_child(
-                                    egui::UiBuilder::new()
-                                        .max_rect(rect)
-                                        .layout(egui::Layout::top_down(egui::Align::Center)),
-                                );
-                                let image_response = card_ui.add_sized(
-                                    [image_size, image_size],
-                                    egui::ImageButton::new(image.clone()).frame(false),
-                                );
-                                // Combine hover states
-                                let is_hovered = is_hovered || image_response.hovered();
-
-                                // Center the label below the image
-                                card_ui.label(
-                                    egui::RichText::new(asset_name)
-                                        .strong()
-                                        .color(egui::Color32::WHITE),
-                                );
+                                card_ui.vertical_centered(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(asset_name)
+                                            .strong()
+                                            .color(egui::Color32::WHITE),
+                                    );
+                                });
 
                                 if (i + 1) % columns == 0 {
                                     ui.end_row();

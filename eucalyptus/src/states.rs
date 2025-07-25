@@ -5,7 +5,10 @@
 //! as well as public structs related to that config and docs (hopefully).
 
 use std::{
-    fmt::{self, Display, Formatter}, fs, path::PathBuf, sync::RwLock
+    fmt::{self, Display, Formatter},
+    fs,
+    path::PathBuf,
+    sync::RwLock,
 };
 
 use chrono::Utc;
@@ -63,7 +66,7 @@ impl ProjectConfig {
     ///
     /// # Parameters
     /// * path - The root **folder** of the project.
-    
+
     pub fn write_to(&mut self, path: &PathBuf) -> anyhow::Result<()> {
         self.load_config_to_memory()?;
         self.date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
@@ -97,7 +100,7 @@ impl ProjectConfig {
     }
 
     /// This function loads a `source.eucc` or a `resources.eucc` config file into memory, allowing
-    /// you to reference and load the nodes located inside them. 
+    /// you to reference and load the nodes located inside them.
     pub fn load_config_to_memory(&mut self) -> anyhow::Result<()> {
         let project_root = PathBuf::from(&self.project_path);
 
@@ -148,8 +151,7 @@ impl ProjectConfig {
         }
 
         Ok(())
-}
-
+    }
 
     /// # Parameters
     /// * path - The root folder of the project
@@ -205,12 +207,19 @@ pub enum ResourceType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Model {
-    pub thumbnail_location: PathBuf
+    pub thumbnail_location: PathBuf,
 }
 
 impl Model {
     pub fn gen_thumbnail(project_path: &PathBuf, model_path: &PathBuf) -> Self {
-        let thumbnail_path = model_path.parent().unwrap().join("thumbnails").join(format!("{}.png", model_path.file_stem().unwrap().to_string_lossy()));
+        let thumbnail_path = model_path
+            .parent()
+            .unwrap()
+            .join("thumbnails")
+            .join(format!(
+                "{}.png",
+                model_path.file_stem().unwrap().to_string_lossy()
+            ));
         if !thumbnail_path.exists() {
             crate::utils::convert_model_to_image(project_path, model_path);
         }
@@ -236,7 +245,7 @@ impl Display for ResourceType {
 /// This is the resource config.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ResourceConfig {
-    /// The path to the resource folder. 
+    /// The path to the resource folder.
     pub path: PathBuf,
     /// The files and folders of the assets
     pub nodes: Vec<Node>,
@@ -251,7 +260,7 @@ impl ResourceConfig {
             path: resource_dir.clone(),
             nodes: collect_nodes(&resource_dir, path, vec!["thumbnails"].as_slice()),
         };
-        
+
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialisation error: {}", e))?;
         let config_path = path.join("resources").join("resources.eucc");
@@ -273,7 +282,7 @@ impl ResourceConfig {
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct SourceConfig {
-    /// The path to the resource folder. 
+    /// The path to the resource folder.
     pub path: PathBuf,
     /// The files and folders of the assets
     pub nodes: Vec<Node>,
@@ -283,15 +292,15 @@ impl SourceConfig {
     /// # Parameters
     /// - path: The root **folder** of the project
     pub fn write_to(&self, path: &PathBuf) -> anyhow::Result<()> {
-        let resource_dir = path.join("source");
+        let resource_dir = path.join("src");
         let updated_config = SourceConfig {
             path: resource_dir.clone(),
             nodes: collect_nodes(&resource_dir, path, vec!["scripts"].as_slice()),
         };
-        
+
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialisation error: {}", e))?;
-        let config_path = path.join("source").join("source.eucc");
+        let config_path = path.join("src").join("source.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -313,7 +322,11 @@ fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let entry_path = entry.path();
-            let name = entry_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let name = entry_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
 
             if entry_path.is_dir() && exclude_list.iter().any(|ex| &ex.to_string() == &name) {
                 log::debug!("Skipped past folder {:?}", name);
@@ -328,13 +341,17 @@ fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -
                     nodes: folder_nodes,
                 }));
             } else {
-                let parent_folder = entry_path.parent()
+                let parent_folder = entry_path
+                    .parent()
                     .and_then(|p| p.file_name())
                     .map(|n| n.to_string_lossy().to_lowercase())
                     .unwrap_or_default();
 
                 let resource_type = if parent_folder.contains("model") {
-                    Some(ResourceType::Model(Model::gen_thumbnail(project_path, &entry_path)))
+                    Some(ResourceType::Model(Model::gen_thumbnail(
+                        project_path,
+                        &entry_path,
+                    )))
                 } else if parent_folder.contains("texture") {
                     Some(ResourceType::Texture)
                 } else if parent_folder.contains("shader") {

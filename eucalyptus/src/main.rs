@@ -1,4 +1,3 @@
-pub(crate) mod assets;
 mod editor;
 mod menu;
 // mod scene1;
@@ -8,7 +7,6 @@ pub mod utils;
 use std::{cell::RefCell, rc::Rc};
 
 use dropbear_engine::{WindowConfiguration, scene, tokio};
-
 
 #[tokio::main]
 async fn main() {
