@@ -1,11 +1,14 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use dropbear_engine::{
     camera::Camera,
     egui, egui_extras,
+    entity::{AdoptedEntity, Transform},
     graphics::{Graphics, NO_TEXTURE, Shader},
+    hecs::{self, World},
     input::{Controller, Keyboard, Mouse},
     log,
+    nalgebra::{Point3, Vector3},
     scene::{Scene, SceneCommand},
     wgpu::{Color, Extent3d, RenderPipeline},
     winit::{
@@ -16,10 +19,11 @@ use egui_dock_fork::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
-use crate::states::PROJECT;
+use crate::states::{Node, PROJECT, RESOURCES};
 
 pub struct Editor {
     scene_command: SceneCommand,
+    world: hecs::World,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -70,6 +74,7 @@ impl Editor {
             toasts: egui_toast_fork::Toasts::new()
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
+            world: World::new(),
         }
     }
 
@@ -300,12 +305,58 @@ impl Scene for Editor {
             include_str!("shader.wgsl"),
             Some("viewport_shader"),
         );
+        let cube_path = {
+            #[allow(unused_assignments)]
+            let mut path = PathBuf::new();
+            let resources = RESOURCES.read().unwrap();
+            let mut matches = Vec::new();
+            crate::utils::search_nodes_recursively(
+                &resources.nodes,
+                &|node| match node {
+                    Node::File(file) => file.name.contains("cube"),
+                    Node::Folder(folder) => folder.name.contains("cube"),
+                },
+                &mut matches,
+            );
+            match matches.get(0) {
+                Some(thing) => match thing {
+                    Node::File(file) => path = file.path.clone(),
+                    Node::Folder(folder) => path = folder.path.clone(),
+                },
+                None => path = PathBuf::new(),
+            }
+            path
+        };
 
-        let camera = Camera::predetermined(graphics);
+        if cube_path != PathBuf::new() {
+            let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
+            self.world.spawn((cube, Transform::default()));
+        } else {
+            log::warn!("cube path is empty :(")
+        }
 
+        let aspect = self.size.width as f32 / self.size.height as f32;
+        let camera = Camera::new(
+            graphics,
+            Point3::new(0.0, 1.0, 2.0),
+            Point3::new(0.0, 0.0, 0.0),
+            Vector3::y(),
+            aspect,
+            45.0,
+            0.1,
+            100.0,
+            0.125,
+            0.002,
+        );
+
+        let model_layout = graphics.create_model_uniform_bind_group_layout();
         let pipeline = graphics.create_render_pipline(
             &shader,
-            vec![&graphics.state.texture_bind_layout, camera.layout()],
+            vec![
+                &graphics.state.texture_bind_layout,
+                camera.layout(),
+                &model_layout,
+            ],
         );
 
         self.camera = camera;
@@ -313,7 +364,7 @@ impl Scene for Editor {
         self.window = Some(graphics.state.window.clone());
     }
 
-    fn update(&mut self, _dt: f32, _graphics: &mut Graphics) {
+    fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
@@ -338,8 +389,15 @@ impl Scene for Editor {
             }
         }
 
+        self.camera.update(graphics);
+
         if !self.is_cursor_locked {
             self.window.as_mut().unwrap().set_cursor_visible(true);
+        }
+
+        let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
+        for (_, (entity, transform)) in query {
+            entity.update(&graphics, transform);
         }
 
         self.toasts = egui_toast_fork::Toasts::new()
@@ -355,18 +413,23 @@ impl Scene for Editor {
             a: 1.0,
         };
         self.color = color.clone();
-
-        let mut pass = graphics.clear_colour(color);
-        if let Some(pipeline) = &self.render_pipeline {
-            pass.set_pipeline(pipeline);
-        }
-
-        self.texture_id = Some(graphics.state.texture_id);
         self.size = graphics.state.viewport_texture.size;
+        self.texture_id = Some(graphics.state.texture_id);
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
         self.window = Some(graphics.state.window.clone());
         self.toasts.show(graphics.get_egui_context());
+        if let Some(pipeline) = &self.render_pipeline {
+            {
+                let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
+                let mut render_pass = graphics.clear_colour(color);
+                render_pass.set_pipeline(pipeline);
+
+                for (_, (entity, _)) in query.iter() {
+                    entity.render(&mut render_pass, &self.camera);
+                }
+            }
+        }
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
@@ -384,7 +447,7 @@ impl Keyboard for Editor {
     ) {
         match key {
             // KeyCode::Escape => event_loop.exit(),
-            KeyCode::F1 => {
+            KeyCode::Escape => {
                 self.is_cursor_locked = !self.is_cursor_locked;
                 if !self.is_cursor_locked {
                     if let Some((surface_idx, node_idx, _)) =

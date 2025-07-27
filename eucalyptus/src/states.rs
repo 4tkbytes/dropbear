@@ -23,6 +23,11 @@ use crate::editor::EditorTab;
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
 
+pub static RESOURCES: Lazy<RwLock<ResourceConfig>> =
+    Lazy::new(|| RwLock::new(ResourceConfig::default()));
+
+pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceConfig::default()));
+
 /// The root config file, responsible for building and other metadata.
 ///
 /// # Location
@@ -35,10 +40,6 @@ pub struct ProjectConfig {
     pub date_last_accessed: String,
     #[serde(default)]
     pub dock_layout: Option<DockState<EditorTab>>,
-    #[serde(default)]
-    pub resources_config: Option<ResourceConfig>,
-    #[serde(default)]
-    pub source_config: Option<SourceConfig>,
 }
 
 impl ProjectConfig {
@@ -54,8 +55,6 @@ impl ProjectConfig {
             date_created,
             date_last_accessed,
             dock_layout: None,
-            resources_config: None,
-            source_config: None,
         };
         let _ = result.load_config_to_memory(); // TODO: Deal with later...
         result
@@ -105,7 +104,10 @@ impl ProjectConfig {
         let project_root = PathBuf::from(&self.project_path);
 
         match ResourceConfig::read_from(&project_root) {
-            Ok(resources) => self.resources_config = Some(resources),
+            Ok(resources) => {
+                let mut cfg = RESOURCES.write().unwrap();
+                *cfg = resources;
+            }
             Err(e) => {
                 if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
                     if io_err.kind() == std::io::ErrorKind::NotFound {
@@ -115,20 +117,21 @@ impl ProjectConfig {
                             nodes: vec![],
                         };
                         default.write_to(&project_root)?;
-                        self.resources_config = Some(default);
+                        {
+                            let mut cfg = RESOURCES.write().unwrap();
+                            *cfg = default;
+                        }
                     } else {
                         log::warn!("Failed to load resources.eucc: {}", e);
-                        self.resources_config = None;
                     }
                 } else {
                     log::warn!("Failed to load resources.eucc: {}", e);
-                    self.resources_config = None;
                 }
             }
         }
-
+        let mut source_config = SOURCE.write().unwrap();
         match SourceConfig::read_from(&project_root) {
-            Ok(source) => self.source_config = Some(source),
+            Ok(source) => *source_config = source,
             Err(e) => {
                 if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
                     if io_err.kind() == std::io::ErrorKind::NotFound {
@@ -138,14 +141,12 @@ impl ProjectConfig {
                             nodes: vec![],
                         };
                         default.write_to(&project_root)?;
-                        self.source_config = Some(default);
+                        *source_config = default;
                     } else {
                         log::warn!("Failed to load source.eucc: {}", e);
-                        self.source_config = None;
                     }
                 } else {
                     log::warn!("Failed to load source.eucc: {}", e);
-                    self.source_config = None;
                 }
             }
         }
@@ -157,12 +158,15 @@ impl ProjectConfig {
     /// * path - The root folder of the project
     pub fn write_to_all(&mut self) -> anyhow::Result<()> {
         let path = PathBuf::from(self.project_path.clone());
-        if let Some(res) = &self.resources_config {
-            res.write_to(&path)?;
+
+        {
+            let resources_config = RESOURCES.read().unwrap();
+            resources_config.write_to(&path)?;
         }
 
-        if let Some(src) = &self.source_config {
-            src.write_to(&path)?;
+        {
+            let source_config = SOURCE.read().unwrap();
+            source_config.write_to(&path)?;
         }
 
         self.write_to(&path)?;
@@ -252,6 +256,12 @@ pub struct ResourceConfig {
 }
 
 impl ResourceConfig {
+    /// Builds a resource path from the ProjectConfiguration's project_path (or a string)
+    #[allow(dead_code)]
+    pub fn build_path(project_path: String) -> PathBuf {
+        PathBuf::from(project_path).join("resources/resources.eucc")
+    }
+
     /// # Parameters
     /// - path: The root **folder** of the project
     pub fn write_to(&self, path: &PathBuf) -> anyhow::Result<()> {
@@ -260,9 +270,8 @@ impl ResourceConfig {
             path: resource_dir.clone(),
             nodes: collect_nodes(&resource_dir, path, vec!["thumbnails"].as_slice()),
         };
-
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
-            .map_err(|e| anyhow::anyhow!("RON serialisation error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
         let config_path = path.join("resources").join("resources.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -289,6 +298,12 @@ pub struct SourceConfig {
 }
 
 impl SourceConfig {
+    /// Builds a source path from the ProjectConfiguration's project_path (or a string)
+    #[allow(dead_code)]
+    pub fn build_path(project_path: String) -> PathBuf {
+        PathBuf::from(project_path).join("src/source.eucc")
+    }
+
     /// # Parameters
     /// - path: The root **folder** of the project
     pub fn write_to(&self, path: &PathBuf) -> anyhow::Result<()> {

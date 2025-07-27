@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{Buffer, RenderPass, util::DeviceExt};
+use wgpu::{BindGroup, Buffer, RenderPass, util::DeviceExt};
 
 use crate::{
     camera::Camera,
@@ -14,6 +14,7 @@ pub struct AdoptedEntity {
     model: Option<Model>,
     uniform: ModelUniform,
     uniform_buffer: Option<Buffer>,
+    uniform_bind_group: Option<BindGroup>,
     #[allow(unused)]
     instance: Instance,
     instance_buffer: Option<Buffer>,
@@ -82,6 +83,20 @@ impl AdoptedEntity {
         let uniform = ModelUniform::new();
         let uniform_buffer = graphics.create_uniform(uniform, Some("Entity Model Uniform"));
 
+        let model_layout = graphics.create_model_uniform_bind_group_layout();
+        let uniform_bind_group =
+            graphics
+                .state
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("model_uniform_bind_group"),
+                    layout: &model_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffer.as_entire_binding(),
+                    }],
+                });
+
         let instance = Instance::new(Vector3::identity(), UnitQuaternion::identity());
 
         let instance_buffer =
@@ -101,6 +116,7 @@ impl AdoptedEntity {
             model: Some(model),
             uniform,
             uniform_buffer: Some(uniform_buffer),
+            uniform_bind_group: Some(uniform_bind_group),
             instance,
             instance_buffer: Some(instance_buffer),
         }
@@ -131,6 +147,7 @@ impl AdoptedEntity {
     pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, camera: &'a Camera) {
         if let Some(model) = &self.model {
             render_pass.set_vertex_buffer(1, self.instance_buffer.as_ref().unwrap().slice(..));
+            render_pass.set_bind_group(2, self.uniform_bind_group.as_ref().unwrap(), &[]);
             render_pass.draw_model(model, camera.bind_group());
         }
     }

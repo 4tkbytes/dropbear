@@ -140,6 +140,24 @@ impl<'a> Graphics<'a> {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         })
     }
+
+    pub fn create_model_uniform_bind_group_layout(&self) -> BindGroupLayout {
+        self.state
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("model_uniform_bind_group_layout"),
+            })
+    }
 }
 
 pub struct Shader {

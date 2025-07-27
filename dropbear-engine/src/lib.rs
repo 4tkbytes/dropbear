@@ -236,11 +236,11 @@ Hardware:
                 label: Some("Render Encoder"),
             });
 
-        let viewport_view = &self.viewport_texture.view;
+        let viewport_view = { &self.viewport_texture.view };
 
         self.egui_renderer.begin_frame(&self.window);
 
-        let mut graphics = Graphics::new(self, &viewport_view, &mut encoder);
+        let mut graphics = Graphics::new(self, viewport_view, &mut encoder);
 
         scene_manager
             .update(previous_dt, &mut graphics, event_loop)
@@ -301,12 +301,12 @@ impl App {
         log::debug!("Created new instance of app");
         Self {
             state: None,
-            config,
+            config: config.clone(),
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
             delta_time: (1.0 / 60.0),
             next_frame_time: None,
-            target_fps: 60,
+            target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
         }
@@ -315,7 +315,7 @@ impl App {
     #[allow(dead_code)]
     /// A constant that lets you not have any fps count.
     /// It is just the max value of an unsigned 32 bit number lol.
-    const NO_FPS_CAP: u32 = u32::MAX;
+    pub const NO_FPS_CAP: u32 = u32::MAX;
 
     /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
     pub fn set_target_fps(&mut self, fps: u32) {
@@ -518,7 +518,7 @@ impl ApplicationHandler for App {
 ///
 /// This struct is primitive but has purpose in the way that it sets the initial specs of the window.
 /// Thats all it does. And it can also display. But thats about it.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WindowConfiguration {
     pub windowed_mode: WindowedModes,
     pub title: &'static str,
@@ -527,11 +527,12 @@ pub struct WindowConfiguration {
     ///
     /// As of right now, it has not been implemented yet :(
     // TODO: Implement config reading.
-    pub read_from_config: Option<String>,
+    // pub read_from_config: Option<String>,
+    pub max_fps: u32,
 }
 
 /// An enum displaying the different modes on initial startup
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum WindowedModes {
     Windowed(u32, u32),
     Maximised,
