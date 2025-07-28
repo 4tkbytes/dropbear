@@ -1,9 +1,13 @@
 use std::{mem, ops::Range, path::PathBuf};
 
-use russimp::{material::{DataContent, TextureType}, scene::{PostProcess, Scene}, Vector3D};
-use wgpu::{util::DeviceExt, BufferAddress, VertexAttribute, VertexBufferLayout};
+use russimp::{
+    Vector3D,
+    material::{DataContent, TextureType},
+    scene::{PostProcess, Scene},
+};
+use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-use crate::graphics::{Graphics, Texture, NO_TEXTURE};
+use crate::graphics::{Graphics, NO_TEXTURE, Texture};
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -68,18 +72,20 @@ impl Model {
         log::debug!("Loading model [{}]", file_name);
 
         let scene = Scene::from_file(
-        path.to_str().unwrap(), 
-        vec![
-                    PostProcess::Triangulate,
-                    PostProcess::FlipUVs,
-                    PostProcess::GenerateNormals,
-                ],
+            path.to_str().unwrap(),
+            vec![
+                PostProcess::Triangulate,
+                PostProcess::FlipUVs,
+                PostProcess::GenerateNormals,
+            ],
         )?;
 
         let mut materials = Vec::new();
         for m in &scene.materials {
             let mut name = String::new();
-            let diffuse_bytes_opt = m.textures.iter()
+            let diffuse_bytes_opt = m
+                .textures
+                .iter()
                 .find(|(t_type, _)| **t_type == TextureType::Diffuse)
                 .and_then(|(_, tex)| {
                     name = tex.borrow().filename.clone();
@@ -96,7 +102,10 @@ impl Model {
                 Texture::new(graphics, &bytes)
             } else {
                 if !name.is_empty() {
-                    log::warn!("Error loading material {}, using default missing texture", name);
+                    log::warn!(
+                        "Error loading material {}, using default missing texture",
+                        name
+                    );
                 } else {
                     log::warn!("Error loading material, using default missing texture");
                 }
@@ -113,34 +122,54 @@ impl Model {
 
         let mut meshes = Vec::new();
         for mesh in &scene.meshes {
-            let vertices: Vec<ModelVertex> = mesh.vertices.iter().enumerate().map(|(i, v)| {
-                let normal = mesh.normals.get(i).copied().unwrap_or(Vector3D { x: 0.0, y: 1.0, z: 0.0 });
-                let tex_coords = mesh.texture_coords
-                                    .get(0)
-                                    .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
-                                    .map(|tc| [tc.x, tc.y])
-                                    .unwrap_or([0.0, 0.0]);
-                ModelVertex {
-                    position: [v.x, v.y, v.z],
-                    tex_coords,
-                    normal: [normal.x, normal.y, normal.z],
-                }
-            }).collect();
+            let vertices: Vec<ModelVertex> = mesh
+                .vertices
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    let normal = mesh.normals.get(i).copied().unwrap_or(Vector3D {
+                        x: 0.0,
+                        y: 1.0,
+                        z: 0.0,
+                    });
+                    let tex_coords = mesh
+                        .texture_coords
+                        .get(0)
+                        .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
+                        .map(|tc| [tc.x, tc.y])
+                        .unwrap_or([0.0, 0.0]);
+                    ModelVertex {
+                        position: [v.x, v.y, v.z],
+                        tex_coords,
+                        normal: [normal.x, normal.y, normal.z],
+                    }
+                })
+                .collect();
 
-            let indices: Vec<u32> = mesh.faces.iter()
+            let indices: Vec<u32> = mesh
+                .faces
+                .iter()
                 .flat_map(|f| f.0.iter().copied())
                 .collect();
 
-            let vertex_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Vertex Buffer", file_name)),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Index Buffer", file_name)),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+            let vertex_buffer =
+                graphics
+                    .state
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("{:?} Vertex Buffer", file_name)),
+                        contents: bytemuck::cast_slice(&vertices),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+            let index_buffer =
+                graphics
+                    .state
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("{:?} Index Buffer", file_name)),
+                        contents: bytemuck::cast_slice(&indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    });
 
             meshes.push(Mesh {
                 name: mesh.name.clone(),
@@ -151,10 +180,7 @@ impl Model {
             });
         }
         log::debug!("Successfully loaded model [{}]", file_name);
-        Ok(Model {
-            meshes,
-            materials,
-        })
+        Ok(Model { meshes, materials })
     }
 }
 

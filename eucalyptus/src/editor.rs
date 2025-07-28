@@ -1,4 +1,9 @@
-use std::{collections::HashSet, fs, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashSet,
+    fs,
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+};
 
 use dropbear_engine::{
     camera::Camera,
@@ -49,6 +54,10 @@ pub enum EditorTab {
     ModelEntityList,   // right side,
     Viewport,          // middle,
 }
+
+use std::sync::Mutex;
+
+pub static LOGGED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 impl Editor {
     pub fn new() -> Self {
@@ -231,69 +240,80 @@ impl TabViewer for EditorTabViewer {
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
 
-                // let assets: Vec<(egui::Image, String)> = (0..30)
-                //     .map(|i| {
-                //         let image =
-                //             egui::Image::from_bytes(format!("no texture {}", i), NO_TEXTURE);
-                //         (image, format!("no texture {}", i))
-                //     })
-                //     .collect::<Vec<_>>();
-
-                let mut assets = Vec::new();
+                let mut assets: Vec<(egui::Image, String)> = Vec::new();
                 {
                     let res = RESOURCES.read().unwrap();
-                    for node in &res.nodes {
-                        match node {
-                            Node::File(file) => {
-                                log::debug!(
-                                    "Adding image for {} of type {}",
-                                    file.name,
-                                    file.resource_type.as_ref().unwrap()
-                                );
-                                if let Some(ref res_type) = file.resource_type {
-                                    match res_type {
-                                        crate::states::ResourceType::Model => {
-                                            let ad_dir = app_dirs2::get_app_root(
-                                                app_dirs2::AppDataType::UserData,
-                                                &APP_INFO,
-                                            )
-                                            .unwrap();
-                                            let model_thumbnail = ad_dir
-                                                .join("resources/thumbnails/cube_thumbnail.png");
-                                            let file_name_osstr =
-                                                model_thumbnail.file_name().unwrap();
-                                            let file_name =
-                                                file_name_osstr.to_str().unwrap().to_string();
-                                            let image = egui::Image::from_bytes(
-                                                file_name.clone(),
-                                                fs::read(&model_thumbnail).unwrap(),
-                                            );
-                                            assets.push((image, file.name.clone()))
-                                        }
-                                        _ => {
-                                            if file
-                                                .path
-                                                .clone()
-                                                .extension()
-                                                .unwrap()
-                                                .to_str()
-                                                .unwrap()
-                                                .contains("euc")
-                                            {
-                                                continue;
+
+                    fn recursive_search_nodes_and_attach_thumbnail(
+                        res: &Vec<Node>,
+                        assets: &mut Vec<(egui::Image, String)>,
+                        logged: &mut HashSet<String>,
+                    ) {
+                        for node in res {
+                            match node {
+                                Node::File(file) => {
+                                    if !logged.contains(&file.name) {
+                                        logged.insert(file.name.clone());
+                                        log::debug!(
+                                            "Adding image for {} of type {}",
+                                            file.name,
+                                            file.resource_type.as_ref().unwrap()
+                                        );
+                                    }
+                                    if let Some(ref res_type) = file.resource_type {
+                                        match res_type {
+                                            crate::states::ResourceType::Model => {
+                                                let ad_dir = app_dirs2::get_app_root(
+                                                    app_dirs2::AppDataType::UserData,
+                                                    &APP_INFO,
+                                                )
+                                                .unwrap();
+                                                let model_thumbnail =
+                                                    ad_dir.join("cube_thumbnail.png");
+                                                let file_name_osstr =
+                                                    model_thumbnail.file_name().unwrap();
+                                                let file_name =
+                                                    file_name_osstr.to_str().unwrap().to_string();
+                                                let image = egui::Image::from_bytes(
+                                                    file_name.clone(),
+                                                    fs::read(&model_thumbnail).unwrap(),
+                                                );
+                                                assets.push((image, file.name.clone()))
                                             }
-                                            let image = egui::Image::from_bytes(
-                                                file.name.clone(),
-                                                NO_TEXTURE,
-                                            );
-                                            assets.push((image, file.name.clone()))
+                                            _ => {
+                                                if file
+                                                    .path
+                                                    .clone()
+                                                    .extension()
+                                                    .unwrap()
+                                                    .to_str()
+                                                    .unwrap()
+                                                    .contains("euc")
+                                                {
+                                                    continue;
+                                                }
+                                                let image = egui::Image::from_bytes(
+                                                    file.name.clone(),
+                                                    NO_TEXTURE,
+                                                );
+                                                assets.push((image, file.name.clone()))
+                                            }
                                         }
                                     }
                                 }
+                                Node::Folder(folder) => {
+                                    recursive_search_nodes_and_attach_thumbnail(
+                                        &folder.nodes,
+                                        assets,
+                                        logged,
+                                    )
+                                }
                             }
-                            _ => continue,
                         }
                     }
+
+                    let mut logged = LOGGED.lock().unwrap();
+                    recursive_search_nodes_and_attach_thumbnail(&res.nodes, &mut assets, &mut logged);
                 }
 
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -529,6 +549,8 @@ impl Keyboard for Editor {
                     {
                         self.dock_state
                             .set_focused_node_and_surface((surface_idx, node_idx));
+                    } else {
+                        self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
                     }
                 }
             }

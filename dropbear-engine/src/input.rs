@@ -1,9 +1,9 @@
+use gilrs::{Axis, EventType, Gilrs};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
 };
-use gilrs::{Axis, EventType, Gilrs};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
