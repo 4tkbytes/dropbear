@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     APP_INFO,
-    states::{Node, PROJECT, RESOURCES},
+    states::{Node, PROJECT, RESOURCES, ResourceType},
 };
 
 pub struct Editor {
@@ -280,6 +280,14 @@ impl TabViewer for EditorTabViewer {
                                                 );
                                                 assets.push((image, file.name.clone()))
                                             }
+                                            ResourceType::Texture => {
+                                                let image = egui::Image::from_bytes(
+                                                    file.name.clone(),
+                                                    std::fs::read(&file.path)
+                                                        .unwrap_or(NO_TEXTURE.to_vec()),
+                                                );
+                                                assets.push((image, file.name.clone()))
+                                            }
                                             _ => {
                                                 if file
                                                     .path
@@ -313,7 +321,11 @@ impl TabViewer for EditorTabViewer {
                     }
 
                     let mut logged = LOGGED.lock().unwrap();
-                    recursive_search_nodes_and_attach_thumbnail(&res.nodes, &mut assets, &mut logged);
+                    recursive_search_nodes_and_attach_thumbnail(
+                        &res.nodes,
+                        &mut assets,
+                        &mut logged,
+                    );
                 }
 
                 egui::ScrollArea::vertical().show(ui, |ui| {
