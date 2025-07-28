@@ -25,8 +25,7 @@ use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    APP_INFO,
-    states::{Node, PROJECT, RESOURCES, ResourceType},
+    states::{EntityNode, Node, ResourceType, PROJECT, RESOURCES}, APP_INFO
 };
 
 pub struct Editor {
@@ -39,6 +38,7 @@ pub struct Editor {
     camera: Camera,
     color: Color,
     toasts: Toasts,
+    selected_entity: Option<hecs::Entity>,
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
@@ -87,6 +87,7 @@ impl Editor {
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
             world: World::new(),
+            selected_entity: None,
         }
     }
 
@@ -212,9 +213,47 @@ impl Editor {
     }
 }
 
+fn show_entity_tree(
+    ui: &mut egui::Ui,
+    nodes: &mut Vec<EntityNode>,
+    selected: &mut Option<hecs::Entity>,
+    id_source: &str
+) {
+    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, dragging| {
+        match item.clone() {
+            EntityNode::Entity { id, name } => {
+                let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
+                if resp.clicked() {
+                    *selected = Some(id);
+                }
+                handle.ui(ui, |ui| {
+                    ui.label("⠿");
+                });
+            },
+            EntityNode::Script { name, path } => {
+                ui.label(format!("SCRIPT {name}"));
+                handle.ui(ui, |ui| {
+                    ui.label("⠿");
+                });
+            },
+            EntityNode::Group { ref name, mut children, mut collapsed } => {
+                let header = egui::CollapsingHeader::new(name).default_open(!collapsed).show(ui, |ui| {
+                    show_entity_tree(ui, &mut children, selected, name);
+                });
+                collapsed = !header.body_returned.is_some();
+                handle.ui(ui, |ui| {
+                    ui.label("⠿");
+                });
+            }
+        }
+    });
+}
+
 pub struct EditorTabViewer {
     pub view: egui::TextureId,
 }
+
+pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
 
 impl TabViewer for EditorTabViewer {
     type Tab = EditorTab;
@@ -236,6 +275,12 @@ impl TabViewer for EditorTabViewer {
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
+                // TODO: deal with show_entity_tree and figure out how to convert hecs::World 
+                // to EntityNodes and to write it to file
+                {
+                    let selected = SELECTED.lock().unwrap();
+                    show_entity_tree(ui, nodes, &mut selected, id_source);
+                }
             }
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());

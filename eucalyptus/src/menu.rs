@@ -56,6 +56,7 @@ impl MainMenu {
         }
     }
 
+    #[allow(dead_code)]
     fn setup_poetry_project(project_path: &Path) -> anyhow::Result<()> {
         if !Command::new("poetry").args(["--version"]).output().is_ok() {
             return Err(anyhow!(
@@ -114,15 +115,8 @@ impl MainMenu {
                 ("git", 0.1, "Creating a git folder..."),
                 ("src", 0.2, "Creating src folder..."),
                 ("resources/models", 0.4, "Creating models folder..."),
-                ("scripts", 0.5, "Initialising Python environment"),
-                (
-                    "deps",
-                    0.55,
-                    "Installing python dependencies into environment",
-                ),
                 ("resources/shaders", 0.6, "Creating shader folder..."),
                 ("resources/textures", 0.8, "Creating textures folder..."),
-                ("scripts2", 0.85, "Copying python scripts to folder"),
                 ("src2", 0.9, "Creating project config file..."),
             ];
 
@@ -166,30 +160,31 @@ impl MainMenu {
                         } else {
                             Err(anyhow!("Project path not found"))
                         }
-                    } else if folder == "scripts" || folder == "deps" {
-                        if folder == "scripts" {
-                            Self::setup_poetry_project(path)
-                        } else {
-                            let status = Command::new("poetry")
-                                .args(["add", "3d-to-image"])
-                                .current_dir(path)
-                                .status();
-                            match status {
-                                Ok(_) => Ok(()),
-                                Err(e) => Err(anyhow!(e)),
-                            }
-                        }
-                    } else if folder == "scripts2" {
-                        if path.join("src/scripts").exists() {
-                            fs::write(
-                                &path.join("src/scripts/convert_model_to_image.py"),
-                                include_str!("scripts/convert_model_to_image.py"),
-                            )
-                            .map_err(|e| anyhow!(e))
-                        } else {
-                            Err(anyhow!("The src/scripts folder does not exist"))
-                        }
-                    } else {
+                    } 
+                    // else if folder == "scripts" || folder == "deps" {
+                    //     if folder == "scripts" {
+                    //         Self::setup_poetry_project(path)
+                    //     } else {
+                    //         let status = Command::new("poetry")
+                    //             .args(["add", "3d-to-image"])
+                    //             .current_dir(path)
+                    //             .status();
+                    //         match status {
+                    //             Ok(_) => Ok(()),
+                    //             Err(e) => Err(anyhow!(e)),
+                    //         }
+                    //     }
+                    // } else if folder == "scripts2" {
+                    //     if path.join("src/scripts").exists() {
+                    //         fs::write(
+                    //             &path.join("src/scripts/convert_model_to_image.py"),
+                    //             include_str!("scripts/convert_model_to_image.py"),
+                    //         )
+                    //         .map_err(|e| anyhow!(e))
+                    //     } else {
+                    //         Err(anyhow!("The src/scripts folder does not exist"))
+                    //     }
+                    else {
                         if !full_path.exists() {
                             fs::create_dir_all(&full_path)
                                 .map_err(|e| anyhow!(e))

@@ -12,7 +12,7 @@ use std::{
 };
 
 use chrono::Utc;
-use dropbear_engine::log;
+use dropbear_engine::{hecs, log};
 use egui_dock_fork::DockState;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
@@ -364,4 +364,21 @@ fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -
         }
     }
     nodes
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
+pub enum EntityNode {
+    Entity {
+        id: hecs::Entity,
+        name: String,
+    },
+    Script {
+        name: String,
+        path: PathBuf,
+    },
+    Group {
+        name: String,
+        children: Vec<EntityNode>,
+        collapsed: bool,
+    }
 }

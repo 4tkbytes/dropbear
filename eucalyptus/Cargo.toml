@@ -20,8 +20,10 @@ ron = "0.10.1"
 chrono = "0.4.41"
 egui-toast-fork = "0.18.0"
 egui_dock-fork = { version = "0.17", features = ["serde"] }
+egui_dnd = "0.13"
 once_cell = "1.21"
 app_dirs2 = "2.5"
+transform-gizmo-egui = "0.6"
 
 [dependencies.rhai]
 version = "1.22"
