@@ -203,41 +203,24 @@ pub struct Folder {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ResourceType {
     Unknown,
-    Model(Model),
+    Model,
     Thumbnail,
     Texture,
     Shader,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Model {
-    pub thumbnail_location: PathBuf,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct Model {
+//     pub thumbnail_location: PathBuf,
+// }
 
-impl Model {
-    pub fn gen_thumbnail(project_path: &PathBuf, model_path: &PathBuf) -> Self {
-        let thumbnail_path = model_path
-            .parent()
-            .unwrap()
-            .join("thumbnails")
-            .join(format!(
-                "{}.png",
-                model_path.file_stem().unwrap().to_string_lossy()
-            ));
-        if !thumbnail_path.exists() {
-            crate::utils::convert_model_to_image(project_path, model_path);
-        }
-        Self {
-            thumbnail_location: thumbnail_path,
-        }
-    }
-}
+// impl Model {}
 
 impl Display for ResourceType {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let str = match self {
             ResourceType::Unknown => "unknown",
-            ResourceType::Model(_) => "model",
+            ResourceType::Model => "model",
             ResourceType::Texture => "texture",
             ResourceType::Shader => "shader",
             ResourceType::Thumbnail => "thumbnail",
@@ -363,10 +346,7 @@ fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -
                     .unwrap_or_default();
 
                 let resource_type = if parent_folder.contains("model") {
-                    Some(ResourceType::Model(Model::gen_thumbnail(
-                        project_path,
-                        &entry_path,
-                    )))
+                    Some(ResourceType::Model)
                 } else if parent_folder.contains("texture") {
                     Some(ResourceType::Texture)
                 } else if parent_folder.contains("shader") {

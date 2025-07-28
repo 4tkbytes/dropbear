@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, fs, path::PathBuf, sync::Arc};
 
 use dropbear_engine::{
     camera::Camera,
@@ -19,7 +19,10 @@ use egui_dock_fork::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
-use crate::states::{Node, PROJECT, RESOURCES};
+use crate::{
+    APP_INFO,
+    states::{Node, PROJECT, RESOURCES},
+};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -164,9 +167,23 @@ impl Editor {
                     ui.label("Undo");
                     ui.label("Redo");
                 });
-                ui.menu_button("Window", |_ui| {
-                    // ui.menu
-                })
+
+                ui.menu_button("Window", |ui_window| {
+                    if ui_window.button("Open Asset Viewer").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
+                    }
+                    if ui_window.button("Open Resource Inspector").clicked() {
+                        self.dock_state
+                            .push_to_focused_leaf(EditorTab::ResourceInspector);
+                    }
+                    if ui_window.button("Open Entity List").clicked() {
+                        self.dock_state
+                            .push_to_focused_leaf(EditorTab::ModelEntityList);
+                    }
+                    if ui_window.button("Open Viewport").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
+                    }
+                });
                 // todo: add more stuff and give it purpose this is too bland :(
             });
         });
@@ -214,13 +231,70 @@ impl TabViewer for EditorTabViewer {
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
 
-                let assets: Vec<(egui::Image, String)> = (0..30)
-                    .map(|i| {
-                        let image =
-                            egui::Image::from_bytes(format!("no texture {}", i), NO_TEXTURE);
-                        (image, format!("no texture {}", i))
-                    })
-                    .collect::<Vec<_>>();
+                // let assets: Vec<(egui::Image, String)> = (0..30)
+                //     .map(|i| {
+                //         let image =
+                //             egui::Image::from_bytes(format!("no texture {}", i), NO_TEXTURE);
+                //         (image, format!("no texture {}", i))
+                //     })
+                //     .collect::<Vec<_>>();
+
+                let mut assets = Vec::new();
+                {
+                    let res = RESOURCES.read().unwrap();
+                    for node in &res.nodes {
+                        match node {
+                            Node::File(file) => {
+                                log::debug!(
+                                    "Adding image for {} of type {}",
+                                    file.name,
+                                    file.resource_type.as_ref().unwrap()
+                                );
+                                if let Some(ref res_type) = file.resource_type {
+                                    match res_type {
+                                        crate::states::ResourceType::Model => {
+                                            let ad_dir = app_dirs2::get_app_root(
+                                                app_dirs2::AppDataType::UserData,
+                                                &APP_INFO,
+                                            )
+                                            .unwrap();
+                                            let model_thumbnail = ad_dir
+                                                .join("resources/thumbnails/cube_thumbnail.png");
+                                            let file_name_osstr =
+                                                model_thumbnail.file_name().unwrap();
+                                            let file_name =
+                                                file_name_osstr.to_str().unwrap().to_string();
+                                            let image = egui::Image::from_bytes(
+                                                file_name.clone(),
+                                                fs::read(&model_thumbnail).unwrap(),
+                                            );
+                                            assets.push((image, file.name.clone()))
+                                        }
+                                        _ => {
+                                            if file
+                                                .path
+                                                .clone()
+                                                .extension()
+                                                .unwrap()
+                                                .to_str()
+                                                .unwrap()
+                                                .contains("euc")
+                                            {
+                                                continue;
+                                            }
+                                            let image = egui::Image::from_bytes(
+                                                file.name.clone(),
+                                                NO_TEXTURE,
+                                            );
+                                            assets.push((image, file.name.clone()))
+                                        }
+                                    }
+                                }
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
 
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let columns = 6;

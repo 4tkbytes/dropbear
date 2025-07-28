@@ -33,7 +33,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     u32,
 };
-use wgpu::{BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration};
+use wgpu::{
+    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, TextureFormat,
+};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -125,7 +127,7 @@ Hardware:
             .iter()
             .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(surface_caps.formats[0]);
+            .unwrap_or(TextureFormat::Rgba8Unorm);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,

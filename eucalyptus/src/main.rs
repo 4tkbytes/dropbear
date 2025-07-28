@@ -8,6 +8,11 @@ use std::{cell::RefCell, rc::Rc};
 
 use dropbear_engine::{App, WindowConfiguration, scene, tokio};
 
+pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
+    name: "Eucalyptus",
+    author: "4tkbytes",
+};
+
 #[tokio::main]
 async fn main() {
     let config = WindowConfiguration {
