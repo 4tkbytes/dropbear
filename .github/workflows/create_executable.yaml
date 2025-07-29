@@ -2,7 +2,9 @@
 name: Build Executables
 
 on:
-  push: {}
+  push:
+    tags:
+      - '*'
   pull_request: {}
 
 jobs:
@@ -57,18 +59,26 @@ jobs:
       - name: Build eucalyptus
         run: cargo build --release --package eucalyptus --target ${{ matrix.target }}
 
-      - name: Download and extract russimp dynamic lib
+
+      - name: Download and extract russimp dynamic lib (Windows/Linux)
+        if: matrix.os != 'macos-latest' && matrix.russimp_url != ''
         run: |
           curl -L -o russimp.tar.gz ${{ matrix.russimp_url }}
           tar -xzf russimp.tar.gz
-        if: ${{ matrix.russimp_url != '' }}
+
+      - name: Download README.md from gist (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          curl -L -o README.md https://gist.github.com/4tkbytes/05576d43fa12e7e2331dd7eb4e606bca/raw/README.md
 
       - name: Prepare artifact
         run: |
           mkdir dist
           cp target/${{ matrix.target }}/release/redback${{ matrix.ext }} dist/
           cp target/${{ matrix.target }}/release/eucalyptus${{ matrix.ext }} dist/
-          if [ "${{ matrix.russimp_file }}" != "" ]; then
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            cp README.md dist/
+          elif [ "${{ matrix.russimp_file }}" != "" ]; then
             find . -name "${{ matrix.russimp_file }}" -exec cp {} dist/ \;
           fi
         shell: bash

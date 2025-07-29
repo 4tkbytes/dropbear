@@ -6,18 +6,23 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Related projects
 
- - [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) is the visual editor used to create games visually, taking inspiration from Unity and other engines.
- - [redback](https://github.com/4tkbytes/dropbear/tree/main/redback) is the build system used by [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) to bind, build and ship games made with the engine.
+- [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) is the visual editor used to create games visually, taking inspiration from Unity and other engines.
+- [redback](https://github.com/4tkbytes/dropbear/tree/main/redback) is the build system used by [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) to bind, build and ship games made with the engine.
 
- ## Build
+## Build
 
- To build, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
- ```bash
- git clone git@github.com:4tkbytes/dropbear
- cd dropbear
- # this will build all the projects in the workspace, including eucalyptus and redback.
- cargo build
- ```
+To build, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
+
+```bash
+git clone git@github.com:4tkbytes/dropbear
+cd dropbear
+# this will build all the projects in the workspace, including eucalyptus and redback.
+cargo build
+```
+
+If you do not want to build it locally, you are able to download the latest action build (if no releases have been made).
+
+[nightly.link](https://nightly.link/4tkbytes/dropbear/workflows/create_executable.yaml/main?preview)
 
 ## Usage
 
