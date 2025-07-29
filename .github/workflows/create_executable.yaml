@@ -87,6 +87,7 @@ jobs:
             powershell Compress-Archive -Path dist\* -DestinationPath ${{ matrix.package }}-${{ matrix.os_name }}.zip
           else
             tar -czf ${{ matrix.package }}-${{ matrix.os_name }}.tar.gz -C dist .
+          fi
         shell: bash
 
       - name: Upload artifact
