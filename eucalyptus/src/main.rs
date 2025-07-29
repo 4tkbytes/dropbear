@@ -6,7 +6,7 @@ pub mod utils;
 
 use std::{cell::RefCell, rc::Rc};
 
-use dropbear_engine::{App, WindowConfiguration, scene, tokio};
+use dropbear_engine::{WindowConfiguration, scene, tokio};
 
 pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "Eucalyptus",
@@ -18,7 +18,7 @@ async fn main() {
     let config = WindowConfiguration {
         title: "Eucalyptus, built with dropbear",
         windowed_mode: dropbear_engine::WindowedModes::Maximised,
-        max_fps: App::NO_FPS_CAP,
+        max_fps: 120,
     };
 
     let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {

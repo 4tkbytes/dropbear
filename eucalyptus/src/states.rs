@@ -209,13 +209,6 @@ pub enum ResourceType {
     Shader,
 }
 
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct Model {
-//     pub thumbnail_location: PathBuf,
-// }
-
-// impl Model {}
-
 impl Display for ResourceType {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let str = match self {
@@ -380,7 +373,7 @@ pub enum EntityNode {
         name: String,
         children: Vec<EntityNode>,
         collapsed: bool,
-    }
+    },
 }
 
 #[derive(Debug)]
@@ -394,25 +387,43 @@ impl EntityNode {
         let mut nodes = Vec::new();
         let mut handled = std::collections::HashSet::new();
 
-        for (id, (script, _transform, adopted)) in world.query::<(&ScriptComponent, &dropbear_engine::entity::Transform, &dropbear_engine::entity::AdoptedEntity)>().iter() {
+        for (id, (script, _transform, adopted)) in world
+            .query::<(
+                &ScriptComponent,
+                &dropbear_engine::entity::Transform,
+                &dropbear_engine::entity::AdoptedEntity,
+            )>()
+            .iter()
+        {
             let name = adopted.model().label.clone();
 
             nodes.push(EntityNode::Group {
                 name: name.clone(),
                 children: vec![
-                    EntityNode::Entity { id, name: name.clone() },
+                    EntityNode::Entity {
+                        id,
+                        name: name.clone(),
+                    },
                     EntityNode::Script {
                         name: script.name.clone(),
                         path: script.path.clone(),
-                    }
+                    },
                 ],
                 collapsed: false,
             });
             handled.insert(id);
         }
 
-        for (id, (_, adopted)) in world.query::<(&dropbear_engine::entity::Transform, &dropbear_engine::entity::AdoptedEntity)>().iter() {
-            if handled.contains(&id) { continue; }
+        for (id, (_, adopted)) in world
+            .query::<(
+                &dropbear_engine::entity::Transform,
+                &dropbear_engine::entity::AdoptedEntity,
+            )>()
+            .iter()
+        {
+            if handled.contains(&id) {
+                continue;
+            }
             let name = adopted.model().label.clone();
 
             nodes.push(EntityNode::Entity { id, name });

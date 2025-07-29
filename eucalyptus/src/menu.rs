@@ -160,7 +160,7 @@ impl MainMenu {
                         } else {
                             Err(anyhow!("Project path not found"))
                         }
-                    } 
+                    }
                     // else if folder == "scripts" || folder == "deps" {
                     //     if folder == "scripts" {
                     //         Self::setup_poetry_project(path)

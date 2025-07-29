@@ -69,7 +69,11 @@ pub struct Mesh {
 }
 
 impl Model {
-    pub fn load(graphics: &Graphics<'_>, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Model> {
+    pub fn load(
+        graphics: &Graphics<'_>,
+        path: &PathBuf,
+        label: Option<&str>,
+    ) -> anyhow::Result<Model> {
         let file_name = path.file_name().unwrap().to_str().unwrap();
         log::debug!("Loading model [{}]", file_name);
 
@@ -182,12 +186,16 @@ impl Model {
             });
         }
         log::debug!("Successfully loaded model [{}]", file_name);
-        Ok(Model { meshes, materials, label: if let Some(l) = label {
-            l.to_string()
-        } else {
-            String::from(file_name.split(".").into_iter().next().unwrap())
-        },
-        path: path.clone()})
+        Ok(Model {
+            meshes,
+            materials,
+            label: if let Some(l) = label {
+                l.to_string()
+            } else {
+                String::from(file_name.split(".").into_iter().next().unwrap())
+            },
+            path: path.clone(),
+        })
     }
 }
 

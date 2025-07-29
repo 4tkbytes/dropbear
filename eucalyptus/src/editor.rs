@@ -25,7 +25,8 @@ use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    states::{EntityNode, Node, ResourceType, ScriptComponent, PROJECT, RESOURCES}, APP_INFO
+    APP_INFO,
+    states::{EntityNode, Node, PROJECT, RESOURCES, ResourceType, ScriptComponent},
 };
 
 pub struct Editor {
@@ -44,6 +45,17 @@ pub struct Editor {
     is_cursor_locked: bool,
 
     window: Option<Arc<Window>>,
+
+    show_new_project: bool,
+    project_name: String,
+    project_path: Option<PathBuf>,
+    pending_scene_switch: bool,
+}
+
+impl Default for Editor {
+    fn default() -> Self {
+        Editor::new()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -86,6 +98,10 @@ impl Editor {
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
             world: World::new(),
+            show_new_project: false,
+            project_name: String::new(),
+            project_path: None,
+            pending_scene_switch: false,
         }
     }
 
@@ -109,8 +125,31 @@ impl Editor {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    ui.label("New");
-                    ui.label("Open");
+                    // if ui.button("New").clicked() {
+                    //     self.show_new_project = true;
+                    // }
+
+                    // if ui.button("Open").clicked() {
+                    //     // Call your open_project utility function
+                    //     if let Err(e) = crate::utils::open_project(&mut self.scene_command, &mut self.toasts) {
+                    //         self.toasts.add(egui_toast_fork::Toast {
+                    //             kind: egui_toast_fork::ToastKind::Error,
+                    //             text: format!("Failed to open project: {e}").into(),
+                    //             options: ToastOptions::default()
+                    //                 .duration_in_seconds(5.0)
+                    //                 .show_progress(true),
+                    //             ..Default::default()
+                    //         });
+                    //     }
+                    // }
+
+                    if ui
+                        .button("Main Menu (New + Open + Editor Settings)")
+                        .clicked()
+                    {
+                        self.scene_command = SceneCommand::SwitchScene("main_menu".into());
+                    }
+
                     if ui.button("Save").clicked() {
                         match self.save_project_config() {
                             Ok(_) => {}
@@ -136,14 +175,7 @@ impl Editor {
                             ..Default::default()
                         });
                     }
-                    ui.menu_button("Settings", |ui| {
-                        let project_name = {
-                            let config = PROJECT.read().unwrap();
-                            config.project_name.clone()
-                        };
-                        ui.label(format!("{} config", project_name));
-                        ui.label("Eucalyptus Editor");
-                    });
+                    if ui.button("Project Settings").clicked() {};
                     if ui.button("Quit").clicked() {
                         match self.save_project_config() {
                             Ok(_) => {}
@@ -203,12 +235,27 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        nodes: EntityNode::from_world(&self.world)
+                        nodes: EntityNode::from_world(&self.world),
                     },
                 );
         });
 
         self.toasts.show(ctx);
+        crate::utils::show_new_project_window(
+            ctx,
+            &mut self.show_new_project,
+            &mut self.project_name,
+            &mut self.project_path,
+            |name, path| {
+                crate::utils::start_project_creation(name.to_string(), Some(path.clone()));
+                self.pending_scene_switch = true;
+            },
+        );
+
+        if self.pending_scene_switch {
+            self.scene_command = SceneCommand::SwitchScene("editor".to_string());
+            self.pending_scene_switch = false;
+        }
     }
 }
 
@@ -216,43 +263,46 @@ fn show_entity_tree(
     ui: &mut egui::Ui,
     nodes: &mut Vec<EntityNode>,
     selected: &mut Option<hecs::Entity>,
-    id_source: &str
+    id_source: &str,
 ) {
-    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, _dragging| {
-        match item.clone() {
-            EntityNode::Entity { id, name } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("|||");
-                    });
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
+    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, _dragging| match item
+        .clone()
+    {
+        EntityNode::Entity { id, name } => {
+            ui.horizontal(|ui| {
+                handle.ui(ui, |ui| {
+                    ui.label("|||");
                 });
-            },
-            EntityNode::Script { name, path: _ } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("|||");
-                    });
-                    ui.label(format!("{name}"));
+                let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
+                if resp.clicked() {
+                    *selected = Some(id);
+                }
+            });
+        }
+        EntityNode::Script { name, path: _ } => {
+            ui.horizontal(|ui| {
+                handle.ui(ui, |ui| {
+                    ui.label("|||");
                 });
-                
-            },
-            EntityNode::Group { ref name, ref mut children, ref mut collapsed } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("|||");
-                    });
-                    let header = egui::CollapsingHeader::new(name)
-                        .default_open(!*collapsed)
-                        .show(ui, |ui| {
-                            show_entity_tree(ui, children, selected, name);
-                        });
-                    *collapsed = !header.body_returned.is_some();
+                ui.label(format!("{name}"));
+            });
+        }
+        EntityNode::Group {
+            ref name,
+            ref mut children,
+            ref mut collapsed,
+        } => {
+            ui.horizontal(|ui| {
+                handle.ui(ui, |ui| {
+                    ui.label("|||");
                 });
-            }
+                let header = egui::CollapsingHeader::new(name)
+                    .default_open(!*collapsed)
+                    .show(ui, |ui| {
+                        show_entity_tree(ui, children, selected, name);
+                    });
+                *collapsed = !header.body_returned.is_some();
+            });
         }
     });
 }
@@ -263,6 +313,17 @@ pub struct EditorTabViewer {
 }
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
+
+static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
+    LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
+
+#[derive(Debug, Default)]
+pub(crate) struct INeedABetterNameForThisStruct {
+    show_context_menu: bool,
+    context_menu_pos: egui::Pos2,
+}
+
+impl INeedABetterNameForThisStruct {}
 
 impl TabViewer for EditorTabViewer {
     type Tab = EditorTab;
@@ -277,6 +338,20 @@ impl TabViewer for EditorTabViewer {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        let mut cfg = TABS_GLOBAL.lock().unwrap();
+
+        ui.ctx().input(|i| {
+            if i.pointer.button_pressed(egui::PointerButton::Secondary) {
+                if let Some(pos) = i.pointer.hover_pos() {
+                    if ui.available_rect_before_wrap().contains(pos) {
+                        cfg.show_context_menu = true;
+                        // log::debug!("Position: {:?}", pos);
+                        cfg.context_menu_pos = pos;
+                    }
+                }
+            }
+        });
+
         match tab {
             EditorTab::Viewport => {
                 let size = ui.available_size();
@@ -284,10 +359,38 @@ impl TabViewer for EditorTabViewer {
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
-                // TODO: deal with show_entity_tree and figure out how to convert hecs::World 
+                // TODO: deal with show_entity_tree and figure out how to convert hecs::World
                 // to EntityNodes and to write it to file
                 {
-                    show_entity_tree(ui, &mut self.nodes, &mut SELECTED.lock().unwrap(), "Model Entity Asset List");
+                    show_entity_tree(
+                        ui,
+                        &mut self.nodes,
+                        &mut SELECTED.lock().unwrap(),
+                        "Model Entity Asset List",
+                    );
+                }
+
+                if cfg.show_context_menu {
+                    egui::Area::new("context_menu".into())
+                        .fixed_pos(cfg.context_menu_pos)
+                        .order(egui::Order::Foreground)
+                        .show(ui.ctx(), |ui| {
+                            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                                ui.set_min_width(150.0);
+
+                                if ui.selectable_label(false, "Import resource").clicked() {
+                                    cfg.show_context_menu = false;
+                                    // TODO: Add in an import resource function
+                                }
+                            })
+                        });
+
+                    if ui
+                        .ctx()
+                        .input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
+                    {
+                        cfg.show_context_menu = false;
+                    }
                 }
             }
             EditorTab::AssetViewer => {

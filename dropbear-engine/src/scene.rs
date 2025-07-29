@@ -15,6 +15,7 @@ pub trait Scene {
     fn run_command(&mut self) -> SceneCommand {
         SceneCommand::None
     }
+    fn clear_ui(&mut self) {}
 }
 
 #[derive(Clone)]
@@ -94,7 +95,22 @@ impl Manager {
                 scene.borrow_mut().update(dt, graphics);
                 let command = scene.borrow_mut().run_command();
                 match command {
-                    SceneCommand::SwitchScene(target) => self.switch(&target),
+                    SceneCommand::SwitchScene(target) => {
+                        if let Some(current) = &self.current_scene {
+                            if current == &target {
+                                // reload the scene
+                                if let Some(scene) = self.scenes.get_mut(current) {
+                                    scene.borrow_mut().exit(event_loop);
+                                    scene.borrow_mut().load(graphics);
+                                    log::debug!("Reloaded scene: {}", current);
+                                }
+                            } else {
+                                self.switch(&target);
+                            }
+                        } else {
+                            self.switch(&target);
+                        }
+                    }
                     SceneCommand::Quit => {
                         log::info!("Exiting app!");
                         event_loop.exit();

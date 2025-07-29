@@ -1,4 +1,0 @@
-loading screen:
-it shows an egui scene, while the next_scene.load() function is called. once that is done, it will switch over and start rendering.
-
-editor:

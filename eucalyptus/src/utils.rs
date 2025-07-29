@@ -1,8 +1,16 @@
-use std::{path::PathBuf, process::Command};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::mpsc::{self, Receiver},
+};
 
-use dropbear_engine::log;
+use anyhow::anyhow;
+use dropbear_engine::egui::{self, Context};
+use dropbear_engine::scene::SceneCommand;
+use egui_toast_fork::{Toast, ToastOptions, Toasts};
+use git2::Repository;
 
-use crate::states::Node;
+use crate::states::{Node, PROJECT, ProjectConfig};
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
@@ -21,88 +29,186 @@ where
     }
 }
 
-#[deprecated]
-pub fn convert_model_to_image(project_path: &PathBuf, path: &PathBuf) {
-    let path = path.clone();
+/// Progress events for project creation
+pub enum ProjectProgress {
+    Step { progress: f32, message: String },
+    Error(String),
+    Done,
+}
+
+/// Open a project file and update the global state.
+/// Returns Ok(Some(SceneCommand::SwitchScene)) on success, or an error string on failure.
+pub fn open_project(
+    scene_command: &mut SceneCommand,
+    toast: &mut Toasts,
+) -> Result<Option<SceneCommand>, String> {
+    if let Some(path) = rfd::FileDialog::new()
+        .add_filter("Eucalyptus Configuration Files", &["eucp"])
+        .pick_file()
+    {
+        match ProjectConfig::read_from(&path) {
+            Ok(config) => {
+                let mut global = PROJECT.write().unwrap();
+                *global = config;
+                *scene_command = SceneCommand::SwitchScene("editor".to_string());
+                Ok(Some(SceneCommand::SwitchScene("editor".to_string())))
+            }
+            Err(e) => {
+                if e.to_string().contains("missing field") {
+                    toast.add(Toast {
+                        kind: egui_toast_fork::ToastKind::Error,
+                        text: "Project version is not up to date.".into(),
+                        options: ToastOptions::default()
+                            .duration_in_seconds(5.0)
+                            .show_progress(true),
+                        ..Default::default()
+                    });
+                }
+                Err(format!("Failed to load project: {e}"))
+            }
+        }
+    } else {
+        Err("File dialog returned None".to_string())
+    }
+}
+
+/// Start creating a new project in a background thread.
+/// Returns a Receiver for progress updates.
+pub fn start_project_creation(
+    project_name: String,
+    project_path: Option<PathBuf>,
+) -> Option<Receiver<ProjectProgress>> {
+    let (tx, rx) = mpsc::channel();
     let project_path = project_path.clone();
+
     std::thread::spawn(move || {
-        let script_path = "src/scripts/convert_model_to_image.py";
+        let folders = [
+            ("git", 0.1, "Creating a git folder..."),
+            ("src", 0.2, "Creating src folder..."),
+            ("resources/models", 0.4, "Creating models folder..."),
+            ("resources/shaders", 0.6, "Creating shader folder..."),
+            ("resources/textures", 0.8, "Creating textures folder..."),
+            ("src2", 0.9, "Creating project config file..."),
+        ];
 
-        match Command::new("poetry")
-            .current_dir(&project_path)
-            .arg("lock")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    log::error!(
-                        "Poetry lock failed: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    );
-                    return;
+        if let Some(path) = &project_path {
+            for (folder, progress, message) in folders {
+                tx.send(ProjectProgress::Step {
+                    progress,
+                    message: message.to_string(),
+                })
+                .ok();
+
+                let full_path = path.join(folder);
+                let result: anyhow::Result<()> = if folder == "src" {
+                    if !full_path.exists() {
+                        fs::create_dir(&full_path)
+                            .map_err(|e| anyhow::anyhow!(e))
+                            .map(|_| ())
+                    } else {
+                        Ok(())
+                    }
+                } else if folder == "git" {
+                    match Repository::init(path) {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            if matches!(e.code(), git2::ErrorCode::Exists) {
+                                Ok(())
+                            } else {
+                                Err(anyhow!(e))
+                            }
+                        }
+                    }
+                } else if folder == "src2" {
+                    if let Some(path) = &project_path {
+                        let mut config = ProjectConfig::new(project_name.clone(), &path);
+                        let _ = config.write_to_all();
+                        let mut global = PROJECT.write().unwrap();
+                        *global = config;
+                        Ok(())
+                    } else {
+                        Err(anyhow!("Project path not found"))
+                    }
                 } else {
-                    log::info!(
-                        "Poetry lock succeeded: {}",
-                        String::from_utf8_lossy(&output.stdout)
-                    );
+                    if !full_path.exists() {
+                        fs::create_dir_all(&full_path)
+                            .map_err(|e| anyhow!(e))
+                            .map(|_| ())
+                    } else {
+                        Ok(())
+                    }
+                };
+                if let Err(e) = result {
+                    tx.send(ProjectProgress::Error(e.to_string())).ok();
                 }
             }
-            Err(e) => {
-                log::error!("Failed to run poetry lock: {}", e);
-                return;
-            }
-        }
-
-        match Command::new("poetry")
-            .current_dir(&project_path)
-            .arg("install")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    log::error!(
-                        "Poetry install failed: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    );
-                    return;
-                } else {
-                    log::info!(
-                        "Poetry install succeeded: {}",
-                        String::from_utf8_lossy(&output.stdout)
-                    );
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to run poetry install: {}", e);
-                return;
-            }
-        }
-
-        let poetry_cmd = Command::new("poetry")
-            .current_dir(&project_path)
-            .arg("run")
-            .arg("python")
-            .arg(script_path)
-            .arg(path.to_str().unwrap())
-            .output();
-
-        match poetry_cmd {
-            Ok(output) => {
-                if !output.status.success() {
-                    log::error!(
-                        "Thumbnail generation failed: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    );
-                } else {
-                    log::info!(
-                        "Thumbnail generation succeeded: {}",
-                        String::from_utf8_lossy(&output.stdout)
-                    );
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to run thumbnail generator: {}", e);
-            }
+            tx.send(ProjectProgress::Step {
+                progress: 1.0,
+                message: "Project creation complete!".to_string(),
+            })
+            .ok();
+            tx.send(ProjectProgress::Done).ok();
         }
     });
+
+    Some(rx)
+}
+
+pub fn show_new_project_window<F>(
+    ctx: &Context,
+    show_new_project: &mut bool,
+    project_name: &mut String,
+    project_path: &mut Option<PathBuf>,
+    on_create: F,
+) where
+    F: FnOnce(&str, &PathBuf),
+{
+    let screen_size = egui::vec2(400.0, 220.0);
+
+    let mut open = *show_new_project;
+    egui::Window::new("Create new project")
+        .open(&mut open)
+        .resizable(true)
+        .collapsible(false)
+        .fixed_size(screen_size)
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.heading("Project Name:");
+                ui.add_space(5.0);
+
+                ui.text_edit_singleline(project_name);
+                ui.add_space(10.0);
+
+                ui.heading("Project Location: ");
+                ui.add_space(5.0);
+
+                if let Some(path) = project_path {
+                    ui.label(format!("Chosen location: {}", path.display()));
+                    ui.add_space(5.0);
+                }
+
+                ui.add_space(5.0);
+                if ui.button("Choose Location").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Save Project")
+                        .set_file_name(project_name.clone())
+                        .pick_folder()
+                    {
+                        *project_path = Some(path);
+                    }
+                }
+
+                let can_create = project_path.is_some() && !project_name.is_empty();
+                if ui
+                    .add_enabled(can_create, egui::Button::new("Create Project"))
+                    .clicked()
+                {
+                    if let Some(path) = project_path {
+                        on_create(project_name, path);
+                    }
+                    ui.ctx().request_repaint();
+                }
+            });
+        });
+    *show_new_project = open;
 }
