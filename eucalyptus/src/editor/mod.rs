@@ -17,9 +17,7 @@ use dropbear_engine::{
     log,
     scene::SceneCommand,
     wgpu::{Color, Extent3d, RenderPipeline},
-    winit::{
-        keyboard::KeyCode, window::Window,
-    },
+    winit::{keyboard::KeyCode, window::Window},
 };
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
