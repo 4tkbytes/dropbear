@@ -43,7 +43,7 @@ pub fn open_project(
     toast: &mut Toasts,
 ) -> Result<Option<SceneCommand>, String> {
     if let Some(path) = rfd::FileDialog::new()
-        .add_filter("Eucalyptus Configuration Files", &["eucp"])
+        .add_filter("Eucalyptus Project Configuration Files", &["eucp"])
         .pick_file()
     {
         match ProjectConfig::read_from(&path) {

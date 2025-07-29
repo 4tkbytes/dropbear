@@ -141,6 +141,11 @@ impl Scene for Editor {
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
         self.window = Some(graphics.state.window.clone());
+        {
+            if let Ok(mut cfg) = TABS_GLOBAL.try_lock() {
+                cfg.toasts.show(graphics.get_egui_context());
+            }
+        }
         self.toasts.show(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             {

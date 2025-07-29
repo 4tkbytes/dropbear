@@ -12,6 +12,7 @@ use dropbear_engine::{
     log,
 };
 use egui_dock_fork::TabViewer;
+use egui_toast_fork::{Toast, ToastKind};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -34,14 +35,27 @@ pub struct EditorTabViewer {
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
 
-static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
+pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
 
-#[derive(Debug, Default)]
 pub(crate) struct INeedABetterNameForThisStruct {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
     context_menu_tab: Option<EditorTab>,
+    pub toasts: Toasts,
+}
+
+impl Default for INeedABetterNameForThisStruct {
+    fn default() -> Self {
+        Self { 
+            show_context_menu: Default::default(), 
+            context_menu_pos: Default::default(), 
+            context_menu_tab: Default::default(), 
+            toasts: egui_toast_fork::Toasts::new()
+                .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+                .direction(egui::Direction::BottomUp),
+        }
+    }
 }
 
 impl INeedABetterNameForThisStruct {}
@@ -312,7 +326,28 @@ impl TabViewer for EditorTabViewer {
                 if Some(tab.clone()) == cfg.context_menu_tab {
                     match action {
                         EditorTabMenuAction::ImportResource => {
-                            log::debug!("Asset viewer right clicked");
+                            log::debug!("Import Resource clicked");
+                            match import_object() {
+                                Ok(_) => {
+                                    cfg.toasts.add(Toast {
+                                        kind: ToastKind::Success,
+                                        text: "Resource(s) imported successfully!".into(),
+                                        options: ToastOptions::default()
+                                            .duration_in_seconds(3.0),
+                                        ..Default::default()
+                                    });
+                                }
+                                Err(e) => {
+                                    cfg.toasts.add(Toast {
+                                        kind: ToastKind::Error,
+                                        text: format!("Failed to import resource(s): {e}")
+                                            .into(),
+                                        options: ToastOptions::default()
+                                            .duration_in_seconds(5.0),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;
@@ -369,6 +404,77 @@ impl TabViewer for EditorTabViewer {
         }
     }
 }
+
+pub(crate) fn import_object() -> anyhow::Result<()> {
+    let model_ext = vec!["glb", "fbx", "obj"];
+    let texture_ext = vec!["png"];
+
+    let files = rfd::FileDialog::new()
+        .add_filter("Model", &model_ext)
+        .add_filter("Texture", &texture_ext)
+        .pick_files();
+    if let Some(files) = files {
+        for file in files {
+            let ext = file.extension().unwrap().to_str().unwrap();
+            let mut copied = false;
+            for mde in model_ext.iter() {
+                if ext.contains(mde) {
+                    // copy over to models folder
+                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                        let models_dir = PathBuf::from(project.project_path.clone())
+                            .join("resources")
+                            .join("models");
+                        if !models_dir.exists() {
+                            std::fs::create_dir_all(&models_dir)?;
+                        }
+                        let dest = models_dir.join(file.file_name().unwrap());
+                        std::fs::copy(&file, &dest)?;
+                        log::info!("Copied model file to {:?}", dest);
+                        copied = true;
+                    }
+                }
+            }
+            for tex in texture_ext.iter() {
+                if ext.contains(tex) {
+                    // copy over to textures folder
+                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                        let textures_dir = PathBuf::from(project.project_path.clone())
+                            .join("resources")
+                            .join("textures");
+                        if !textures_dir.exists() {
+                            std::fs::create_dir_all(&textures_dir)?;
+                        }
+                        let dest = textures_dir.join(file.file_name().unwrap());
+                        std::fs::copy(&file, &dest)?;
+                        log::info!("Copied texture file to {:?}", dest);
+                        copied = true;
+                    }
+                }
+            }
+
+            if !copied {
+                if let Some(project) = crate::states::PROJECT.read().ok() {
+                    // everything else copies over to resources root dir
+                    let resources_dir =
+                        PathBuf::from(project.project_path.clone()).join("resources");
+                    if !resources_dir.exists() {
+                        std::fs::create_dir_all(&resources_dir)?;
+                    }
+                    let dest = resources_dir.join(file.file_name().unwrap());
+                    std::fs::copy(&file, &dest)?;
+                    log::info!("Copied other resource file to {:?}", dest);
+                }
+            }
+        }
+        // save it all to ensure the eucc recognises it
+        let mut proj = PROJECT.write().unwrap();
+        proj.write_to_all()?;
+        Ok(())
+    } else {
+        return Err(anyhow::anyhow!("File dialogue returned None"));
+    }
+}
+
 
 #[derive(Debug, Clone, Copy)]
 pub enum EditorTabMenuAction {
