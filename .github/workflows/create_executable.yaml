@@ -34,9 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libudev-dev (Linux only)
+      - name: Install libudev-dev (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
+      - name: Install assimp (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y assimp
+
+      - name: Install assimp (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install assimp
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
