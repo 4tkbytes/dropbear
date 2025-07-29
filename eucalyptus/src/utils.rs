@@ -21,6 +21,7 @@ where
     }
 }
 
+#[deprecated]
 pub fn convert_model_to_image(project_path: &PathBuf, path: &PathBuf) {
     let path = path.clone();
     let project_path = project_path.clone();

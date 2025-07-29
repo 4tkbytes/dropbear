@@ -38,7 +38,6 @@ pub struct Editor {
     camera: Camera,
     color: Color,
     toasts: Toasts,
-    selected_entity: Option<hecs::Entity>,
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
@@ -87,7 +86,6 @@ impl Editor {
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
             world: World::new(),
-            selected_entity: None,
         }
     }
 
@@ -205,6 +203,7 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
+                        nodes: EntityNode::from_world(&self.world)
                     },
                 );
         });
@@ -219,7 +218,7 @@ fn show_entity_tree(
     selected: &mut Option<hecs::Entity>,
     id_source: &str
 ) {
-    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, dragging| {
+    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, _dragging| {
         match item.clone() {
             EntityNode::Entity { id, name } => {
                 let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
@@ -230,17 +229,19 @@ fn show_entity_tree(
                     ui.label("⠿");
                 });
             },
-            EntityNode::Script { name, path } => {
+            EntityNode::Script { name, path: _ } => {
                 ui.label(format!("SCRIPT {name}"));
                 handle.ui(ui, |ui| {
                     ui.label("⠿");
                 });
             },
-            EntityNode::Group { ref name, mut children, mut collapsed } => {
-                let header = egui::CollapsingHeader::new(name).default_open(!collapsed).show(ui, |ui| {
-                    show_entity_tree(ui, &mut children, selected, name);
-                });
-                collapsed = !header.body_returned.is_some();
+            EntityNode::Group { ref name, ref mut children, ref mut collapsed } => {
+                let header = egui::CollapsingHeader::new(name)
+                    .default_open(!*collapsed)
+                    .show(ui, |ui| {
+                        show_entity_tree(ui, children, selected, name);
+                    });
+                *collapsed = !header.body_returned.is_some();
                 handle.ui(ui, |ui| {
                     ui.label("⠿");
                 });
@@ -251,6 +252,7 @@ fn show_entity_tree(
 
 pub struct EditorTabViewer {
     pub view: egui::TextureId,
+    pub nodes: Vec<EntityNode>,
 }
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
@@ -278,8 +280,7 @@ impl TabViewer for EditorTabViewer {
                 // TODO: deal with show_entity_tree and figure out how to convert hecs::World 
                 // to EntityNodes and to write it to file
                 {
-                    let selected = SELECTED.lock().unwrap();
-                    show_entity_tree(ui, nodes, &mut selected, id_source);
+                    show_entity_tree(ui, &mut self.nodes, &mut SELECTED.lock().unwrap(), "Model Entity Asset List");
                 }
             }
             EditorTab::AssetViewer => {

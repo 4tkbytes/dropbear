@@ -382,3 +382,40 @@ pub enum EntityNode {
         collapsed: bool,
     }
 }
+
+#[derive(Debug)]
+pub struct ScriptComponent {
+    pub name: String,
+    pub path: PathBuf,
+}
+
+impl EntityNode {
+    /// Creates a vector of entity nodes from a hecs world
+    pub fn from_world(world: &hecs::World) -> Vec<EntityNode> {
+        let mut nodes = Vec::new();
+
+        for (id, script) in world.query::<&ScriptComponent>().iter() {
+            let name = format!("Entity {:?}", id);
+            nodes.push(EntityNode::Group {
+                name: name.clone(),
+                children: vec![
+                    EntityNode::Entity { id, name: name.clone() },
+                    EntityNode::Script {
+                        name: script.name.clone(),
+                        path: script.path.clone(),
+                    }
+                ],
+                collapsed: false,
+            });
+        }
+
+        let scripted: std::collections::HashSet<_> = world.query::<&ScriptComponent>().iter().map(|(id, _)| id).collect();
+        for id in world.iter().map(|e| e.entity()) {
+            if !scripted.contains(&id) {
+                let name = format!("Entity {:?}", id);
+                nodes.push(EntityNode::Entity { id, name });
+            }
+        }
+        nodes
+    }
+}
