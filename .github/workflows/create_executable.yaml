@@ -1,0 +1,100 @@
+name: Build Executables
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build ${{ matrix.package }} for ${{ matrix.os_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            os_name: Windows x64
+            target: x86_64-pc-windows-msvc
+            ext: .exe
+            assimp_url: https://github.com/jkvargas/russimp-sys/releases/download/v2.0.3/russimp-2.0.3-x86_64-pc-windows-msvc-dylib.tar.gz
+            assimp_file: assimp.dll
+            package: redback
+          - os: windows-latest
+            os_name: Windows x64
+            target: x86_64-pc-windows-msvc
+            ext: .exe
+            assimp_url: https://github.com/jkvargas/russimp-sys/releases/download/v2.0.3/russimp-2.0.3-x86_64-pc-windows-msvc-dylib.tar.gz
+            assimp_file: assimp.dll
+            package: eucalyptus
+          - os: ubuntu-latest
+            os_name: Linux x64
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+            assimp_url: https://github.com/jkvargas/russimp-sys/releases/download/v2.0.3/russimp-2.0.3-x86_64-unknown-linux-gnu-dylib.tar.gz
+            assimp_file: libassimp.so.5
+            package: redback
+          - os: ubuntu-latest
+            os_name: Linux x64
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+            assimp_url: https://github.com/jkvargas/russimp-sys/releases/download/v2.0.3/russimp-2.0.3-x86_64-unknown-linux-gnu-dylib.tar.gz
+            assimp_file: libassimp.so.5
+            package: eucalyptus
+          - os: macos-latest
+            os_name: macOS ARM64
+            target: aarch64-apple-darwin
+            ext: ""
+            assimp_url: "" # doesnt exist prompt user to build it themself
+            assimp_file: ""
+            package: redback
+          - os: macos-latest
+            os_name: macOS ARM64
+            target: aarch64-apple-darwin
+            ext: ""
+            assimp_url: "" # doesnt exist prompt user to build it themself
+            assimp_file: ""
+            package: eucalyptus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build ${{ matrix.package }}
+        run: cargo build --release --package ${{ matrix.package }} --target ${{ matrix.target }}
+
+      - name: Download and extract assimp
+        if: ${{ matrix.assimp_url != '' }}
+        run: |
+          curl -L -o assimp.tar.gz ${{ matrix.assimp_url }}
+          tar -xzf assimp.tar.gz
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/${{ matrix.package }}${{ matrix.ext }} dist/
+          if [ "${{ matrix.assimp_file }}" != "" ]; then
+            # Find and copy the assimp file from extracted folder
+            find . -name "${{ matrix.assimp_file }}" -exec cp {} dist/ \;
+          fi
+        shell: bash
+
+      - name: Archive artifact
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            powershell Compress-Archive -Path dist\* -DestinationPath ${{ matrix.package }}-${{ matrix.os_name }}.zip
+          else
+            tar -czf ${{ matrix.package }}-${{ matrix.os_name }}.tar.gz -C dist .
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}-${{ matrix.os_name }}
+          path: |
+            ${{ matrix.package }}-${{ matrix.os_name }}.zip
+            ${{ matrix.package }}-${{ matrix.os_name }}.tar.gz
