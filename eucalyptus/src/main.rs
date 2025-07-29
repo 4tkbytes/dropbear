@@ -25,13 +25,6 @@ async fn main() {
         let main_menu = Rc::new(RefCell::new(menu::MainMenu::new()));
         let editor = Rc::new(RefCell::new(editor::Editor::new()));
 
-        // not needed anymore
-        // scene::add_scene_with_input(
-        //     &mut scene_manager,
-        //     &mut input_manager,
-        //     testing_scene,
-        //     "testing_scene_1",
-        // );
         scene::add_scene_with_input(
             &mut scene_manager,
             &mut input_manager,

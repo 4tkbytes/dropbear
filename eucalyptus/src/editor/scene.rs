@@ -9,9 +9,7 @@ use dropbear_engine::{
     nalgebra::{Point3, Vector3},
     scene::{Scene, SceneCommand},
     wgpu::Color,
-    winit::{
-        event_loop::ActiveEventLoop, keyboard::KeyCode,
-    },
+    winit::{event_loop::ActiveEventLoop, keyboard::KeyCode},
 };
 
 use super::*;
