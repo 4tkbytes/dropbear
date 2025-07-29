@@ -38,9 +38,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
-      - name: Install assimp (Linux)
+      - name: Install assimp-utils (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install -y assimp
+        run: sudo apt-get install -y assimp-utils
 
       - name: Install assimp (macOS)
         if: matrix.os == 'macos-latest'
