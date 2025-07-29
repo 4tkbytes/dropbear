@@ -18,7 +18,7 @@ async fn main() {
     let config = WindowConfiguration {
         title: "Eucalyptus, built with dropbear",
         windowed_mode: dropbear_engine::WindowedModes::Maximised,
-        max_fps: 120,
+        max_fps: dropbear_engine::App::NO_FPS_CAP,
     };
 
     let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
