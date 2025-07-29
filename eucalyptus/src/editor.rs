@@ -25,7 +25,7 @@ use egui_toast_fork::{ToastOptions, Toasts};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    states::{EntityNode, Node, ResourceType, PROJECT, RESOURCES}, APP_INFO
+    states::{EntityNode, Node, ResourceType, ScriptComponent, PROJECT, RESOURCES}, APP_INFO
 };
 
 pub struct Editor {
@@ -221,29 +221,36 @@ fn show_entity_tree(
     egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, _dragging| {
         match item.clone() {
             EntityNode::Entity { id, name } => {
-                let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                if resp.clicked() {
-                    *selected = Some(id);
-                }
-                handle.ui(ui, |ui| {
-                    ui.label("⠿");
+                ui.horizontal(|ui| {
+                    handle.ui(ui, |ui| {
+                        ui.label("|||");
+                    });
+                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
+                    if resp.clicked() {
+                        *selected = Some(id);
+                    }
                 });
             },
             EntityNode::Script { name, path: _ } => {
-                ui.label(format!("SCRIPT {name}"));
-                handle.ui(ui, |ui| {
-                    ui.label("⠿");
+                ui.horizontal(|ui| {
+                    handle.ui(ui, |ui| {
+                        ui.label("|||");
+                    });
+                    ui.label(format!("{name}"));
                 });
+                
             },
             EntityNode::Group { ref name, ref mut children, ref mut collapsed } => {
-                let header = egui::CollapsingHeader::new(name)
-                    .default_open(!*collapsed)
-                    .show(ui, |ui| {
-                        show_entity_tree(ui, children, selected, name);
+                ui.horizontal(|ui| {
+                    handle.ui(ui, |ui| {
+                        ui.label("|||");
                     });
-                *collapsed = !header.body_returned.is_some();
-                handle.ui(ui, |ui| {
-                    ui.label("⠿");
+                    let header = egui::CollapsingHeader::new(name)
+                        .default_open(!*collapsed)
+                        .show(ui, |ui| {
+                            show_entity_tree(ui, children, selected, name);
+                        });
+                    *collapsed = !header.body_returned.is_some();
                 });
             }
         }
@@ -482,7 +489,11 @@ impl Scene for Editor {
 
         if cube_path != PathBuf::new() {
             let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
-            self.world.spawn((cube, Transform::default()));
+            let script = ScriptComponent {
+                name: "DummyScript".to_string(),
+                path: PathBuf::from("dummy/path/to/script.rs"),
+            };
+            self.world.spawn((cube, Transform::default(), script));
         } else {
             log::warn!("cube path is empty :(")
         }

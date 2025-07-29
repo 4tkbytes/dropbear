@@ -390,12 +390,13 @@ pub struct ScriptComponent {
 }
 
 impl EntityNode {
-    /// Creates a vector of entity nodes from a hecs world
-    pub fn from_world(world: &hecs::World) -> Vec<EntityNode> {
+    pub fn from_world(world: &hecs::World) -> Vec<Self> {
         let mut nodes = Vec::new();
+        let mut handled = std::collections::HashSet::new();
 
-        for (id, script) in world.query::<&ScriptComponent>().iter() {
-            let name = format!("Entity {:?}", id);
+        for (id, (script, _transform, adopted)) in world.query::<(&ScriptComponent, &dropbear_engine::entity::Transform, &dropbear_engine::entity::AdoptedEntity)>().iter() {
+            let name = adopted.model().label.clone();
+
             nodes.push(EntityNode::Group {
                 name: name.clone(),
                 children: vec![
@@ -407,15 +408,16 @@ impl EntityNode {
                 ],
                 collapsed: false,
             });
+            handled.insert(id);
         }
 
-        let scripted: std::collections::HashSet<_> = world.query::<&ScriptComponent>().iter().map(|(id, _)| id).collect();
-        for id in world.iter().map(|e| e.entity()) {
-            if !scripted.contains(&id) {
-                let name = format!("Entity {:?}", id);
-                nodes.push(EntityNode::Entity { id, name });
-            }
+        for (id, (_, adopted)) in world.query::<(&dropbear_engine::entity::Transform, &dropbear_engine::entity::AdoptedEntity)>().iter() {
+            if handled.contains(&id) { continue; }
+            let name = adopted.model().label.clone();
+
+            nodes.push(EntityNode::Entity { id, name });
         }
+
         nodes
     }
 }

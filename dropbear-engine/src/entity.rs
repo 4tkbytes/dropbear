@@ -75,7 +75,7 @@ impl Transform {
 
 impl AdoptedEntity {
     pub fn new(graphics: &Graphics, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let model = Model::load(graphics, path)?;
+        let model = Model::load(graphics, path, label.clone())?;
         Ok(Self::adopt(graphics, model, label))
     }
 
