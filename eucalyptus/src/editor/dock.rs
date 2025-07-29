@@ -253,5 +253,129 @@ impl TabViewer for EditorTabViewer {
                 ui.label("Resource Inspector");
             }
         }
+
+        let mut menu_action: Option<EditorTabMenuAction> = None;
+        let area = egui::Area::new("context_menu".into())
+            .fixed_pos(cfg.context_menu_pos)
+            .order(egui::Order::Foreground);
+
+        if cfg.show_context_menu {
+            let menu_tab = cfg
+                .context_menu_tab
+                .clone()
+                .unwrap_or(EditorTab::ModelEntityList);
+
+            // We'll store the popup rect here
+            let mut popup_rect = None;
+
+            area.show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    // Save the rect of the popup for later hit-testing
+                    popup_rect.replace(ui.max_rect());
+
+                    match menu_tab {
+                        EditorTab::AssetViewer => {
+                            ui.set_min_width(150.0);
+                            if ui.selectable_label(false, "Import resource").clicked() {
+                                menu_action = Some(EditorTabMenuAction::ImportResource);
+                            }
+                            if ui.selectable_label(false, "Refresh assets").clicked() {
+                                menu_action = Some(EditorTabMenuAction::RefreshAssets);
+                            }
+                        }
+                        EditorTab::ModelEntityList => {
+                            ui.set_min_width(150.0);
+                            if ui.selectable_label(false, "Add Entity").clicked() {
+                                menu_action = Some(EditorTabMenuAction::AddEntity);
+                            }
+                            if ui.selectable_label(false, "Delete Entity").clicked() {
+                                menu_action = Some(EditorTabMenuAction::DeleteEntity);
+                            }
+                        }
+                        EditorTab::ResourceInspector => {
+                            ui.set_min_width(150.0);
+                            if ui.selectable_label(false, "Inspect Resource").clicked() {
+                                menu_action = Some(EditorTabMenuAction::InspectResource);
+                            }
+                        }
+                        EditorTab::Viewport => {
+                            ui.set_min_width(150.0);
+                            if ui.selectable_label(false, "Viewport Option").clicked() {
+                                menu_action = Some(EditorTabMenuAction::ViewportOption);
+                            }
+                        }
+                    }
+                })
+            });
+
+            if let Some(action) = menu_action {
+                if Some(tab.clone()) == cfg.context_menu_tab {
+                    match action {
+                        EditorTabMenuAction::ImportResource => {
+                            log::debug!("Asset viewer right clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                        EditorTabMenuAction::RefreshAssets => {
+                            log::debug!("Refresh assets clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                        EditorTabMenuAction::AddEntity => {
+                            log::debug!("Add Entity clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                        EditorTabMenuAction::DeleteEntity => {
+                            log::debug!("Delete Entity clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                        EditorTabMenuAction::InspectResource => {
+                            log::debug!("Inspect Resource clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                        EditorTabMenuAction::ViewportOption => {
+                            log::debug!("Viewport Option clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if let Some(rect) = popup_rect {
+                if cfg.show_context_menu && Some(tab.clone()) == cfg.context_menu_tab {
+                    if ui
+                        .ctx()
+                        .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
+                    {
+                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                            if !rect.contains(pos) {
+                                cfg.show_context_menu = false;
+                                cfg.context_menu_tab = None;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum EditorTabMenuAction {
+    ImportResource,
+    RefreshAssets,
+    AddEntity,
+    DeleteEntity,
+    InspectResource,
+    ViewportOption,
 }
