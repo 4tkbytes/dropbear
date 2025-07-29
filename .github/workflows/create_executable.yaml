@@ -94,6 +94,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.package }}-${{ matrix.os_name }}
-          path: |
-            ${{ matrix.package }}-${{ matrix.os_name }}.zip
-            ${{ matrix.package }}-${{ matrix.os_name }}.tar.gz
+          path: ${{ matrix.package }}-${{ matrix.os_name }}.*
