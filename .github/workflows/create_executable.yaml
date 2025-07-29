@@ -68,8 +68,10 @@ jobs:
       - name: Download and extract assimp
         if: ${{ matrix.assimp_url != '' }}
         run: |
-          curl -L -o assimp.tar.gz ${{ matrix.assimp_url }}
-          tar -xzf assimp.tar.gz
+          curl --fail -L -o assimp.tar.gz ${{ matrix.assimp_url }}
+          if [ -f assimp.tar.gz ]; then
+            tar -xzf assimp.tar.gz
+          fi
 
       - name: Prepare artifact
         run: |
@@ -83,6 +85,7 @@ jobs:
 
       - name: Archive artifact
         run: |
+          set -e
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             powershell Compress-Archive -Path dist\* -DestinationPath ${{ matrix.package }}-${{ matrix.os_name }}.zip
           else
@@ -91,7 +94,25 @@ jobs:
         shell: bash
 
       - name: Upload artifact
+        run: |
+          set -e
+          if [ -f "${{ matrix.package }}-${{ matrix.os_name }}.zip" ]; then
+            echo "Uploading zip artifact"
+            gh release upload temp-release "${{ matrix.package }}-${{ matrix.os_name }}.zip" || true
+            mv "${{ matrix.package }}-${{ matrix.os_name }}.zip" upload-artifact.zip
+            echo "::set-output name=artifact_path::upload-artifact.zip"
+          elif [ -f "${{ matrix.package }}-${{ matrix.os_name }}.tar.gz" ]; then
+            echo "Uploading tar.gz artifact"
+            gh release upload temp-release "${{ matrix.package }}-${{ matrix.os_name }}.tar.gz" || true
+            mv "${{ matrix.package }}-${{ matrix.os_name }}.tar.gz" upload-artifact.tar.gz
+            echo "::set-output name=artifact_path::upload-artifact.tar.gz"
+          else
+            echo "No artifact found to upload!"
+            exit 1
+          fi
+        shell: bash
+      - name: Upload artifact to Actions
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.package }}-${{ matrix.os_name }}
-          path: ${{ matrix.package }}-${{ matrix.os_name }}.*
+          path: upload-artifact.*
