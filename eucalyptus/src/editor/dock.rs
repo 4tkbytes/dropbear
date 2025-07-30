@@ -6,14 +6,12 @@ use std::{
 };
 
 use dropbear_engine::{
-    egui, egui_extras,
-    graphics::NO_TEXTURE,
-    hecs::{self},
-    log, nalgebra,
+    egui, egui_extras, entity::Transform, graphics::NO_TEXTURE, hecs::{self}, log
 };
 use egui_dock_fork::TabViewer;
 use egui_toast_fork::{Toast, ToastKind};
 use serde::{Deserialize, Serialize};
+use transform_gizmo_egui::Gizmo;
 
 use crate::{
     APP_INFO,
@@ -28,10 +26,11 @@ pub enum EditorTab {
     Viewport,          // middle,
 }
 
-pub struct EditorTabViewer {
+pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
-    // pub world: hecs::World,
+    pub world: &'a mut hecs::World,
+    pub gizmo: &'a mut Gizmo,
 }
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
@@ -57,7 +56,7 @@ impl Default for INeedABetterNameForThisStruct {
 
 impl INeedABetterNameForThisStruct {}
 
-impl TabViewer for EditorTabViewer {
+impl<'a> TabViewer for EditorTabViewer<'a> {
     type Tab = EditorTab;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
@@ -90,7 +89,23 @@ impl TabViewer for EditorTabViewer {
                 ui.image((self.view, size));
 
                 if let Some(selected) = SELECTED.lock().unwrap().as_ref() {
-                    // if let Ok(mut query) = self.world.query_one_mut::<&mut Transform>(entity)
+                    if let Ok((transform, camera)) = self.world.query_one_mut::<(&Transform, &Camera)>(*selected) {
+                        self.gizmo.update_config(GizmoConfig {
+                            view_matrix: camera.uniform.view_proj.into(),
+                            projection_matrix: todo!(),
+                            viewport: todo!(),
+                            modes: todo!(),
+                            mode_override: todo!(),
+                            orientation: todo!(),
+                            pivot_point: todo!(),
+                            snapping: todo!(),
+                            snap_angle: todo!(),
+                            snap_distance: todo!(),
+                            snap_scale: todo!(),
+                            visuals: todo!(),
+                            pixels_per_point: todo!(),
+                        });
+                    }
                 }
             }
             EditorTab::ModelEntityList => {

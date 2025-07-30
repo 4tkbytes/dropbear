@@ -22,6 +22,7 @@ use dropbear_engine::{
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
 use once_cell::sync::Lazy;
+use transform_gizmo_egui::*;
 
 use crate::states::{EntityNode, PROJECT};
 
@@ -53,6 +54,8 @@ pub struct Editor {
     project_name: String,
     project_path: Option<PathBuf>,
     pending_scene_switch: bool,
+
+    gizmo: Gizmo,
 }
 
 impl Default for Editor {
@@ -90,6 +93,7 @@ impl Editor {
             project_name: String::new(),
             project_path: None,
             pending_scene_switch: false,
+            gizmo: Gizmo::default(),
         }
     }
 
@@ -214,6 +218,8 @@ impl Editor {
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
                         nodes: EntityNode::from_world(&self.world),
+                        world: &mut self.world,
+                        gizmo: &mut self.gizmo,
                     },
                 );
         });
