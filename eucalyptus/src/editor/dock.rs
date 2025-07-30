@@ -9,7 +9,7 @@ use dropbear_engine::{
     egui, egui_extras,
     graphics::NO_TEXTURE,
     hecs::{self},
-    log,
+    log, nalgebra,
 };
 use egui_dock_fork::TabViewer;
 use egui_toast_fork::{Toast, ToastKind};
@@ -31,6 +31,7 @@ pub enum EditorTab {
 pub struct EditorTabViewer {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
+    // pub world: hecs::World,
 }
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
@@ -77,7 +78,7 @@ impl TabViewer for EditorTabViewer {
                     if ui.available_rect_before_wrap().contains(pos) {
                         cfg.show_context_menu = true;
                         cfg.context_menu_pos = pos;
-                        cfg.context_menu_tab = Some(tab.clone()); // <-- Store the tab
+                        cfg.context_menu_tab = Some(tab.clone());
                     }
                 }
             }
@@ -87,6 +88,10 @@ impl TabViewer for EditorTabViewer {
             EditorTab::Viewport => {
                 let size = ui.available_size();
                 ui.image((self.view, size));
+
+                if let Some(selected) = SELECTED.lock().unwrap().as_ref() {
+                    // if let Ok(mut query) = self.world.query_one_mut::<&mut Transform>(entity)
+                }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
