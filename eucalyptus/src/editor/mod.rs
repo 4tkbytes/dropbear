@@ -21,8 +21,17 @@ use dropbear_engine::{
 };
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
+use once_cell::sync::Lazy;
 
 use crate::states::{EntityNode, PROJECT};
+
+pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
+    Mutex::new(
+        Toasts::new()
+            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+            .direction(egui::Direction::BottomUp),
+    )
+});
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -33,7 +42,6 @@ pub struct Editor {
     render_pipeline: Option<RenderPipeline>,
     camera: Camera,
     color: Color,
-    toasts: Toasts,
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
@@ -77,9 +85,6 @@ impl Editor {
             pressed_keys: HashSet::new(),
             is_cursor_locked: false,
             window: None,
-            toasts: egui_toast_fork::Toasts::new()
-                .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
-                .direction(egui::Direction::BottomUp),
             world: World::new(),
             show_new_project: false,
             project_name: String::new(),
@@ -108,24 +113,6 @@ impl Editor {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    // if ui.button("New").clicked() {
-                    //     self.show_new_project = true;
-                    // }
-
-                    // if ui.button("Open").clicked() {
-                    //     // Call your open_project utility function
-                    //     if let Err(e) = crate::utils::open_project(&mut self.scene_command, &mut self.toasts) {
-                    //         self.toasts.add(egui_toast_fork::Toast {
-                    //             kind: egui_toast_fork::ToastKind::Error,
-                    //             text: format!("Failed to open project: {e}").into(),
-                    //             options: ToastOptions::default()
-                    //                 .duration_in_seconds(5.0)
-                    //                 .show_progress(true),
-                    //             ..Default::default()
-                    //         });
-                    //     }
-                    // }
-
                     if ui
                         .button("Main Menu (New + Open + Editor Settings)")
                         .clicked()
@@ -138,25 +125,29 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
-                                self.toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Error,
-                                    text: format!("Error saving project: {}", e).into(),
-                                    options: ToastOptions::default()
-                                        .duration_in_seconds(5.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Error,
+                                        text: format!("Error saving project: {}", e).into(),
+                                        options: ToastOptions::default()
+                                            .duration_in_seconds(5.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
                             }
                         }
                         log::info!("Successfully saved project");
-                        self.toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Success,
-                            text: format!("Successfully saved project").into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
-                            ..Default::default()
-                        });
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Success,
+                                text: format!("Successfully saved project").into(),
+                                options: ToastOptions::default()
+                                    .duration_in_seconds(5.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
                     }
                     if ui.button("Project Settings").clicked() {};
                     if ui.button("Quit").clicked() {
@@ -164,26 +155,30 @@ impl Editor {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Error saving project: {}", e);
-                                self.toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Error,
-                                    text: format!("Error saving project: {}", e).into(),
-                                    options: ToastOptions::default()
-                                        .duration_in_seconds(5.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Error,
+                                        text: format!("Error saving project: {}", e).into(),
+                                        options: ToastOptions::default()
+                                            .duration_in_seconds(5.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
                             }
                         }
                         log::info!("Successfully saved project");
-                        self.toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Success,
-                            text: format!("Successfully saved project").into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
-                            ..Default::default()
-                        });
-                        self.scene_command = SceneCommand::Quit;
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Success,
+                                text: format!("Successfully saved project").into(),
+                                options: ToastOptions::default()
+                                    .duration_in_seconds(5.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                            self.scene_command = SceneCommand::Quit;
+                        }
                     }
                 });
                 ui.menu_button("Edit", |ui| {
@@ -223,7 +218,10 @@ impl Editor {
                 );
         });
 
-        self.toasts.show(ctx);
+        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+            toasts.show(ctx);
+        }
+
         crate::utils::show_new_project_window(
             ctx,
             &mut self.show_new_project,

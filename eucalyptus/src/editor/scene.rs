@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use dropbear_engine::{
     camera::Camera,
-    egui,
     entity::{AdoptedEntity, Transform},
     graphics::{Graphics, Shader},
     log,
@@ -122,10 +121,6 @@ impl Scene for Editor {
         for (_, (entity, transform)) in query {
             entity.update(&graphics, transform);
         }
-
-        self.toasts = egui_toast_fork::Toasts::new()
-            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
-            .direction(egui::Direction::BottomUp);
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
@@ -141,12 +136,9 @@ impl Scene for Editor {
         let ctx = graphics.get_egui_context();
         self.show_ui(ctx);
         self.window = Some(graphics.state.window.clone());
-        {
-            if let Ok(mut cfg) = TABS_GLOBAL.try_lock() {
-                cfg.toasts.show(graphics.get_egui_context());
-            }
+        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+            toasts.show(graphics.get_egui_context());
         }
-        self.toasts.show(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             {
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();

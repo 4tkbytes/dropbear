@@ -38,25 +38,29 @@ impl Keyboard for Editor {
                     match self.save_project_config() {
                         Ok(_) => {
                             log::info!("Successfully saved project");
-                            self.toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Success,
-                                text: format!("Successfully saved project").into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(5.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Success,
+                                    text: format!("Successfully saved project").into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(5.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
                         }
                         Err(e) => {
                             log::error!("Error saving project: {}", e);
-                            self.toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Error,
-                                text: format!("Error saving project: {}", e).into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(5.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Error,
+                                    text: format!("Error saving project: {}", e).into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(5.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
                         }
                     }
                 } else {

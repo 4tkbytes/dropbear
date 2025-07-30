@@ -42,18 +42,14 @@ pub(crate) struct INeedABetterNameForThisStruct {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
     context_menu_tab: Option<EditorTab>,
-    pub toasts: Toasts,
 }
 
 impl Default for INeedABetterNameForThisStruct {
     fn default() -> Self {
-        Self { 
-            show_context_menu: Default::default(), 
-            context_menu_pos: Default::default(), 
-            context_menu_tab: Default::default(), 
-            toasts: egui_toast_fork::Toasts::new()
-                .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
-                .direction(egui::Direction::BottomUp),
+        Self {
+            show_context_menu: Default::default(),
+            context_menu_pos: Default::default(),
+            context_menu_tab: Default::default(),
         }
     }
 }
@@ -327,25 +323,30 @@ impl TabViewer for EditorTabViewer {
                     match action {
                         EditorTabMenuAction::ImportResource => {
                             log::debug!("Import Resource clicked");
+
                             match import_object() {
                                 Ok(_) => {
-                                    cfg.toasts.add(Toast {
-                                        kind: ToastKind::Success,
-                                        text: "Resource(s) imported successfully!".into(),
-                                        options: ToastOptions::default()
-                                            .duration_in_seconds(3.0),
-                                        ..Default::default()
-                                    });
+                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                        toasts.add(Toast {
+                                            kind: ToastKind::Success,
+                                            text: "Resource(s) imported successfully!".into(),
+                                            options: ToastOptions::default()
+                                                .duration_in_seconds(3.0),
+                                            ..Default::default()
+                                        });
+                                    }
                                 }
                                 Err(e) => {
-                                    cfg.toasts.add(Toast {
-                                        kind: ToastKind::Error,
-                                        text: format!("Failed to import resource(s): {e}")
-                                            .into(),
-                                        options: ToastOptions::default()
-                                            .duration_in_seconds(5.0),
-                                        ..Default::default()
-                                    });
+                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                        toasts.add(Toast {
+                                            kind: ToastKind::Error,
+                                            text: format!("Failed to import resource(s): {e}")
+                                                .into(),
+                                            options: ToastOptions::default()
+                                                .duration_in_seconds(5.0),
+                                            ..Default::default()
+                                        });
+                                    }
                                 }
                             }
                             cfg.show_context_menu = false;
@@ -410,6 +411,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
     let texture_ext = vec!["png"];
 
     let files = rfd::FileDialog::new()
+        .add_filter("All Files", &["*"])
         .add_filter("Model", &model_ext)
         .add_filter("Texture", &texture_ext)
         .pick_files();
@@ -474,7 +476,6 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("File dialogue returned None"));
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub enum EditorTabMenuAction {
