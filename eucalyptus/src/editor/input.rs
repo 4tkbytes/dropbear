@@ -1,15 +1,16 @@
 use super::*;
 use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
-    log,
-    winit::{dpi::PhysicalPosition, keyboard::KeyCode},
 };
+use gilrs::{Button, GamepadId};
+use log;
+use winit::{dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 impl Keyboard for Editor {
     fn key_down(
         &mut self,
-        key: dropbear_engine::winit::keyboard::KeyCode,
-        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        key: KeyCode,
+        _event_loop: &ActiveEventLoop,
     ) {
         match key {
             // KeyCode::Escape => event_loop.exit(),
@@ -75,8 +76,8 @@ impl Keyboard for Editor {
 
     fn key_up(
         &mut self,
-        key: dropbear_engine::winit::keyboard::KeyCode,
-        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        key: KeyCode,
+        _event_loop: &ActiveEventLoop,
     ) {
         self.pressed_keys.remove(&key);
     }
@@ -100,35 +101,35 @@ impl Mouse for Editor {
         }
     }
 
-    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
+    fn mouse_down(&mut self, _button: MouseButton) {}
 
-    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
+    fn mouse_up(&mut self, _button: MouseButton) {}
 }
 
 impl Controller for Editor {
     fn button_down(
         &mut self,
-        _button: dropbear_engine::gilrs::Button,
-        _id: dropbear_engine::gilrs::GamepadId,
+        _button: Button,
+        _id: GamepadId,
     ) {
     }
 
     fn button_up(
         &mut self,
-        _button: dropbear_engine::gilrs::Button,
-        _id: dropbear_engine::gilrs::GamepadId,
+        _button: Button,
+        _id: GamepadId,
     ) {
     }
 
-    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {
+    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {
         // used for moving the camera
     }
 
-    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: dropbear_engine::gilrs::GamepadId) {
+    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {
         // used for moving the player
     }
 
-    fn on_connect(&mut self, _id: dropbear_engine::gilrs::GamepadId) {}
+    fn on_connect(&mut self, _id: GamepadId) {}
 
-    fn on_disconnect(&mut self, _id: dropbear_engine::gilrs::GamepadId) {}
+    fn on_disconnect(&mut self, _id: GamepadId) {}
 }

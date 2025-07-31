@@ -1,39 +1,40 @@
 [package]
 name = "dropbear-engine"
-version = "0.1.2"
-edition = "2024"
-license = "GPL-3.0-or-later"
 description = "A game engine made by 4tkbytes. Thats really it..."
-repository = "https://github.com/4tkbytes/dropbear-engine"
-readme = "../README.md"
 
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-winit = { version = "0.30", features = ["android-native-activity"] }
-env_logger = "0.11"
-log = "0.4"
-wgpu = "25"
-pollster = "0.4"
-tokio = { version = "1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-bytemuck = { version = "1.23", features = ["derive"] }
-spin_sleep = "1.3"
-nalgebra = "0.33"
-num-traits = "0.2"
-egui = "0.32"
-egui-winit = "0.32"
-egui-wgpu = { version = "0.32", features = ["winit"] }
-egui_extras = { version = "0.32", features = ["all_loaders"] }
-gilrs = "0.11"
-hecs = {version = "0.10", features = ["serde"]}
+anyhow.workspace = true
+async-trait.workspace = true
+bytemuck.workspace = true
+egui-wgpu.workspace = true
+egui-winit.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+env_logger.workspace = true
+futures.workspace = true
+gilrs.workspace = true
+hecs.workspace = true
+log.workspace = true
+mint.workspace = true
+nalgebra.workspace = true
+num-traits.workspace = true
+pollster.workspace = true
+spin_sleep.workspace = true
+tokio.workspace = true
+wgpu.workspace = true
+winit.workspace = true
 
 [target.'cfg(any(target_arch = "aarch64", target_arch = "arm"))'.dependencies]
 russimp = "3.2"
 
 [target.'cfg(not(any(target_arch = "aarch64", target_arch = "arm")))'.dependencies]
-russimp = { version = "3.2", features = ["prebuilt"] }
+russimp.workspace = true
 
 [dependencies.image]
 version = "0.25"

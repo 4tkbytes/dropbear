@@ -6,11 +6,11 @@ use std::{
 };
 
 use dropbear_engine::{
-    egui, egui_extras,
     graphics::NO_TEXTURE,
-    hecs::{self},
-    log, nalgebra,
 };
+use egui;
+use egui_extras;
+use log;
 use egui_dock_fork::TabViewer;
 use egui_toast_fork::{Toast, ToastKind};
 use serde::{Deserialize, Serialize};
@@ -88,10 +88,6 @@ impl TabViewer for EditorTabViewer {
             EditorTab::Viewport => {
                 let size = ui.available_size();
                 ui.image((self.view, size));
-
-                if let Some(selected) = SELECTED.lock().unwrap().as_ref() {
-                    // if let Ok(mut query) = self.world.query_one_mut::<&mut Transform>(entity)
-                }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");

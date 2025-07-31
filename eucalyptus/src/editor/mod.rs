@@ -12,13 +12,13 @@ use std::{
 
 use dropbear_engine::{
     camera::Camera,
-    egui,
-    hecs::{self, World},
-    log,
     scene::SceneCommand,
-    wgpu::{Color, Extent3d, RenderPipeline},
-    winit::{keyboard::KeyCode, window::Window},
 };
+use egui;
+use hecs::World;
+use log;
+use wgpu::{Color, Extent3d, RenderPipeline};
+use winit::{keyboard::KeyCode, window::Window};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
 use once_cell::sync::Lazy;

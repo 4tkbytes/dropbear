@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use dropbear_engine::egui::{self, Context};
+use egui::{Context};
 use dropbear_engine::scene::SceneCommand;
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
 use git2::Repository;

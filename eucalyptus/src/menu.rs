@@ -7,15 +7,16 @@ use std::{
 
 use anyhow::anyhow;
 use dropbear_engine::{
-    async_trait::async_trait,
-    egui::{self, FontId, Frame, RichText},
-    gilrs,
     input::{Controller, Keyboard, Mouse},
-    log::{self, debug},
     scene::{Scene, SceneCommand},
 };
+use log::{self, debug};
+use gilrs;
+use async_trait::async_trait;
+use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
 use git2::Repository;
+use winit::{dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 use crate::states::{PROJECT, ProjectConfig};
 
@@ -385,7 +386,7 @@ impl Scene for MainMenu {
         self.toast.show(graphics.get_egui_context());
     }
 
-    fn exit(&mut self, _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop) {}
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)
@@ -395,8 +396,8 @@ impl Scene for MainMenu {
 impl Keyboard for MainMenu {
     fn key_down(
         &mut self,
-        _key: dropbear_engine::winit::keyboard::KeyCode,
-        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        _key: KeyCode,
+        _event_loop: &ActiveEventLoop,
     ) {
         // if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
         //     event_loop.exit();
@@ -405,18 +406,18 @@ impl Keyboard for MainMenu {
 
     fn key_up(
         &mut self,
-        _key: dropbear_engine::winit::keyboard::KeyCode,
-        _event_loop: &dropbear_engine::winit::event_loop::ActiveEventLoop,
+        _key: KeyCode,
+        _event_loop: &ActiveEventLoop,
     ) {
     }
 }
 
 impl Mouse for MainMenu {
-    fn mouse_move(&mut self, _position: dropbear_engine::winit::dpi::PhysicalPosition<f64>) {}
+    fn mouse_move(&mut self, _position: PhysicalPosition<f64>) {}
 
-    fn mouse_down(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
+    fn mouse_down(&mut self, _button: MouseButton) {}
 
-    fn mouse_up(&mut self, _button: dropbear_engine::winit::event::MouseButton) {}
+    fn mouse_up(&mut self, _button: MouseButton) {}
 }
 
 impl Controller for MainMenu {
