@@ -36,7 +36,7 @@ pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceC
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub project_name: String,
-    pub project_path: String,
+    pub project_path: PathBuf,
     pub date_created: String,
     pub date_last_accessed: String,
     #[serde(default)]
@@ -48,11 +48,10 @@ impl ProjectConfig {
     /// a new project, with it creating new defaults for everything.
     pub fn new(project_name: String, project_path: &PathBuf) -> Self {
         let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        let project_path_str = project_path.to_str().unwrap().to_string();
         let date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         let mut result = Self {
             project_name,
-            project_path: project_path_str,
+            project_path: project_path.to_path_buf(),
             date_created,
             date_last_accessed,
             dock_layout: None,
@@ -74,7 +73,7 @@ impl ProjectConfig {
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
         let config_path = path.join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
-        self.project_path = path.clone().to_str().unwrap().to_string();
+        self.project_path = path.to_path_buf();
 
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -88,11 +87,10 @@ impl ProjectConfig {
     pub fn read_from(path: &PathBuf) -> anyhow::Result<Self> {
         let ron_str = fs::read_to_string(path)?;
         let mut config: ProjectConfig = ron::de::from_str(&ron_str.as_str())?;
+        config.project_path = path.parent().unwrap().to_path_buf();
         log::info!("Loaded project!");
-        log::debug!("Loaded config info: {:#?}", config);
+        log::debug!("Loaded config info: {:?}", config);
         log::debug!("Updating with new content");
-        // config.write_to(&path.parent().unwrap().to_path_buf())?;
-        // config.assets = Assets::walk(&path.parent().unwrap().to_path_buf());
         config.load_config_to_memory()?;
         config.write_to_all()?;
         log::debug!("Successfully updated!");

@@ -14,6 +14,7 @@ use log;
 use egui_dock_fork::TabViewer;
 use egui_toast_fork::{Toast, ToastKind};
 use serde::{Deserialize, Serialize};
+use transform_gizmo_egui::{Gizmo, GizmoConfig};
 
 use crate::{
     APP_INFO,
@@ -28,10 +29,13 @@ pub enum EditorTab {
     Viewport,          // middle,
 }
 
-pub struct EditorTabViewer {
+pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
-    // pub world: hecs::World,
+    pub tex_size: Extent3d,
+    pub gizmo: &'a mut Gizmo,
+    pub camera: &'a mut Camera,
+    pub resize_signal: &'a mut (bool, u32, u32),
 }
 
 pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
@@ -57,7 +61,7 @@ impl Default for INeedABetterNameForThisStruct {
 
 impl INeedABetterNameForThisStruct {}
 
-impl TabViewer for EditorTabViewer {
+impl<'a> TabViewer for EditorTabViewer<'a> {
     type Tab = EditorTab;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
@@ -87,7 +91,28 @@ impl TabViewer for EditorTabViewer {
         match tab {
             EditorTab::Viewport => {
                 let size = ui.available_size();
-                ui.image((self.view, size));
+                let new_tex_width = size.x.max(1.0) as u32;
+                let new_tex_height = size.y.max(1.0) as u32;
+
+                if self.tex_size.width != new_tex_height || self.tex_size.height != new_tex_height {
+                    // log::debug!("Sending resize signal");
+                    *self.resize_signal = (true, new_tex_width, new_tex_height);
+
+                    self.tex_size.width = new_tex_width;
+                    self.tex_size.height = new_tex_height;
+
+                    let new_aspect = new_tex_width as f32 / new_tex_height as f32;
+                    self.camera.aspect = new_aspect;
+                }
+
+                ui.image((self.view, [self.tex_size.width as f32, self.tex_size.height as f32].into()));
+
+                // self.gizmo.update_config(GizmoConfig {
+                //     view_matrix: self.camera.view_mat.into(),
+                //     projection_matrix: self.camera.proj_mat.into(),
+                // });
+                // TODO: Figure out how to get the guizmos working because this is fucking annoying to deal with
+                // Note to self: fuck you >:(
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");

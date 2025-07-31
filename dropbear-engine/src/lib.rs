@@ -224,7 +224,7 @@ Hardware:
                 label: Some("Render Encoder"),
             });
 
-        let viewport_view = { &self.viewport_texture.view };
+        let viewport_view = { &self.viewport_texture.view.clone() };
 
         self.egui_renderer.begin_frame(&self.window);
 

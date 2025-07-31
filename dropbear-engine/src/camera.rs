@@ -34,6 +34,9 @@ pub struct Camera {
 
     pub speed: f32,
     pub sensitivity: f32,
+
+    pub view_mat: Matrix4<f32>,
+    pub proj_mat: Matrix4<f32>,
 }
 
 impl Camera {
@@ -117,10 +120,13 @@ impl Camera {
         self.eye
     }
 
-    fn build_vp(&self) -> Matrix4<f32> {
+    fn build_vp(&mut self) -> Matrix4<f32> {
         let view = Matrix4::<f32>::look_at_rh(&self.eye, &self.target, &self.up);
         let proj = Perspective3::new(self.aspect, self.fov_y.to_radians(), self.znear, self.zfar);
-        return OPENGL_TO_WGPU_MATRIX * proj.to_homogeneous() * view;
+        self.view_mat = view.clone();
+        self.proj_mat = proj.clone().to_homogeneous();
+        let result = OPENGL_TO_WGPU_MATRIX * proj.to_homogeneous() * view;
+        result
     }
 
     pub fn create_bind_group_layout(&mut self, graphics: &Graphics, camera_buffer: Buffer) {

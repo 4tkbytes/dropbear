@@ -70,12 +70,13 @@ impl Scene for Editor {
             0.125,
             0.002,
         );
+        let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();
         let pipeline = graphics.create_render_pipline(
             &shader,
             vec![
-                &graphics.state.texture_bind_layout,
+                texture_bind_group,
                 camera.layout(),
                 &model_layout,
             ],
@@ -111,6 +112,10 @@ impl Scene for Editor {
             }
         }
 
+        let new_size = graphics.state.viewport_texture.size;
+        let new_aspect = new_size.width as f32 / new_size.height as f32;
+        self.camera.aspect = new_aspect;
+
         self.camera.update(graphics);
 
         if !self.is_cursor_locked {
@@ -131,10 +136,15 @@ impl Scene for Editor {
             a: 1.0,
         };
         self.color = color.clone();
-        self.size = graphics.state.viewport_texture.size;
-        self.texture_id = Some(graphics.state.texture_id);
-        let ctx = graphics.get_egui_context();
-        self.show_ui(ctx);
+        self.size = graphics.state.viewport_texture.size.clone();
+        self.texture_id = Some(graphics.state.texture_id.clone());
+        self.show_ui(&graphics.get_egui_context());
+
+        if self.resize_signal.0.clone() {
+            // graphics.state.resize(self.resize_signal.1, self.resize_signal.2);
+            // self.resize_signal.0 = false;
+        }
+        
         self.window = Some(graphics.state.window.clone());
         if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
             toasts.show(graphics.get_egui_context());

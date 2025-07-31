@@ -1,7 +1,5 @@
 use std::{
-    fs, io,
-    path::Path,
-    process::Command,
+    fs,
     sync::mpsc::{self, Receiver},
 };
 
@@ -12,7 +10,6 @@ use dropbear_engine::{
 };
 use log::{self, debug};
 use gilrs;
-use async_trait::async_trait;
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
 use git2::Repository;
@@ -55,49 +52,6 @@ impl MainMenu {
                 .direction(egui::Direction::BottomUp),
             ..Default::default()
         }
-    }
-
-    #[allow(dead_code)]
-    fn setup_poetry_project(project_path: &Path) -> anyhow::Result<()> {
-        if !Command::new("poetry").args(["--version"]).output().is_ok() {
-            return Err(anyhow!(
-                "Poetry is not installed. Please install it using pipx or the official poetry website"
-            ));
-        }
-
-        let status = Command::new("poetry")
-            .args(&["new", "scripts"])
-            .current_dir(project_path)
-            .status()
-            .expect("Failed to run poetry new");
-        if !status.success() {
-            return Err(anyhow!(io::Error::new(
-                io::ErrorKind::Other,
-                "Poetry project creation failed",
-            )));
-        }
-
-        let scripts_path = project_path.join("scripts");
-        if scripts_path.exists() && scripts_path.is_dir() {
-            for entry in fs::read_dir(&scripts_path)? {
-                let entry = entry?;
-                let path = entry.path();
-                let file_name = path.file_name().unwrap();
-                let dest = project_path.join(file_name);
-                fs::rename(&path, &dest)?;
-            }
-        }
-
-        if scripts_path.exists() {
-            fs::remove_dir_all(&scripts_path)?;
-        }
-
-        let tests_path = project_path.join("tests");
-        if tests_path.exists() {
-            fs::remove_dir_all(&tests_path)?;
-        }
-
-        Ok(())
     }
 
     fn start_project_creation(&mut self) {
@@ -153,7 +107,6 @@ impl MainMenu {
                     } else if folder == "src2" {
                         if let Some(path) = &project_path {
                             let mut config = ProjectConfig::new(project_name.clone(), &path);
-                            // let _ = config.write_to(&path);
                             let _ = config.write_to_all();
                             let mut global = PROJECT.write().unwrap();
                             *global = config;
@@ -162,29 +115,6 @@ impl MainMenu {
                             Err(anyhow!("Project path not found"))
                         }
                     }
-                    // else if folder == "scripts" || folder == "deps" {
-                    //     if folder == "scripts" {
-                    //         Self::setup_poetry_project(path)
-                    //     } else {
-                    //         let status = Command::new("poetry")
-                    //             .args(["add", "3d-to-image"])
-                    //             .current_dir(path)
-                    //             .status();
-                    //         match status {
-                    //             Ok(_) => Ok(()),
-                    //             Err(e) => Err(anyhow!(e)),
-                    //         }
-                    //     }
-                    // } else if folder == "scripts2" {
-                    //     if path.join("src/scripts").exists() {
-                    //         fs::write(
-                    //             &path.join("src/scripts/convert_model_to_image.py"),
-                    //             include_str!("scripts/convert_model_to_image.py"),
-                    //         )
-                    //         .map_err(|e| anyhow!(e))
-                    //     } else {
-                    //         Err(anyhow!("The src/scripts folder does not exist"))
-                    //     }
                     else {
                         if !full_path.exists() {
                             fs::create_dir_all(&full_path)
@@ -214,7 +144,6 @@ impl MainMenu {
     }
 }
 
-#[async_trait]
 impl Scene for MainMenu {
     fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 

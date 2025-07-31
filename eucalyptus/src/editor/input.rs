@@ -15,17 +15,17 @@ impl Keyboard for Editor {
         match key {
             // KeyCode::Escape => event_loop.exit(),
             KeyCode::Escape => {
-                self.is_cursor_locked = !self.is_cursor_locked;
-                if !self.is_cursor_locked {
-                    if let Some((surface_idx, node_idx, _)) =
-                        self.dock_state.find_tab(&EditorTab::AssetViewer)
-                    {
-                        self.dock_state
-                            .set_focused_node_and_surface((surface_idx, node_idx));
-                    } else {
-                        self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
-                    }
-                }
+                // self.is_cursor_locked = !self.is_cursor_locked;
+                // if !self.is_cursor_locked {
+                //     if let Some((surface_idx, node_idx, _)) =
+                //         self.dock_state.find_tab(&EditorTab::AssetViewer)
+                //     {
+                //         self.dock_state
+                //             .set_focused_node_and_surface((surface_idx, node_idx));
+                //     } else {
+                //         self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
+                //     }
+                // }
             }
             KeyCode::KeyS => {
                 #[cfg(not(target_os = "macos"))]

@@ -11,7 +11,20 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Build
 
-To build, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
+To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
+
+With Unix systems (macOS not tested), you will have to download a couple dependencies if building locally:
+<!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
+
+```bash
+# ubuntu, adapt to your own OS
+sudo apt install libudev-dev pkg-config libssl-dev clang
+
+# if on arm devices where russimp cannot compile
+sudo apt install assimp-utils
+```
+
+After downloading the requirements, you are free to build it using cargo.
 
 ```bash
 git clone git@github.com:4tkbytes/dropbear

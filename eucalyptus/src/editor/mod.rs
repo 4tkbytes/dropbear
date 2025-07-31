@@ -11,12 +11,12 @@ use std::{
 };
 
 use dropbear_engine::{
-    camera::Camera,
-    scene::SceneCommand,
+    camera::Camera, scene::SceneCommand, 
 };
-use egui;
+use egui::{self, Context};
 use hecs::World;
 use log;
+use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
@@ -53,6 +53,10 @@ pub struct Editor {
     project_name: String,
     project_path: Option<PathBuf>,
     pending_scene_switch: bool,
+
+    gizmo: Gizmo,
+
+    resize_signal: (bool, u32, u32),
 }
 
 impl Default for Editor {
@@ -90,6 +94,8 @@ impl Editor {
             project_name: String::new(),
             project_path: None,
             pending_scene_switch: false,
+            gizmo: Gizmo::default(),
+            resize_signal: (false, 1, 1)
         }
     }
 
@@ -109,7 +115,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn show_ui(&mut self, ctx: &egui::Context) {
+    pub fn show_ui(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -206,7 +212,7 @@ impl Editor {
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(&ctx, |ui| {
             DockArea::new(&mut self.dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(
@@ -214,6 +220,10 @@ impl Editor {
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
                         nodes: EntityNode::from_world(&self.world),
+                        gizmo: &mut self.gizmo,
+                        tex_size: self.size,
+                        camera: &mut self.camera,
+                        resize_signal: &mut self.resize_signal,
                     },
                 );
         });

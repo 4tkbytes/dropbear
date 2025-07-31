@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub struct Graphics<'a> {
-    pub state: &'a State,
+    pub state: &'a mut State,
     pub view: &'a TextureView,
     pub encoder: &'a mut CommandEncoder,
     pub screen_size: (f32, f32),
@@ -27,13 +27,22 @@ pub struct Graphics<'a> {
 pub const NO_TEXTURE: &'static [u8] = include_bytes!("no-texture.png");
 
 impl<'a> Graphics<'a> {
-    pub fn new(state: &'a State, view: &'a TextureView, encoder: &'a mut CommandEncoder) -> Self {
+    pub fn new(state: &'a mut State, view: &'a TextureView, encoder: &'a mut CommandEncoder) -> Self {
+        let screen_size = (state.config.width as f32, state.config.height as f32);
         Self {
             state,
             view,
             encoder,
-            screen_size: (state.config.width as f32, state.config.height as f32),
+            screen_size,
         }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.state.resize(width, height);
+    }
+
+    pub fn texture_bind_group(&mut self) -> &wgpu::BindGroupLayout {
+        &self.state.texture_bind_layout
     }
 
     pub fn create_render_pipline(
