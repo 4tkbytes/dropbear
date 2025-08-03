@@ -53,4 +53,4 @@ To be fair, I do not plan on supporting web, android or iOS yet (as it isnt even
 
 ## Contributions
 
-Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
+Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass. 
