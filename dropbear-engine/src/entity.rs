@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use nalgebra::{Matrix4, UnitQuaternion, Vector3};
+use glam::{DMat4, DQuat, DVec3, Mat4};
+// use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{BindGroup, Buffer, RenderPass, util::DeviceExt};
 
 use crate::{
@@ -22,54 +23,48 @@ pub struct AdoptedEntity {
 
 #[derive(Debug, Clone)]
 pub struct Transform {
-    pub position: Vector3<f32>,
-    pub rotation: UnitQuaternion<f32>,
-    pub scale: Vector3<f32>,
+    pub position: DVec3,
+    pub rotation: DQuat,
+    pub scale: DVec3,
 }
 
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            position: Vector3::new(0.0, 0.0, 0.0),
-            rotation: UnitQuaternion::identity(),
-            scale: Vector3::new(1.0, 1.0, 1.0),
+            position: DVec3::new(0.0, 0.0, 0.0),
+            rotation: DQuat::IDENTITY,
+            scale: DVec3::new(1.0, 1.0, 1.0),
         }
     }
 }
 
 impl Transform {
     pub fn new() -> Self {
-        Self {
-            position: Vector3::new(0.0, 0.0, 0.0),
-            rotation: UnitQuaternion::identity(),
-            scale: Vector3::new(1.0, 1.0, 1.0),
-        }
+        Self::default()
     }
 
-    pub fn matrix(&self) -> Matrix4<f32> {
-        Matrix4::new_translation(&self.position)
-            * self.rotation.to_homogeneous()
-            * Matrix4::new_nonuniform_scaling(&self.scale)
+    pub fn matrix(&self) -> DMat4 {        
+        DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 
-    pub fn rotate_x(&mut self, angle_rad: f32) {
-        self.rotation *= UnitQuaternion::from_euler_angles(angle_rad, 0.0, 0.0);
+    pub fn rotate_x(&mut self, angle_rad: f64) {
+        self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, angle_rad, 0.0, 0.0);
     }
 
-    pub fn rotate_y(&mut self, angle_rad: f32) {
-        self.rotation *= UnitQuaternion::from_euler_angles(0.0, angle_rad, 0.0);
+    pub fn rotate_y(&mut self, angle_rad: f64) {
+        self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, 0.0, angle_rad, 0.0);
     }
 
-    pub fn rotate_z(&mut self, angle_rad: f32) {
-        self.rotation *= UnitQuaternion::from_euler_angles(0.0, 0.0, angle_rad);
+    pub fn rotate_z(&mut self, angle_rad: f64) {
+        self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, angle_rad);
     }
 
-    pub fn translate(&mut self, translation: Vector3<f32>) {
+    pub fn translate(&mut self, translation: DVec3) {
         self.position += translation;
     }
 
-    pub fn scale(&mut self, scale: Vector3<f32>) {
-        self.scale.component_mul_assign(&scale);
+    pub fn scale(&mut self, scale: DVec3) {
+        self.scale *= scale;
     }
 }
 
@@ -97,7 +92,7 @@ impl AdoptedEntity {
                     }],
                 });
 
-        let instance = Instance::new(Vector3::identity(), UnitQuaternion::identity());
+        let instance = Instance::new(DVec3::ONE, DQuat::IDENTITY);
 
         let instance_buffer =
             graphics
@@ -123,7 +118,7 @@ impl AdoptedEntity {
     }
 
     pub fn update(&mut self, graphics: &Graphics, transform: &Transform) {
-        self.uniform.model = transform.matrix().into();
+        self.uniform.model = transform.matrix().as_mat4().to_cols_array_2d();
 
         if let Some(buffer) = &self.uniform_buffer {
             graphics
@@ -166,7 +161,7 @@ pub struct ModelUniform {
 impl ModelUniform {
     pub fn new() -> Self {
         Self {
-            model: Matrix4::<f32>::identity().into(),
+            model: Mat4::IDENTITY.to_cols_array_2d(),
         }
     }
 }

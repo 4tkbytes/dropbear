@@ -1,33 +1,43 @@
 [package]
 name = "eucalyptus"
-version = "0.1.0"
-edition = "2024"
-license = "GPL-3.0-or-later"
 description = "A visual game editor for the dropbear game engine"
-repository = "https://github.com/4tkbytes/dropbear-engine"
-readme = "README.md"
 default-run = "eucalyptus"
 exclude = ["resources"]
 
-[dependencies]
-serde = { version = "1.0.219", features = ["derive"] }
-dropbear-engine = { path = "../dropbear-engine" }
-# dropbear-engine = "0.1.2"
-rfd = "0.15.4"
-git2 = "0.20.2"
-anyhow = "1.0"
-ron = "0.10.1"
-chrono = "0.4.41"
-egui-toast-fork = "0.18.0"
-egui_dock-fork = { version = "0.17", features = ["serde"] }
-egui_dnd = "0.13"
-once_cell = "1.21"
-app_dirs2 = "2.5"
-transform-gizmo-egui = "0.6"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
 
-[dependencies.rhai]
-version = "1.22"
-features = ["std"]
+[dependencies]
+anyhow.workspace = true
+app_dirs2.workspace = true
+chrono.workspace = true
+dropbear-engine.workspace = true
+egui-toast-fork.workspace = true
+egui.workspace = true
+egui_dnd.workspace = true
+egui_dock-fork.workspace = true
+egui_extras.workspace = true
+gilrs.workspace = true
+git2.workspace = true
+glam.workspace = true
+hecs.workspace = true
+log.workspace = true
+# model_to_image.workspace = true
+once_cell.workspace = true
+rfd.workspace = true
+rhai.workspace = true
+ron.workspace = true
+serde.workspace = true
+tokio.workspace = true
+transform-gizmo-egui.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["rhai"]
 
 [build-dependencies]
 anyhow = "1.0"

@@ -4,12 +4,13 @@ use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
     graphics::{Graphics, Shader},
-    log,
-    nalgebra::{Point3, Vector3},
     scene::{Scene, SceneCommand},
-    wgpu::Color,
-    winit::{event_loop::ActiveEventLoop, keyboard::KeyCode},
 };
+use glam::DVec3;
+use log;
+// use nalgebra::{Point3, Vector3};
+use wgpu::Color;
+use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 use super::*;
 use crate::states::{Node, RESOURCES, ScriptComponent};
@@ -57,12 +58,12 @@ impl Scene for Editor {
             log::warn!("cube path is empty :(")
         }
 
-        let aspect = self.size.width as f32 / self.size.height as f32;
+        let aspect = self.size.width as f64 / self.size.height as f64;
         let camera = Camera::new(
             graphics,
-            Point3::new(0.0, 1.0, 2.0),
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::y(),
+            DVec3::new(0.0, 1.0, 2.0),
+            DVec3::new(0.0, 0.0, 0.0),
+            DVec3::Y,
             aspect,
             45.0,
             0.1,
@@ -70,15 +71,12 @@ impl Scene for Editor {
             0.125,
             0.002,
         );
+        let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();
         let pipeline = graphics.create_render_pipline(
             &shader,
-            vec![
-                &graphics.state.texture_bind_layout,
-                camera.layout(),
-                &model_layout,
-            ],
+            vec![texture_bind_group, camera.layout(), &model_layout],
         );
 
         self.camera = camera;
@@ -93,29 +91,33 @@ impl Scene for Editor {
             self.is_viewport_focused = false;
         }
 
-        if self.is_viewport_focused {
-            self.is_cursor_locked = true;
-        }
+        // if self.is_viewport_focused {
+        //     self.is_cursor_locked = true;
+        // }
 
-        if self.is_cursor_locked {
-            for key in &self.pressed_keys {
-                match key {
-                    KeyCode::KeyW => self.camera.move_forwards(),
-                    KeyCode::KeyA => self.camera.move_left(),
-                    KeyCode::KeyD => self.camera.move_right(),
-                    KeyCode::KeyS => self.camera.move_back(),
-                    KeyCode::ShiftLeft => self.camera.move_down(),
-                    KeyCode::Space => self.camera.move_up(),
-                    _ => {}
-                }
+        // if self.is_cursor_locked {
+        for key in &self.pressed_keys {
+            match key {
+                KeyCode::KeyW => self.camera.move_forwards(),
+                KeyCode::KeyA => self.camera.move_left(),
+                KeyCode::KeyD => self.camera.move_right(),
+                KeyCode::KeyS => self.camera.move_back(),
+                KeyCode::ShiftLeft => self.camera.move_down(),
+                KeyCode::Space => self.camera.move_up(),
+                _ => {}
             }
         }
+        // }
+
+        let new_size = graphics.state.viewport_texture.size;
+        let new_aspect = new_size.width as f64 / new_size.height as f64;
+        self.camera.aspect = new_aspect;
 
         self.camera.update(graphics);
 
-        if !self.is_cursor_locked {
-            self.window.as_mut().unwrap().set_cursor_visible(true);
-        }
+        // if !self.is_cursor_locked {
+        //     self.window.as_mut().unwrap().set_cursor_visible(true);
+        // }
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
@@ -131,10 +133,15 @@ impl Scene for Editor {
             a: 1.0,
         };
         self.color = color.clone();
-        self.size = graphics.state.viewport_texture.size;
-        self.texture_id = Some(graphics.state.texture_id);
-        let ctx = graphics.get_egui_context();
-        self.show_ui(ctx);
+        self.size = graphics.state.viewport_texture.size.clone();
+        self.texture_id = Some(graphics.state.texture_id.clone());
+        self.show_ui(&graphics.get_egui_context());
+
+        if self.resize_signal.0.clone() {
+            // graphics.state.resize(self.resize_signal.1, self.resize_signal.2);
+            // self.resize_signal.0 = false;
+        }
+
         self.window = Some(graphics.state.window.clone());
         if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
             toasts.show(graphics.get_egui_context());

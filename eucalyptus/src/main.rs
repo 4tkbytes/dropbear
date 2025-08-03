@@ -1,12 +1,11 @@
 mod editor;
 mod menu;
-// mod scene1;
 pub(crate) mod states;
 pub mod utils;
 
 use std::{cell::RefCell, rc::Rc};
 
-use dropbear_engine::{WindowConfiguration, scene, tokio};
+use dropbear_engine::{WindowConfiguration, scene};
 
 pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "Eucalyptus",

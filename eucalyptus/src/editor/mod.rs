@@ -10,19 +10,16 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use dropbear_engine::{
-    camera::Camera,
-    egui,
-    hecs::{self, World},
-    log,
-    scene::SceneCommand,
-    wgpu::{Color, Extent3d, RenderPipeline},
-    winit::{keyboard::KeyCode, window::Window},
-};
+use dropbear_engine::{camera::Camera, scene::SceneCommand};
+use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
+use hecs::World;
+use log;
 use once_cell::sync::Lazy;
-use transform_gizmo_egui::*;
+use transform_gizmo_egui::Gizmo;
+use wgpu::{Color, Extent3d, RenderPipeline};
+use winit::{keyboard::KeyCode, window::Window};
 
 use crate::states::{EntityNode, PROJECT};
 
@@ -46,8 +43,7 @@ pub struct Editor {
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
-    is_cursor_locked: bool,
-
+    // is_cursor_locked: bool,
     window: Option<Arc<Window>>,
 
     show_new_project: bool,
@@ -56,6 +52,9 @@ pub struct Editor {
     pending_scene_switch: bool,
 
     gizmo: Gizmo,
+    selected_entity: Option<hecs::Entity>,
+
+    resize_signal: (bool, u32, u32),
 }
 
 impl Default for Editor {
@@ -86,7 +85,7 @@ impl Editor {
             color: Color::default(),
             is_viewport_focused: false,
             pressed_keys: HashSet::new(),
-            is_cursor_locked: false,
+            // is_cursor_locked: false,
             window: None,
             world: World::new(),
             show_new_project: false,
@@ -94,6 +93,8 @@ impl Editor {
             project_path: None,
             pending_scene_switch: false,
             gizmo: Gizmo::default(),
+            resize_signal: (false, 1, 1),
+            selected_entity: None,
         }
     }
 
@@ -113,7 +114,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn show_ui(&mut self, ctx: &egui::Context) {
+    pub fn show_ui(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -210,7 +211,7 @@ impl Editor {
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(&ctx, |ui| {
             DockArea::new(&mut self.dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(
@@ -218,8 +219,12 @@ impl Editor {
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
                         nodes: EntityNode::from_world(&self.world),
-                        world: &mut self.world,
                         gizmo: &mut self.gizmo,
+                        tex_size: self.size,
+                        camera: &mut self.camera,
+                        resize_signal: &mut self.resize_signal,
+                        world: &mut self.world,
+                        selected_entity: &mut self.selected_entity,
                     },
                 );
         });
