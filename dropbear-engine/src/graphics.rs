@@ -98,7 +98,7 @@ impl<'a> Graphics<'a> {
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Texture::DEPTH_FORMAT,
                         depth_write_enabled: true,
-                        depth_compare: CompareFunction::Less,
+                        depth_compare: CompareFunction::Greater,
                         stencil: StencilState::default(),
                         bias: DepthBiasState::default(),
                     }),
@@ -133,7 +133,7 @@ impl<'a> Graphics<'a> {
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.state.depth_texture.view,
                     depth_ops: Some(Operations {
-                        load: LoadOp::Clear(1.0),
+                        load: LoadOp::Clear(0.0),
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,

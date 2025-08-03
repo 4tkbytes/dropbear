@@ -200,14 +200,15 @@ impl Camera {
 
     pub fn move_right(&mut self) {
         let forward = (self.target - self.eye).normalize();
-        let right = forward.cross(self.up).normalize();
+        // LH: right = up.cross(forward)
+        let right = self.up.cross(forward).normalize();
         self.eye += right * self.speed;
         self.target += right * self.speed;
     }
 
     pub fn move_left(&mut self) {
         let forward = (self.target - self.eye).normalize();
-        let right = forward.cross(self.up).normalize();
+        let right = self.up.cross(forward).normalize();
         self.eye -= right * self.speed;
         self.target -= right * self.speed;
     }
