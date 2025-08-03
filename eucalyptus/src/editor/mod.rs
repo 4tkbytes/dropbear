@@ -10,18 +10,16 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use dropbear_engine::{
-    camera::Camera, scene::SceneCommand, 
-};
+use dropbear_engine::{camera::Camera, scene::SceneCommand};
 use egui::{self, Context};
+use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
+use egui_toast_fork::{ToastOptions, Toasts};
 use hecs::World;
 use log;
+use once_cell::sync::Lazy;
 use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
-use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use egui_toast_fork::{ToastOptions, Toasts};
-use once_cell::sync::Lazy;
 
 use crate::states::{EntityNode, PROJECT};
 
@@ -46,7 +44,6 @@ pub struct Editor {
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
     // is_cursor_locked: bool,
-
     window: Option<Arc<Window>>,
 
     show_new_project: bool,

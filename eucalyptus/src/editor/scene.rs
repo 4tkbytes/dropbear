@@ -6,10 +6,11 @@ use dropbear_engine::{
     graphics::{Graphics, Shader},
     scene::{Scene, SceneCommand},
 };
+use glam::DVec3;
 use log;
-use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+// use nalgebra::{Point3, Vector3};
 use wgpu::Color;
-use nalgebra::{Point3, Vector3};
+use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 use super::*;
 use crate::states::{Node, RESOURCES, ScriptComponent};
@@ -57,12 +58,12 @@ impl Scene for Editor {
             log::warn!("cube path is empty :(")
         }
 
-        let aspect = self.size.width as f32 / self.size.height as f32;
+        let aspect = self.size.width as f64 / self.size.height as f64;
         let camera = Camera::new(
             graphics,
-            Point3::new(0.0, 1.0, 2.0),
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::y(),
+            DVec3::new(0.0, 1.0, 2.0),
+            DVec3::new(0.0, 0.0, 0.0),
+            DVec3::Y,
             aspect,
             45.0,
             0.1,
@@ -75,11 +76,7 @@ impl Scene for Editor {
         let model_layout = graphics.create_model_uniform_bind_group_layout();
         let pipeline = graphics.create_render_pipline(
             &shader,
-            vec![
-                texture_bind_group,
-                camera.layout(),
-                &model_layout,
-            ],
+            vec![texture_bind_group, camera.layout(), &model_layout],
         );
 
         self.camera = camera;
@@ -99,21 +96,21 @@ impl Scene for Editor {
         // }
 
         // if self.is_cursor_locked {
-            for key in &self.pressed_keys {
-                match key {
-                    KeyCode::KeyW => self.camera.move_forwards(),
-                    KeyCode::KeyA => self.camera.move_left(),
-                    KeyCode::KeyD => self.camera.move_right(),
-                    KeyCode::KeyS => self.camera.move_back(),
-                    KeyCode::ShiftLeft => self.camera.move_down(),
-                    KeyCode::Space => self.camera.move_up(),
-                    _ => {}
-                }
+        for key in &self.pressed_keys {
+            match key {
+                KeyCode::KeyW => self.camera.move_forwards(),
+                KeyCode::KeyA => self.camera.move_left(),
+                KeyCode::KeyD => self.camera.move_right(),
+                KeyCode::KeyS => self.camera.move_back(),
+                KeyCode::ShiftLeft => self.camera.move_down(),
+                KeyCode::Space => self.camera.move_up(),
+                _ => {}
             }
+        }
         // }
 
         let new_size = graphics.state.viewport_texture.size;
-        let new_aspect = new_size.width as f32 / new_size.height as f32;
+        let new_aspect = new_size.width as f64 / new_size.height as f64;
         self.camera.aspect = new_aspect;
 
         self.camera.update(graphics);
@@ -144,7 +141,7 @@ impl Scene for Editor {
             // graphics.state.resize(self.resize_signal.1, self.resize_signal.2);
             // self.resize_signal.0 = false;
         }
-        
+
         self.window = Some(graphics.state.window.clone());
         if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
             toasts.show(graphics.get_egui_context());

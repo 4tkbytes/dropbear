@@ -1,8 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use egui::Context;
+use glam::{DMat4, DQuat, DVec3};
 use image::GenericImageView;
-use nalgebra::{Matrix4, UnitQuaternion, Vector3};
+// use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
     CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass,
@@ -27,7 +28,11 @@ pub struct Graphics<'a> {
 pub const NO_TEXTURE: &'static [u8] = include_bytes!("no-texture.png");
 
 impl<'a> Graphics<'a> {
-    pub fn new(state: &'a mut State, view: &'a TextureView, encoder: &'a mut CommandEncoder) -> Self {
+    pub fn new(
+        state: &'a mut State,
+        view: &'a TextureView,
+        encoder: &'a mut CommandEncoder,
+    ) -> Self {
         let screen_size = (state.config.width as f32, state.config.height as f32);
         Self {
             state,
@@ -391,14 +396,14 @@ impl Texture {
 
 #[derive(Default)]
 pub struct Instance {
-    pub position: Vector3<f32>,
-    pub rotation: UnitQuaternion<f32>,
+    pub position: DVec3,
+    pub rotation: DQuat,
 
     buffer: Option<Buffer>,
 }
 
 impl Instance {
-    pub fn new(position: Vector3<f32>, rotation: UnitQuaternion<f32>) -> Self {
+    pub fn new(position: DVec3, rotation: DQuat) -> Self {
         Self {
             position,
             rotation,
@@ -408,9 +413,9 @@ impl Instance {
 
     pub fn to_raw(&self) -> InstanceRaw {
         let rotation = self.rotation;
-        let model_matrix = Matrix4::new_translation(&self.position) * rotation.to_homogeneous();
+        let model_matrix = DMat4::from_translation(self.position) * DMat4::from_quat(rotation);
         InstanceRaw {
-            model: model_matrix.into(),
+            model: model_matrix.as_mat4().to_cols_array_2d(),
         }
     }
 
@@ -418,9 +423,8 @@ impl Instance {
         self.buffer.as_ref().unwrap()
     }
 
-    pub fn from_matrix(mat: Matrix4<f32>) -> Self {
-        let position = mat.fixed_view::<3, 1>(0, 3).into();
-        let rotation = UnitQuaternion::from_matrix(&mat.fixed_view::<3, 3>(0, 0).into_owned());
+    pub fn from_matrix(mat: DMat4) -> Self {
+        let (_, rotation, position) = mat.to_scale_rotation_translation();
         Instance {
             position,
             rotation,

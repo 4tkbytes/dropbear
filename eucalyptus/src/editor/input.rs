@@ -1,17 +1,13 @@
 use super::*;
-use dropbear_engine::{
-    input::{Controller, Keyboard, Mouse},
-};
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use gilrs::{Button, GamepadId};
 use log;
-use winit::{dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode};
+use winit::{
+    dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
+};
 
 impl Keyboard for Editor {
-    fn key_down(
-        &mut self,
-        key: KeyCode,
-        _event_loop: &ActiveEventLoop,
-    ) {
+    fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         match key {
             // KeyCode::Escape => event_loop.exit(),
             KeyCode::Escape => {
@@ -74,11 +70,7 @@ impl Keyboard for Editor {
         }
     }
 
-    fn key_up(
-        &mut self,
-        key: KeyCode,
-        _event_loop: &ActiveEventLoop,
-    ) {
+    fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         self.pressed_keys.remove(&key);
     }
 }
@@ -107,27 +99,31 @@ impl Mouse for Editor {
 }
 
 impl Controller for Editor {
-    fn button_down(
-        &mut self,
-        _button: Button,
-        _id: GamepadId,
-    ) {
+    fn button_down(&mut self, button: Button, _id: GamepadId) {
+        match button {
+            Button::South => {
+                self.camera.move_up();
+            }
+            Button::East => {
+                self.camera.move_down();
+            }
+            Button::LeftTrigger2 => {
+                self.camera.move_up();
+            }
+            Button::RightTrigger2 => {
+                self.camera.move_down();
+            }
+            _ => {
+                log::debug!("Controller button pressed: {:?}", button);
+            }
+        }
     }
 
-    fn button_up(
-        &mut self,
-        _button: Button,
-        _id: GamepadId,
-    ) {
-    }
+    fn button_up(&mut self, _button: Button, _id: GamepadId) {}
 
-    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {
-        // used for moving the camera
-    }
+    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {}
 
-    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {
-        // used for moving the player
-    }
+    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {}
 
     fn on_connect(&mut self, _id: GamepadId) {}
 

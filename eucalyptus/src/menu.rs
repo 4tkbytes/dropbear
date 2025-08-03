@@ -8,12 +8,14 @@ use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
 };
-use log::{self, debug};
-use gilrs;
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
+use gilrs;
 use git2::Repository;
-use winit::{dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode};
+use log::{self, debug};
+use winit::{
+    dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
+};
 
 use crate::states::{PROJECT, ProjectConfig};
 
@@ -114,8 +116,7 @@ impl MainMenu {
                         } else {
                             Err(anyhow!("Project path not found"))
                         }
-                    }
-                    else {
+                    } else {
                         if !full_path.exists() {
                             fs::create_dir_all(&full_path)
                                 .map_err(|e| anyhow!(e))
@@ -323,22 +324,13 @@ impl Scene for MainMenu {
 }
 
 impl Keyboard for MainMenu {
-    fn key_down(
-        &mut self,
-        _key: KeyCode,
-        _event_loop: &ActiveEventLoop,
-    ) {
+    fn key_down(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {
         // if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
         //     event_loop.exit();
         // }
     }
 
-    fn key_up(
-        &mut self,
-        _key: KeyCode,
-        _event_loop: &ActiveEventLoop,
-    ) {
-    }
+    fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {}
 }
 
 impl Mouse for MainMenu {

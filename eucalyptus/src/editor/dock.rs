@@ -1,19 +1,22 @@
 use super::*;
 use std::{
-    collections::HashSet, fs, sync::{LazyLock, Mutex}
+    collections::HashSet,
+    fs,
+    sync::{LazyLock, Mutex},
 };
 
-use dropbear_engine::{
-    entity::Transform, graphics::NO_TEXTURE
-};
+use dropbear_engine::{entity::Transform, graphics::NO_TEXTURE};
 use egui;
-use egui_extras;
-use log;
 use egui_dock_fork::TabViewer;
+use egui_extras;
 use egui_toast_fork::{Toast, ToastKind};
-use nalgebra::{UnitQuaternion, Vector3};
+use log;
+// use nalgebra::{Matrix4, Perspective3, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
-use transform_gizmo_egui::{mint::RowMatrix4, Gizmo, GizmoConfig, GizmoExt, GizmoMode};
+use transform_gizmo_egui::{
+    Gizmo, GizmoConfig, GizmoExt, GizmoMode,
+    math::{DMat4, DVec3},
+};
 
 use crate::{
     APP_INFO,
@@ -93,67 +96,108 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let new_tex_width = size.x.max(1.0) as u32;
                 let new_tex_height = size.y.max(1.0) as u32;
 
-                if self.tex_size.width != new_tex_height || self.tex_size.height != new_tex_height {
+                if self.tex_size.width != new_tex_width || self.tex_size.height != new_tex_height {
                     // log::debug!("Sending resize signal");
                     *self.resize_signal = (true, new_tex_width, new_tex_height);
 
                     self.tex_size.width = new_tex_width;
                     self.tex_size.height = new_tex_height;
 
-                    let new_aspect = new_tex_width as f32 / new_tex_height as f32;
+                    let new_aspect = new_tex_width as f64 / new_tex_height as f64;
                     self.camera.aspect = new_aspect;
                 }
+
+                let image_response = ui.add(
+                    egui::Image::new((
+                        self.view,
+                        [self.tex_size.width as f32, self.tex_size.height as f32].into(),
+                    ))
+                    .sense(egui::Sense::click_and_drag()),
+                );
+                log::debug!("Viewport rect: {:?}", image_response.rect);
+                log::debug!(
+                    "Camera matrices - View: {:?}, Proj: {:?}",
+                    self.camera.view_mat,
+                    self.camera.proj_mat
+                );
 
                 // TODO: Figure out how to get the guizmos working because this is fucking annoying to deal with
                 // Note to self: fuck you >:(
                 // Note to self: ok wow thats pretty rude im trying my best ＞﹏＜
+                // Note to self: finally holy shit i got it working
                 self.gizmo.update_config(GizmoConfig {
-                    view_matrix: RowMatrix4::from(Into::<[[f64; 4]; 4]>::into(self.camera.view_mat.cast::<f64>())),
-                    projection_matrix: RowMatrix4::from(Into::<[[f64; 4]; 4]>::into(self.camera.view_mat.cast::<f64>())),
-                    viewport: ui.clip_rect(),
+                    view_matrix: DMat4::look_at_lh(
+                        DVec3::new(
+                            self.camera.eye.x as f64,
+                            self.camera.eye.y as f64,
+                            self.camera.eye.z as f64,
+                        ),
+                        DVec3::new(
+                            self.camera.target.x as f64,
+                            self.camera.target.y as f64,
+                            self.camera.target.z as f64,
+                        ),
+                        DVec3::new(
+                            self.camera.up.x as f64,
+                            self.camera.up.y as f64,
+                            self.camera.up.z as f64,
+                        ),
+                    )
+                    .into(),
+                    projection_matrix: DMat4::perspective_infinite_reverse_lh(
+                        self.camera.fov_y as f64,
+                        self.camera.aspect as f64,
+                        self.camera.znear as f64,
+                    )
+                    .into(),
+                    viewport: image_response.rect,
                     modes: GizmoMode::all(),
                     orientation: transform_gizmo_egui::GizmoOrientation::Global,
                     ..Default::default()
-                });                
+                });
 
-                let image_response = ui.add(
-                    egui::Image::new((self.view, [self.tex_size.width as f32, self.tex_size.height as f32].into()))
-                        .sense(egui::Sense::click_and_drag())
-                );
-                log::debug!("Viewport rect: {:?}", image_response.rect);
-                log::debug!("Camera matrices - View: {:?}, Proj: {:?}", self.camera.view_mat, self.camera.proj_mat);
+                println!("View Matrix: {:#?}", self.camera.view_mat);
+                println!("Projection Matrix: {:#?}", self.camera.proj_mat);
 
                 if let Some(entity_id) = self.selected_entity {
-        if let Ok(transform) = self.world.query_one_mut::<&mut Transform>(*entity_id) {
-            let gizmo_transform = transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                transform.scale.cast::<f64>(), 
-                transform.rotation.cast::<f64>(), 
-                transform.position.cast::<f64>(),
-            );
+                    log::debug!("Entity selected: {:?}", entity_id);
+                    if let Ok(transform) =
+                        self.world.query_one_mut::<&mut Transform>(*entity_id)
+                    {
+                        log::debug!(
+                            "Transform - pos: {:?}, rot: {:?}, scale: {:?}",
+                            transform.position,
+                            transform.rotation,
+                            transform.scale
+                        );
 
-            if let Some((result, new_transforms)) = self.gizmo.interact(ui, &[gizmo_transform]) {
-                if let Some(new_transform) = new_transforms.first() {
-                    transform.position = Vector3::from([
-                        new_transform.translation.x as f32,
-                        new_transform.translation.y as f32,
-                        new_transform.translation.z as f32,
-                    ]);
-                    transform.rotation = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                        new_transform.rotation.s as f32,
-                        new_transform.rotation.v.x as f32, 
-                        new_transform.rotation.v.y as f32, 
-                        new_transform.rotation.v.z as f32
-                    ));
-                    transform.scale = Vector3::from([
-                        new_transform.scale.x as f32,
-                        new_transform.scale.y as f32,
-                        new_transform.scale.z as f32,
-                    ]);
-                    log::debug!("Gizmo updated entity {:?}: {:?}", entity_id, result);
+                        let gizmo_transform =
+                            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                transform.scale,
+                                transform.rotation,
+                                transform.position,
+                            );
+
+                        log::debug!("Gizmo transform created: {:?}", gizmo_transform);
+                        log::debug!("Calling gizmo.interact...");
+
+                        if let Some((result, new_transforms)) =
+                            self.gizmo.interact(ui, &[gizmo_transform])
+                        {
+                            log::debug!("Gizmo interaction successful: {:?}", result);
+                            if let Some(new_transform) = new_transforms.first() {
+                                transform.position = new_transform.translation.into();
+                                transform.rotation = new_transform.rotation.into();
+                                transform.scale = new_transform.scale.into();
+                                log::debug!("Gizmo updated entity {:?}: {:?}", entity_id, result);
+                            }
+                        } else { }
+                    } else {
+                        log::warn!("Unable to query entity: {:?}", entity_id);
+                    }
+                } else {
+                    log::debug!("No entity selected");
                 }
-            }
-        }
-    }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");

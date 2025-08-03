@@ -13,10 +13,10 @@ anyhow = "1.0"
 app_dirs2 = "2.5"
 async-trait = "0.1"
 bytemuck = { version = "1.23", features = ["derive"] }
-chrono = "0.4.41"
+chrono = "0.4"
 dropbear-engine = { path = "dropbear-engine" }
 egui = "0.32"
-egui-toast-fork = "0.18.0"
+egui-toast-fork = "0.18"
 egui-wgpu = { version = "0.32", features = ["winit"] }
 egui-winit = "0.32"
 egui_dnd = "0.13"
@@ -25,12 +25,14 @@ egui_extras = { version = "0.32", features = ["all_loaders"] }
 env_logger = "0.11"
 futures = "0.3"
 gilrs = "0.11"
-git2 = "0.20.2"
+git2 = "0.20"
+glam = "0.30"
 hecs = {version = "0.10", features = ["serde"]}
 log = "0.4"
 mint = "0.5"
 model_to_image = "0.1"
-nalgebra = { version = "0.33", features = ["mint"] }
+# changing to glam coz nalgebra is too much of a hassle
+# nalgebra = { version = "0.33", features = ["mint"] }
 num-traits = "0.2"
 once_cell = "1.21"
 pollster = "0.4"
