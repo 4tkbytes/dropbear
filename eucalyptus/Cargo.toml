@@ -25,6 +25,7 @@ gilrs.workspace = true
 git2.workspace = true
 hecs.workspace = true
 log.workspace = true
+model_to_image.workspace = true
 nalgebra.workspace = true
 once_cell.workspace = true
 rfd.workspace = true

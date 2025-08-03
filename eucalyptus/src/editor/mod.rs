@@ -45,7 +45,7 @@ pub struct Editor {
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
-    is_cursor_locked: bool,
+    // is_cursor_locked: bool,
 
     window: Option<Arc<Window>>,
 
@@ -55,6 +55,7 @@ pub struct Editor {
     pending_scene_switch: bool,
 
     gizmo: Gizmo,
+    selected_entity: Option<hecs::Entity>,
 
     resize_signal: (bool, u32, u32),
 }
@@ -87,7 +88,7 @@ impl Editor {
             color: Color::default(),
             is_viewport_focused: false,
             pressed_keys: HashSet::new(),
-            is_cursor_locked: false,
+            // is_cursor_locked: false,
             window: None,
             world: World::new(),
             show_new_project: false,
@@ -95,7 +96,8 @@ impl Editor {
             project_path: None,
             pending_scene_switch: false,
             gizmo: Gizmo::default(),
-            resize_signal: (false, 1, 1)
+            resize_signal: (false, 1, 1),
+            selected_entity: None,
         }
     }
 
@@ -224,6 +226,8 @@ impl Editor {
                         tex_size: self.size,
                         camera: &mut self.camera,
                         resize_signal: &mut self.resize_signal,
+                        world: &mut self.world,
+                        selected_entity: &mut self.selected_entity,
                     },
                 );
         });

@@ -94,11 +94,11 @@ impl Scene for Editor {
             self.is_viewport_focused = false;
         }
 
-        if self.is_viewport_focused {
-            self.is_cursor_locked = true;
-        }
+        // if self.is_viewport_focused {
+        //     self.is_cursor_locked = true;
+        // }
 
-        if self.is_cursor_locked {
+        // if self.is_cursor_locked {
             for key in &self.pressed_keys {
                 match key {
                     KeyCode::KeyW => self.camera.move_forwards(),
@@ -110,7 +110,7 @@ impl Scene for Editor {
                     _ => {}
                 }
             }
-        }
+        // }
 
         let new_size = graphics.state.viewport_texture.size;
         let new_aspect = new_size.width as f32 / new_size.height as f32;
@@ -118,9 +118,9 @@ impl Scene for Editor {
 
         self.camera.update(graphics);
 
-        if !self.is_cursor_locked {
-            self.window.as_mut().unwrap().set_cursor_visible(true);
-        }
+        // if !self.is_cursor_locked {
+        //     self.window.as_mut().unwrap().set_cursor_visible(true);
+        // }
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {

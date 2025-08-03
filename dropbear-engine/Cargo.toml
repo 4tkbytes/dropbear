@@ -25,16 +25,11 @@ mint.workspace = true
 nalgebra.workspace = true
 num-traits.workspace = true
 pollster.workspace = true
+russimp.workspace = true
 spin_sleep.workspace = true
 tokio.workspace = true
 wgpu.workspace = true
 winit.workspace = true
-
-[target.'cfg(any(target_arch = "aarch64", target_arch = "arm"))'.dependencies]
-russimp = "3.2"
-
-[target.'cfg(not(any(target_arch = "aarch64", target_arch = "arm")))'.dependencies]
-russimp.workspace = true
 
 [dependencies.image]
 version = "0.25"

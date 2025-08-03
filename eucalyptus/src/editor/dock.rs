@@ -1,20 +1,19 @@
 use super::*;
 use std::{
-    collections::HashSet,
-    fs,
-    sync::{LazyLock, Mutex},
+    collections::HashSet, fs, sync::{LazyLock, Mutex}
 };
 
 use dropbear_engine::{
-    graphics::NO_TEXTURE,
+    entity::Transform, graphics::NO_TEXTURE
 };
 use egui;
 use egui_extras;
 use log;
 use egui_dock_fork::TabViewer;
 use egui_toast_fork::{Toast, ToastKind};
+use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
-use transform_gizmo_egui::{Gizmo, GizmoConfig};
+use transform_gizmo_egui::{mint::RowMatrix4, Gizmo, GizmoConfig, GizmoExt, GizmoMode};
 
 use crate::{
     APP_INFO,
@@ -36,9 +35,9 @@ pub struct EditorTabViewer<'a> {
     pub gizmo: &'a mut Gizmo,
     pub camera: &'a mut Camera,
     pub resize_signal: &'a mut (bool, u32, u32),
+    pub world: &'a mut hecs::World,
+    pub selected_entity: &'a mut Option<hecs::Entity>,
 }
-
-pub const SELECTED: LazyLock<Mutex<Option<hecs::Entity>>> = LazyLock::new(|| Mutex::new(None));
 
 pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
@@ -105,27 +104,67 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     self.camera.aspect = new_aspect;
                 }
 
-                ui.image((self.view, [self.tex_size.width as f32, self.tex_size.height as f32].into()));
-
-                // self.gizmo.update_config(GizmoConfig {
-                //     view_matrix: self.camera.view_mat.into(),
-                //     projection_matrix: self.camera.proj_mat.into(),
-                // });
                 // TODO: Figure out how to get the guizmos working because this is fucking annoying to deal with
                 // Note to self: fuck you >:(
+                // Note to self: ok wow thats pretty rude im trying my best ＞﹏＜
+                self.gizmo.update_config(GizmoConfig {
+                    view_matrix: RowMatrix4::from(Into::<[[f64; 4]; 4]>::into(self.camera.view_mat.cast::<f64>())),
+                    projection_matrix: RowMatrix4::from(Into::<[[f64; 4]; 4]>::into(self.camera.view_mat.cast::<f64>())),
+                    viewport: ui.clip_rect(),
+                    modes: GizmoMode::all(),
+                    orientation: transform_gizmo_egui::GizmoOrientation::Global,
+                    ..Default::default()
+                });                
+
+                let image_response = ui.add(
+                    egui::Image::new((self.view, [self.tex_size.width as f32, self.tex_size.height as f32].into()))
+                        .sense(egui::Sense::click_and_drag())
+                );
+                log::debug!("Viewport rect: {:?}", image_response.rect);
+                log::debug!("Camera matrices - View: {:?}, Proj: {:?}", self.camera.view_mat, self.camera.proj_mat);
+
+                if let Some(entity_id) = self.selected_entity {
+        if let Ok(transform) = self.world.query_one_mut::<&mut Transform>(*entity_id) {
+            let gizmo_transform = transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                transform.scale.cast::<f64>(), 
+                transform.rotation.cast::<f64>(), 
+                transform.position.cast::<f64>(),
+            );
+
+            if let Some((result, new_transforms)) = self.gizmo.interact(ui, &[gizmo_transform]) {
+                if let Some(new_transform) = new_transforms.first() {
+                    transform.position = Vector3::from([
+                        new_transform.translation.x as f32,
+                        new_transform.translation.y as f32,
+                        new_transform.translation.z as f32,
+                    ]);
+                    transform.rotation = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                        new_transform.rotation.s as f32,
+                        new_transform.rotation.v.x as f32, 
+                        new_transform.rotation.v.y as f32, 
+                        new_transform.rotation.v.z as f32
+                    ));
+                    transform.scale = Vector3::from([
+                        new_transform.scale.x as f32,
+                        new_transform.scale.y as f32,
+                        new_transform.scale.z as f32,
+                    ]);
+                    log::debug!("Gizmo updated entity {:?}: {:?}", entity_id, result);
+                }
+            }
+        }
+    }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
                 // TODO: deal with show_entity_tree and figure out how to convert hecs::World
                 // to EntityNodes and to write it to file
-                {
-                    show_entity_tree(
-                        ui,
-                        &mut self.nodes,
-                        &mut SELECTED.lock().unwrap(),
-                        "Model Entity Asset List",
-                    );
-                }
+                show_entity_tree(
+                    ui,
+                    &mut self.nodes,
+                    &mut self.selected_entity,
+                    "Model Entity Asset List",
+                );
             }
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
@@ -168,6 +207,24 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     file_name.clone(),
                                                     fs::read(&model_thumbnail).unwrap(),
                                                 );
+
+                                                // let mut model = match model_to_image::ModelToImageBuilder::new(&file.path)
+                                                //     .with_size((800, 800))
+                                                //     .build() {
+                                                //         Ok(v) => v,
+                                                //         Err(e) => panic!("Error occurred while loading file from path: {}", e),
+                                                //     };
+                                                // let _ = model.render();
+                                                // let buffer = model.output();
+                                                // let bytes = buffer.bytes()
+                                                //     .filter_map(Result::ok)
+                                                //     .collect::<Vec<u8>>();
+                                                // let file_name =
+                                                //     file.name.clone();
+                                                // let image = egui::Image::from_bytes(
+                                                //     file_name,
+                                                //     bytes,
+                                                // );
                                                 assets.push((image, file.name.clone()))
                                             }
                                             ResourceType::Texture => {

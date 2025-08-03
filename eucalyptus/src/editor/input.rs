@@ -84,21 +84,21 @@ impl Keyboard for Editor {
 }
 
 impl Mouse for Editor {
-    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if self.is_cursor_locked {
-            if let Some(window) = &self.window {
-                let size = window.inner_size();
-                let center =
-                    PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+    fn mouse_move(&mut self, _position: PhysicalPosition<f64>) {
+        // // if self.is_cursor_locked {
+        //     if let Some(window) = &self.window {
+        //         let size = window.inner_size();
+        //         let center =
+        //             PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
 
-                let dx = position.x - center.x;
-                let dy = position.y - center.y;
-                self.camera.track_mouse_delta(dx as f32, dy as f32);
+        //         let dx = position.x - center.x;
+        //         let dy = position.y - center.y;
+        //         self.camera.track_mouse_delta(dx as f32, dy as f32);
 
-                window.set_cursor_position(center).ok();
-                window.set_cursor_visible(false);
-            }
-        }
+        //         window.set_cursor_position(center).ok();
+        //         window.set_cursor_visible(false);
+        //     }
+        // // }
     }
 
     fn mouse_down(&mut self, _button: MouseButton) {}
