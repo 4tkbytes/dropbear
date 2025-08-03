@@ -1,7 +1,6 @@
 use super::*;
 use std::{
     collections::HashSet,
-    fs,
     sync::{LazyLock, Mutex},
 };
 
@@ -11,7 +10,6 @@ use egui_dock_fork::TabViewer;
 use egui_extras;
 use egui_toast_fork::{Toast, ToastKind};
 use log;
-// use nalgebra::{Matrix4, Perspective3, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
     Gizmo, GizmoConfig, GizmoExt, GizmoMode,
@@ -40,6 +38,50 @@ pub struct EditorTabViewer<'a> {
     pub resize_signal: &'a mut (bool, u32, u32),
     pub world: &'a mut hecs::World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
+}
+
+impl<'a> EditorTabViewer<'a> {
+    fn screen_to_world_coords(
+        &self,
+        screen_pos: egui::Pos2,
+        viewport_rect: egui::Rect,
+    ) -> (glam::DVec3, glam::DVec3) {
+        let viewport_width = viewport_rect.width() as f64;
+        let viewport_height = viewport_rect.height() as f64;
+        
+        let ndc_x = 2.0 * (screen_pos.x as f64 - viewport_rect.min.x as f64) / viewport_width - 1.0;
+        let ndc_y = 1.0 - 2.0 * (screen_pos.y as f64 - viewport_rect.min.y as f64) / viewport_height;
+        
+        let inv_view = self.camera.view_mat.inverse();
+        let inv_proj = self.camera.proj_mat.inverse();
+        
+        let clip_near = glam::DVec4::new(ndc_x, ndc_y, 0.0, 1.0);
+        let clip_far = glam::DVec4::new(ndc_x, ndc_y, 1.0, 1.0);
+        
+        let view_near = inv_proj * clip_near;
+        let view_far = inv_proj * clip_far;
+        
+        let world_near = inv_view * glam::DVec4::new(view_near.x, view_near.y, view_near.z, 1.0);
+        let world_far = inv_view * glam::DVec4::new(view_far.x, view_far.y, view_far.z, 1.0);
+        
+        let world_near = world_near.truncate() / world_near.w;
+        let world_far = world_far.truncate() / world_far.w;
+        
+        (world_near, world_far)
+    }
+
+    // Add a debug function to check camera state
+    fn debug_camera_state(&self) {
+        log::debug!("Camera state:");
+        log::debug!("  Eye: {:?}", self.camera.eye);
+        log::debug!("  Target: {:?}", self.camera.target);
+        log::debug!("  Up: {:?}", self.camera.up);
+        log::debug!("  FOV Y: {}", self.camera.fov_y);
+        log::debug!("  Aspect: {}", self.camera.aspect);
+        log::debug!("  Z Near: {}", self.camera.znear);
+        log::debug!("  Proj Mat finite: {}", self.camera.proj_mat.is_finite());
+        log::debug!("  View Mat finite: {}", self.camera.view_mat.is_finite());
+    }
 }
 
 pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
@@ -97,7 +139,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let new_tex_height = size.y.max(1.0) as u32;
 
                 if self.tex_size.width != new_tex_width || self.tex_size.height != new_tex_height {
-                    // log::debug!("Sending resize signal");
                     *self.resize_signal = (true, new_tex_width, new_tex_height);
 
                     self.tex_size.width = new_tex_width;
@@ -114,12 +155,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ))
                     .sense(egui::Sense::click_and_drag()),
                 );
-                log::debug!("Viewport rect: {:?}", image_response.rect);
-                log::debug!(
-                    "Camera matrices - View: {:?}, Proj: {:?}",
-                    self.camera.view_mat,
-                    self.camera.proj_mat
-                );
+
+                if image_response.clicked() {
+                    if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                        self.debug_camera_state();
+
+                        let (ray_origin, ray_dir) = self.screen_to_world_coords(click_pos, image_response.rect);
+                        log::debug!("Click pos: {:?}, viewport rect: {:?}", click_pos, image_response.rect);
+                        log::debug!("Ray origin: {:?}, direction: {:?}", ray_origin, ray_dir);
+                    }
+                }
 
                 // TODO: Figure out how to get the guizmos working because this is fucking annoying to deal with
                 // Note to self: fuck you >:(
@@ -156,20 +201,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ..Default::default()
                 });
 
-                println!("View Matrix: {:#?}", self.camera.view_mat);
-                println!("Projection Matrix: {:#?}", self.camera.proj_mat);
-
                 if let Some(entity_id) = self.selected_entity {
-                    log::debug!("Entity selected: {:?}", entity_id);
                     if let Ok(transform) =
                         self.world.query_one_mut::<&mut Transform>(*entity_id)
                     {
-                        log::debug!(
-                            "Transform - pos: {:?}, rot: {:?}, scale: {:?}",
-                            transform.position,
-                            transform.rotation,
-                            transform.scale
-                        );
 
                         let gizmo_transform =
                             transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
@@ -178,25 +213,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 transform.position,
                             );
 
-                        log::debug!("Gizmo transform created: {:?}", gizmo_transform);
-                        log::debug!("Calling gizmo.interact...");
-
-                        if let Some((result, new_transforms)) =
+                        if let Some((_result, new_transforms)) =
                             self.gizmo.interact(ui, &[gizmo_transform])
                         {
-                            log::debug!("Gizmo interaction successful: {:?}", result);
                             if let Some(new_transform) = new_transforms.first() {
                                 transform.position = new_transform.translation.into();
                                 transform.rotation = new_transform.rotation.into();
                                 transform.scale = new_transform.scale.into();
-                                log::debug!("Gizmo updated entity {:?}: {:?}", entity_id, result);
                             }
-                        } else { }
-                    } else {
-                        log::warn!("Unable to query entity: {:?}", entity_id);
+                        }
                     }
-                } else {
-                    log::debug!("No entity selected");
                 }
             }
             EditorTab::ModelEntityList => {
@@ -241,34 +267,27 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     &APP_INFO,
                                                 )
                                                 .unwrap();
-                                                let model_thumbnail =
-                                                    ad_dir.join("cube_thumbnail.png");
-                                                let file_name_osstr =
-                                                    model_thumbnail.file_name().unwrap();
-                                                let file_name =
-                                                    file_name_osstr.to_str().unwrap().to_string();
-                                                let image = egui::Image::from_bytes(
-                                                    file_name.clone(),
-                                                    fs::read(&model_thumbnail).unwrap(),
-                                                );
 
-                                                // let mut model = match model_to_image::ModelToImageBuilder::new(&file.path)
-                                                //     .with_size((800, 800))
-                                                //     .build() {
-                                                //         Ok(v) => v,
-                                                //         Err(e) => panic!("Error occurred while loading file from path: {}", e),
-                                                //     };
-                                                // let _ = model.render();
-                                                // let buffer = model.output();
-                                                // let bytes = buffer.bytes()
-                                                //     .filter_map(Result::ok)
-                                                //     .collect::<Vec<u8>>();
-                                                // let file_name =
-                                                //     file.name.clone();
-                                                // let image = egui::Image::from_bytes(
-                                                //     file_name,
-                                                //     bytes,
-                                                // );
+                                                let model_thumbnail =
+                                                    ad_dir.join(format!("{}.png", file.name));
+                                                
+                                                if !model_thumbnail.exists() {
+                                                    // gen image
+                                                    log::debug!("Model thumbnail [{}] does not exist, generating one now", file.name);
+                                                    let mut model = match model_to_image::ModelToImageBuilder::new(&file.path)
+                                                    .with_size((600, 600))
+                                                    .build() {
+                                                        Ok(v) => v,
+                                                        Err(e) => panic!("Error occurred while loading file from path: {}", e),
+                                                    };
+                                                    if let Err(e) = model.render().unwrap().write_to(Some(&ad_dir.join(format!("{}.png", file.name)))) {
+                                                        log::error!("Failed to write model thumbnail for {}: {}", file.name, e);
+                                                    }
+                                                }
+
+                                                let image_uri = model_thumbnail.to_string_lossy().to_string();
+                                                let image = egui::Image::from_uri(format!("file://{}", image_uri));
+
                                                 assets.push((image, file.name.clone()))
                                             }
                                             ResourceType::Texture => {

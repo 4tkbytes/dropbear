@@ -416,7 +416,11 @@ impl ApplicationHandler for App {
                     .render(&mut self.scene_manager, self.delta_time, event_loop)
                     .now_or_never()
                 {
-                    result.unwrap();
+                    match result {
+                        Ok(_) => {},
+                        Err(_) => {
+                        },
+                    }
                 }
 
                 let frame_elapsed = frame_start.elapsed();
