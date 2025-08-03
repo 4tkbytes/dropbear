@@ -13,7 +13,6 @@ readme.workspace = true
 [dependencies]
 anyhow.workspace = true
 app_dirs2.workspace = true
-async-trait.workspace = true
 chrono.workspace = true
 dropbear-engine.workspace = true
 egui-toast-fork.workspace = true
@@ -26,8 +25,7 @@ git2.workspace = true
 glam.workspace = true
 hecs.workspace = true
 log.workspace = true
-model_to_image.workspace = true
-# nalgebra.workspace = true
+# model_to_image.workspace = true
 once_cell.workspace = true
 rfd.workspace = true
 rhai.workspace = true
@@ -37,6 +35,9 @@ tokio.workspace = true
 transform-gizmo-egui.workspace = true
 wgpu.workspace = true
 winit.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["rhai"]
 
 [build-dependencies]
 anyhow = "1.0"
