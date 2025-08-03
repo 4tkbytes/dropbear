@@ -3,12 +3,13 @@ name: Build Executables
 
 on:
   push:
-    tags:
-      - '*'
+    branches: 
+    - '**'
   pull_request: {}
 
 jobs:
   build:
+    if: contains(github.event.head_commit.message, 'jarvis, run github actions')
     name: Build for ${{ matrix.os_name }}
     runs-on: ${{ matrix.os }}
     strategy:
