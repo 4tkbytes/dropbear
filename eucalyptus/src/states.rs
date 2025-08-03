@@ -199,7 +199,7 @@ pub struct Folder {
 }
 
 /// The type of resource
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash)]
 pub enum ResourceType {
     Unknown,
     Model,

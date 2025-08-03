@@ -417,9 +417,8 @@ impl ApplicationHandler for App {
                     .now_or_never()
                 {
                     match result {
-                        Ok(_) => {},
-                        Err(_) => {
-                        },
+                        Ok(_) => {}
+                        Err(_) => {}
                     }
                 }
 

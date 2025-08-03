@@ -2,11 +2,12 @@
 
 Just a list of stuff i need to work on/a list of items i need to implement
 
-- [ ] drag and drop system for the asset viewer
+- [x] drag and drop system for the asset viewer
+- [ ] ability to drag and drop an asset from the viewer to the viewport and get it to spawn
 - [ ] a basic resource inspector
+- [ ] write object locations to file
 - [ ] scripting functionality
 - [ ] global settings page
-- [ ] write object locations to file
 - [ ] menu bar stuff
   - [ ] undo and redo
   - [ ] copy and paste
@@ -15,4 +16,3 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] fix up camera aspect ratio
 - [ ] fix up scaling an object
 - [ ] basic physics
-- [ ] 

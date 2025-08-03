@@ -190,7 +190,7 @@ impl Scene for MainMenu {
                                         log::info!("Loaded project!");
                                         let mut global = PROJECT.write().unwrap();
                                         *global = config;
-                                        println!("Loaded config info: {:#?}", global);
+                                        // println!("Loaded config info: {:#?}", global);
                                         self.scene_command =
                                             SceneCommand::SwitchScene(String::from("editor"));
                                     }

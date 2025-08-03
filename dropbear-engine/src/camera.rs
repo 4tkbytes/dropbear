@@ -122,14 +122,8 @@ impl Camera {
     }
 
     fn build_vp(&mut self) -> DMat4 {
-        let view = DMat4::look_at_lh(
-            self.eye, self.target, self.up
-        );
-        let proj = DMat4::perspective_infinite_reverse_lh(
-            self.fov_y,
-            self.aspect,
-            self.znear
-        );
+        let view = DMat4::look_at_lh(self.eye, self.target, self.up);
+        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y, self.aspect, self.znear);
 
         self.view_mat = view.clone();
         self.proj_mat = proj.clone();
@@ -249,7 +243,7 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
-            view_proj: Mat4::IDENTITY.to_cols_array_2d()
+            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
         }
     }
 }

@@ -4,8 +4,8 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
-use dropbear_engine::{entity::Transform, graphics::NO_TEXTURE};
-use egui;
+use dropbear_engine::entity::Transform;
+use egui::{self};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use egui_toast_fork::{Toast, ToastKind};
@@ -48,29 +48,29 @@ impl<'a> EditorTabViewer<'a> {
     ) -> (glam::DVec3, glam::DVec3) {
         let viewport_width = viewport_rect.width() as f64;
         let viewport_height = viewport_rect.height() as f64;
-        
+
         let ndc_x = 2.0 * (screen_pos.x as f64 - viewport_rect.min.x as f64) / viewport_width - 1.0;
-        let ndc_y = 1.0 - 2.0 * (screen_pos.y as f64 - viewport_rect.min.y as f64) / viewport_height;
-        
+        let ndc_y =
+            1.0 - 2.0 * (screen_pos.y as f64 - viewport_rect.min.y as f64) / viewport_height;
+
         let inv_view = self.camera.view_mat.inverse();
         let inv_proj = self.camera.proj_mat.inverse();
-        
+
         let clip_near = glam::DVec4::new(ndc_x, ndc_y, 0.0, 1.0);
         let clip_far = glam::DVec4::new(ndc_x, ndc_y, 1.0, 1.0);
-        
+
         let view_near = inv_proj * clip_near;
         let view_far = inv_proj * clip_far;
-        
+
         let world_near = inv_view * glam::DVec4::new(view_near.x, view_near.y, view_near.z, 1.0);
         let world_far = inv_view * glam::DVec4::new(view_far.x, view_far.y, view_far.z, 1.0);
-        
+
         let world_near = world_near.truncate() / world_near.w;
         let world_far = world_far.truncate() / world_far.w;
-        
+
         (world_near, world_far)
     }
 
-    // Add a debug function to check camera state
     fn debug_camera_state(&self) {
         log::debug!("Camera state:");
         log::debug!("  Eye: {:?}", self.camera.eye);
@@ -160,8 +160,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
                         self.debug_camera_state();
 
-                        let (ray_origin, ray_dir) = self.screen_to_world_coords(click_pos, image_response.rect);
-                        log::debug!("Click pos: {:?}, viewport rect: {:?}", click_pos, image_response.rect);
+                        let (ray_origin, ray_dir) =
+                            self.screen_to_world_coords(click_pos, image_response.rect);
+                        log::debug!(
+                            "Click pos: {:?}, viewport rect: {:?}",
+                            click_pos,
+                            image_response.rect
+                        );
                         log::debug!("Ray origin: {:?}, direction: {:?}", ray_origin, ray_dir);
                     }
                 }
@@ -202,10 +207,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 });
 
                 if let Some(entity_id) = self.selected_entity {
-                    if let Ok(transform) =
-                        self.world.query_one_mut::<&mut Transform>(*entity_id)
-                    {
-
+                    if let Ok(transform) = self.world.query_one_mut::<&mut Transform>(*entity_id) {
                         let gizmo_transform =
                             transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
                                 transform.scale,
@@ -239,13 +241,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
 
-                let mut assets: Vec<(egui::Image, String)> = Vec::new();
+                let mut assets: Vec<(String, String)> = Vec::new();
                 {
                     let res = RESOURCES.read().unwrap();
 
                     fn recursive_search_nodes_and_attach_thumbnail(
                         res: &Vec<Node>,
-                        assets: &mut Vec<(egui::Image, String)>,
+                        assets: &mut Vec<(String, String)>,
                         logged: &mut HashSet<String>,
                     ) {
                         for node in res {
@@ -270,33 +272,55 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                 let model_thumbnail =
                                                     ad_dir.join(format!("{}.png", file.name));
-                                                
+
                                                 if !model_thumbnail.exists() {
                                                     // gen image
-                                                    log::debug!("Model thumbnail [{}] does not exist, generating one now", file.name);
+                                                    log::debug!(
+                                                        "Model thumbnail [{}] does not exist, generating one now",
+                                                        file.name
+                                                    );
                                                     let mut model = match model_to_image::ModelToImageBuilder::new(&file.path)
                                                     .with_size((600, 600))
                                                     .build() {
                                                         Ok(v) => v,
                                                         Err(e) => panic!("Error occurred while loading file from path: {}", e),
                                                     };
-                                                    if let Err(e) = model.render().unwrap().write_to(Some(&ad_dir.join(format!("{}.png", file.name)))) {
-                                                        log::error!("Failed to write model thumbnail for {}: {}", file.name, e);
+                                                    if let Err(e) =
+                                                        model.render().unwrap().write_to(Some(
+                                                            &ad_dir
+                                                                .join(format!("{}.png", file.name)),
+                                                        ))
+                                                    {
+                                                        log::error!(
+                                                            "Failed to write model thumbnail for {}: {}",
+                                                            file.name,
+                                                            e
+                                                        );
                                                     }
                                                 }
 
-                                                let image_uri = model_thumbnail.to_string_lossy().to_string();
-                                                let image = egui::Image::from_uri(format!("file://{}", image_uri));
+                                                let image_uri =
+                                                    model_thumbnail.to_string_lossy().to_string();
+                                                // let image = egui::Image::from_uri(format!(
+                                                //     "file://{}",
+                                                //     image_uri
+                                                // ));
 
-                                                assets.push((image, file.name.clone()))
+                                                assets.push((
+                                                    format!("file://{}", image_uri),
+                                                    file.name.clone(),
+                                                ))
                                             }
                                             ResourceType::Texture => {
-                                                let image = egui::Image::from_bytes(
+                                                // let image = egui::Image::from_bytes(
+                                                //     file.name.clone(),
+                                                //     std::fs::read(&file.path)
+                                                //         .unwrap_or(NO_TEXTURE.to_vec()),
+                                                // );
+                                                assets.push((
+                                                    file.path.to_string_lossy().to_string(),
                                                     file.name.clone(),
-                                                    std::fs::read(&file.path)
-                                                        .unwrap_or(NO_TEXTURE.to_vec()),
-                                                );
-                                                assets.push((image, file.name.clone()))
+                                                ))
                                             }
                                             _ => {
                                                 if file
@@ -310,11 +334,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 {
                                                     continue;
                                                 }
-                                                let image = egui::Image::from_bytes(
-                                                    file.name.clone(),
-                                                    NO_TEXTURE,
-                                                );
-                                                assets.push((image, file.name.clone()))
+                                                // let image = egui::Image::from_bytes(
+                                                //     file.name.clone(),
+                                                //     NO_TEXTURE,
+                                                // );
+                                                assets
+                                                    .push(("NO_TEXTURE".into(), file.name.clone()))
                                             }
                                         }
                                     }
@@ -339,70 +364,80 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
 
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    let columns = 6;
-                    let available_width = ui.available_width();
-                    let min_spacing = 8.0;
-                    let max_spacing = 30.0;
+                    let max_columns = 6;
+                    let available_width = ui.clip_rect().width() - ui.spacing().indent;
+                    let margin = 16.0;
+                    let usable_width = available_width - margin;
                     let label_height = 20.0;
-                    let padding = 8.0; // check it out
+                    let padding = 8.0;
+                    let min_card_width = 60.0;
 
-                    let card_width = ((available_width - max_spacing * (columns as f32 - 1.0))
-                        / columns as f32)
-                        .max(32.0);
-                    let image_size = card_width - label_height;
-                    let spacing = ((available_width - columns as f32 * card_width)
-                        / (columns as f32 - 1.0))
-                        .clamp(min_spacing, max_spacing);
+                    let mut columns = max_columns;
+                    for test_columns in (1..=max_columns).rev() {
+                        let card_width = usable_width / test_columns as f32;
+                        if card_width >= min_card_width {
+                            columns = test_columns;
+                            break;
+                        }
+                    }
+
+                    let card_width = usable_width / columns as f32;
+                    let image_size = (card_width - label_height - padding).max(32.0);
                     let card_height = image_size + label_height + padding;
 
-                    egui::Grid::new("asset_grid")
-                        .num_columns(columns)
-                        .min_col_width(card_width)
-                        .max_col_width(card_width)
-                        .spacing([spacing, spacing])
-                        .show(ui, |ui| {
-                            for (i, (image, asset_name)) in assets.iter().enumerate() {
-                                let card_size = egui::vec2(card_width, card_height);
-                                let (rect, card_response) =
-                                    ui.allocate_exact_size(card_size, egui::Sense::click());
+                    for row_start in (0..assets.len()).step_by(columns) {
+                        let row_end = (row_start + columns).min(assets.len());
+                        let row_items = &mut assets[row_start..row_end];
 
-                                let mut card_ui = ui.new_child(
-                                    egui::UiBuilder::new()
-                                        .max_rect(rect)
-                                        .layout(egui::Layout::top_down(egui::Align::Center)),
-                                );
+                        ui.horizontal(|ui| {
+                            ui.set_max_width(usable_width);
 
-                                let image_response = card_ui.add(
-                                    egui::ImageButton::new(
-                                        image.clone().max_size([image_size, image_size].into()),
-                                    )
-                                    .frame(false),
-                                );
+                            egui_dnd::dnd(ui, format!("asset_row_{}", row_start / columns))
+                                .show_vec(row_items, |ui, (image, asset_name), handle, state| {
+                                    let card_size = egui::vec2(card_width, card_height);
+                                    handle.ui(ui, |ui| {
+                                        let (rect, card_response) =
+                                            ui.allocate_exact_size(card_size, egui::Sense::click());
 
-                                let is_hovered =
-                                    card_response.hovered() || image_response.hovered();
+                                        let mut card_ui = ui.new_child(
+                                            egui::UiBuilder::new().max_rect(rect).layout(
+                                                egui::Layout::top_down(egui::Align::Center),
+                                            ),
+                                        );
 
-                                if is_hovered {
-                                    ui.painter().rect_filled(
-                                        rect,
-                                        6.0, // corner radius
-                                        egui::Color32::from_rgb(60, 60, 80),
-                                    );
-                                }
+                                        let image_response = card_ui.add_sized(
+                                            [image_size, image_size],
+                                            egui::ImageButton::new(image.clone()).frame(false),
+                                        );
 
-                                card_ui.vertical_centered(|ui| {
-                                    ui.label(
-                                        egui::RichText::new(asset_name)
-                                            .strong()
-                                            .color(egui::Color32::WHITE),
-                                    );
+                                        let is_hovered = card_response.hovered()
+                                            || image_response.hovered()
+                                            || state.dragged;
+
+                                        if is_hovered || state.dragged {
+                                            ui.painter().rect_filled(
+                                                rect,
+                                                6.0,
+                                                if state.dragged {
+                                                    egui::Color32::from_rgb(80, 80, 100)
+                                                } else {
+                                                    egui::Color32::from_rgb(60, 60, 80)
+                                                },
+                                            );
+                                        }
+
+                                        card_ui.vertical_centered(|ui| {
+                                            ui.label(
+                                                egui::RichText::new(asset_name.clone())
+                                                    .strong()
+                                                    .color(egui::Color32::WHITE),
+                                            );
+                                        });
+                                    });
                                 });
-
-                                if (i + 1) % columns == 0 {
-                                    ui.end_row();
-                                }
-                            }
                         });
+                        ui.add_space(8.0);
+                    }
                 });
             }
             EditorTab::ResourceInspector => {

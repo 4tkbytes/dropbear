@@ -288,14 +288,13 @@ fn show_entity_tree(
         } => {
             ui.horizontal(|ui| {
                 handle.ui(ui, |ui| {
-                    ui.label("|||");
+                    let header = egui::CollapsingHeader::new(name)
+                        .default_open(!*collapsed)
+                        .show(ui, |ui| {
+                            show_entity_tree(ui, children, selected, name);
+                        });
+                    *collapsed = !header.body_returned.is_some();
                 });
-                let header = egui::CollapsingHeader::new(name)
-                    .default_open(!*collapsed)
-                    .show(ui, |ui| {
-                        show_entity_tree(ui, children, selected, name);
-                    });
-                *collapsed = !header.body_returned.is_some();
             });
         }
     });
