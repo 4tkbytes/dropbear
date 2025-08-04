@@ -3,9 +3,9 @@
 Just a list of stuff i need to work on/a list of items i need to implement
 
 - [x] drag and drop system for the asset viewer
+- [ ] write object locations to file
 - [ ] ability to drag and drop an asset from the viewer to the viewport and get it to spawn
 - [ ] a basic resource inspector
-- [ ] write object locations to file
 - [ ] scripting functionality
 - [ ] global settings page
 - [ ] menu bar stuff

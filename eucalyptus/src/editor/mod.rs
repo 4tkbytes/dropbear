@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use dropbear_engine::{camera::Camera, scene::SceneCommand};
+use dropbear_engine::{camera::Camera, graphics::Graphics, scene::SceneCommand};
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
@@ -21,7 +21,7 @@ use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
-use crate::states::{EntityNode, PROJECT};
+use crate::states::{EntityNode, SceneConfig, SceneEntity, ScriptComponent, PROJECT, SCENES};
 
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
@@ -101,15 +101,90 @@ impl Editor {
     pub fn save_project_config(&self) -> anyhow::Result<()> {
         let mut config = PROJECT.write().unwrap();
         config.dock_layout = Some(self.dock_state.clone());
-        // let project_path = config.project_path.clone();
-        // config.write_to(&PathBuf::from(project_path))
+        self.save_current_scene()?;
         config.write_to_all()
+    }
+
+    /// Save the current world state to the active scene
+    pub fn save_current_scene(&self) -> anyhow::Result<()> {        
+        let mut scenes = SCENES.write().unwrap();
+        
+        // todo: fix this
+        let scene_index = if scenes.is_empty() {
+            panic!("Paradoxical error: Scene is empty despite a scene already loaded?");
+        } else {
+            0
+        };
+
+        let scene = &mut scenes[scene_index];
+        
+        scene.entities.clear();
+        
+        for (id, (adopted, transform)) in self.world
+            .query::<(
+                &dropbear_engine::entity::AdoptedEntity,
+                &dropbear_engine::entity::Transform,
+            )>()
+            .iter()
+        {
+            let script = self.world.get::<&ScriptComponent>(id).ok().map(|s| 
+                crate::states::ScriptComponent {
+                    name: s.name.clone(),
+                    path: s.path.clone(),
+                }
+            );
+
+            let model_path = adopted.model().path.clone();
+            
+            let scene_entity = SceneEntity {
+                model_path,
+                label: adopted.model().label.clone(),
+                transform: *transform,
+                script,
+                entity_id: Some(id),
+            };
+            
+            scene.entities.push(scene_entity);
+        }
+
+        scene.camera = crate::states::SceneCameraConfig {
+            position: [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z],
+            target: [self.camera.target.x, self.camera.target.y, self.camera.target.z],
+            up: [self.camera.up.x, self.camera.up.y, self.camera.up.z],
+            aspect: self.camera.aspect,
+            fov: self.camera.fov_y as f32,
+            near: self.camera.znear as f32,
+            far: self.camera.zfar as f32,
+        };
+
+        log::info!("Saved {} entities to scene '{}'", scene.entities.len(), scene.scene_name);
+        
+        Ok(())
     }
 
     pub fn load_project_config(&mut self) -> anyhow::Result<()> {
         let config = PROJECT.read().unwrap();
+        
         if let Some(layout) = &config.dock_layout {
             self.dock_state = layout.clone();
+        }
+        
+        {
+            let scenes = SCENES.read().unwrap();
+            if let Some(first_scene) = scenes.first() {
+                
+                log::info!("Would load scene: {}", first_scene.scene_name);
+            }
+        }
+        
+        Ok(())
+    }
+
+    pub fn load_scene(&mut self, scene_name: &str, graphics: &Graphics) -> anyhow::Result<()> {
+        let scenes = SCENES.read().unwrap();
+        if let Some(scene) = scenes.iter().find(|s| s.scene_name == scene_name) {
+            let camera = scene.load_into_world(self.world, graphics).unwrap();
+            self.camera = camera;
         }
         Ok(())
     }

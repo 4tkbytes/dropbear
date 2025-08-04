@@ -22,6 +22,7 @@ log.workspace = true
 # nalgebra.workspace = true
 pollster.workspace = true
 russimp.workspace = true
+serde.workspace = true
 spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true

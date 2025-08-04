@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use glam::{DMat4, DQuat, DVec3, Mat4};
+use serde::{Deserialize, Serialize};
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{BindGroup, Buffer, RenderPass, util::DeviceExt};
 
@@ -21,7 +22,7 @@ pub struct AdoptedEntity {
     instance_buffer: Option<Buffer>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize, Copy)]
 pub struct Transform {
     pub position: DVec3,
     pub rotation: DQuat,

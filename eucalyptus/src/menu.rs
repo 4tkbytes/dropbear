@@ -71,10 +71,11 @@ impl MainMenu {
             let folders = [
                 ("git", 0.1, "Creating a git folder..."),
                 ("src", 0.2, "Creating src folder..."),
-                ("resources/models", 0.4, "Creating models folder..."),
-                ("resources/shaders", 0.6, "Creating shader folder..."),
-                ("resources/textures", 0.8, "Creating textures folder..."),
-                ("src2", 0.9, "Creating project config file..."),
+                ("resources/models", 0.3, "Creating models folder..."),
+                ("resources/shaders", 0.4, "Creating shader folder..."),
+                ("resources/textures", 0.5, "Creating textures folder..."),
+                ("src2", 0.6, "Creating project config file..."),
+                ("scenes", 0.7, "Creating the scenes folder"),
             ];
 
             if let Some(path) = &project_path {
@@ -197,7 +198,7 @@ impl Scene for MainMenu {
                                     Err(e) => if e.to_string().contains("missing field") {
                                         self.toast.add(egui_toast_fork::Toast {
                                             kind: egui_toast_fork::ToastKind::Error,
-                                            text: format!("Your project version is not up to date with the current project version. To fix this, // TODO: create a way to backup").into(),
+                                            text: format!("Your project version is not up to date with the current project version").into(),
                                             options: ToastOptions::default()
                                                 .duration_in_seconds(5.0)
                                                 .show_progress(true),

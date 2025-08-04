@@ -12,6 +12,11 @@ use std::{
 };
 
 use chrono::Utc;
+use dropbear_engine::{
+    camera::Camera,
+    entity::{AdoptedEntity, Transform},
+    graphics::Graphics,
+};
 use egui_dock_fork::DockState;
 use hecs;
 use log;
@@ -28,6 +33,9 @@ pub static RESOURCES: Lazy<RwLock<ResourceConfig>> =
     Lazy::new(|| RwLock::new(ResourceConfig::default()));
 
 pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceConfig::default()));
+
+pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = 
+    Lazy::new(|| RwLock::new(Vec::new()));
 
 /// The root config file, responsible for building and other metadata.
 ///
@@ -102,6 +110,7 @@ impl ProjectConfig {
     pub fn load_config_to_memory(&mut self) -> anyhow::Result<()> {
         let project_root = PathBuf::from(&self.project_path);
 
+        // resource config
         match ResourceConfig::read_from(&project_root) {
             Ok(resources) => {
                 let mut cfg = RESOURCES.write().unwrap();
@@ -128,6 +137,8 @@ impl ProjectConfig {
                 }
             }
         }
+
+        // src config
         let mut source_config = SOURCE.write().unwrap();
         match SourceConfig::read_from(&project_root) {
             Ok(source) => *source_config = source,
@@ -150,6 +161,54 @@ impl ProjectConfig {
             }
         }
 
+        // scenes
+        let mut scene_configs = SCENES.write().unwrap();
+        scene_configs.clear(); // Clear existing scenes before loading new ones
+        
+        // iterate through each scene file in the folder
+        let scene_folder = &project_root.join("scenes");
+        
+        // Create scenes directory if it doesn't exist
+        if !scene_folder.exists() {
+            fs::create_dir_all(scene_folder)?;
+        }
+        
+        for scene_entry in fs::read_dir(scene_folder)? {
+            let scene_entry = scene_entry?;
+            let path = scene_entry.path();
+
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") {
+                match SceneConfig::read_from(&path) {
+                    Ok(scene) => {
+                        log::debug!("Loaded scene: {}", scene.scene_name);
+                        scene_configs.push(scene);
+                    }
+                    Err(e) => {
+                        if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
+                            if io_err.kind() == std::io::ErrorKind::NotFound {
+                                log::warn!("Scene file {:?} not found", path);
+                            } else {
+                                log::warn!("Failed to load scene file {:?}: {}", path, e);
+                            }
+                        } else {
+                            log::warn!("Failed to load scene file {:?}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no scenes were found, create a default scene
+        if scene_configs.is_empty() {
+            log::info!("No scenes found, creating default scene");
+            let default_scene = SceneConfig::new(
+                "Default".to_string(),
+                scene_folder.join("default.eucs")
+            );
+            default_scene.write_to(&project_root)?;
+            scene_configs.push(default_scene);
+        }
+
         Ok(())
     }
 
@@ -166,6 +225,13 @@ impl ProjectConfig {
         {
             let source_config = SOURCE.read().unwrap();
             source_config.write_to(&path)?;
+        }
+
+        {
+            let scene_configs = SCENES.read().unwrap();
+            for scene in scene_configs.iter() {
+                scene.write_to(&path)?;
+            }
         }
 
         self.write_to(&path)?;
@@ -375,7 +441,7 @@ pub enum EntityNode {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptComponent {
     pub name: String,
     pub path: PathBuf,
@@ -429,5 +495,169 @@ impl EntityNode {
         }
 
         nodes
+    }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct SceneConfig {
+    pub scene_name: String,
+    pub path: PathBuf,
+    pub entities: Vec<SceneEntity>,
+    pub camera: SceneCameraConfig,
+    // todo later
+    // pub settings: SceneSettings,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SceneCameraConfig {
+    pub position: [f64; 3],
+    pub target: [f64; 3],
+    pub up: [f64; 3],
+    pub aspect: f64,
+    pub fov: f32,
+    pub near: f32,
+    pub far: f32,
+}
+
+impl Default for SceneCameraConfig {
+    fn default() -> Self {
+        Self {
+            position: [0.0, 1.0, 2.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            aspect: 16.0 / 9.0,
+            fov: 45.0,
+            near: 0.1,
+            far: 100.0,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SceneEntity {
+    pub model_path: PathBuf,
+    pub label: String,
+    pub transform: Transform,
+    pub script: Option<ScriptComponent>,
+    #[serde(skip)]
+    #[allow(dead_code)]
+    pub entity_id: Option<hecs::Entity>,
+}
+
+impl SceneConfig {
+    /// Creates a new instance of the scene config
+    pub fn new(scene_name: String, path: PathBuf) -> Self {
+        Self {
+            scene_name,
+            path,
+            entities: Vec::new(),
+            camera: SceneCameraConfig::default(),
+        }
+    }
+
+    /// Write the scene config to a .eucs file
+    pub fn write_to(&self, project_path: &PathBuf) -> anyhow::Result<()> {
+        let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
+            .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
+
+        let scenes_dir = project_path.join("scenes");
+        fs::create_dir_all(&scenes_dir)?;
+
+        let config_path = scenes_dir.join(format!("{}.eucs", self.scene_name));
+        fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Read a scene config from a .eucs file
+    pub fn read_from(scene_path: &PathBuf) -> anyhow::Result<Self> {
+        let ron_str = fs::read_to_string(scene_path)?;
+        let mut config: SceneConfig = ron::de::from_str(&ron_str)
+            .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
+
+        config.path = scene_path.clone();
+        Ok(config)
+    }
+
+    pub fn from_world(world: &hecs::World, scene_name: String, camera: &Camera) -> Self {
+        let mut entities = Vec::new();
+
+        for (id, (adopted, transform)) in world.query::<(&AdoptedEntity, &Transform)>().iter() {
+            let script = world
+                .get::<&ScriptComponent>(id)
+                .ok()
+                .map(|s| ScriptComponent {
+                    name: s.name.clone(),
+                    path: s.path.clone(),
+                });
+
+            let model_path = adopted.model().path.clone();
+
+            entities.push(SceneEntity {
+                model_path,
+                label: adopted.model().label.clone(),
+                transform: *transform,
+                script,
+                entity_id: Some(id),
+            });
+        }
+
+        Self {
+            scene_name,
+            path: PathBuf::new(),
+            entities,
+            camera: SceneCameraConfig {
+                position: [camera.eye.x, camera.eye.y, camera.eye.z],
+                target: [camera.target.x, camera.target.y, camera.target.z],
+                up: [camera.up.x, camera.up.y, camera.up.z],
+                aspect: camera.aspect,
+                fov: camera.fov_y as f32,
+                near: camera.znear as f32,
+                far: camera.zfar as f32,
+            },
+        }
+    }
+
+    pub fn load_into_world(
+        &self,
+        world: &mut hecs::World,
+        graphics: &Graphics,
+    ) -> anyhow::Result<Camera> {
+        // todo: prompt user about clearing world
+        world.clear();
+
+        for entity_config in &self.entities {
+            let adopted = AdoptedEntity::new(
+                graphics,
+                &entity_config.model_path,
+                Some(&entity_config.label),
+            )?;
+
+            let transform = entity_config.transform;
+
+            if let Some(script_config) = &entity_config.script {
+                let script = ScriptComponent {
+                    name: script_config.name.clone(),
+                    path: script_config.path.clone()
+                };
+                world.spawn((adopted, transform, script));
+            } else {
+                world.spawn((adopted, transform));
+            }
+        }
+
+        let camera = Camera::new(
+            graphics,
+            glam::DVec3::from_array(self.camera.position),
+            glam::DVec3::from_array(self.camera.target),
+            glam::DVec3::from_array(self.camera.up),
+            self.camera.aspect,
+            self.camera.fov as f64,
+            self.camera.near as f64,
+            self.camera.far as f64,
+            0.125 as f64,
+            0.002 as f64,
+        );
+
+        Ok(camera)
     }
 }
