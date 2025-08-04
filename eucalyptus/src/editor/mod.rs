@@ -21,7 +21,7 @@ use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
-use crate::states::{EntityNode, SceneConfig, SceneEntity, ScriptComponent, PROJECT, SCENES};
+use crate::states::{EntityNode, SceneEntity, ScriptComponent, PROJECT, SCENES};
 
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
@@ -162,7 +162,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn load_project_config(&mut self) -> anyhow::Result<()> {
+    pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<Camera> {
         let config = PROJECT.read().unwrap();
         
         if let Some(layout) = &config.dock_layout {
@@ -172,21 +172,13 @@ impl Editor {
         {
             let scenes = SCENES.read().unwrap();
             if let Some(first_scene) = scenes.first() {
-                
-                log::info!("Would load scene: {}", first_scene.scene_name);
+                let result = first_scene.load_into_world(&mut self.world, graphics)?;
+                log::info!("Successfully loaded scene with {} entities", first_scene.entities.len());
+                return Ok(result);
             }
         }
         
-        Ok(())
-    }
-
-    pub fn load_scene(&mut self, scene_name: &str, graphics: &Graphics) -> anyhow::Result<()> {
-        let scenes = SCENES.read().unwrap();
-        if let Some(scene) = scenes.iter().find(|s| s.scene_name == scene_name) {
-            let camera = scene.load_into_world(self.world, graphics).unwrap();
-            self.camera = camera;
-        }
-        Ok(())
+        return Err(anyhow::anyhow!("Unable to load scene, most likely there are no scenes? I don't know check the backlog..."));
     }
 
     pub fn show_ui(&mut self, ctx: &Context) {

@@ -1,12 +1,10 @@
 use std::path::PathBuf;
 
 use dropbear_engine::{
-    camera::Camera,
     entity::{AdoptedEntity, Transform},
     graphics::{Graphics, Shader},
     scene::{Scene, SceneCommand},
 };
-use glam::DVec3;
 use log;
 // use nalgebra::{Point3, Vector3};
 use wgpu::Color;
@@ -17,7 +15,7 @@ use crate::states::{Node, RESOURCES, ScriptComponent};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut Graphics) {
-        let _ = self.load_project_config();
+        let camera = self.load_project_config(graphics).unwrap();
 
         let shader = Shader::new(
             graphics,
@@ -58,19 +56,19 @@ impl Scene for Editor {
             log::warn!("cube path is empty :(")
         }
 
-        let aspect = self.size.width as f64 / self.size.height as f64;
-        let camera = Camera::new(
-            graphics,
-            DVec3::new(0.0, 1.0, 2.0),
-            DVec3::new(0.0, 0.0, 0.0),
-            DVec3::Y,
-            aspect,
-            45.0,
-            0.1,
-            100.0,
-            0.125,
-            0.002,
-        );
+        // let aspect = self.size.width as f64 / self.size.height as f64;
+        // let camera = Camera::new(
+        //     graphics,
+        //     DVec3::new(0.0, 1.0, 2.0),
+        //     DVec3::new(0.0, 0.0, 0.0),
+        //     DVec3::Y,
+        //     aspect,
+        //     45.0,
+        //     0.1,
+        //     100.0,
+        //     0.125,
+        //     0.002,
+        // );
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();

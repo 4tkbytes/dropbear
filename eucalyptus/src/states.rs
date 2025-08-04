@@ -578,6 +578,8 @@ impl SceneConfig {
         Ok(config)
     }
 
+    #[allow(dead_code)]
+    // todo: perhaps delete this if not required?
     pub fn from_world(world: &hecs::World, scene_name: String, camera: &Camera) -> Self {
         let mut entities = Vec::new();
 
@@ -623,9 +625,14 @@ impl SceneConfig {
         graphics: &Graphics,
     ) -> anyhow::Result<Camera> {
         // todo: prompt user about clearing world
+        log::info!("Loading scene [{}], clearing world with {} entities", self.scene_name, world.len());
         world.clear();
 
+        log::info!("World cleared, now has {} entities", world.len());
+
         for entity_config in &self.entities {
+            log::debug!("Loading entity: {}", entity_config.label);
+        
             let adopted = AdoptedEntity::new(
                 graphics,
                 &entity_config.model_path,
