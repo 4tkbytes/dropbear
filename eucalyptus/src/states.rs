@@ -34,8 +34,7 @@ pub static RESOURCES: Lazy<RwLock<ResourceConfig>> =
 
 pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceConfig::default()));
 
-pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = 
-    Lazy::new(|| RwLock::new(Vec::new()));
+pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = Lazy::new(|| RwLock::new(Vec::new()));
 
 /// The root config file, responsible for building and other metadata.
 ///
@@ -164,15 +163,15 @@ impl ProjectConfig {
         // scenes
         let mut scene_configs = SCENES.write().unwrap();
         scene_configs.clear(); // Clear existing scenes before loading new ones
-        
+
         // iterate through each scene file in the folder
         let scene_folder = &project_root.join("scenes");
-        
+
         // Create scenes directory if it doesn't exist
         if !scene_folder.exists() {
             fs::create_dir_all(scene_folder)?;
         }
-        
+
         for scene_entry in fs::read_dir(scene_folder)? {
             let scene_entry = scene_entry?;
             let path = scene_entry.path();
@@ -197,14 +196,12 @@ impl ProjectConfig {
                 }
             }
         }
-        
+
         // If no scenes were found, create a default scene
         if scene_configs.is_empty() {
             log::info!("No scenes found, creating default scene");
-            let default_scene = SceneConfig::new(
-                "Default".to_string(),
-                scene_folder.join("default.eucs")
-            );
+            let default_scene =
+                SceneConfig::new("Default".to_string(), scene_folder.join("default.eucs"));
             default_scene.write_to(&project_root)?;
             scene_configs.push(default_scene);
         }
@@ -625,14 +622,18 @@ impl SceneConfig {
         graphics: &Graphics,
     ) -> anyhow::Result<Camera> {
         // todo: prompt user about clearing world
-        log::info!("Loading scene [{}], clearing world with {} entities", self.scene_name, world.len());
+        log::info!(
+            "Loading scene [{}], clearing world with {} entities",
+            self.scene_name,
+            world.len()
+        );
         world.clear();
 
         log::info!("World cleared, now has {} entities", world.len());
 
         for entity_config in &self.entities {
             log::debug!("Loading entity: {}", entity_config.label);
-        
+
             let adopted = AdoptedEntity::new(
                 graphics,
                 &entity_config.model_path,
@@ -644,7 +645,7 @@ impl SceneConfig {
             if let Some(script_config) = &entity_config.script {
                 let script = ScriptComponent {
                     name: script_config.name.clone(),
-                    path: script_config.path.clone()
+                    path: script_config.path.clone(),
                 };
                 world.spawn((adopted, transform, script));
             } else {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use dropbear_engine::scene::SceneCommand;
+use dropbear_engine::{camera::Camera, scene::SceneCommand};
 use egui::Context;
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
 use git2::Repository;
@@ -211,4 +211,40 @@ pub fn show_new_project_window<F>(
             });
         });
     *show_new_project = open;
+}
+
+/// Converts a click on a screen (like a viewport) coordinate relative to the world
+pub fn screen_to_world_coords(
+    camera: &Camera,
+    screen_pos: egui::Pos2,
+    viewport_rect: egui::Rect,
+) -> (glam::DVec3, glam::DVec3) {
+    let viewport_width = viewport_rect.width() as f64;
+    let viewport_height = viewport_rect.height() as f64;
+
+    let ndc_x = 2.0 * (screen_pos.x as f64 - viewport_rect.min.x as f64) / viewport_width - 1.0;
+    let ndc_y = 1.0 - 2.0 * (screen_pos.y as f64 - viewport_rect.min.y as f64) / viewport_height;
+
+    let inv_view = camera.view_mat.inverse();
+    let inv_proj = camera.proj_mat.inverse();
+
+    let clip_near = glam::DVec4::new(ndc_x, ndc_y, 0.0, 1.0);
+    let clip_far = glam::DVec4::new(ndc_x, ndc_y, 1.0, 1.0);
+
+    let view_near = inv_proj * clip_near;
+    let view_far = inv_proj * clip_far;
+
+    let world_near = inv_view * glam::DVec4::new(view_near.x, view_near.y, view_near.z, 1.0);
+    let world_far = inv_view * glam::DVec4::new(view_far.x, view_far.y, view_far.z, 1.0);
+
+    let world_near = world_near.truncate() / world_near.w;
+    let world_far = world_far.truncate() / world_far.w;
+
+    (world_near, world_far)
+}
+
+pub enum ViewportMode {
+    None,
+    CameraMove,
+    Gizmo,
 }

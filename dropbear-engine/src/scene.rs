@@ -143,6 +143,22 @@ impl Manager {
         }
         None
     }
+
+    pub fn get_active_input_handlers(&self) -> Vec<String> {
+        if let Some(scene_name) = &self.current_scene {
+            vec![
+                format!("{}_keyboard", scene_name),
+                format!("{}_mouse", scene_name),
+                format!("{}_controller", scene_name),
+            ]
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn get_current_scene_name(&self) -> Option<&String> {
+        self.current_scene.as_ref()
+    }
 }
 
 pub fn add_scene_with_input<

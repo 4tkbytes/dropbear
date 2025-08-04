@@ -41,36 +41,7 @@ pub struct EditorTabViewer<'a> {
 }
 
 impl<'a> EditorTabViewer<'a> {
-    fn screen_to_world_coords(
-        &self,
-        screen_pos: egui::Pos2,
-        viewport_rect: egui::Rect,
-    ) -> (glam::DVec3, glam::DVec3) {
-        let viewport_width = viewport_rect.width() as f64;
-        let viewport_height = viewport_rect.height() as f64;
-
-        let ndc_x = 2.0 * (screen_pos.x as f64 - viewport_rect.min.x as f64) / viewport_width - 1.0;
-        let ndc_y =
-            1.0 - 2.0 * (screen_pos.y as f64 - viewport_rect.min.y as f64) / viewport_height;
-
-        let inv_view = self.camera.view_mat.inverse();
-        let inv_proj = self.camera.proj_mat.inverse();
-
-        let clip_near = glam::DVec4::new(ndc_x, ndc_y, 0.0, 1.0);
-        let clip_far = glam::DVec4::new(ndc_x, ndc_y, 1.0, 1.0);
-
-        let view_near = inv_proj * clip_near;
-        let view_far = inv_proj * clip_far;
-
-        let world_near = inv_view * glam::DVec4::new(view_near.x, view_near.y, view_near.z, 1.0);
-        let world_far = inv_view * glam::DVec4::new(view_far.x, view_far.y, view_far.z, 1.0);
-
-        let world_near = world_near.truncate() / world_near.w;
-        let world_far = world_far.truncate() / world_far.w;
-
-        (world_near, world_far)
-    }
-
+    #[allow(dead_code)]
     fn debug_camera_state(&self) {
         log::debug!("Camera state:");
         log::debug!("  Eye: {:?}", self.camera.eye);
@@ -158,10 +129,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 if image_response.clicked() {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                        self.debug_camera_state();
+                        // self.debug_camera_state();
 
-                        let (ray_origin, ray_dir) =
-                            self.screen_to_world_coords(click_pos, image_response.rect);
+                        let (ray_origin, ray_dir) = crate::utils::screen_to_world_coords(
+                            self.camera,
+                            click_pos,
+                            image_response.rect,
+                        );
                         log::debug!(
                             "Click pos: {:?}, viewport rect: {:?}",
                             click_pos,
@@ -171,7 +145,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     }
                 }
 
-                // TODO: Figure out how to get the guizmos working because this is fucking annoying to deal with
                 // Note to self: fuck you >:(
                 // Note to self: ok wow thats pretty rude im trying my best ＞﹏＜
                 // Note to self: finally holy shit i got it working

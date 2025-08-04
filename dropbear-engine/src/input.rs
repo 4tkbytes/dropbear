@@ -47,6 +47,8 @@ pub struct Manager {
     keyboard_handlers: HashMap<String, KeyboardImpl>,
     mouse_handlers: HashMap<String, MouseImpl>,
     controller_handlers: HashMap<String, ControllerImpl>,
+
+    active_handlers: HashSet<String>,
 }
 
 impl Manager {
@@ -62,6 +64,14 @@ impl Manager {
             keyboard_handlers: HashMap::new(),
             mouse_handlers: HashMap::new(),
             controller_handlers: HashMap::new(),
+            active_handlers: HashSet::new(),
+        }
+    }
+
+    pub fn set_active_handlers(&mut self, handlers: Vec<String>) {
+        self.active_handlers.clear();
+        for name in handlers {
+            self.active_handlers.insert(name);
         }
     }
 
@@ -77,16 +87,20 @@ impl Manager {
         if pressed {
             if !self.pressed_keys.contains(&key) {
                 self.just_pressed_keys.insert(key);
-                for handler in self.keyboard_handlers.values_mut() {
-                    handler.borrow_mut().key_down(key, event_loop);
+                for (name, handler) in self.keyboard_handlers.iter_mut() {
+                    if self.active_handlers.contains(name) {
+                        handler.borrow_mut().key_down(key, event_loop);
+                    }
                 }
             }
             self.pressed_keys.insert(key);
         } else {
             if self.pressed_keys.contains(&key) {
                 self.just_released_keys.insert(key);
-                for handler in self.keyboard_handlers.values_mut() {
-                    handler.borrow_mut().key_up(key, event_loop);
+                for (name, handler) in self.keyboard_handlers.iter_mut() {
+                    if self.active_handlers.contains(name) {
+                        handler.borrow_mut().key_up(key, event_loop);
+                    }
                 }
             }
             self.pressed_keys.remove(&key);
@@ -97,16 +111,20 @@ impl Manager {
         if pressed {
             if !self.pressed_mouse_buttons.contains(&button) {
                 self.just_pressed_mouse_buttons.insert(button);
-                for handler in self.mouse_handlers.values_mut() {
-                    handler.borrow_mut().mouse_down(button);
+                for (name, handler) in self.mouse_handlers.iter_mut() {
+                    if self.active_handlers.contains(name) {
+                        handler.borrow_mut().mouse_down(button);
+                    }
                 }
             }
             self.pressed_mouse_buttons.insert(button);
         } else {
             if self.pressed_mouse_buttons.contains(&button) {
                 self.just_released_mouse_buttons.insert(button);
-                for handler in self.mouse_handlers.values_mut() {
-                    handler.borrow_mut().mouse_up(button);
+                for (name, handler) in self.mouse_handlers.iter_mut() {
+                    if self.active_handlers.contains(name) {
+                        handler.borrow_mut().mouse_up(button);
+                    }
                 }
             }
             self.pressed_mouse_buttons.remove(&button);
@@ -115,8 +133,10 @@ impl Manager {
 
     pub fn handle_mouse_movement(&mut self, position: PhysicalPosition<f64>) {
         self.mouse_position = position;
-        for handler in self.mouse_handlers.values_mut() {
-            handler.borrow_mut().mouse_move(position);
+        for (name, handler) in self.mouse_handlers.iter_mut() {
+            if self.active_handlers.contains(name) {
+                handler.borrow_mut().mouse_move(position);
+            }
         }
     }
 
@@ -161,34 +181,35 @@ impl Manager {
     }
 
     pub fn handle_controller_event(&mut self, event: gilrs::Event) {
-        for handler in self.controller_handlers.values_mut() {
-            match event.event {
-                EventType::ButtonPressed(button, _) => {
-                    handler.borrow_mut().button_down(button, event.id);
+        for (name, handler) in self.controller_handlers.iter_mut() {
+            if self.active_handlers.contains(name) {
+                match event.event {
+                    EventType::ButtonPressed(button, _) => {
+                        handler.borrow_mut().button_down(button, event.id);
+                    }
+                    EventType::ButtonReleased(button, _) => {
+                        handler.borrow_mut().button_up(button, event.id);
+                    }
+                    EventType::AxisChanged(Axis::LeftStickX, x, _) => {
+                        handler.borrow_mut().left_stick_changed(x, 0.0, event.id);
+                    }
+                    EventType::AxisChanged(Axis::LeftStickY, y, _) => {
+                        handler.borrow_mut().left_stick_changed(0.0, y, event.id);
+                    }
+                    EventType::AxisChanged(Axis::RightStickX, x, _) => {
+                        handler.borrow_mut().right_stick_changed(x, 0.0, event.id);
+                    }
+                    EventType::AxisChanged(Axis::RightStickY, y, _) => {
+                        handler.borrow_mut().right_stick_changed(0.0, y, event.id);
+                    }
+                    EventType::Connected => {
+                        handler.borrow_mut().on_connect(event.id);
+                    }
+                    EventType::Disconnected => {
+                        handler.borrow_mut().on_disconnect(event.id);
+                    }
+                    _ => {}
                 }
-                EventType::ButtonReleased(button, _) => {
-                    handler.borrow_mut().button_up(button, event.id);
-                }
-                EventType::AxisChanged(Axis::LeftStickX, x, _) => {
-                    // You may want to cache Y and call only when both are updated
-                    handler.borrow_mut().left_stick_changed(x, 0.0, event.id);
-                }
-                EventType::AxisChanged(Axis::LeftStickY, y, _) => {
-                    handler.borrow_mut().left_stick_changed(0.0, y, event.id);
-                }
-                EventType::AxisChanged(Axis::RightStickX, x, _) => {
-                    handler.borrow_mut().right_stick_changed(x, 0.0, event.id);
-                }
-                EventType::AxisChanged(Axis::RightStickY, y, _) => {
-                    handler.borrow_mut().right_stick_changed(0.0, y, event.id);
-                }
-                EventType::Connected => {
-                    handler.borrow_mut().on_connect(event.id);
-                }
-                EventType::Disconnected => {
-                    handler.borrow_mut().on_disconnect(event.id);
-                }
-                _ => {}
             }
         }
     }

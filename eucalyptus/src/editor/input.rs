@@ -9,20 +9,20 @@ use winit::{
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         match key {
-            // KeyCode::Escape => event_loop.exit(),
-            KeyCode::Escape => {
-                // self.is_cursor_locked = !self.is_cursor_locked;
-                // if !self.is_cursor_locked {
-                //     if let Some((surface_idx, node_idx, _)) =
-                //         self.dock_state.find_tab(&EditorTab::AssetViewer)
-                //     {
-                //         self.dock_state
-                //             .set_focused_node_and_surface((surface_idx, node_idx));
-                //     } else {
-                //         self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
-                //     }
-                // }
-            }
+            // KeyCode::Escape => _event_loop.exit(),
+            // KeyCode::Escape => {
+            //     // self.is_cursor_locked = !self.is_cursor_locked;
+            //     // if !self.is_cursor_locked {
+            //     //     if let Some((surface_idx, node_idx, _)) =
+            //     //         self.dock_state.find_tab(&EditorTab::AssetViewer)
+            //     //     {
+            //     //         self.dock_state
+            //     //             .set_focused_node_and_surface((surface_idx, node_idx));
+            //     //     } else {
+            //     //         self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
+            //     //     }
+            //     // }
+            // }
             KeyCode::KeyS => {
                 #[cfg(not(target_os = "macos"))]
                 let ctrl_pressed = self.pressed_keys.contains(&KeyCode::ControlLeft)

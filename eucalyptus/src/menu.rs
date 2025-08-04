@@ -325,10 +325,10 @@ impl Scene for MainMenu {
 }
 
 impl Keyboard for MainMenu {
-    fn key_down(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {
-        // if key == dropbear_engine::winit::keyboard::KeyCode::Escape {
-        //     event_loop.exit();
-        // }
+    fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
+        if key == KeyCode::Escape {
+            event_loop.exit();
+        }
     }
 
     fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {}

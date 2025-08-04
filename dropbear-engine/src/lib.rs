@@ -411,6 +411,9 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let frame_start = Instant::now();
 
+                let active_handlers = self.scene_manager.get_active_input_handlers();
+                self.input_manager.set_active_handlers(active_handlers);
+
                 self.input_manager.update(&mut self.gilrs);
                 if let Some(result) = state
                     .render(&mut self.scene_manager, self.delta_time, event_loop)

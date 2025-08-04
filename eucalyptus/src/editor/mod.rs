@@ -21,7 +21,7 @@ use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
-use crate::states::{EntityNode, SceneEntity, ScriptComponent, PROJECT, SCENES};
+use crate::states::{EntityNode, PROJECT, SCENES, SceneEntity, ScriptComponent};
 
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
@@ -106,9 +106,9 @@ impl Editor {
     }
 
     /// Save the current world state to the active scene
-    pub fn save_current_scene(&self) -> anyhow::Result<()> {        
+    pub fn save_current_scene(&self) -> anyhow::Result<()> {
         let mut scenes = SCENES.write().unwrap();
-        
+
         // todo: fix this
         let scene_index = if scenes.is_empty() {
             panic!("Paradoxical error: Scene is empty despite a scene already loaded?");
@@ -117,25 +117,26 @@ impl Editor {
         };
 
         let scene = &mut scenes[scene_index];
-        
+
         scene.entities.clear();
-        
-        for (id, (adopted, transform)) in self.world
+
+        for (id, (adopted, transform)) in self
+            .world
             .query::<(
                 &dropbear_engine::entity::AdoptedEntity,
                 &dropbear_engine::entity::Transform,
             )>()
             .iter()
         {
-            let script = self.world.get::<&ScriptComponent>(id).ok().map(|s| 
+            let script = self.world.get::<&ScriptComponent>(id).ok().map(|s| {
                 crate::states::ScriptComponent {
                     name: s.name.clone(),
                     path: s.path.clone(),
                 }
-            );
+            });
 
             let model_path = adopted.model().path.clone();
-            
+
             let scene_entity = SceneEntity {
                 model_path,
                 label: adopted.model().label.clone(),
@@ -143,13 +144,17 @@ impl Editor {
                 script,
                 entity_id: Some(id),
             };
-            
+
             scene.entities.push(scene_entity);
         }
 
         scene.camera = crate::states::SceneCameraConfig {
             position: [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z],
-            target: [self.camera.target.x, self.camera.target.y, self.camera.target.z],
+            target: [
+                self.camera.target.x,
+                self.camera.target.y,
+                self.camera.target.z,
+            ],
             up: [self.camera.up.x, self.camera.up.y, self.camera.up.z],
             aspect: self.camera.aspect,
             fov: self.camera.fov_y as f32,
@@ -157,28 +162,37 @@ impl Editor {
             far: self.camera.zfar as f32,
         };
 
-        log::info!("Saved {} entities to scene '{}'", scene.entities.len(), scene.scene_name);
-        
+        log::info!(
+            "Saved {} entities to scene '{}'",
+            scene.entities.len(),
+            scene.scene_name
+        );
+
         Ok(())
     }
 
     pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<Camera> {
         let config = PROJECT.read().unwrap();
-        
+
         if let Some(layout) = &config.dock_layout {
             self.dock_state = layout.clone();
         }
-        
+
         {
             let scenes = SCENES.read().unwrap();
             if let Some(first_scene) = scenes.first() {
                 let result = first_scene.load_into_world(&mut self.world, graphics)?;
-                log::info!("Successfully loaded scene with {} entities", first_scene.entities.len());
+                log::info!(
+                    "Successfully loaded scene with {} entities",
+                    first_scene.entities.len()
+                );
                 return Ok(result);
             }
         }
-        
-        return Err(anyhow::anyhow!("Unable to load scene, most likely there are no scenes? I don't know check the backlog..."));
+
+        return Err(anyhow::anyhow!(
+            "Unable to load scene, most likely there are no scenes? I don't know check the backlog..."
+        ));
     }
 
     pub fn show_ui(&mut self, ctx: &Context) {
