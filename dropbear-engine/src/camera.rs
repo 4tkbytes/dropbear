@@ -221,7 +221,7 @@ impl Camera {
 
     pub fn track_mouse_delta(&mut self, dx: f64, dy: f64) {
         let sensitivity = self.sensitivity;
-        self.yaw += dx * sensitivity;
+        self.yaw -= dx * sensitivity;
         self.pitch -= dy * sensitivity;
         let max_pitch = std::f64::consts::FRAC_PI_2 - 0.01;
         self.pitch = self.pitch.clamp(-max_pitch, max_pitch);

@@ -8,29 +8,89 @@ use winit::{
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
-        match key {
-            // KeyCode::Escape => _event_loop.exit(),
-            // KeyCode::Escape => {
-            //     // self.is_cursor_locked = !self.is_cursor_locked;
-            //     // if !self.is_cursor_locked {
-            //     //     if let Some((surface_idx, node_idx, _)) =
-            //     //         self.dock_state.find_tab(&EditorTab::AssetViewer)
-            //     //     {
-            //     //         self.dock_state
-            //     //             .set_focused_node_and_surface((surface_idx, node_idx));
-            //     //     } else {
-            //     //         self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
-            //     //     }
-            //     // }
-            // }
-            KeyCode::KeyS => {
-                #[cfg(not(target_os = "macos"))]
-                let ctrl_pressed = self.pressed_keys.contains(&KeyCode::ControlLeft)
-                    || self.pressed_keys.contains(&KeyCode::ControlRight);
-                #[cfg(target_os = "macos")]
-                let ctrl_pressed = self.pressed_keys.contains(&KeyCode::SuperLeft)
-                    || self.pressed_keys.contains(&KeyCode::SuperRight);
+        #[cfg(not(target_os = "macos"))]
+        let ctrl_pressed = self.pressed_keys.contains(&KeyCode::ControlLeft)
+            || self.pressed_keys.contains(&KeyCode::ControlRight);
+        #[cfg(target_os = "macos")]
+        let ctrl_pressed = self.pressed_keys.contains(&KeyCode::SuperLeft)
+            || self.pressed_keys.contains(&KeyCode::SuperRight);
 
+        let _alt_pressed = 
+            self.pressed_keys.contains(&KeyCode::AltLeft) || 
+            self.pressed_keys.contains(&KeyCode::AltRight);
+
+        match key {
+            KeyCode::KeyG => {
+                if self.is_viewport_focused {
+                    self.viewport_mode = crate::utils::ViewportMode::Gizmo;
+                    log::info!("Switched to ViewportMode::Gizmo");
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Info,
+                            text: format!("Switched to Viewport::Gizmo").into(),
+                            options: egui_toast_fork::ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                    }
+                    if let Some(window) = &self.window {
+                        window.set_cursor_visible(true);
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyF => {
+                if self.is_viewport_focused {
+                    self.viewport_mode = crate::utils::ViewportMode::CameraMove;
+                    log::debug!("Switched to ViewportMode::CameraMove");
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Info,
+                            text: format!("Switched to Viewport::CameraMove").into(),
+                            options: egui_toast_fork::ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                    }
+                    if let Some(window) = &self.window {
+                        window.set_cursor_visible(false);
+                        // Center the cursor
+                        let size = window.inner_size();
+                        let center = winit::dpi::PhysicalPosition::new(
+                            size.width as f64 / 2.0,
+                            size.height as f64 / 2.0,
+                        );
+                        let _ = window.set_cursor_position(center);
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::Escape => {
+                if self.is_viewport_focused {
+                    self.viewport_mode = crate::utils::ViewportMode::None;
+                    log::debug!("Switched to Viewport::None");
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Info,
+                            text: format!("Switched to Viewport::None").into(),
+                            options: egui_toast_fork::ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                    }
+                    if let Some(window) = &self.window {
+                        window.set_cursor_visible(true);
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyS => {
                 if ctrl_pressed {
                     match self.save_project_config() {
                         Ok(_) => {
@@ -76,21 +136,23 @@ impl Keyboard for Editor {
 }
 
 impl Mouse for Editor {
-    fn mouse_move(&mut self, _position: PhysicalPosition<f64>) {
-        // // if self.is_cursor_locked {
-        //     if let Some(window) = &self.window {
-        //         let size = window.inner_size();
-        //         let center =
-        //             PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
+        if self.is_viewport_focused
+            && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
+        {
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                let center =
+                    PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
 
-        //         let dx = position.x - center.x;
-        //         let dy = position.y - center.y;
-        //         self.camera.track_mouse_delta(dx as f32, dy as f32);
+                let dx = position.x - center.x;
+                let dy = position.y - center.y;
+                self.camera.track_mouse_delta(dx, dy);
 
-        //         window.set_cursor_position(center).ok();
-        //         window.set_cursor_visible(false);
-        //     }
-        // // }
+                let _ = window.set_cursor_position(center);
+                window.set_cursor_visible(false);
+            }
+        }
     }
 
     fn mouse_down(&mut self, _button: MouseButton) {}

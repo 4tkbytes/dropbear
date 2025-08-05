@@ -21,7 +21,10 @@ use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
-use crate::states::{EntityNode, PROJECT, SCENES, SceneEntity, ScriptComponent};
+use crate::{
+    states::{EntityNode, PROJECT, SCENES, SceneEntity, ScriptComponent},
+    utils::ViewportMode,
+};
 
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
@@ -53,6 +56,7 @@ pub struct Editor {
 
     gizmo: Gizmo,
     selected_entity: Option<hecs::Entity>,
+    viewport_mode: ViewportMode,
 
     resize_signal: (bool, u32, u32),
 }
@@ -95,6 +99,7 @@ impl Editor {
             gizmo: Gizmo::default(),
             resize_signal: (false, 1, 1),
             selected_entity: None,
+            viewport_mode: ViewportMode::None,
         }
     }
 
@@ -306,6 +311,7 @@ impl Editor {
                         resize_signal: &mut self.resize_signal,
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
+                        viewport_mode: &mut self.viewport_mode,
                     },
                 );
         });

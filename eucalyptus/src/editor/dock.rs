@@ -38,6 +38,7 @@ pub struct EditorTabViewer<'a> {
     pub resize_signal: &'a mut (bool, u32, u32),
     pub world: &'a mut hecs::World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
+    pub viewport_mode: &'a mut ViewportMode,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -179,22 +180,29 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ..Default::default()
                 });
 
-                if let Some(entity_id) = self.selected_entity {
-                    if let Ok(transform) = self.world.query_one_mut::<&mut Transform>(*entity_id) {
-                        let gizmo_transform =
+                if matches!(
+                    self.viewport_mode,
+                    crate::utils::ViewportMode::Gizmo
+                ) {
+                    if let Some(entity_id) = self.selected_entity {
+                        if let Ok(transform) =
+                            self.world.query_one_mut::<&mut Transform>(*entity_id)
+                        {
+                            let gizmo_transform =
                             transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
                                 transform.scale,
                                 transform.rotation,
                                 transform.position,
                             );
 
-                        if let Some((_result, new_transforms)) =
-                            self.gizmo.interact(ui, &[gizmo_transform])
-                        {
-                            if let Some(new_transform) = new_transforms.first() {
-                                transform.position = new_transform.translation.into();
-                                transform.rotation = new_transform.rotation.into();
-                                transform.scale = new_transform.scale.into();
+                            if let Some((_result, new_transforms)) =
+                                self.gizmo.interact(ui, &[gizmo_transform])
+                            {
+                                if let Some(new_transform) = new_transforms.first() {
+                                    transform.position = new_transform.translation.into();
+                                    transform.rotation = new_transform.rotation.into();
+                                    transform.scale = new_transform.scale.into();
+                                }
                             }
                         }
                     }

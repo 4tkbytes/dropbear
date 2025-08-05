@@ -93,29 +93,27 @@ impl Scene for Editor {
         //     self.is_cursor_locked = true;
         // }
 
-        // if self.is_cursor_locked {
-        for key in &self.pressed_keys {
-            match key {
-                KeyCode::KeyW => self.camera.move_forwards(),
-                KeyCode::KeyA => self.camera.move_left(),
-                KeyCode::KeyD => self.camera.move_right(),
-                KeyCode::KeyS => self.camera.move_back(),
-                KeyCode::ShiftLeft => self.camera.move_down(),
-                KeyCode::Space => self.camera.move_up(),
-                _ => {}
+        if self.is_viewport_focused
+            && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
+        {
+            for key in &self.pressed_keys {
+                match key {
+                    KeyCode::KeyW => self.camera.move_forwards(),
+                    KeyCode::KeyA => self.camera.move_left(),
+                    KeyCode::KeyD => self.camera.move_right(),
+                    KeyCode::KeyS => self.camera.move_back(),
+                    KeyCode::ShiftLeft => self.camera.move_down(),
+                    KeyCode::Space => self.camera.move_up(),
+                    _ => {}
+                }
             }
         }
-        // }
 
         let new_size = graphics.state.viewport_texture.size;
         let new_aspect = new_size.width as f64 / new_size.height as f64;
         self.camera.aspect = new_aspect;
 
         self.camera.update(graphics);
-
-        // if !self.is_cursor_locked {
-        //     self.window.as_mut().unwrap().set_cursor_visible(true);
-        // }
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {

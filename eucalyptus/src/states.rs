@@ -162,12 +162,11 @@ impl ProjectConfig {
 
         // scenes
         let mut scene_configs = SCENES.write().unwrap();
-        scene_configs.clear(); // Clear existing scenes before loading new ones
+        scene_configs.clear();
 
         // iterate through each scene file in the folder
         let scene_folder = &project_root.join("scenes");
 
-        // Create scenes directory if it doesn't exist
         if !scene_folder.exists() {
             fs::create_dir_all(scene_folder)?;
         }
@@ -197,7 +196,6 @@ impl ProjectConfig {
             }
         }
 
-        // If no scenes were found, create a default scene
         if scene_configs.is_empty() {
             log::info!("No scenes found, creating default scene");
             let default_scene =
