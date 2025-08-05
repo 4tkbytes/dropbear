@@ -436,7 +436,7 @@ pub enum EntityNode {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScriptComponent {
     pub name: String,
     pub path: PathBuf,
@@ -528,7 +528,7 @@ impl Default for SceneCameraConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
     pub model_path: PathBuf,
     pub label: String,

@@ -1,5 +1,8 @@
 use super::*;
-use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::{
+    entity::{AdoptedEntity, Transform},
+    input::{Controller, Keyboard, Mouse},
+};
 use gilrs::{Button, GamepadId};
 use log;
 use winit::{
@@ -84,6 +87,103 @@ impl Keyboard for Editor {
                     }
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyC => {
+                if ctrl_pressed {
+                    if let Some(entity) = &self.selected_entity {
+                        let query = self
+                            .world
+                            .query_one::<(&AdoptedEntity, &Transform)>(*entity);
+                        if let Ok(mut q) = query {
+                            if let Some((e, t)) = q.get() {
+                                let s_entity = crate::states::SceneEntity {
+                                    model_path: e.model().path.clone(),
+                                    label: e.model().label.clone(),
+                                    transform: *t,
+                                    script: None,
+                                    entity_id: None,
+                                };
+                                self.signal = Signal::Copy(s_entity);
+
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Info,
+                                        text: format!("Copied!").into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(1.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+
+                                log::debug!("Copied selected entity");
+                            } else {
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Warning,
+                                        text: format!("Unable to copy entity: Unable to fetch world entity properties").into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(3.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                                log::warn!(
+                                    "Unable to copy entity: Unable to fetch world entity properties"
+                                );
+                            }
+                        } else {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Warning,
+                                    text: format!("Unable to copy entity: Unable to obtain lock")
+                                        .into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                            log::warn!("Unable to copy entity: Unable to obtain lock");
+                        }
+                    } else {
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Warning,
+                                text: format!("Unable to copy entity: None selected").into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(3.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
+                        log::warn!("Unable to copy entity: None selected");
+                        self.pressed_keys.insert(key);
+                    }
+                }
+            }
+            KeyCode::KeyV => {
+                if ctrl_pressed {
+                    match &self.signal {
+                        Signal::Copy(entity) => {
+                            self.signal = Signal::Paste(entity.clone());
+                        }
+                        _ => {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Warning,
+                                    text: format!("Unable to paste: You haven't selected anything!").into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                        }
                     }
                 } else {
                     self.pressed_keys.insert(key);

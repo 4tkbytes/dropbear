@@ -414,7 +414,8 @@ impl Instance {
     }
 
     pub fn to_raw(&self) -> InstanceRaw {
-        let model_matrix = DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
+        let model_matrix =
+            DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
         InstanceRaw {
             model: model_matrix.as_mat4().to_cols_array_2d(),
         }

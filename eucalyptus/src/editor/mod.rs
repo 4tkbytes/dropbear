@@ -10,7 +10,12 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use dropbear_engine::{camera::Camera, graphics::Graphics, scene::SceneCommand};
+use dropbear_engine::{
+    camera::Camera,
+    entity::{AdoptedEntity, Transform},
+    graphics::Graphics,
+    scene::SceneCommand,
+};
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use egui_toast_fork::{ToastOptions, Toasts};
@@ -58,7 +63,16 @@ pub struct Editor {
     selected_entity: Option<hecs::Entity>,
     viewport_mode: ViewportMode,
 
-    resize_signal: (bool, u32, u32),
+    signal: Signal,
+}
+
+/// This enum will be used to describe the type of command/signal. This is only between
+/// the editor and unlike SceneCommand, this will ping a signal everywhere.
+pub enum Signal {
+    None,
+    Copy(SceneEntity),
+    Paste(SceneEntity),
+    // Resize(u32, u32),
 }
 
 impl Default for Editor {
@@ -97,9 +111,9 @@ impl Editor {
             project_path: None,
             pending_scene_switch: false,
             gizmo: Gizmo::default(),
-            resize_signal: (false, 1, 1),
             selected_entity: None,
             viewport_mode: ViewportMode::None,
+            signal: Signal::None,
         }
     }
 
@@ -273,6 +287,93 @@ impl Editor {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
+                    if ui.button("Copy").clicked() {
+                        if let Some(entity) = &self.selected_entity {
+                            let query = self.world.query_one::<(&AdoptedEntity, &Transform)>(*entity);
+                            if let Ok(mut q) = query {
+                                if let Some((e, t)) = q.get() {
+                                    let s_entity = crate::states::SceneEntity {
+                                        model_path: e.model().path.clone(),
+                                        label: e.model().label.clone(),
+                                        transform: *t,
+                                        script: None,
+                                        entity_id: None,
+                                    };
+                                    self.signal = Signal::Copy(s_entity);
+
+                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                        toasts.add(egui_toast_fork::Toast {
+                                            kind: egui_toast_fork::ToastKind::Info,
+                                            text: format!("Copied!").into(),
+                                            options: egui_toast_fork::ToastOptions::default()
+                                                .duration_in_seconds(1.0)
+                                                .show_progress(false),
+                                            ..Default::default()
+                                        });
+                                    }
+
+                                    log::debug!("Copied selected entity");
+                                } else {
+                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                        toasts.add(egui_toast_fork::Toast {
+                                            kind: egui_toast_fork::ToastKind::Warning,
+                                            text: format!("Unable to copy entity: Unable to fetch world entity properties").into(),
+                                            options: egui_toast_fork::ToastOptions::default()
+                                                .duration_in_seconds(3.0)
+                                                .show_progress(true),
+                                            ..Default::default()
+                                        });
+                                    }
+                                    log::warn!("Unable to copy entity: Unable to fetch world entity properties");
+                                }
+                            } else {
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Warning,
+                                        text: format!("Unable to copy entity: Unable to obtain lock").into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(3.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                                log::warn!("Unable to copy entity: Unable to obtain lock");
+                            }
+                        } else {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Warning,
+                                    text: format!("Unable to copy entity: None selected").into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                            log::warn!("Unable to copy entity: None selected");
+                        }
+                    }
+
+                    if ui.button("Paste").clicked() {
+                        match &self.signal {
+                            Signal::Copy(entity) => {
+                                self.signal = Signal::Paste(entity.clone());
+                            }
+                            _ => {
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Warning,
+                                        text: format!("Unable to paste: You haven't selected anything!").into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(3.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                        }
+                    }
+
                     ui.label("Undo");
                     ui.label("Redo");
                 });
@@ -308,7 +409,7 @@ impl Editor {
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         camera: &mut self.camera,
-                        resize_signal: &mut self.resize_signal,
+                        signal: &mut self.signal,
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,

@@ -4,7 +4,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
-use dropbear_engine::entity::{Transform};
+use dropbear_engine::entity::Transform;
 use egui::{self};
 use egui_dock_fork::TabViewer;
 use egui_extras;
@@ -37,10 +37,11 @@ pub struct EditorTabViewer<'a> {
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
     pub camera: &'a mut Camera,
-    pub resize_signal: &'a mut (bool, u32, u32),
     pub world: &'a mut hecs::World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
+    #[allow(dead_code)]
+    pub signal: &'a mut Signal,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -145,9 +146,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let new_tex_width = size.x.max(1.0) as u32;
                 let new_tex_height = size.y.max(1.0) as u32;
 
+                // idk why its here...
+                // todo: remove this part or look at its usefulness
                 if self.tex_size.width != new_tex_width || self.tex_size.height != new_tex_height {
-                    *self.resize_signal = (true, new_tex_width, new_tex_height);
-
                     self.tex_size.width = new_tex_width;
                     self.tex_size.height = new_tex_height;
 
@@ -312,7 +313,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 // TODO: deal with show_entity_tree and figure out how to convert hecs::World
                 // to EntityNodes and to write it to file
 
-                // Note: Technically i have already done that, but further testing required. 
+                // Note: Technically i have already done that, but further testing required.
                 show_entity_tree(
                     ui,
                     &mut self.nodes,
@@ -391,14 +392,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     res_type.clone(),
                                                 ))
                                             }
-                                            ResourceType::Texture => {
-                                                assets.push((
-                                                    file.path.to_string_lossy().to_string(),
-                                                    file.name.clone(),
-                                                    file.path.clone(),
-                                                    res_type.clone(),
-                                                ))
-                                            }
+                                            ResourceType::Texture => assets.push((
+                                                file.path.to_string_lossy().to_string(),
+                                                file.name.clone(),
+                                                file.path.clone(),
+                                                res_type.clone(),
+                                            )),
                                             _ => {
                                                 if file
                                                     .path
@@ -411,10 +410,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 {
                                                     continue;
                                                 }
-                                                // let image = egui::Image::from_bytes(
-                                                //     file.name.clone(),
-                                                //     NO_TEXTURE,
-                                                // );
+
                                                 assets.push((
                                                     "NO_TEXTURE".into(),
                                                     file.name.clone(),
@@ -495,10 +491,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 egui::ImageButton::new(image.clone()).frame(false),
                                             );
 
-                                            let is_hovered = card_response.hovered()
-                                                || image_response.hovered()
-                                                || state.dragged;
-                                            
+                                            let is_hovered = card_response.hovered() || image_response.hovered() || state.dragged;
                                             let is_d_clicked = card_response.double_clicked() || image_response.double_clicked();
 
                                             if is_d_clicked {
@@ -592,12 +585,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 .clone()
                 .unwrap_or(EditorTab::ModelEntityList);
 
-            // We'll store the popup rect here
             let mut popup_rect = None;
 
             area.show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    // Save the rect of the popup for later hit-testing
                     popup_rect.replace(ui.max_rect());
 
                     match menu_tab {

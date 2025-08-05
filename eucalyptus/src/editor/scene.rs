@@ -113,10 +113,6 @@ impl Scene for Editor {
             }
         }
 
-        // if self.is_viewport_focused {
-        //     self.is_cursor_locked = true;
-        // }
-
         if self.is_viewport_focused
             && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
         {
@@ -131,6 +127,56 @@ impl Scene for Editor {
                     _ => {}
                 }
             }
+        }
+
+        match &self.signal {
+            Signal::Paste(scene_entity) => {
+                match AdoptedEntity::new(
+                    graphics,
+                    &scene_entity.model_path,
+                    Some(&scene_entity.label),
+                ) {
+                    Ok(adopted) => {
+                        let entity_id = self.world.spawn((adopted, scene_entity.transform));
+                        self.selected_entity = Some(entity_id);
+                        log::debug!(
+                            "Successfully paste-spawned {} with ID {:?}",
+                            scene_entity.label,
+                            entity_id
+                        );
+
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Success,
+                                text: format!("Paste!").into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(1.0)
+                                    .show_progress(false),
+                                ..Default::default()
+                            });
+                        }
+                        self.signal = Signal::Copy(scene_entity.clone());
+                    }
+                    Err(e) => {
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Warning,
+                                text: format!(
+                                    "Failed to paste-spawn {}: {}",
+                                    scene_entity.label, e
+                                )
+                                .into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(3.0)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
+                        log::error!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                    }
+                }
+            }
+            _ => {}
         }
 
         let new_size = graphics.state.viewport_texture.size;
@@ -156,11 +202,6 @@ impl Scene for Editor {
         self.size = graphics.state.viewport_texture.size.clone();
         self.texture_id = Some(graphics.state.texture_id.clone());
         self.show_ui(&graphics.get_egui_context());
-
-        if self.resize_signal.0.clone() {
-            // graphics.state.resize(self.resize_signal.1, self.resize_signal.2);
-            // self.resize_signal.0 = false;
-        }
 
         self.window = Some(graphics.state.window.clone());
         if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {

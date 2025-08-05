@@ -10,7 +10,9 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] global settings page
 - [ ] menu bar stuff
   - [ ] undo and redo
-  - [ ] copy and paste
+  - [x] copy and paste
+    - [x] add to menu bar
+  - [ ] delete
 - [ ] using arrow keys to move the camera
 - [ ] using the controller to move the camera
 - [ ] basic physics
