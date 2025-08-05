@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use dropbear_engine::{camera::Camera, scene::SceneCommand};
+use dropbear_engine::{camera::Camera, entity::Transform, scene::SceneCommand};
 use egui::Context;
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
 use git2::Repository;
@@ -247,4 +247,11 @@ pub enum ViewportMode {
     None,
     CameraMove,
     Gizmo,
+}
+
+#[derive(Clone, Debug)]
+pub struct PendingSpawn {
+    pub asset_path: PathBuf,
+    pub asset_name: String,
+    pub transform: Transform,
 }

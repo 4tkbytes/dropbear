@@ -4,7 +4,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
-use dropbear_engine::entity::Transform;
+use dropbear_engine::entity::{Transform};
 use egui::{self};
 use egui_dock_fork::TabViewer;
 use egui_extras;
@@ -18,7 +18,9 @@ use transform_gizmo_egui::{
 
 use crate::{
     APP_INFO,
+    editor::scene::PENDING_SPAWNS,
     states::{EntityNode, Node, RESOURCES, ResourceType},
+    utils::PendingSpawn,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -42,7 +44,30 @@ pub struct EditorTabViewer<'a> {
 }
 
 impl<'a> EditorTabViewer<'a> {
+    fn spawn_entity_at_pos(
+        &mut self,
+        asset: &DraggedAsset,
+        position: glam::DVec3,
+    ) -> anyhow::Result<()> {
+        let mut transform = Transform::default();
+        transform.position = position;
+
+        if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
+            pending_spawns.push(PendingSpawn {
+                asset_path: asset.path.clone(),
+                asset_name: asset.name.clone(),
+                transform,
+            });
+            Ok(())
+        } else {
+            return Err(anyhow::anyhow!(
+                "Failed to retrieve the lock from the PENDING_SPAWNS const"
+            ));
+        }
+    }
+
     #[allow(dead_code)]
+    // purely for debug, nothing else...
     fn debug_camera_state(&self) {
         log::debug!("Camera state:");
         log::debug!("  Eye: {:?}", self.camera.eye);
@@ -56,8 +81,18 @@ impl<'a> EditorTabViewer<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DraggedAsset {
+    pub name: String,
+    pub path: PathBuf,
+    pub asset_type: ResourceType,
+}
+
 pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
+
+pub static DRAGGED_ASSET: LazyLock<Mutex<Option<DraggedAsset>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 pub(crate) struct INeedABetterNameForThisStruct {
     show_context_menu: bool,
@@ -128,6 +163,67 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     .sense(egui::Sense::click_and_drag()),
                 );
 
+                if image_response.hovered() {
+                    if let Ok(mut dragged_asset) = DRAGGED_ASSET.lock() {
+                        if let Some(asset) = dragged_asset.take() {
+                            if matches!(asset.asset_type, ResourceType::Model) {
+                                if let Some(drop_pos) = ui.ctx().input(|i| i.pointer.interact_pos())
+                                {
+                                    let (ray_og, ray_dir) = crate::utils::screen_to_world_coords(
+                                        self.camera,
+                                        drop_pos,
+                                        image_response.rect,
+                                    );
+
+                                    let spawn_distance = 5.0;
+                                    let spawn_position = ray_og + ray_dir * spawn_distance;
+
+                                    match self.spawn_entity_at_pos(&asset, spawn_position) {
+                                        Ok(()) => {
+                                            log::info!(
+                                                "Queued spawn for {} at position {:?}",
+                                                asset.name,
+                                                spawn_position
+                                            );
+
+                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                toasts.add(Toast {
+                                                    kind: ToastKind::Success,
+                                                    text: format!("Spawning {}", asset.name).into(), // Changed text to indicate queuing
+                                                    options: ToastOptions::default()
+                                                        .duration_in_seconds(2.0),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::error!(
+                                                "Failed to queue spawn for {}: {}",
+                                                asset.name,
+                                                e
+                                            );
+
+                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                toasts.add(Toast {
+                                                    kind: ToastKind::Error,
+                                                    text: format!(
+                                                        "Failed to queue spawn for {}: {}",
+                                                        asset.name, e
+                                                    )
+                                                    .into(),
+                                                    options: ToastOptions::default()
+                                                        .duration_in_seconds(3.0),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if image_response.clicked() {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
                         // self.debug_camera_state();
@@ -145,6 +241,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log::debug!("Ray origin: {:?}, direction: {:?}", ray_origin, ray_dir);
                     }
                 }
+
+                let snapping = ui.input(|input| input.modifiers.shift);
 
                 // Note to self: fuck you >:(
                 // Note to self: ok wow thats pretty rude im trying my best ＞﹏＜
@@ -177,13 +275,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     viewport: image_response.rect,
                     modes: GizmoMode::all(),
                     orientation: transform_gizmo_egui::GizmoOrientation::Global,
+                    snapping,
                     ..Default::default()
                 });
 
-                if matches!(
-                    self.viewport_mode,
-                    crate::utils::ViewportMode::Gizmo
-                ) {
+                if matches!(self.viewport_mode, crate::utils::ViewportMode::Gizmo) {
                     if let Some(entity_id) = self.selected_entity {
                         if let Ok(transform) =
                             self.world.query_one_mut::<&mut Transform>(*entity_id)
@@ -212,6 +308,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 ui.label("Model/Entity List");
                 // TODO: deal with show_entity_tree and figure out how to convert hecs::World
                 // to EntityNodes and to write it to file
+
+                // Note: Technically i have already done that, but further testing required. 
                 show_entity_tree(
                     ui,
                     &mut self.nodes,
@@ -222,13 +320,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
 
-                let mut assets: Vec<(String, String)> = Vec::new();
+                let mut assets: Vec<(String, String, PathBuf, ResourceType)> = Vec::new();
                 {
                     let res = RESOURCES.read().unwrap();
 
                     fn recursive_search_nodes_and_attach_thumbnail(
                         res: &Vec<Node>,
-                        assets: &mut Vec<(String, String)>,
+                        assets: &mut Vec<(String, String, PathBuf, ResourceType)>,
                         logged: &mut HashSet<String>,
                     ) {
                         for node in res {
@@ -290,6 +388,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 assets.push((
                                                     format!("file://{}", image_uri),
                                                     file.name.clone(),
+                                                    file.path.clone(),
+                                                    res_type.clone(),
                                                 ))
                                             }
                                             ResourceType::Texture => {
@@ -301,6 +401,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 assets.push((
                                                     file.path.to_string_lossy().to_string(),
                                                     file.name.clone(),
+                                                    file.path.clone(),
+                                                    res_type.clone(),
                                                 ))
                                             }
                                             _ => {
@@ -319,8 +421,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 //     file.name.clone(),
                                                 //     NO_TEXTURE,
                                                 // );
-                                                assets
-                                                    .push(("NO_TEXTURE".into(), file.name.clone()))
+                                                assets.push((
+                                                    "NO_TEXTURE".into(),
+                                                    file.name.clone(),
+                                                    file.path.clone(),
+                                                    res_type.clone(),
+                                                ))
                                             }
                                         }
                                     }
@@ -374,48 +480,103 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             ui.set_max_width(usable_width);
 
                             egui_dnd::dnd(ui, format!("asset_row_{}", row_start / columns))
-                                .show_vec(row_items, |ui, (image, asset_name), handle, state| {
-                                    let card_size = egui::vec2(card_width, card_height);
-                                    handle.ui(ui, |ui| {
-                                        let (rect, card_response) =
-                                            ui.allocate_exact_size(card_size, egui::Sense::click());
-
-                                        let mut card_ui = ui.new_child(
-                                            egui::UiBuilder::new().max_rect(rect).layout(
-                                                egui::Layout::top_down(egui::Align::Center),
-                                            ),
-                                        );
-
-                                        let image_response = card_ui.add_sized(
-                                            [image_size, image_size],
-                                            egui::ImageButton::new(image.clone()).frame(false),
-                                        );
-
-                                        let is_hovered = card_response.hovered()
-                                            || image_response.hovered()
-                                            || state.dragged;
-
-                                        if is_hovered || state.dragged {
-                                            ui.painter().rect_filled(
-                                                rect,
-                                                6.0,
-                                                if state.dragged {
-                                                    egui::Color32::from_rgb(80, 80, 100)
-                                                } else {
-                                                    egui::Color32::from_rgb(60, 60, 80)
-                                                },
+                                .show_vec(
+                                    row_items,
+                                    |ui, (image, asset_name, asset_path, asset_type), handle, state| {
+                                        let card_size = egui::vec2(card_width, card_height);
+                                        handle.ui(ui, |ui| {
+                                            let (rect, card_response) = ui.allocate_exact_size(
+                                                card_size,
+                                                egui::Sense::click(),
                                             );
-                                        }
 
-                                        card_ui.vertical_centered(|ui| {
-                                            ui.label(
-                                                egui::RichText::new(asset_name.clone())
-                                                    .strong()
-                                                    .color(egui::Color32::WHITE),
+                                            let mut card_ui = ui.new_child(
+                                                egui::UiBuilder::new().max_rect(rect).layout(
+                                                    egui::Layout::top_down(egui::Align::Center),
+                                                ),
                                             );
+
+                                            let image_response = card_ui.add_sized(
+                                                [image_size, image_size],
+                                                egui::ImageButton::new(image.clone()).frame(false),
+                                            );
+
+                                            let is_hovered = card_response.hovered()
+                                                || image_response.hovered()
+                                                || state.dragged;
+                                            
+                                            let is_d_clicked = card_response.double_clicked() || image_response.double_clicked();
+
+                                            if is_d_clicked {
+                                                if matches!(asset_type, ResourceType::Model) {
+                                                    let spawn_position = self.camera.eye;
+                                                    let asset = DraggedAsset {
+                                                        name: asset_name.clone(),
+                                                        path: asset_path.clone(),
+                                                        asset_type: asset_type.clone(),
+                                                    };
+
+                                                    match self.spawn_entity_at_pos(&asset, spawn_position) {
+                                                        Ok(()) => {
+                                                            log::debug!("db click spawned {} at camera pos {:?}",
+                                                                asset.name, spawn_position
+                                                            );
+
+                                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                                toasts.add(Toast {
+                                                                    kind: ToastKind::Success,
+                                                                    text: format!("Spawned {} at camera", asset.name).into(),
+                                                                    options: ToastOptions::default()
+                                                                        .duration_in_seconds(2.0),
+                                                                    ..Default::default()
+                                                                });
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            log::error!(
+                                                            "Failed to spawn {} at camera: {}",
+                                                            asset.name,
+                                                            e);
+
+                                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                                toasts.add(Toast {
+                                                                    kind: ToastKind::Error,
+                                                                    text: format!(
+                                                                        "Failed to spawn {}: {}",
+                                                                        asset.name, e
+                                                                    ).into(),
+                                                                    options: ToastOptions::default()
+                                                                        .duration_in_seconds(3.0),
+                                                                    ..Default::default()
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if is_hovered || state.dragged {
+                                                ui.painter().rect_filled(
+                                                    rect,
+                                                    6.0,
+                                                    if state.dragged {
+                                                        egui::Color32::from_rgb(80, 80, 100)
+                                                    } else {
+                                                        egui::Color32::from_rgb(60, 60, 80)
+                                                    },
+                                                );
+                                            }
+
+                                            card_ui.vertical_centered(|ui| {
+                                                ui.label(
+                                                    egui::RichText::new(asset_name.clone())
+                                                        .strong()
+                                                        .color(egui::Color32::WHITE),
+                                                );
+                                            });
                                         });
-                                    });
-                                });
+                                    },
+                                );
                         });
                         ui.add_space(8.0);
                     }

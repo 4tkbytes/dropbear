@@ -11,7 +11,13 @@ use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 use super::*;
-use crate::states::{Node, RESOURCES};
+use crate::{
+    states::{Node, RESOURCES},
+    utils::PendingSpawn,
+};
+
+pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut Graphics) {
@@ -62,7 +68,10 @@ impl Scene for Editor {
                 log::warn!("cube path is empty :(")
             }
         } else {
-            log::info!("Scene loaded with {} entities, skipping default cube", self.world.len());
+            log::info!(
+                "Scene loaded with {} entities, skipping default cube",
+                self.world.len()
+            );
         }
 
         let texture_bind_group = &graphics.texture_bind_group().clone();
@@ -83,6 +92,25 @@ impl Scene for Editor {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
             self.is_viewport_focused = false;
+        }
+
+        if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
+            for spawn in pending_spawns.drain(..) {
+                match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
+                    Ok(adopted) => {
+                        let entity_id = self.world.spawn((adopted, spawn.transform));
+                        self.selected_entity = Some(entity_id);
+                        log::info!(
+                            "Successfully spawned {} with ID {:?}",
+                            spawn.asset_name,
+                            entity_id
+                        );
+                    }
+                    Err(e) => {
+                        log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
+                    }
+                }
+            }
         }
 
         // if self.is_viewport_focused {

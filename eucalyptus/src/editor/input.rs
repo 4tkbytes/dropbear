@@ -15,9 +15,8 @@ impl Keyboard for Editor {
         let ctrl_pressed = self.pressed_keys.contains(&KeyCode::SuperLeft)
             || self.pressed_keys.contains(&KeyCode::SuperRight);
 
-        let _alt_pressed = 
-            self.pressed_keys.contains(&KeyCode::AltLeft) || 
-            self.pressed_keys.contains(&KeyCode::AltRight);
+        let _alt_pressed = self.pressed_keys.contains(&KeyCode::AltLeft)
+            || self.pressed_keys.contains(&KeyCode::AltRight);
 
         match key {
             KeyCode::KeyG => {
