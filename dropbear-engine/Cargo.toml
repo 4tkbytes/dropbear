@@ -26,7 +26,7 @@ serde.workspace = true
 spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
-
+ 
 [dependencies.image]
 version = "0.25"
 default-features = false
