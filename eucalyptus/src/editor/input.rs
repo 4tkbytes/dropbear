@@ -22,7 +22,7 @@ impl Keyboard for Editor {
             KeyCode::KeyG => {
                 if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::Gizmo;
-                    log::info!("Switched to ViewportMode::Gizmo");
+                    log::debug!("Switched to ViewportMode::Gizmo");
                     if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
                         toasts.add(egui_toast_fork::Toast {
                             kind: egui_toast_fork::ToastKind::Info,
@@ -56,7 +56,7 @@ impl Keyboard for Editor {
                     }
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(false);
-                        // Center the cursor
+
                         let size = window.inner_size();
                         let center = winit::dpi::PhysicalPosition::new(
                             size.width as f64 / 2.0,

@@ -279,17 +279,19 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ..Default::default()
                 });
 
-                if matches!(self.viewport_mode, crate::utils::ViewportMode::Gizmo) {
+                if !matches!(self.viewport_mode, crate::utils::ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
                         if let Ok(transform) =
                             self.world.query_one_mut::<&mut Transform>(*entity_id)
                         {
                             let gizmo_transform =
-                            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                                transform.scale,
-                                transform.rotation,
-                                transform.position,
-                            );
+                                transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                    transform.scale,
+                                    transform.rotation,
+                                    transform.position,
+                                );
+
+                            // log::debug!("Before scaling: {:?}", gizmo_transform);
 
                             if let Some((_result, new_transforms)) =
                                 self.gizmo.interact(ui, &[gizmo_transform])
@@ -298,6 +300,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     transform.position = new_transform.translation.into();
                                     transform.rotation = new_transform.rotation.into();
                                     transform.scale = new_transform.scale.into();
+                                    // log::debug!("After scaling: {:?}", transform);
                                 }
                             }
                         }
@@ -380,10 +383,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                 let image_uri =
                                                     model_thumbnail.to_string_lossy().to_string();
-                                                // let image = egui::Image::from_uri(format!(
-                                                //     "file://{}",
-                                                //     image_uri
-                                                // ));
 
                                                 assets.push((
                                                     format!("file://{}", image_uri),
@@ -393,11 +392,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 ))
                                             }
                                             ResourceType::Texture => {
-                                                // let image = egui::Image::from_bytes(
-                                                //     file.name.clone(),
-                                                //     std::fs::read(&file.path)
-                                                //         .unwrap_or(NO_TEXTURE.to_vec()),
-                                                // );
                                                 assets.push((
                                                     file.path.to_string_lossy().to_string(),
                                                     file.name.clone(),

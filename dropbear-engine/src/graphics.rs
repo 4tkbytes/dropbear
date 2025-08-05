@@ -398,22 +398,23 @@ impl Texture {
 pub struct Instance {
     pub position: DVec3,
     pub rotation: DQuat,
+    pub scale: DVec3,
 
     buffer: Option<Buffer>,
 }
 
 impl Instance {
-    pub fn new(position: DVec3, rotation: DQuat) -> Self {
+    pub fn new(position: DVec3, rotation: DQuat, scale: DVec3) -> Self {
         Self {
             position,
             rotation,
+            scale,
             buffer: None,
         }
     }
 
     pub fn to_raw(&self) -> InstanceRaw {
-        let rotation = self.rotation;
-        let model_matrix = DMat4::from_translation(self.position) * DMat4::from_quat(rotation);
+        let model_matrix = DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
         InstanceRaw {
             model: model_matrix.as_mat4().to_cols_array_2d(),
         }
@@ -424,10 +425,11 @@ impl Instance {
     }
 
     pub fn from_matrix(mat: DMat4) -> Self {
-        let (_, rotation, position) = mat.to_scale_rotation_translation();
+        let (scale, rotation, position) = mat.to_scale_rotation_translation();
         Instance {
             position,
             rotation,
+            scale,
             buffer: None,
         }
     }
@@ -447,8 +449,6 @@ impl InstanceRaw {
             attributes: &[
                 wgpu::VertexAttribute {
                     offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials, we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5, not conflict with them later
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,
                 },

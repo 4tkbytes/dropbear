@@ -93,7 +93,7 @@ impl AdoptedEntity {
                     }],
                 });
 
-        let instance = Instance::new(DVec3::ONE, DQuat::IDENTITY);
+        let instance = Instance::new(DVec3::ONE, DQuat::IDENTITY, DVec3::ONE);
 
         let instance_buffer =
             graphics
