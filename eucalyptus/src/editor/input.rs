@@ -29,8 +29,8 @@ impl Keyboard for Editor {
                             kind: egui_toast_fork::ToastKind::Info,
                             text: format!("Switched to Viewport::Gizmo").into(),
                             options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
+                                .duration_in_seconds(1.0)
+                                .show_progress(false),
                             ..Default::default()
                         });
                     }
@@ -50,8 +50,8 @@ impl Keyboard for Editor {
                             kind: egui_toast_fork::ToastKind::Info,
                             text: format!("Switched to Viewport::CameraMove").into(),
                             options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
+                                .duration_in_seconds(1.0)
+                                .show_progress(false),
                             ..Default::default()
                         });
                     }
@@ -78,8 +78,8 @@ impl Keyboard for Editor {
                             kind: egui_toast_fork::ToastKind::Info,
                             text: format!("Switched to Viewport::None").into(),
                             options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
+                                .duration_in_seconds(1.0)
+                                .show_progress(false),
                             ..Default::default()
                         });
                     }

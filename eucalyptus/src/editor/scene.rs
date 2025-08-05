@@ -11,7 +11,7 @@ use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 use super::*;
-use crate::states::{Node, RESOURCES, ScriptComponent};
+use crate::states::{Node, RESOURCES};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut Graphics) {
@@ -22,53 +22,49 @@ impl Scene for Editor {
             include_str!("../shader.wgsl"),
             Some("viewport_shader"),
         );
-        let cube_path = {
-            #[allow(unused_assignments)]
-            let mut path = PathBuf::new();
-            let resources = RESOURCES.read().unwrap();
-            let mut matches = Vec::new();
-            crate::utils::search_nodes_recursively(
-                &resources.nodes,
-                &|node| match node {
-                    Node::File(file) => file.name.contains("cube"),
-                    Node::Folder(folder) => folder.name.contains("cube"),
-                },
-                &mut matches,
-            );
-            match matches.get(0) {
-                Some(thing) => match thing {
-                    Node::File(file) => path = file.path.clone(),
-                    Node::Folder(folder) => path = folder.path.clone(),
-                },
-                None => path = PathBuf::new(),
-            }
-            path
-        };
-
-        if cube_path != PathBuf::new() {
-            let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
-            let script = ScriptComponent {
-                name: "DummyScript".to_string(),
-                path: PathBuf::from("dummy/path/to/script.rs"),
+        if self.world.len() == 0 {
+            let cube_path = {
+                #[allow(unused_assignments)]
+                let mut path = PathBuf::new();
+                let resources = RESOURCES.read().unwrap();
+                let mut matches = Vec::new();
+                crate::utils::search_nodes_recursively(
+                    &resources.nodes,
+                    &|node| match node {
+                        Node::File(file) => file.name.contains("cube"),
+                        Node::Folder(folder) => folder.name.contains("cube"),
+                    },
+                    &mut matches,
+                );
+                match matches.get(0) {
+                    Some(thing) => match thing {
+                        Node::File(file) => path = file.path.clone(),
+                        Node::Folder(folder) => path = folder.path.clone(),
+                    },
+                    None => path = PathBuf::new(),
+                }
+                path
             };
-            self.world.spawn((cube, Transform::default(), script));
+
+            if cube_path != PathBuf::new() {
+                let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
+                // let script = ScriptComponent {
+                //     name: "DummyScript".to_string(),
+                //     path: PathBuf::from("dummy/path/to/script.rs"),
+                // };
+                self.world.spawn((
+                    cube,
+                    Transform::default(),
+                    // script
+                ));
+                log::info!("Added default cube since no entities were loaded from scene");
+            } else {
+                log::warn!("cube path is empty :(")
+            }
         } else {
-            log::warn!("cube path is empty :(")
+            log::info!("Scene loaded with {} entities, skipping default cube", self.world.len());
         }
 
-        // let aspect = self.size.width as f64 / self.size.height as f64;
-        // let camera = Camera::new(
-        //     graphics,
-        //     DVec3::new(0.0, 1.0, 2.0),
-        //     DVec3::new(0.0, 0.0, 0.0),
-        //     DVec3::Y,
-        //     aspect,
-        //     45.0,
-        //     0.1,
-        //     100.0,
-        //     0.125,
-        //     0.002,
-        // );
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();
