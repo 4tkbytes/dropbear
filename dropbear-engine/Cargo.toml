@@ -20,6 +20,7 @@ gilrs.workspace = true
 glam.workspace = true
 log.workspace = true
 # nalgebra.workspace = true
+russimp.workspace = true
 pollster.workspace = true
 serde.workspace = true
 spin_sleep.workspace = true
@@ -30,9 +31,3 @@ winit.workspace = true
 version = "0.25"
 default-features = false
 features = ["png", "jpeg"]
-
-[target.'cfg(any(target_arch = "aarch64", target_arch = "arm"))'.dependencies]
-russimp = "3.2"
-
-[target.'cfg(not(any(target_arch = "aarch64", target_arch = "arm")))'.dependencies]
-russimp.workspace = true

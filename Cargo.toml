@@ -48,8 +48,8 @@ version = "0.25"
 default-features = false
 features = ["png"]
 
-# [patch.crates-io]
-# russimp-sys = { git = "https://github.com/4tkbytes/russimp-sys" }
+[patch.crates-io]
+russimp-sys = { git = "https://github.com/4tkbytes/russimp-sys" }
 
 [profile.dev]
 opt-level = 0
