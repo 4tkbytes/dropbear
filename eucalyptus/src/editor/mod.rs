@@ -64,6 +64,9 @@ pub struct Editor {
     viewport_mode: ViewportMode,
 
     signal: Signal,
+    // undo_stack: Vec<UndoableAction>,
+    // redo_stack: Vec<UndoableAction>,
+    // max_undo_steps: usize,
 }
 
 /// This enum will be used to describe the type of command/signal. This is only between
@@ -72,7 +75,7 @@ pub enum Signal {
     None,
     Copy(SceneEntity),
     Paste(SceneEntity),
-    // Resize(u32, u32),
+    Delete,
 }
 
 impl Default for Editor {
@@ -114,6 +117,39 @@ impl Editor {
             selected_entity: None,
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
+            // undo_stack: Vec::new(),
+            // redo_stack: Vec::new(),
+            // max_undo_steps: 50,
+        }
+    }
+
+    #[allow(dead_code)]
+    /// A helper function that gets the selected entity and returns the entity reference and
+    /// the scene entity information.
+    fn get_selected_entity(&self) -> Option<(hecs::Entity, SceneEntity)> {
+        if let Some(entity) = &self.selected_entity {
+            let id = unsafe { self.world.find_entity_from_id(entity.id()) };
+            if let Ok(mut q) = self
+                .world
+                .query_one::<(&AdoptedEntity, &Transform)>(*entity)
+            {
+                if let Some((e, t)) = q.get() {
+                    let entity = SceneEntity {
+                        model_path: e.model().path.clone(),
+                        label: e.model().label.clone(),
+                        transform: *t,
+                        script: None,
+                        entity_id: Some(entity.clone()),
+                    };
+                    return Some((id, entity));
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        } else {
+            return None;
         }
     }
 

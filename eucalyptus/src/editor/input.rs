@@ -21,6 +21,9 @@ impl Keyboard for Editor {
         let _alt_pressed = self.pressed_keys.contains(&KeyCode::AltLeft)
             || self.pressed_keys.contains(&KeyCode::AltRight);
 
+        let _shift_pressed = self.pressed_keys.contains(&KeyCode::ShiftLeft)
+            || self.pressed_keys.contains(&KeyCode::ShiftRight);
+
         match key {
             KeyCode::KeyG => {
                 if self.is_viewport_focused {
@@ -69,6 +72,22 @@ impl Keyboard for Editor {
                     }
                 } else {
                     self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::Delete => {
+                if let Some(_) = &self.selected_entity {
+                    self.signal = Signal::Delete;
+                } else {
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Warning,
+                            text: format!("Failed to delete: No entity selected").into(),
+                            options: egui_toast_fork::ToastOptions::default()
+                                .duration_in_seconds(3.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                    }
                 }
             }
             KeyCode::Escape => {
@@ -176,7 +195,10 @@ impl Keyboard for Editor {
                             if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
                                 toasts.add(egui_toast_fork::Toast {
                                     kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!("Unable to paste: You haven't selected anything!").into(),
+                                    text: format!(
+                                        "Unable to paste: You haven't selected anything!"
+                                    )
+                                    .into(),
                                     options: egui_toast_fork::ToastOptions::default()
                                         .duration_in_seconds(3.0)
                                         .show_progress(true),

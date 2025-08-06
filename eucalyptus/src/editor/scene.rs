@@ -176,6 +176,37 @@ impl Scene for Editor {
                     }
                 }
             }
+            Signal::Delete => {
+                if let Some(sel_e) = &self.selected_entity {
+                    match self.world.despawn(*sel_e) {
+                        Ok(_) => {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Success,
+                                    text: format!("Decimated entity").into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                            self.signal = Signal::None;
+                        }
+                        Err(e) => {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Warning,
+                                    text: format!("Failed to delete entity: {}", e).into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
 

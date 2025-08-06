@@ -528,7 +528,7 @@ impl Default for SceneCameraConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct SceneEntity {
     pub model_path: PathBuf,
     pub label: String,
