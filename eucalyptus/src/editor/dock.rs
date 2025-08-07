@@ -5,7 +5,7 @@ use std::{
 };
 
 use dropbear_engine::entity::Transform;
-use egui::{self};
+use egui::{self, CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use egui_toast_fork::{Toast, ToastKind};
@@ -70,7 +70,7 @@ impl<'a> EditorTabViewer<'a> {
                     properties: ModelProperties::default(),
                 });
             }
-            
+
             Ok(())
         } else {
             return Err(anyhow::anyhow!(
@@ -171,84 +171,178 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     .sense(egui::Sense::click_and_drag()),
                 );
 
-                // todo: fix
-                //
-                // if image_response.hovered() {
-                //     if let Ok(mut dragged_asset) = DRAGGED_ASSET.lock() {
-                //         if let Some(asset) = dragged_asset.take() {
-                //             if matches!(asset.asset_type, ResourceType::Model) {
-                //                 if let Some(drop_pos) = ui.ctx().input(|i| i.pointer.interact_pos())
-                //                 {
-                //                     let (ray_og, ray_dir) = crate::utils::screen_to_world_coords(
-                //                         self.camera,
-                //                         drop_pos,
-                //                         image_response.rect,
-                //                     );
-
-                //                     let spawn_distance = 5.0;
-                //                     let spawn_position = ray_og + ray_dir * spawn_distance;
-
-                //                     match self.spawn_entity_at_pos(&asset, spawn_position) {
-                //                         Ok(()) => {
-                //                             log::info!(
-                //                                 "Queued spawn for {} at position {:?}",
-                //                                 asset.name,
-                //                                 spawn_position
-                //                             );
-
-                //                             if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                //                                 toasts.add(Toast {
-                //                                     kind: ToastKind::Success,
-                //                                     text: format!("Spawning {}", asset.name).into(), // Changed text to indicate queuing
-                //                                     options: ToastOptions::default()
-                //                                         .duration_in_seconds(2.0),
-                //                                     ..Default::default()
-                //                                 });
-                //                             }
-                //                         }
-                //                         Err(e) => {
-                //                             log::error!(
-                //                                 "Failed to queue spawn for {}: {}",
-                //                                 asset.name,
-                //                                 e
-                //                             );
-
-                //                             if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                //                                 toasts.add(Toast {
-                //                                     kind: ToastKind::Error,
-                //                                     text: format!(
-                //                                         "Failed to queue spawn for {}: {}",
-                //                                         asset.name, e
-                //                                     )
-                //                                     .into(),
-                //                                     options: ToastOptions::default()
-                //                                         .duration_in_seconds(3.0),
-                //                                     ..Default::default()
-                //                                 });
-                //                             }
-                //                         }
-                //                     }
-                //                 }
-                //             }
-                //         }
-                //     }
-                // }
-
                 if image_response.clicked() {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                        // self.debug_camera_state();
+                        let viewport_rect = image_response.rect;
+                        let local_pos = click_pos - viewport_rect.min;
 
-                        let (ray_origin, ray_dir) = crate::utils::screen_to_world_coords(
-                            self.camera,
-                            click_pos,
-                            image_response.rect,
+                        let ndc_x = (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
+                        let ndc_y = 1.0 - (2.0 * local_pos.y / viewport_rect.height());
+
+                        let view_matrix = glam::DMat4::look_at_lh(
+                            self.camera.eye,
+                            self.camera.target,
+                            self.camera.up,
+                        );
+
+                        let proj_matrix = glam::DMat4::perspective_lh(
+                            self.camera.fov_y.to_radians(),
+                            self.camera.aspect,
+                            self.camera.znear,
+                            self.camera.zfar,
+                        );
+
+                        log::debug!(
+                            "Camera - eye: {:?}, target: {:?}, up: {:?}",
+                            self.camera.eye,
+                            self.camera.target,
+                            self.camera.up
                         );
                         log::debug!(
-                            "Click pos: {:?}, viewport rect: {:?}",
-                            click_pos,
-                            image_response.rect
+                            "Camera - fov_y: {:.3}°, aspect: {:.3}, znear: {:.3}, zfar: {:.3}",
+                            self.camera.fov_y,
+                            self.camera.aspect,
+                            self.camera.znear,
+                            self.camera.zfar
                         );
-                        log::debug!("Ray origin: {:?}, direction: {:?}", ray_origin, ray_dir);
+
+                        if !view_matrix.is_finite() {
+                            log::error!("Invalid view matrix");
+                            return;
+                        }
+                        if !proj_matrix.is_finite() {
+                            log::error!("Invalid projection matrix");
+                            return;
+                        }
+
+                        let view_proj = proj_matrix * view_matrix;
+                        let inv_view_proj = view_proj.inverse();
+
+                        if !inv_view_proj.is_finite() {
+                            log::error!("Cannot invert view-projection matrix");
+                            return;
+                        }
+
+                        let ray_start_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 0.0, 1.0);
+                        let ray_end_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 1.0, 1.0);
+
+                        let ray_start_world = inv_view_proj * ray_start_ndc;
+                        let ray_end_world = inv_view_proj * ray_end_ndc;
+
+                        if ray_start_world.w == 0.0 || ray_end_world.w == 0.0 {
+                            log::error!("Invalid homogeneous coordinates");
+                            return;
+                        }
+
+                        let ray_start = ray_start_world.truncate() / ray_start_world.w;
+                        let ray_end = ray_end_world.truncate() / ray_end_world.w;
+
+                        if !ray_start.is_finite() || !ray_end.is_finite() {
+                            log::error!(
+                                "Invalid ray points - start: {:?}, end: {:?}",
+                                ray_start,
+                                ray_end
+                            );
+                            return;
+                        }
+
+                        let ray_direction = (ray_end - ray_start).normalize();
+
+                        if !ray_direction.is_finite() {
+                            log::error!("Invalid ray direction: {:?}", ray_direction);
+                            return;
+                        }
+
+                        log::debug!(
+                            "Click pos: {:?}, NDC: ({:.3}, {:.3})",
+                            click_pos,
+                            ndc_x,
+                            ndc_y
+                        );
+                        log::debug!("Ray start: {:?}, direction: {:?}", ray_start, ray_direction);
+
+                        let mut closest_distance = f64::INFINITY;
+                        let mut selected_entity_id: Option<hecs::Entity> = None;
+                        let mut entity_count = 0;
+
+                        for (entity_id, (transform, _)) in
+                            self.world.query::<(&Transform, &AdoptedEntity)>().iter()
+                        {
+                            entity_count += 1;
+                            let entity_pos = transform.position;
+                            let sphere_radius = transform.scale.max_element() * 1.0;
+
+                            let to_sphere = entity_pos - ray_start;
+                            let projection = to_sphere.dot(ray_direction);
+
+                            // Debug each entity
+                            log::debug!(
+                                "Entity {:?}: pos={:?}, scale={:?}, radius={:.3}",
+                                entity_id,
+                                entity_pos,
+                                transform.scale,
+                                sphere_radius
+                            );
+                            log::debug!(
+                                "  to_sphere={:?}, projection={:.3}",
+                                to_sphere,
+                                projection
+                            );
+
+                            if projection > 0.0 {
+                                let closest_point = ray_start + ray_direction * projection;
+                                let distance_to_sphere = (closest_point - entity_pos).length();
+
+                                log::debug!(
+                                    "  closest_point={:?}, distance_to_sphere={:.3}",
+                                    closest_point,
+                                    distance_to_sphere
+                                );
+
+                                if distance_to_sphere <= sphere_radius {
+                                    let discriminant = sphere_radius * sphere_radius
+                                        - distance_to_sphere * distance_to_sphere;
+                                    if discriminant >= 0.0 {
+                                        let intersection_distance =
+                                            projection - discriminant.sqrt();
+                                        log::debug!(
+                                            "  HIT! intersection_distance={:.3}",
+                                            intersection_distance
+                                        );
+
+                                        if intersection_distance < closest_distance {
+                                            closest_distance = intersection_distance;
+                                            selected_entity_id = Some(entity_id);
+                                        }
+                                    }
+                                } else {
+                                    log::debug!(
+                                        "  MISS: distance {:.3} > radius {:.3}",
+                                        distance_to_sphere,
+                                        sphere_radius
+                                    );
+                                }
+                            } else {
+                                log::debug!("  BEHIND: projection {:.3} <= 0", projection);
+                            }
+                        }
+
+                        log::debug!("Total entities checked: {}", entity_count);
+
+                        if let Some(entity_id) = selected_entity_id {
+                            *self.selected_entity = Some(entity_id);
+                            log::debug!("Selected entity: {:?}", entity_id);
+                        } else {
+                            *self.selected_entity = None;
+                            if entity_count == 0 {
+                                log::debug!("No entities in world to select");
+                            } else {
+                                log::debug!(
+                                    "No entity hit by ray (checked {} entities)",
+                                    entity_count
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -320,22 +414,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             if was_focused && !cfg.is_focused {
-                            // Check if transform actually changed from the original
-                            let transform_changed = cfg.old_pos.position != transform.position 
-                                || cfg.old_pos.rotation != transform.rotation 
-                                || cfg.old_pos.scale != transform.scale;
-                            
-                            if transform_changed {
-                                UndoableAction::push_to_undo(
-                                    &mut self.undo_stack,
-                                    UndoableAction::Transform(
-                                        entity_id.clone(),
-                                        cfg.old_pos.clone(),
-                                    ),
-                                );
-                                log::debug!("Pushed transform action to stack");
+                                let transform_changed = cfg.old_pos.position != transform.position
+                                    || cfg.old_pos.rotation != transform.rotation
+                                    || cfg.old_pos.scale != transform.scale;
+
+                                if transform_changed {
+                                    UndoableAction::push_to_undo(
+                                        &mut self.undo_stack,
+                                        UndoableAction::Transform(
+                                            entity_id.clone(),
+                                            cfg.old_pos.clone(),
+                                        ),
+                                    );
+                                    log::debug!("Pushed transform action to stack");
+                                }
                             }
-                        }
                         }
                     }
                 }
@@ -600,7 +693,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
-                    match self.world.query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(*entity) {
+                    match self
+                        .world
+                        .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(
+                            *entity,
+                        ) {
                         Ok((e, transform, _props)) => {
                             let model = e.model_mut();
                             ui.group(|ui| {
@@ -610,155 +707,238 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 })
                             });
 
-                            ui.collapsing("Transformation", |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label("Position:");
-                                });
-                                
-                                let mut pos_changed = false;
-                                ui.horizontal(|ui| {
-                                    ui.label("X:");
-                                    if ui.add(egui::DragValue::new(&mut transform.position.x)
-                                        .speed(0.1)
-                                        .fixed_decimals(3)).changed() {
-                                        pos_changed = true;
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Y:");
-                                    if ui.add(egui::DragValue::new(&mut transform.position.y)
-                                        .speed(0.1)
-                                        .fixed_decimals(3)).changed() {
-                                        pos_changed = true;
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Z:");
-                                    if ui.add(egui::DragValue::new(&mut transform.position.z)
-                                        .speed(0.1)
-                                        .fixed_decimals(3)).changed() {
-                                        pos_changed = true;
-                                    }
-                                });
-                                if ui.button("Reset Position").clicked() {
-                                    transform.position = glam::DVec3::ZERO;
-                                }
-                                
-                                ui.add_space(5.0);
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("Rotation:");
-                                });
-                                
-                                let mut rotation_changed = false;
-                                let (mut x_rot, mut y_rot, mut z_rot) = transform.rotation.to_euler(glam::EulerRot::XYZ);
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("X:");
-                                    if ui.add(egui::Slider::new(&mut x_rot, -std::f64::consts::PI..=std::f64::consts::PI)
-                                        .step_by(0.01)
-                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
-                                        rotation_changed = true;
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Y:");
-                                    if ui.add(egui::Slider::new(&mut y_rot, -std::f64::consts::PI..=std::f64::consts::PI)
-                                        .step_by(0.01)
-                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
-                                        rotation_changed = true;
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Z:");
-                                    if ui.add(egui::Slider::new(&mut z_rot, -std::f64::consts::PI..=std::f64::consts::PI)
-                                        .step_by(0.01)
-                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
-                                        rotation_changed = true;
-                                    }
-                                });
-                                
-                                if rotation_changed {
-                                    transform.rotation = glam::DQuat::from_euler(glam::EulerRot::XYZ, x_rot, y_rot, z_rot);
-                                }
-                                if ui.button("Reset Rotation").clicked() {
-                                    transform.rotation = glam::DQuat::IDENTITY;
-                                }
-                                ui.add_space(5.0);
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("Scale:");
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
-                                        if ui.button(lock_icon).on_hover_text("Lock uniform scaling").clicked() {
-                                            cfg.scale_locked = !cfg.scale_locked;
+                            CollapsingHeader::new("h")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Position:");
+                                    });
+
+                                    let mut pos_changed = false;
+                                    ui.horizontal(|ui| {
+                                        ui.label("X:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut transform.position.x)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            )
+                                            .changed()
+                                        {
+                                            pos_changed = true;
                                         }
                                     });
-                                });
-                                
-                                let mut scale_changed = false;
-                                let mut new_scale = transform.scale;
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("X:");
-                                    if ui.add(egui::Slider::new(&mut new_scale.x, 0.01..=10.0)
-                                        .step_by(0.01)
-                                        .fixed_decimals(3)).changed() {
-                                        scale_changed = true;
-                                        if cfg.scale_locked {
-                                            let scale_factor = new_scale.x / transform.scale.x;
-                                            new_scale.y = transform.scale.y * scale_factor;
-                                            new_scale.z = transform.scale.z * scale_factor;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Y:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut transform.position.y)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            )
+                                            .changed()
+                                        {
+                                            pos_changed = true;
                                         }
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Z:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut transform.position.z)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            )
+                                            .changed()
+                                        {
+                                            pos_changed = true;
+                                        }
+                                    });
+                                    if ui.button("Reset Position").clicked() {
+                                        transform.position = glam::DVec3::ZERO;
                                     }
+
+                                    ui.add_space(5.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Rotation:");
+                                    });
+
+                                    let mut rotation_changed = false;
+                                    let (mut x_rot, mut y_rot, mut z_rot) =
+                                        transform.rotation.to_euler(glam::EulerRot::XYZ);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("X:");
+                                        if ui
+                                            .add(
+                                                egui::Slider::new(
+                                                    &mut x_rot,
+                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                                )
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            )
+                                            .changed()
+                                        {
+                                            rotation_changed = true;
+                                        }
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Y:");
+                                        if ui
+                                            .add(
+                                                egui::Slider::new(
+                                                    &mut y_rot,
+                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                                )
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            )
+                                            .changed()
+                                        {
+                                            rotation_changed = true;
+                                        }
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Z:");
+                                        if ui
+                                            .add(
+                                                egui::Slider::new(
+                                                    &mut z_rot,
+                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                                )
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            )
+                                            .changed()
+                                        {
+                                            rotation_changed = true;
+                                        }
+                                    });
+
+                                    if rotation_changed {
+                                        transform.rotation = glam::DQuat::from_euler(
+                                            glam::EulerRot::XYZ,
+                                            x_rot,
+                                            y_rot,
+                                            z_rot,
+                                        );
+                                    }
+                                    if ui.button("Reset Rotation").clicked() {
+                                        transform.rotation = glam::DQuat::IDENTITY;
+                                    }
+                                    ui.add_space(5.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Scale:");
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                let lock_icon =
+                                                    if cfg.scale_locked { "🔒" } else { "🔓" };
+                                                if ui
+                                                    .button(lock_icon)
+                                                    .on_hover_text("Lock uniform scaling")
+                                                    .clicked()
+                                                {
+                                                    cfg.scale_locked = !cfg.scale_locked;
+                                                }
+                                            },
+                                        );
+                                    });
+
+                                    let mut scale_changed = false;
+                                    let mut new_scale = transform.scale;
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("X:");
+                                        if ui
+                                            .add(
+                                                egui::Slider::new(&mut new_scale.x, 0.01..=10.0)
+                                                    .step_by(0.01)
+                                                    .fixed_decimals(3),
+                                            )
+                                            .changed()
+                                        {
+                                            scale_changed = true;
+                                            if cfg.scale_locked {
+                                                let scale_factor = new_scale.x / transform.scale.x;
+                                                new_scale.y = transform.scale.y * scale_factor;
+                                                new_scale.z = transform.scale.z * scale_factor;
+                                            }
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Y:");
+                                        let mut y_slider =
+                                            egui::Slider::new(&mut new_scale.y, 0.01..=10.0)
+                                                .step_by(0.01)
+                                                .fixed_decimals(3);
+
+                                        if cfg.scale_locked {
+                                            y_slider = y_slider.text_color(egui::Color32::GRAY);
+                                        }
+
+                                        if ui.add_enabled(!cfg.scale_locked, y_slider).changed() {
+                                            scale_changed = true;
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Z:");
+                                        let mut z_slider =
+                                            egui::Slider::new(&mut new_scale.z, 0.01..=10.0)
+                                                .step_by(0.01)
+                                                .fixed_decimals(3);
+
+                                        if cfg.scale_locked {
+                                            z_slider = z_slider.text_color(egui::Color32::GRAY);
+                                        }
+
+                                        if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
+                                            scale_changed = true;
+                                        }
+                                    });
+
+                                    if scale_changed {
+                                        transform.scale = new_scale;
+                                    }
+                                    if ui.button("Reset Scale").clicked() {
+                                        transform.scale = glam::DVec3::ONE;
+                                    }
+                                    ui.add_space(5.0);
+
+                                    // maybe use? probs not :/
+                                    // if pos_changed || rotation_changed || scale_changed {
+                                    //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
+                                    // }
                                 });
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("Y:");
-                                    let mut y_slider = egui::Slider::new(&mut new_scale.y, 0.01..=10.0)
-                                        .step_by(0.01)
-                                        .fixed_decimals(3);
-                                    
-                                    if cfg.scale_locked {
-                                        y_slider = y_slider.text_color(egui::Color32::GRAY);
-                                    }
-                                    
-                                    if ui.add_enabled(!cfg.scale_locked, y_slider).changed() {
-                                        scale_changed = true;
-                                    }
-                                });
-                                
-                                ui.horizontal(|ui| {
-                                    ui.label("Z:");
-                                    let mut z_slider = egui::Slider::new(&mut new_scale.z, 0.01..=10.0)
-                                        .step_by(0.01)
-                                        .fixed_decimals(3);
-                                    
-                                    if cfg.scale_locked {
-                                        z_slider = z_slider.text_color(egui::Color32::GRAY);
-                                    }
-                                    
-                                    if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
-                                        scale_changed = true;
-                                    }
-                                });
-                                
-                                if scale_changed {
-                                    transform.scale = new_scale;
-                                }
-                                if ui.button("Reset Scale").clicked() {
-                                    transform.scale = glam::DVec3::ONE;
-                                }
-                                ui.add_space(5.0);
-                                
-                                // maybe use? probs not :/
-                                // if pos_changed || rotation_changed || scale_changed {
-                                //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
-                                // }
-                            });
                         }
                         Err(e) => {
                             ui.label(format!("Error: Unable to query entity: {}", e));

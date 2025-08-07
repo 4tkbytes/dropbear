@@ -5,9 +5,10 @@ pub mod scene;
 pub(crate) use crate::editor::dock::*;
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
+    time::{Duration, Instant},
 };
 
 use dropbear_engine::{
@@ -27,7 +28,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
+    states::{EntityNode, ModelProperties, PROJECT, SCENES, SceneEntity, ScriptComponent},
     utils::ViewportMode,
 };
 
@@ -65,7 +66,10 @@ pub struct Editor {
 
     signal: Signal,
     undo_stack: Vec<UndoableAction>,
+    // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
+    last_key_press_times: HashMap<KeyCode, Instant>,
+    double_press_threshold: Duration,
 }
 
 /// Describes an action that is undoable
@@ -158,8 +162,25 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            // redo_stack: Vec::new(),
+            last_key_press_times: HashMap::new(),
+            double_press_threshold: Duration::from_millis(300),
         }
+    }
+
+    fn is_double_key_press(&mut self, key: KeyCode) -> bool {
+        let now = Instant::now();
+
+        if let Some(last_time) = self.last_key_press_times.get(&key) {
+            let time_diff = now.duration_since(*last_time);
+
+            if time_diff <= self.double_press_threshold {
+                self.last_key_press_times.remove(&key);
+                return true;
+            }
+        }
+
+        self.last_key_press_times.insert(key, now);
+        false
     }
 
     #[allow(dead_code)]
@@ -167,7 +188,7 @@ impl Editor {
     /// the scene entity information.
     fn get_selected_entity(&self) -> Option<(hecs::Entity, SceneEntity)> {
         if let Some(entity) = &self.selected_entity {
-            let id = unsafe { self.world.find_entity_from_id(entity.id()) };
+            let id = entity.clone();
             if let Ok(mut q) = self
                 .world
                 .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity)

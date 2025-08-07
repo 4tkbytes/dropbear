@@ -98,14 +98,16 @@ impl Scene for Editor {
             for spawn in pending_spawns.drain(..) {
                 match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
                     Ok(adopted) => {
-                        let entity_id = self.world.spawn((adopted, spawn.transform, spawn.properties));
+                        let entity_id =
+                            self.world
+                                .spawn((adopted, spawn.transform, spawn.properties));
                         self.selected_entity = Some(entity_id);
-                        
+
                         UndoableAction::push_to_undo(
                             &mut self.undo_stack,
                             UndoableAction::Spawn(entity_id),
                         );
-                        
+
                         log::info!(
                             "Successfully spawned {} with ID {:?}",
                             spawn.asset_name,
@@ -143,7 +145,11 @@ impl Scene for Editor {
                     Some(&scene_entity.label),
                 ) {
                     Ok(adopted) => {
-                        let entity_id = self.world.spawn((adopted, scene_entity.transform, ModelProperties::default()));
+                        let entity_id = self.world.spawn((
+                            adopted,
+                            scene_entity.transform,
+                            ModelProperties::default(),
+                        ));
                         self.selected_entity = Some(entity_id);
                         log::debug!(
                             "Successfully paste-spawned {} with ID {:?}",

@@ -24,6 +24,8 @@ impl Keyboard for Editor {
         let shift_pressed = self.pressed_keys.contains(&KeyCode::ShiftLeft)
             || self.pressed_keys.contains(&KeyCode::ShiftRight);
 
+        let is_double_press = self.is_double_key_press(key);
+
         match key {
             KeyCode::KeyG => {
                 if self.is_viewport_focused {
@@ -91,13 +93,18 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::Escape => {
-                if self.is_viewport_focused {
+                if is_double_press {
+                    if let Some(_) = &self.selected_entity {
+                        self.selected_entity = None;
+                        log::debug!("deselected entity");
+                    }
+                } else if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::None;
                     log::debug!("Switched to Viewport::None");
                     if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
                         toasts.add(egui_toast_fork::Toast {
                             kind: egui_toast_fork::ToastKind::Info,
-                            text: format!("Switched to Viewport::None").into(),
+                            text: "Switched to Viewport::None".into(),
                             options: egui_toast_fork::ToastOptions::default()
                                 .duration_in_seconds(1.0)
                                 .show_progress(false),
@@ -109,6 +116,38 @@ impl Keyboard for Editor {
                     }
                 } else {
                     self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyQ => {
+                if ctrl_pressed {
+                    match self.save_project_config() {
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!("Error saving project: {}", e);
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Error,
+                                    text: format!("Error saving project: {}", e).into(),
+                                    options: ToastOptions::default()
+                                        .duration_in_seconds(5.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                    log::info!("Successfully saved project, about to quit...");
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Success,
+                            text: format!("Successfully saved project").into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(5.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                        self.scene_command = SceneCommand::Quit;
+                    }
                 }
             }
             KeyCode::KeyC => {

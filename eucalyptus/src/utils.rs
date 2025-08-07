@@ -10,7 +10,7 @@ use egui::Context;
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
 use git2::Repository;
 
-use crate::states::{ModelProperties, Node, ProjectConfig, PROJECT};
+use crate::states::{ModelProperties, Node, PROJECT, ProjectConfig};
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
