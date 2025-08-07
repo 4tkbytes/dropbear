@@ -299,6 +299,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     transform.position = new_transform.translation.into();
                                     transform.rotation = new_transform.rotation.into();
                                     transform.scale = new_transform.scale.into();
+                                    transform_changed = true;
                                 }
                             }
 
