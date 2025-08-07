@@ -75,6 +75,14 @@ impl AdoptedEntity {
         Ok(Self::adopt(graphics, model, label))
     }
 
+    pub fn label(&self) -> &String {
+        &self.model().label
+    }
+
+    pub fn set_label(&mut self, label: &str) {
+        self.model_mut().label = label.to_string();
+    }
+
     pub fn adopt(graphics: &Graphics, model: Model, label: Option<&str>) -> Self {
         let uniform = ModelUniform::new();
         let uniform_buffer = graphics.create_uniform(uniform, Some("Entity Model Uniform"));
@@ -150,6 +158,10 @@ impl AdoptedEntity {
 
     pub fn model(&self) -> &Model {
         self.model.as_ref().unwrap()
+    }
+
+    pub fn model_mut(&mut self) -> &mut Model {
+        self.model.as_mut().unwrap()
     }
 }
 

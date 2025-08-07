@@ -41,6 +41,7 @@ pub struct EditorTabViewer<'a> {
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
+    pub signal: &'a mut Signal,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -48,16 +49,28 @@ impl<'a> EditorTabViewer<'a> {
         &mut self,
         asset: &DraggedAsset,
         position: glam::DVec3,
+        properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
         let mut transform = Transform::default();
         transform.position = position;
 
         if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
-            pending_spawns.push(PendingSpawn {
-                asset_path: asset.path.clone(),
-                asset_name: asset.name.clone(),
-                transform,
-            });
+            if let Some(props) = properties {
+                pending_spawns.push(PendingSpawn {
+                    asset_path: asset.path.clone(),
+                    asset_name: asset.name.clone(),
+                    transform,
+                    properties: props,
+                });
+            } else {
+                pending_spawns.push(PendingSpawn {
+                    asset_path: asset.path.clone(),
+                    asset_name: asset.name.clone(),
+                    transform,
+                    properties: ModelProperties::default(),
+                });
+            }
+            
             Ok(())
         } else {
             return Err(anyhow::anyhow!(
@@ -85,14 +98,15 @@ impl<'a> EditorTabViewer<'a> {
 pub struct DraggedAsset {
     pub name: String,
     pub path: PathBuf,
-    pub asset_type: ResourceType,
+    // originally used for dragging stuff
+    // pub asset_type: ResourceType,
 }
 
 pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
 
-pub static DRAGGED_ASSET: LazyLock<Mutex<Option<DraggedAsset>>> =
-    LazyLock::new(|| Mutex::new(None));
+// pub static DRAGGED_ASSET: LazyLock<Mutex<Option<DraggedAsset>>> =
+//     LazyLock::new(|| Mutex::new(None));
 
 #[derive(Default)]
 pub(crate) struct INeedABetterNameForThisStruct {
@@ -101,6 +115,7 @@ pub(crate) struct INeedABetterNameForThisStruct {
     context_menu_tab: Option<EditorTab>,
     is_focused: bool,
     old_pos: Transform,
+    scale_locked: bool,
 }
 
 impl INeedABetterNameForThisStruct {}
@@ -156,66 +171,68 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     .sense(egui::Sense::click_and_drag()),
                 );
 
-                if image_response.hovered() {
-                    if let Ok(mut dragged_asset) = DRAGGED_ASSET.lock() {
-                        if let Some(asset) = dragged_asset.take() {
-                            if matches!(asset.asset_type, ResourceType::Model) {
-                                if let Some(drop_pos) = ui.ctx().input(|i| i.pointer.interact_pos())
-                                {
-                                    let (ray_og, ray_dir) = crate::utils::screen_to_world_coords(
-                                        self.camera,
-                                        drop_pos,
-                                        image_response.rect,
-                                    );
+                // todo: fix
+                //
+                // if image_response.hovered() {
+                //     if let Ok(mut dragged_asset) = DRAGGED_ASSET.lock() {
+                //         if let Some(asset) = dragged_asset.take() {
+                //             if matches!(asset.asset_type, ResourceType::Model) {
+                //                 if let Some(drop_pos) = ui.ctx().input(|i| i.pointer.interact_pos())
+                //                 {
+                //                     let (ray_og, ray_dir) = crate::utils::screen_to_world_coords(
+                //                         self.camera,
+                //                         drop_pos,
+                //                         image_response.rect,
+                //                     );
 
-                                    let spawn_distance = 5.0;
-                                    let spawn_position = ray_og + ray_dir * spawn_distance;
+                //                     let spawn_distance = 5.0;
+                //                     let spawn_position = ray_og + ray_dir * spawn_distance;
 
-                                    match self.spawn_entity_at_pos(&asset, spawn_position) {
-                                        Ok(()) => {
-                                            log::info!(
-                                                "Queued spawn for {} at position {:?}",
-                                                asset.name,
-                                                spawn_position
-                                            );
+                //                     match self.spawn_entity_at_pos(&asset, spawn_position) {
+                //                         Ok(()) => {
+                //                             log::info!(
+                //                                 "Queued spawn for {} at position {:?}",
+                //                                 asset.name,
+                //                                 spawn_position
+                //                             );
 
-                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                toasts.add(Toast {
-                                                    kind: ToastKind::Success,
-                                                    text: format!("Spawning {}", asset.name).into(), // Changed text to indicate queuing
-                                                    options: ToastOptions::default()
-                                                        .duration_in_seconds(2.0),
-                                                    ..Default::default()
-                                                });
-                                            }
-                                        }
-                                        Err(e) => {
-                                            log::error!(
-                                                "Failed to queue spawn for {}: {}",
-                                                asset.name,
-                                                e
-                                            );
+                //                             if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                //                                 toasts.add(Toast {
+                //                                     kind: ToastKind::Success,
+                //                                     text: format!("Spawning {}", asset.name).into(), // Changed text to indicate queuing
+                //                                     options: ToastOptions::default()
+                //                                         .duration_in_seconds(2.0),
+                //                                     ..Default::default()
+                //                                 });
+                //                             }
+                //                         }
+                //                         Err(e) => {
+                //                             log::error!(
+                //                                 "Failed to queue spawn for {}: {}",
+                //                                 asset.name,
+                //                                 e
+                //                             );
 
-                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                toasts.add(Toast {
-                                                    kind: ToastKind::Error,
-                                                    text: format!(
-                                                        "Failed to queue spawn for {}: {}",
-                                                        asset.name, e
-                                                    )
-                                                    .into(),
-                                                    options: ToastOptions::default()
-                                                        .duration_in_seconds(3.0),
-                                                    ..Default::default()
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                //                             if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                //                                 toasts.add(Toast {
+                //                                     kind: ToastKind::Error,
+                //                                     text: format!(
+                //                                         "Failed to queue spawn for {}: {}",
+                //                                         asset.name, e
+                //                                     )
+                //                                     .into(),
+                //                                     options: ToastOptions::default()
+                //                                         .duration_in_seconds(3.0),
+                //                                     ..Default::default()
+                //                                 });
+                //                             }
+                //                         }
+                //                     }
+                //                 }
+                //             }
+                //         }
+                //     }
+                // }
 
                 if image_response.clicked() {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
@@ -338,6 +355,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let mut assets: Vec<(String, String, PathBuf, ResourceType)> = Vec::new();
                 {
                     let res = RESOURCES.read().unwrap();
+                    egui_extras::install_image_loaders(ui.ctx());
 
                     fn recursive_search_nodes_and_attach_thumbnail(
                         res: &Vec<Node>,
@@ -511,12 +529,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
                                                         path: asset_path.clone(),
-                                                        asset_type: asset_type.clone(),
+                                                        // asset_type: asset_type.clone(),
                                                     };
 
-                                                    match self.spawn_entity_at_pos(&asset, spawn_position) {
+                                                    match self.spawn_entity_at_pos(&asset, spawn_position, None) {
                                                         Ok(()) => {
-                                                            log::debug!("db click spawned {} at camera pos {:?}",
+                                                            log::debug!("double click spawned {} at camera pos {:?}",
                                                                 asset.name, spawn_position
                                                             );
 
@@ -581,7 +599,175 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 });
             }
             EditorTab::ResourceInspector => {
-                ui.label("Resource Inspector");
+                if let Some(entity) = self.selected_entity {
+                    match self.world.query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(*entity) {
+                        Ok((e, transform, _props)) => {
+                            let model = e.model_mut();
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Name: ");
+                                    ui.text_edit_singleline(&mut model.label);
+                                })
+                            });
+
+                            ui.collapsing("Transformation", |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Position:");
+                                });
+                                
+                                let mut pos_changed = false;
+                                ui.horizontal(|ui| {
+                                    ui.label("X:");
+                                    if ui.add(egui::DragValue::new(&mut transform.position.x)
+                                        .speed(0.1)
+                                        .fixed_decimals(3)).changed() {
+                                        pos_changed = true;
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Y:");
+                                    if ui.add(egui::DragValue::new(&mut transform.position.y)
+                                        .speed(0.1)
+                                        .fixed_decimals(3)).changed() {
+                                        pos_changed = true;
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Z:");
+                                    if ui.add(egui::DragValue::new(&mut transform.position.z)
+                                        .speed(0.1)
+                                        .fixed_decimals(3)).changed() {
+                                        pos_changed = true;
+                                    }
+                                });
+                                if ui.button("Reset Position").clicked() {
+                                    transform.position = glam::DVec3::ZERO;
+                                }
+                                
+                                ui.add_space(5.0);
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("Rotation:");
+                                });
+                                
+                                let mut rotation_changed = false;
+                                let (mut x_rot, mut y_rot, mut z_rot) = transform.rotation.to_euler(glam::EulerRot::XYZ);
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("X:");
+                                    if ui.add(egui::Slider::new(&mut x_rot, -std::f64::consts::PI..=std::f64::consts::PI)
+                                        .step_by(0.01)
+                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
+                                        rotation_changed = true;
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Y:");
+                                    if ui.add(egui::Slider::new(&mut y_rot, -std::f64::consts::PI..=std::f64::consts::PI)
+                                        .step_by(0.01)
+                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
+                                        rotation_changed = true;
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Z:");
+                                    if ui.add(egui::Slider::new(&mut z_rot, -std::f64::consts::PI..=std::f64::consts::PI)
+                                        .step_by(0.01)
+                                        .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                                        .custom_parser(|s| s.trim_end_matches('°').parse::<f64>().ok().map(|v| v.to_radians()))).changed() {
+                                        rotation_changed = true;
+                                    }
+                                });
+                                
+                                if rotation_changed {
+                                    transform.rotation = glam::DQuat::from_euler(glam::EulerRot::XYZ, x_rot, y_rot, z_rot);
+                                }
+                                if ui.button("Reset Rotation").clicked() {
+                                    transform.rotation = glam::DQuat::IDENTITY;
+                                }
+                                ui.add_space(5.0);
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("Scale:");
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
+                                        if ui.button(lock_icon).on_hover_text("Lock uniform scaling").clicked() {
+                                            cfg.scale_locked = !cfg.scale_locked;
+                                        }
+                                    });
+                                });
+                                
+                                let mut scale_changed = false;
+                                let mut new_scale = transform.scale;
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("X:");
+                                    if ui.add(egui::Slider::new(&mut new_scale.x, 0.01..=10.0)
+                                        .step_by(0.01)
+                                        .fixed_decimals(3)).changed() {
+                                        scale_changed = true;
+                                        if cfg.scale_locked {
+                                            let scale_factor = new_scale.x / transform.scale.x;
+                                            new_scale.y = transform.scale.y * scale_factor;
+                                            new_scale.z = transform.scale.z * scale_factor;
+                                        }
+                                    }
+                                });
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("Y:");
+                                    let mut y_slider = egui::Slider::new(&mut new_scale.y, 0.01..=10.0)
+                                        .step_by(0.01)
+                                        .fixed_decimals(3);
+                                    
+                                    if cfg.scale_locked {
+                                        y_slider = y_slider.text_color(egui::Color32::GRAY);
+                                    }
+                                    
+                                    if ui.add_enabled(!cfg.scale_locked, y_slider).changed() {
+                                        scale_changed = true;
+                                    }
+                                });
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label("Z:");
+                                    let mut z_slider = egui::Slider::new(&mut new_scale.z, 0.01..=10.0)
+                                        .step_by(0.01)
+                                        .fixed_decimals(3);
+                                    
+                                    if cfg.scale_locked {
+                                        z_slider = z_slider.text_color(egui::Color32::GRAY);
+                                    }
+                                    
+                                    if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
+                                        scale_changed = true;
+                                    }
+                                });
+                                
+                                if scale_changed {
+                                    transform.scale = new_scale;
+                                }
+                                if ui.button("Reset Scale").clicked() {
+                                    transform.scale = glam::DVec3::ONE;
+                                }
+                                ui.add_space(5.0);
+                                
+                                // maybe use? probs not :/
+                                // if pos_changed || rotation_changed || scale_changed {
+                                //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
+                                // }
+                            });
+                        }
+                        Err(e) => {
+                            ui.label(format!("Error: Unable to query entity: {}", e));
+                            log::error!("Unable to query entity: {}", e);
+                        }
+                    }
+                } else {
+                    ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
+                }
             }
         }
 
@@ -716,6 +902,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTabMenuAction::DeleteEntity => {
                             log::debug!("Delete Entity clicked");
+                            *self.signal = Signal::Delete;
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;

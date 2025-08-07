@@ -10,7 +10,7 @@ use egui::Context;
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
 use git2::Repository;
 
-use crate::states::{Node, PROJECT, ProjectConfig};
+use crate::states::{ModelProperties, Node, ProjectConfig, PROJECT};
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
@@ -254,4 +254,5 @@ pub struct PendingSpawn {
     pub asset_path: PathBuf,
     pub asset_name: String,
     pub transform: Transform,
+    pub properties: ModelProperties,
 }

@@ -116,13 +116,14 @@ impl Keyboard for Editor {
                     if let Some(entity) = &self.selected_entity {
                         let query = self
                             .world
-                            .query_one::<(&AdoptedEntity, &Transform)>(*entity);
+                            .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                         if let Ok(mut q) = query {
-                            if let Some((e, t)) = q.get() {
+                            if let Some((e, t, props)) = q.get() {
                                 let s_entity = crate::states::SceneEntity {
                                     model_path: e.model().path.clone(),
                                     label: e.model().label.clone(),
                                     transform: *t,
+                                    properties: props.clone(),
                                     script: None,
                                     entity_id: None,
                                 };

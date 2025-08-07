@@ -33,6 +33,7 @@ pub struct MainMenu {
     progress: f32,
     progress_message: String,
     toast: Toasts,
+    is_in_file_dialogue: bool,
 }
 
 pub enum ProjectProgress {
@@ -182,6 +183,7 @@ impl Scene for MainMenu {
                             .clicked()
                         {
                             log::debug!("Opening project");
+                            self.is_in_file_dialogue = true;
                             if let Some(path) = rfd::FileDialog::new()
                                 .add_filter("Eucalyptus Configuration Files", &["eucp"])
                                 .pick_file()
@@ -207,8 +209,9 @@ impl Scene for MainMenu {
                                     }
                                 };
                             } else {
-                                log::error!("File dialog returned \"None\"");
+                                log::warn!("File dialog returned \"None\"");
                             }
+                            self.is_in_file_dialogue = false;
                         }
                         ui.add_space(20.0);
 
@@ -254,6 +257,7 @@ impl Scene for MainMenu {
 
                     ui.add_space(5.0);
                     if ui.button("Choose Location").clicked() {
+                        self.is_in_file_dialogue = true;
                         if let Some(path) = rfd::FileDialog::new()
                             .set_title("Save Project")
                             .set_file_name(&self.project_name)
@@ -262,6 +266,7 @@ impl Scene for MainMenu {
                             self.project_path = Some(path);
                             log::debug!("Project will be saved at: {:?}", self.project_path);
                         }
+                        self.is_in_file_dialogue = false;
                     }
 
                     let can_create = self.project_path.is_some() && !self.project_name.is_empty();
@@ -327,7 +332,9 @@ impl Scene for MainMenu {
 impl Keyboard for MainMenu {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
         if key == KeyCode::Escape {
-            event_loop.exit();
+            if !self.show_new_project && !self.is_in_file_dialogue {
+                event_loop.exit();
+            }
         }
     }
 

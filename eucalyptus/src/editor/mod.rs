@@ -27,7 +27,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    states::{EntityNode, PROJECT, SCENES, SceneEntity, ScriptComponent},
+    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
     utils::ViewportMode,
 };
 
@@ -72,6 +72,7 @@ pub struct Editor {
 #[derive(Debug)]
 pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
+    Spawn(hecs::Entity),
 }
 
 impl UndoableAction {
@@ -95,14 +96,20 @@ impl UndoableAction {
                     Err(anyhow::anyhow!("Could not find an entity to query"))
                 }
             }
+            UndoableAction::Spawn(entity) => {
+                if world.despawn(*entity).is_ok() {
+                    log::debug!("Undid spawn by despawning entity {:?}", entity);
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
+                }
+            }
         }
     }
 }
 
-pub const MAX_UNDO_STEPS: usize = 50;
-
 /// This enum will be used to describe the type of command/signal. This is only between
-/// the editor and unlike SceneCommand, this will ping a signal everywhere.
+/// the editor and unlike SceneCommand, this will ping a signal everywhere in that scene
 pub enum Signal {
     None,
     Copy(SceneEntity),
@@ -163,13 +170,14 @@ impl Editor {
             let id = unsafe { self.world.find_entity_from_id(entity.id()) };
             if let Ok(mut q) = self
                 .world
-                .query_one::<(&AdoptedEntity, &Transform)>(*entity)
+                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity)
             {
-                if let Some((e, t)) = q.get() {
+                if let Some((e, t, properties)) = q.get() {
                     let entity = SceneEntity {
                         model_path: e.model().path.clone(),
                         label: e.model().label.clone(),
                         transform: *t,
+                        properties: properties.clone(),
                         script: None,
                         entity_id: Some(entity.clone()),
                     };
@@ -207,11 +215,12 @@ impl Editor {
 
         scene.entities.clear();
 
-        for (id, (adopted, transform)) in self
+        for (id, (adopted, transform, properties)) in self
             .world
             .query::<(
                 &dropbear_engine::entity::AdoptedEntity,
                 &dropbear_engine::entity::Transform,
+                &ModelProperties,
             )>()
             .iter()
         {
@@ -228,6 +237,7 @@ impl Editor {
                 model_path,
                 label: adopted.model().label.clone(),
                 transform: *transform,
+                properties: properties.clone(),
                 script,
                 entity_id: Some(id),
             };
@@ -357,13 +367,14 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(&AdoptedEntity, &Transform)>(*entity);
+                            let query = self.world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
-                                if let Some((e, t)) = q.get() {
+                                if let Some((e, t, props)) = q.get() {
                                     let s_entity = crate::states::SceneEntity {
                                         model_path: e.model().path.clone(),
                                         label: e.model().label.clone(),
                                         transform: *t,
+                                        properties: props.clone(),
                                         script: None,
                                         entity_id: None,
                                     };
@@ -442,7 +453,9 @@ impl Editor {
                         }
                     }
 
-                    ui.label("Undo");
+                    if ui.button("Undo").clicked() {
+                        self.signal = Signal::Undo;
+                    }
                     ui.label("Redo");
                 });
 
@@ -481,6 +494,7 @@ impl Editor {
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,
+                        signal: &mut self.signal,
                     },
                 );
         });

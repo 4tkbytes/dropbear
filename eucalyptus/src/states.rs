@@ -544,10 +544,28 @@ pub struct SceneEntity {
     pub model_path: PathBuf,
     pub label: String,
     pub transform: Transform,
+    pub properties: ModelProperties,
     pub script: Option<ScriptComponent>,
+
     #[serde(skip)]
     #[allow(dead_code)]
     pub entity_id: Option<hecs::Entity>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModelProperties {
+    pub check: bool,
+    pub str: String,
+}
+
+impl Default for ModelProperties {
+    fn default() -> Self {
+        // any values i change up, add here :)
+        Self {
+            str: Default::default(),
+            check: Default::default(),
+        }
+    }
 }
 
 impl SceneConfig {
@@ -604,6 +622,7 @@ impl SceneConfig {
                 model_path,
                 label: adopted.model().label.clone(),
                 transform: *transform,
+                properties: ModelProperties::default(),
                 script,
                 entity_id: Some(id),
             });
@@ -656,9 +675,9 @@ impl SceneConfig {
                     name: script_config.name.clone(),
                     path: script_config.path.clone(),
                 };
-                world.spawn((adopted, transform, script));
+                world.spawn((adopted, transform, script, entity_config.properties.clone()));
             } else {
-                world.spawn((adopted, transform));
+                world.spawn((adopted, transform, entity_config.properties.clone()));
             }
         }
 
