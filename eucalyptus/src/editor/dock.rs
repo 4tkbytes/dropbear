@@ -270,12 +270,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         {
                             entity_count += 1;
                             let entity_pos = transform.position;
-                            let sphere_radius = transform.scale.max_element() * 1.0;
+                            let sphere_radius = transform.scale.max_element() * 1.5;
 
                             let to_sphere = entity_pos - ray_start;
                             let projection = to_sphere.dot(ray_direction);
 
-                            // Debug each entity
                             log::debug!(
                                 "Entity {:?}: pos={:?}, scale={:?}, radius={:.3}",
                                 entity_id,
@@ -333,7 +332,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             *self.selected_entity = Some(entity_id);
                             log::debug!("Selected entity: {:?}", entity_id);
                         } else {
-                            *self.selected_entity = None;
+                            // *self.selected_entity = None;
                             if entity_count == 0 {
                                 log::debug!("No entities in world to select");
                             } else {
@@ -707,7 +706,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 })
                             });
 
-                            CollapsingHeader::new("h")
+                            CollapsingHeader::new("Transform")
                                 .default_open(true)
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
@@ -879,8 +878,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         ui.label("X:");
                                         if ui
                                             .add(
-                                                egui::Slider::new(&mut new_scale.x, 0.01..=10.0)
-                                                    .step_by(0.01)
+                                                egui::DragValue::new(&mut new_scale.x)
+                                                    .speed(0.01)
                                                     .fixed_decimals(3),
                                             )
                                             .changed()
@@ -896,13 +895,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                     ui.horizontal(|ui| {
                                         ui.label("Y:");
-                                        let mut y_slider =
-                                            egui::Slider::new(&mut new_scale.y, 0.01..=10.0)
-                                                .step_by(0.01)
+                                        let y_slider =
+                                            egui::DragValue::new(&mut new_scale.y)
+                                                .speed(0.01)
                                                 .fixed_decimals(3);
 
                                         if cfg.scale_locked {
-                                            y_slider = y_slider.text_color(egui::Color32::GRAY);
+                                            scale_changed = true;
                                         }
 
                                         if ui.add_enabled(!cfg.scale_locked, y_slider).changed() {
@@ -912,14 +911,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                     ui.horizontal(|ui| {
                                         ui.label("Z:");
-                                        let mut z_slider =
-                                            egui::Slider::new(&mut new_scale.z, 0.01..=10.0)
-                                                .step_by(0.01)
+                                        let z_slider =
+                                            egui::DragValue::new(&mut new_scale.z)
+                                                .speed(0.01)
                                                 .fixed_decimals(3);
-
-                                        if cfg.scale_locked {
-                                            z_slider = z_slider.text_color(egui::Color32::GRAY);
-                                        }
 
                                         if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
                                             scale_changed = true;

@@ -3,7 +3,7 @@
 Just a list of stuff i need to work on/a list of items i need to implement
 
 - [x] write object locations to file (basic save, needs polishing)
-- [ ] a basic resource inspector
+- [x] a basic resource inspector
 - [ ] scripting functionality
 - [ ] global settings page
 - [ ] menu bar stuff
@@ -15,6 +15,7 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] using arrow keys to move the camera
 - [ ] using the controller to move the camera
 - [ ] basic physics
+- [ ] basic lighting
 - [ ] getting redback (the build system) to work
 - [ ] drag and drop system for the asset viewer
 
