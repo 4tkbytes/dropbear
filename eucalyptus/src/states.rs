@@ -104,7 +104,7 @@ impl ProjectConfig {
         Ok(config)
     }
 
-    /// This function loads a `source.eucc` or a `resources.eucc` config file into memory, allowing
+    /// This function loads a `source.eucc`, `resources.eucc` or a `{scene}.eucs` config file into memory, allowing
     /// you to reference and load the nodes located inside them.
     pub fn load_config_to_memory(&mut self) -> anyhow::Result<()> {
         let project_root = PathBuf::from(&self.project_path);
@@ -312,6 +312,17 @@ impl ResourceConfig {
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
+    }
+
+    /// Updates the in-memory ResourceConfig by re-scanning the resource directory.
+    pub fn update_mem(&mut self) -> anyhow::Result<ResourceConfig> {
+        let resource_dir = self.path.clone();
+        let project_path = resource_dir.parent().unwrap_or(&resource_dir).to_path_buf();
+        let updated_config = ResourceConfig {
+            path: resource_dir.clone(),
+            nodes: collect_nodes(&resource_dir, &project_path, vec!["thumbnails"].as_slice()),
+        };
+        Ok(updated_config)
     }
 
     /// # Parameters

@@ -40,8 +40,7 @@ pub struct EditorTabViewer<'a> {
     pub world: &'a mut hecs::World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
-    #[allow(dead_code)]
-    pub signal: &'a mut Signal,
+    pub undo_stack: &'a mut Vec<UndoableAction>,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -95,20 +94,13 @@ pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
 pub static DRAGGED_ASSET: LazyLock<Mutex<Option<DraggedAsset>>> =
     LazyLock::new(|| Mutex::new(None));
 
+#[derive(Default)]
 pub(crate) struct INeedABetterNameForThisStruct {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
     context_menu_tab: Option<EditorTab>,
-}
-
-impl Default for INeedABetterNameForThisStruct {
-    fn default() -> Self {
-        Self {
-            show_context_menu: Default::default(),
-            context_menu_pos: Default::default(),
-            context_menu_tab: Default::default(),
-        }
-    }
+    is_focused: bool,
+    old_pos: Transform,
 }
 
 impl INeedABetterNameForThisStruct {}
@@ -285,14 +277,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         if let Ok(transform) =
                             self.world.query_one_mut::<&mut Transform>(*entity_id)
                         {
+                            let was_focused = cfg.is_focused;
+                            cfg.is_focused = self.gizmo.is_focused();
+
+                            // Update old_pos when gizmo becomes focused (start of interaction)
+                            if cfg.is_focused && !was_focused {
+                                cfg.old_pos = *transform;
+                            }
+
                             let gizmo_transform =
                                 transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
                                     transform.scale,
                                     transform.rotation,
                                     transform.position,
                                 );
-
-                            // log::debug!("Before scaling: {:?}", gizmo_transform);
 
                             if let Some((_result, new_transforms)) =
                                 self.gizmo.interact(ui, &[gizmo_transform])
@@ -301,19 +299,32 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     transform.position = new_transform.translation.into();
                                     transform.rotation = new_transform.rotation.into();
                                     transform.scale = new_transform.scale.into();
-                                    // log::debug!("After scaling: {:?}", transform);
                                 }
                             }
+
+                            if was_focused && !cfg.is_focused {
+                            // Check if transform actually changed from the original
+                            let transform_changed = cfg.old_pos.position != transform.position 
+                                || cfg.old_pos.rotation != transform.rotation 
+                                || cfg.old_pos.scale != transform.scale;
+                            
+                            if transform_changed {
+                                UndoableAction::push_to_undo(
+                                    &mut self.undo_stack,
+                                    UndoableAction::Transform(
+                                        entity_id.clone(),
+                                        cfg.old_pos.clone(),
+                                    ),
+                                );
+                                log::debug!("Pushed transform action to stack");
+                            }
+                        }
                         }
                     }
                 }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
-                // TODO: deal with show_entity_tree and figure out how to convert hecs::World
-                // to EntityNodes and to write it to file
-
-                // Note: Technically i have already done that, but further testing required.
                 show_entity_tree(
                     ui,
                     &mut self.nodes,
@@ -663,6 +674,36 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTabMenuAction::RefreshAssets => {
                             log::debug!("Refresh assets clicked");
+                            if let Ok(mut res) = RESOURCES.write() {
+                                match res.update_mem() {
+                                    Ok(res_cfg) => {
+                                        *res = res_cfg;
+                                        log::info!("Assets refreshed successfully.");
+                                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                            toasts.add(Toast {
+                                                kind: ToastKind::Success,
+                                                text: "Assets refreshed successfully!".into(),
+                                                options: ToastOptions::default()
+                                                    .duration_in_seconds(2.0),
+                                                ..Default::default()
+                                            });
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to refresh assets: {}", e);
+                                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                            toasts.add(Toast {
+                                                kind: ToastKind::Error,
+                                                text: format!("Failed to refresh assets: {}", e)
+                                                    .into(),
+                                                options: ToastOptions::default()
+                                                    .duration_in_seconds(3.0),
+                                                ..Default::default()
+                                            });
+                                        }
+                                    }
+                                }
+                            }
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;

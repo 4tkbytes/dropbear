@@ -207,6 +207,49 @@ impl Scene for Editor {
                     }
                 }
             }
+            Signal::Undo => {
+                if let Some(action) = self.undo_stack.pop() {
+                    match action.undo(&mut self.world) {
+                        Ok(_) => {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Success,
+                                    text: format!("Undid action").into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(1.0)
+                                        .show_progress(false),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                toasts.add(egui_toast_fork::Toast {
+                                    kind: egui_toast_fork::ToastKind::Warning,
+                                    text: format!("Failed to undo action: {}", e).into(),
+                                    options: egui_toast_fork::ToastOptions::default()
+                                        .duration_in_seconds(3.0)
+                                        .show_progress(true),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                        toasts.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Warning,
+                            text: format!("Nothing to undo").into(),
+                            options: egui_toast_fork::ToastOptions::default()
+                                .duration_in_seconds(1.0)
+                                .show_progress(false),
+                            ..Default::default()
+                        });
+                    }
+                    log::debug!("No undoable actions in stack");
+                }
+                self.signal = Signal::None;
+            }
             _ => {}
         }
 
