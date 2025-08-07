@@ -21,7 +21,7 @@ impl Keyboard for Editor {
         let _alt_pressed = self.pressed_keys.contains(&KeyCode::AltLeft)
             || self.pressed_keys.contains(&KeyCode::AltRight);
 
-        let _shift_pressed = self.pressed_keys.contains(&KeyCode::ShiftLeft)
+        let shift_pressed = self.pressed_keys.contains(&KeyCode::ShiftLeft)
             || self.pressed_keys.contains(&KeyCode::ShiftRight);
 
         match key {
@@ -240,6 +240,19 @@ impl Keyboard for Editor {
                                 });
                             }
                         }
+                    }
+                } else {
+                    self.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyZ => {
+                if ctrl_pressed {
+                    if shift_pressed {
+                        // redo
+                    } else {
+                        // undo
+                        log::debug!("Undo signal sent");
+                        self.signal = Signal::Undo;
                     }
                 } else {
                     self.pressed_keys.insert(key);

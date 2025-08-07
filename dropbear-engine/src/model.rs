@@ -7,7 +7,7 @@ use russimp::{
 };
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-use crate::graphics::{Graphics, NO_TEXTURE, Texture};
+use crate::graphics::{Graphics, NO_MODEL, NO_TEXTURE, Texture};
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -77,14 +77,25 @@ impl Model {
         let file_name = path.file_name().unwrap().to_str().unwrap();
         log::debug!("Loading model [{}]", file_name);
 
-        let scene = Scene::from_file(
+        let scene = match Scene::from_file(
             path.to_str().unwrap(),
             vec![
                 PostProcess::Triangulate,
                 PostProcess::FlipUVs,
                 PostProcess::GenerateNormals,
             ],
-        )?;
+        ) {
+            Ok(v) => v,
+            Err(_) => Scene::from_buffer(
+                NO_MODEL,
+                vec![
+                    PostProcess::Triangulate,
+                    PostProcess::FlipUVs,
+                    PostProcess::GenerateNormals,
+                ],
+                "glb",
+            )?,
+        };
 
         let mut materials = Vec::new();
         for m in &scene.materials {

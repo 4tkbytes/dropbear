@@ -64,10 +64,42 @@ pub struct Editor {
     viewport_mode: ViewportMode,
 
     signal: Signal,
-    // undo_stack: Vec<UndoableAction>,
+    undo_stack: Vec<UndoableAction>,
     // redo_stack: Vec<UndoableAction>,
-    // max_undo_steps: usize,
 }
+
+/// Describes an action that is undoable
+#[derive(Debug)]
+pub enum UndoableAction {
+    Transform(hecs::Entity, Transform),
+}
+
+impl UndoableAction {
+    pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
+        undo_stack.push(action);
+        log::debug!("Undo Stack contents: {:?}", undo_stack);
+    }
+
+    pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
+        match self {
+            UndoableAction::Transform(entity, transform) => {
+                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
+                    if let Some(e_t) = q.get() {
+                        *e_t = *transform;
+                        log::debug!("Reverted transform");
+                        Ok(())
+                    } else {
+                        Err(anyhow::anyhow!("Unable to query the entity"))
+                    }
+                } else {
+                    Err(anyhow::anyhow!("Could not find an entity to query"))
+                }
+            }
+        }
+    }
+}
+
+pub const MAX_UNDO_STEPS: usize = 50;
 
 /// This enum will be used to describe the type of command/signal. This is only between
 /// the editor and unlike SceneCommand, this will ping a signal everywhere.
@@ -76,6 +108,7 @@ pub enum Signal {
     Copy(SceneEntity),
     Paste(SceneEntity),
     Delete,
+    Undo,
 }
 
 impl Default for Editor {
@@ -117,9 +150,8 @@ impl Editor {
             selected_entity: None,
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
-            // undo_stack: Vec::new(),
+            undo_stack: Vec::new(),
             // redo_stack: Vec::new(),
-            // max_undo_steps: 50,
         }
     }
 
@@ -445,10 +477,10 @@ impl Editor {
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         camera: &mut self.camera,
-                        signal: &mut self.signal,
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
+                        undo_stack: &mut self.undo_stack,
                     },
                 );
         });

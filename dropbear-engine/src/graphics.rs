@@ -25,7 +25,8 @@ pub struct Graphics<'a> {
     pub screen_size: (f32, f32),
 }
 
-pub const NO_TEXTURE: &'static [u8] = include_bytes!("no-texture.png");
+pub const NO_TEXTURE: &'static [u8] = include_bytes!("../../resources/no-texture.png");
+pub const NO_MODEL: &'static [u8] = include_bytes!("../../resources/error.glb");
 
 impl<'a> Graphics<'a> {
     pub fn new(
