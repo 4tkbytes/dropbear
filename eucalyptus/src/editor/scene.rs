@@ -269,22 +269,288 @@ impl Scene for Editor {
                     script_path,
                     script_name,
                 } => {
-                    log::debug!("Not implemented: AttachScript");
-                    log::debug!("   Script Path: {}", script_path.display());
-                    log::debug!("   Script Name: {}", script_name);
+                    if let Some(selected_entity) = self.selected_entity {
+                        match crate::scripting::move_script_to_src(script_path) {
+                            Ok(moved_path) => {
+                                let new_script = ScriptComponent {
+                                    name: script_name.clone(),
+                                    path: moved_path.clone(),
+                                };
+
+                                let replaced = if let Ok(mut sc) =
+                                    self.world.get::<&mut ScriptComponent>(selected_entity)
+                                {
+                                    sc.name = new_script.name.clone();
+                                    sc.path = new_script.path.clone();
+                                    true
+                                } else {
+                                    match crate::scripting::attach_script_to_entity(
+                                        &mut self.world,
+                                        selected_entity,
+                                        new_script.clone(),
+                                    ) {
+                                        Ok(_) => false,
+                                        Err(e) => {
+                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                toasts.add(egui_toast_fork::Toast {
+                                                    kind: egui_toast_fork::ToastKind::Error,
+                                                    text: format!("Failed to attach: {}", e).into(),
+                                                    options: egui_toast_fork::ToastOptions::default()
+                                                        .duration_in_seconds(3.0)
+                                                        .show_progress(true),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                            log::error!(
+                                                "Failed to attach script to entity {:?}: {}",
+                                                selected_entity,
+                                                e
+                                            );
+                                            self.signal = Signal::None;
+                                            return;
+                                        }
+                                    }
+                                };
+
+                                if let Err(e) = crate::scripting::convert_entity_to_group(
+                                    &self.world,
+                                    selected_entity,
+                                ) {
+                                    log::warn!(
+                                        "convert_entity_to_group failed (non-fatal): {}",
+                                        e
+                                    );
+                                }
+
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Success,
+                                        text: if replaced {
+                                            format!("Reattached script '{}'", script_name)
+                                        } else {
+                                            format!("Attached script '{}'", script_name)
+                                        }
+                                        .into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(2.5)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+
+                                log::info!(
+                                    "{} script '{}' at {:?} to entity {:?}",
+                                    if replaced { "Reattached" } else { "Attached" },
+                                    script_name,
+                                    moved_path,
+                                    selected_entity
+                                );
+                            }
+                            Err(e) if e.downcast_ref::<std::io::Error>().map_or(false, |io_err| io_err.kind() == std::io::ErrorKind::AlreadyExists) => {
+                                let new_script = ScriptComponent {
+                                    name: script_name.clone(),
+                                    path: script_path.clone(),
+                                };
+
+                                let replaced = if let Ok(mut sc) =
+                                    self.world.get::<&mut ScriptComponent>(selected_entity)
+                                {
+                                    sc.name = new_script.name.clone();
+                                    sc.path = new_script.path.clone();
+                                    true
+                                } else {
+                                    match crate::scripting::attach_script_to_entity(
+                                        &mut self.world,
+                                        selected_entity,
+                                        new_script.clone(),
+                                    ) {
+                                        Ok(_) => false,
+                                        Err(e) => {
+                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                toasts.add(egui_toast_fork::Toast {
+                                                    kind: egui_toast_fork::ToastKind::Error,
+                                                    text: format!("Failed to attach: {}", e).into(),
+                                                    options: egui_toast_fork::ToastOptions::default()
+                                                        .duration_in_seconds(3.0)
+                                                        .show_progress(true),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                            log::error!(
+                                                "Failed to attach script to entity {:?}: {}",
+                                                selected_entity,
+                                                e
+                                            );
+                                            self.signal = Signal::None;
+                                            return;
+                                        }
+                                    }
+                                };
+
+                                if let Err(e) = crate::scripting::convert_entity_to_group(
+                                    &self.world,
+                                    selected_entity,
+                                ) {
+                                    log::warn!(
+                                        "convert_entity_to_group failed (non-fatal): {}",
+                                        e
+                                    );
+                                }
+
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Success,
+                                        text: if replaced {
+                                            format!("Reattached script '{}'", script_name)
+                                        } else {
+                                            format!("Attached script '{}'", script_name)
+                                        }
+                                        .into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(2.5)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+
+                                log::info!(
+                                    "{} script '{}' at {:?} to entity {:?}",
+                                    if replaced { "Reattached" } else { "Attached" },
+                                    script_name,
+                                    script_path.clone(),
+                                    selected_entity
+                                );
+                            }
+                            Err(e) => {
+                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                    toasts.add(egui_toast_fork::Toast {
+                                        kind: egui_toast_fork::ToastKind::Error,
+                                        text: format!("Move failed: {}", e).into(),
+                                        options: egui_toast_fork::ToastOptions::default()
+                                            .duration_in_seconds(3.0)
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                                log::error!(
+                                    "Failed to move script {}: {}",
+                                    script_path.display(),
+                                    e
+                                );
+                            }
+                        }
+                    } else {
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Warning,
+                                text: "No selected entity to attach script".into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(2.0)
+                                    .show_progress(false),
+                                ..Default::default()
+                            });
+                        }
+                        log::warn!("AttachScript requested but no entity is selected");
+                    }
+
                     self.signal = Signal::None;
                 }
                 ScriptAction::CreateAndAttachScript {
                     script_path,
                     script_name,
                 } => {
-                    log::debug!("Not implemented: CreateAndAttachScript");
-                    log::debug!("   Script Path: {}", script_path.display());
-                    log::debug!("   Script Name: {}", script_name);
+                    if let Some(selected_entity) = self.selected_entity {
+                        let new_script = ScriptComponent {
+                            name: script_name.clone(),
+                            path: script_path.clone(),
+                        };
+
+                        let replaced = if let Ok(mut sc) =
+                            self.world.get::<&mut ScriptComponent>(selected_entity)
+                        {
+                            sc.name = new_script.name.clone();
+                            sc.path = new_script.path.clone();
+                            true
+                        } else {
+                            match crate::scripting::attach_script_to_entity(
+                                &mut self.world,
+                                selected_entity,
+                                new_script.clone(),
+                            ) {
+                                Ok(_) => false,
+                                Err(e) => {
+                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                        toasts.add(egui_toast_fork::Toast {
+                                            kind: egui_toast_fork::ToastKind::Error,
+                                            text: format!("Failed to attach new script: {}", e).into(),
+                                            options: egui_toast_fork::ToastOptions::default()
+                                                .duration_in_seconds(3.0)
+                                                .show_progress(true),
+                                            ..Default::default()
+                                        });
+                                    }
+                                    log::error!(
+                                        "Failed to attach newly created script to entity {:?}: {}",
+                                        selected_entity,
+                                        e
+                                    );
+                                    self.signal = Signal::None;
+                                    return;
+                                }
+                            }
+                        };
+
+                        if let Err(e) = crate::scripting::convert_entity_to_group(
+                            &self.world,
+                            selected_entity,
+                        ) {
+                            log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                        }
+
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Success,
+                                text: if replaced {
+                                    format!("Replaced script with new '{}'", script_name)
+                                } else {
+                                    format!("Created & attached script '{}'", script_name)
+                                }
+                                .into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(2.5)
+                                    .show_progress(true),
+                                ..Default::default()
+                            });
+                        }
+
+                        log::info!(
+                            "{} new script '{}' at {:?} to entity {:?}",
+                            if replaced { "Replaced" } else { "Attached" },
+                            script_name,
+                            script_path,
+                            selected_entity
+                        );
+                    } else {
+                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                            toasts.add(egui_toast_fork::Toast {
+                                kind: egui_toast_fork::ToastKind::Warning,
+                                text: "No selected entity to attach new script".into(),
+                                options: egui_toast_fork::ToastOptions::default()
+                                    .duration_in_seconds(2.0)
+                                    .show_progress(false),
+                                ..Default::default()
+                            });
+                        }
+                        log::warn!("CreateAndAttachScript requested but no entity is selected");
+                    }
                     self.signal = Signal::None;
                 }
                 ScriptAction::RemoveScript => {
-                    log::debug!("Not implemented: RemoveScript");
+                    // log::debug!("Not implemented: RemoveScript");
+
+                    // delete scene
+
+
                     self.signal = Signal::None;
                 }
                 ScriptAction::ExecuteScript => {

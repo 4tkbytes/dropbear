@@ -697,6 +697,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
+                    #[allow(unused_assignments)]
+                    let mut script_loc: String = String::new();
+                    {
+                        let script = self.world.query_one::<&mut ScriptComponent>(*entity);
+                        if let Ok(mut q) = script {
+                            if let Some(script) = q.get() {
+                                script_loc = format!("{}", script.path.display());
+                            } else {
+                            script_loc = String::from("None");
+                            }
+                        } else {
+                            script_loc = "None".to_string();
+                        }
+                    }
+                    
                     match self
                         .world
                         .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(
@@ -959,7 +974,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     if ui.button("New").clicked() {
                                         if let Some(script_path) = rfd::FileDialog::new()
                                             .add_filter("Rhai Script", &["rhai"])
-                                            .set_file_name(format!("{}_script.rs", e.label()))
+                                            .set_file_name(format!("{}_script.rhai", e.label()))
                                             .save_file()
                                         {
                                             match std::fs::write(&script_path, RHAI_TEMPLATE_SCRIPT) {
@@ -991,16 +1006,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     }
                                 });
 
-                                ui.horizontal(|ui| {
-                                    ui.label("Current:");
-                                    // We can't query the world here due to the borrow, so we'll need to 
-                                    // pass this information differently or handle it outside the closure
-                                    ui.code("Check after selection"); // Placeholder
-                                    
-                                    if ui.button("Remove").clicked() {
-                                        *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
-                                    }
+                                ui.separator();
+
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label("Script Location:");
+                                    ui.label(script_loc);
                                 });
+
+                                if ui.button("Remove").clicked() {
+                                    *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
+                                }
                                 
                                 ui.separator();
                                 
@@ -1017,7 +1032,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         Err(e) => {
                             ui.label(format!("Error: Unable to query entity: {}", e));
-                            log::error!("Unable to query entity: {}", e);
+                            // log::error!("Unable to query entity: {}", e);
                         }
                     }
                 } else {

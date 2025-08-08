@@ -48,17 +48,43 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
         ));
     }
 
-    match fs::copy(script_path, &dest_path) {
-        Ok(_) => {
-            log::info!("Copied script from {:?} to {:?}", script_path, dest_path);
+    const MAX_RETRIES: usize = 5;
+    const RETRY_DELAY_MS: u64 = 60;
+
+    let mut last_err: Option<std::io::Error> = None;
+    for attempt in 0..=MAX_RETRIES {
+        match fs::copy(script_path, &dest_path) {
+            Ok(_) => {
+                log::info!("Copied script from {:?} to {:?}", script_path, dest_path);
+                last_err = None;
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                log::warn!("Script file already exists at {:?}, continuing anyway", dest_path);
+                last_err = None;
+                break;
+            }
+            Err(e) => {
+                // Windows sharing violation = raw_os_error 32
+                if e.raw_os_error() == Some(32) && attempt < MAX_RETRIES {
+                    log::warn!(
+                        "Sharing violation copying script (attempt {}/{}). Retrying in {}ms: {}",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        RETRY_DELAY_MS,
+                        e
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+                    last_err = Some(e);
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
         }
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            log::warn!(
-                "Script file already exists at {:?}, continuing anyway",
-                dest_path
-            );
-        }
-        Err(e) => return Err(e.into()),
+    }
+    if let Some(e) = last_err {
+        return Err(e.into());
     }
 
     {
@@ -67,33 +93,17 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
     }
 
     log::info!("Moved script from {:?} to {:?}", script_path, dest_path);
-
     Ok(dest_path)
-}
-
-pub fn attach_script_and_convert_to_group(
-    world: &mut World,
-    entity_id: hecs::Entity,
-    script_path: PathBuf,
-    script_name: String,
-) -> anyhow::Result<EntityNode> {
-    // First attach the script to the entity
-    attach_script_to_entity(world, entity_id, script_path, script_name)?;
-
-    // Then convert the entity to a group node
-    convert_entity_to_group(world, entity_id)
 }
 
 pub fn convert_entity_to_group(
     world: &World,
     entity_id: hecs::Entity,
 ) -> anyhow::Result<EntityNode> {
-    // Query the entity for its components
     if let Ok(mut query) = world.query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
         if let Some((adopted, _transform)) = query.get() {
             let entity_name = adopted.model().label.clone();
 
-            // Check if entity has a script component
             let script_node = if let Ok(script) = world.get::<&ScriptComponent>(entity_id) {
                 Some(EntityNode::Script {
                     name: script.name.clone(),
@@ -103,13 +113,11 @@ pub fn convert_entity_to_group(
                 None
             };
 
-            // Create the entity node
             let entity_node = EntityNode::Entity {
                 id: entity_id,
                 name: entity_name.clone(),
             };
 
-            // If there's a script, create a group containing both entity and script
             if let Some(script_node) = script_node {
                 Ok(EntityNode::Group {
                     name: entity_name,
@@ -117,7 +125,6 @@ pub fn convert_entity_to_group(
                     collapsed: false,
                 })
             } else {
-                // Return just the entity if no script is attached
                 Ok(entity_node)
             }
         } else {
@@ -131,15 +138,8 @@ pub fn convert_entity_to_group(
 pub fn attach_script_to_entity(
     world: &mut World,
     entity_id: hecs::Entity,
-    script_path: PathBuf,
-    script_name: String,
+    script_component: ScriptComponent,
 ) -> anyhow::Result<()> {
-    let script_component = ScriptComponent {
-        name: script_name,
-        path: script_path,
-    };
-
-    // Add the script component to the existing entity
     if let Err(e) = world.insert_one(entity_id, script_component) {
         return Err(anyhow::anyhow!("Failed to attach script to entity: {}", e));
     }

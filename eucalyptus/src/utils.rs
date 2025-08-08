@@ -31,13 +31,15 @@ where
 
 /// Progress events for project creation
 pub enum ProjectProgress {
-    Step { progress: f32, message: String },
+    Step { _progress: f32, _message: String },
+    #[allow(dead_code)] // idk why its giving me this warning :(
     Error(String),
     Done,
 }
 
 /// Open a project file and update the global state.
 /// Returns Ok(Some(SceneCommand::SwitchScene)) on success, or an error string on failure.
+#[allow(dead_code)]
 pub fn open_project(
     scene_command: &mut SceneCommand,
     toast: &mut Toasts,
@@ -94,8 +96,8 @@ pub fn start_project_creation(
         if let Some(path) = &project_path {
             for (folder, progress, message) in folders {
                 tx.send(ProjectProgress::Step {
-                    progress,
-                    message: message.to_string(),
+                    _progress: progress,
+                    _message: message.to_string(),
                 })
                 .ok();
 
@@ -143,8 +145,8 @@ pub fn start_project_creation(
                 }
             }
             tx.send(ProjectProgress::Step {
-                progress: 1.0,
-                message: "Project creation complete!".to_string(),
+                _progress: 1.0,
+                _message: "Project creation complete!".to_string(),
             })
             .ok();
             tx.send(ProjectProgress::Done).ok();
@@ -214,6 +216,7 @@ pub fn show_new_project_window<F>(
 }
 
 /// Converts a click on a screen (like a viewport) coordinate relative to the world
+#[allow(dead_code)]
 pub fn screen_to_world_coords(
     camera: &Camera,
     screen_pos: egui::Pos2,
