@@ -28,6 +28,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
+    scripting::ScriptAction,
     states::{EntityNode, ModelProperties, PROJECT, SCENES, SceneEntity, ScriptComponent},
     utils::ViewportMode,
 };
@@ -70,6 +71,8 @@ pub struct Editor {
     // redo_stack: Vec<UndoableAction>,
     last_key_press_times: HashMap<KeyCode, Instant>,
     double_press_threshold: Duration,
+
+    rhai_engine: rhai::Engine,
 }
 
 /// Describes an action that is undoable
@@ -120,6 +123,7 @@ pub enum Signal {
     Paste(SceneEntity),
     Delete,
     Undo,
+    ScriptAction(ScriptAction),
 }
 
 impl Default for Editor {
@@ -164,6 +168,7 @@ impl Editor {
             undo_stack: Vec::new(),
             last_key_press_times: HashMap::new(),
             double_press_threshold: Duration::from_millis(300),
+            rhai_engine: rhai::Engine::new(),
         }
     }
 
@@ -516,6 +521,7 @@ impl Editor {
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,
                         signal: &mut self.signal,
+                        engine: &mut self.rhai_engine,
                     },
                 );
         });

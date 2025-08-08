@@ -1,7 +1,8 @@
 mod editor;
 mod menu;
+pub(crate) mod scripting;
 pub(crate) mod states;
-pub mod utils;
+pub(crate) mod utils;
 
 use std::{cell::RefCell, rc::Rc};
 

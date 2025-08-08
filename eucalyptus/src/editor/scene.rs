@@ -262,7 +262,40 @@ impl Scene for Editor {
                 }
                 self.signal = Signal::None;
             }
-            _ => {}
+            Signal::None => {}
+            Signal::Copy(_) => {}
+            Signal::ScriptAction(action) => match action {
+                ScriptAction::AttachScript {
+                    script_path,
+                    script_name,
+                } => {
+                    log::debug!("Not implemented: AttachScript");
+                    log::debug!("   Script Path: {}", script_path.display());
+                    log::debug!("   Script Name: {}", script_name);
+                    self.signal = Signal::None;
+                }
+                ScriptAction::CreateAndAttachScript {
+                    script_path,
+                    script_name,
+                } => {
+                    log::debug!("Not implemented: CreateAndAttachScript");
+                    log::debug!("   Script Path: {}", script_path.display());
+                    log::debug!("   Script Name: {}", script_name);
+                    self.signal = Signal::None;
+                }
+                ScriptAction::RemoveScript => {
+                    log::debug!("Not implemented: RemoveScript");
+                    self.signal = Signal::None;
+                }
+                ScriptAction::ExecuteScript => {
+                    log::debug!("Not implemented: ExecuteScript");
+                    self.signal = Signal::None;
+                }
+                ScriptAction::EditScript => {
+                    log::debug!("Not implemented: EditScript");
+                    self.signal = Signal::None;
+                }
+            },
         }
 
         let new_size = graphics.state.viewport_texture.size;

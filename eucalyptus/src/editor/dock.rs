@@ -19,6 +19,7 @@ use transform_gizmo_egui::{
 use crate::{
     APP_INFO,
     editor::scene::PENDING_SPAWNS,
+    scripting::RHAI_TEMPLATE_SCRIPT,
     states::{EntityNode, Node, RESOURCES, ResourceType},
     utils::PendingSpawn,
 };
@@ -42,6 +43,8 @@ pub struct EditorTabViewer<'a> {
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
+    #[allow(dead_code)]
+    pub engine: &'a mut rhai::Engine,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -514,7 +517,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 ))
                                             }
                                             ResourceType::Texture => assets.push((
-                                                file.path.to_string_lossy().to_string(),
+                                                format!(
+                                                    "file://{}",
+                                                    file.path.to_string_lossy().to_string()
+                                                ),
                                                 file.name.clone(),
                                                 file.path.clone(),
                                                 res_type.clone(),
@@ -531,7 +537,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 {
                                                     continue;
                                                 }
-
                                                 assets.push((
                                                     "NO_TEXTURE".into(),
                                                     file.name.clone(),
@@ -895,10 +900,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                     ui.horizontal(|ui| {
                                         ui.label("Y:");
-                                        let y_slider =
-                                            egui::DragValue::new(&mut new_scale.y)
-                                                .speed(0.01)
-                                                .fixed_decimals(3);
+                                        let y_slider = egui::DragValue::new(&mut new_scale.y)
+                                            .speed(0.01)
+                                            .fixed_decimals(3);
 
                                         if cfg.scale_locked {
                                             scale_changed = true;
@@ -911,10 +915,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                     ui.horizontal(|ui| {
                                         ui.label("Z:");
-                                        let z_slider =
-                                            egui::DragValue::new(&mut new_scale.z)
-                                                .speed(0.01)
-                                                .fixed_decimals(3);
+                                        let z_slider = egui::DragValue::new(&mut new_scale.z)
+                                            .speed(0.01)
+                                            .fixed_decimals(3);
 
                                         if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
                                             scale_changed = true;
@@ -934,6 +937,83 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
                                     // }
                                 });
+                            CollapsingHeader::new("Scripting").default_open(true).show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    if ui.button("Browse").clicked() {
+                                        if let Some(script_file) = rfd::FileDialog::new()
+                                            .add_filter("Rhai Files", &["rhai"])
+                                            .pick_file()
+                                        {
+                                            let script_name = script_file
+                                                .file_stem()
+                                                .unwrap_or_default()
+                                                .to_string_lossy()
+                                                .to_string();
+                                            *self.signal = Signal::ScriptAction(ScriptAction::AttachScript {
+                                                script_path: script_file,
+                                                script_name,
+                                            });
+                                        }
+                                    }
+
+                                    if ui.button("New").clicked() {
+                                        if let Some(script_path) = rfd::FileDialog::new()
+                                            .add_filter("Rhai Script", &["rhai"])
+                                            .set_file_name(format!("{}_script.rs", e.label()))
+                                            .save_file()
+                                        {
+                                            match std::fs::write(&script_path, RHAI_TEMPLATE_SCRIPT) {
+                                                Ok(_) => {
+                                                    let script_name = script_path
+                                                        .file_stem()
+                                                        .unwrap_or_default()
+                                                        .to_string_lossy()
+                                                        .to_string();
+                                                    *self.signal = Signal::ScriptAction(ScriptAction::CreateAndAttachScript {
+                                                        script_path,
+                                                        script_name,
+                                                    });
+                                                },
+                                                Err(e) => {
+                                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+                                                        toasts.add(Toast {
+                                                            kind: ToastKind::Error,
+                                                            text: format!("Failed to create script file: {}", e).into(),
+                                                            options: ToastOptions::default()
+                                                                .duration_in_seconds(3.0),
+                                                            ..Default::default()
+                                                        });
+                                                    }
+                                                    log::error!("Failed to create script file: {}", e);
+                                                },
+                                            }
+                                        }
+                                    }
+                                });
+
+                                ui.horizontal(|ui| {
+                                    ui.label("Current:");
+                                    // We can't query the world here due to the borrow, so we'll need to 
+                                    // pass this information differently or handle it outside the closure
+                                    ui.code("Check after selection"); // Placeholder
+                                    
+                                    if ui.button("Remove").clicked() {
+                                        *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
+                                    }
+                                });
+                                
+                                ui.separator();
+                                
+                                ui.horizontal(|ui| {
+                                    if ui.button("Execute Script").clicked() {
+                                        *self.signal = Signal::ScriptAction(ScriptAction::ExecuteScript);
+                                    }
+                                    
+                                    if ui.button("Edit Script").clicked() {
+                                        *self.signal = Signal::ScriptAction(ScriptAction::EditScript);
+                                    }
+                                });
+                            });
                         }
                         Err(e) => {
                             ui.label(format!("Error: Unable to query entity: {}", e));
