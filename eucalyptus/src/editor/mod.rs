@@ -19,10 +19,8 @@ use dropbear_engine::{
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use egui_toast_fork::{ToastOptions, Toasts};
 use hecs::World;
 use log;
-use once_cell::sync::Lazy;
 use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
@@ -33,13 +31,7 @@ use crate::{
     utils::ViewportMode,
 };
 
-pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
-    Mutex::new(
-        Toasts::new()
-            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
-            .direction(egui::Direction::BottomUp),
-    )
-});
+
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -333,61 +325,20 @@ impl Editor {
                         match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
-                                log::error!("Error saving project: {}", e);
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Error,
-                                        text: format!("Error saving project: {}", e).into(),
-                                        options: ToastOptions::default()
-                                            .duration_in_seconds(5.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
+                                crate::fatal!("Error saving project: {}", e);
                             }
                         }
-                        log::info!("Successfully saved project");
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Success,
-                                text: format!("Successfully saved project").into(),
-                                options: ToastOptions::default()
-                                    .duration_in_seconds(5.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                        }
+                        crate::success!("Successfully saved project");
                     }
                     if ui.button("Project Settings").clicked() {};
                     if ui.button("Quit").clicked() {
                         match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
-                                log::error!("Error saving project: {}", e);
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Error,
-                                        text: format!("Error saving project: {}", e).into(),
-                                        options: ToastOptions::default()
-                                            .duration_in_seconds(5.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
+                                crate::fatal!("Error saving project: {}", e);
                             }
                         }
-                        log::info!("Successfully saved project");
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Success,
-                                text: format!("Successfully saved project").into(),
-                                options: ToastOptions::default()
-                                    .duration_in_seconds(5.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                            self.scene_command = SceneCommand::Quit;
-                        }
+                        crate::success!("Successfully saved project");
                     }
                 });
                 ui.menu_button("Edit", |ui| {
@@ -406,56 +357,15 @@ impl Editor {
                                     };
                                     self.signal = Signal::Copy(s_entity);
 
-                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                        toasts.add(egui_toast_fork::Toast {
-                                            kind: egui_toast_fork::ToastKind::Info,
-                                            text: format!("Copied!").into(),
-                                            options: egui_toast_fork::ToastOptions::default()
-                                                .duration_in_seconds(1.0)
-                                                .show_progress(false),
-                                            ..Default::default()
-                                        });
-                                    }
-
-                                    log::debug!("Copied selected entity");
+                                    crate::info!("Copied selected entity!");
                                 } else {
-                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                        toasts.add(egui_toast_fork::Toast {
-                                            kind: egui_toast_fork::ToastKind::Warning,
-                                            text: format!("Unable to copy entity: Unable to fetch world entity properties").into(),
-                                            options: egui_toast_fork::ToastOptions::default()
-                                                .duration_in_seconds(3.0)
-                                                .show_progress(true),
-                                            ..Default::default()
-                                        });
-                                    }
-                                    log::warn!("Unable to copy entity: Unable to fetch world entity properties");
+                                    crate::warn!("Unable to copy entity: Unable to fetch world entity properties");
                                 }
                             } else {
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Warning,
-                                        text: format!("Unable to copy entity: Unable to obtain lock").into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(3.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-                                log::warn!("Unable to copy entity: Unable to obtain lock");
+                                crate::warn!("Unable to copy entity: Unable to obtain lock");
                             }
                         } else {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!("Unable to copy entity: None selected").into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
-                            log::warn!("Unable to copy entity: None selected");
+                            crate::warn!("Unable to copy entity: None selected");
                         }
                     }
 
@@ -465,16 +375,7 @@ impl Editor {
                                 self.signal = Signal::Paste(entity.clone());
                             }
                             _ => {
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Warning,
-                                        text: format!("Unable to paste: You haven't selected anything!").into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(3.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
+                                crate::warn!("Unable to paste: You haven't selected anything!");
                             }
                         }
                     }
@@ -526,9 +427,10 @@ impl Editor {
                 );
         });
 
-        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-            toasts.show(ctx);
-        }
+        // dup from scene.render()
+        // if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
+        //     toasts.show(ctx);
+        // }
 
         crate::utils::show_new_project_window(
             ctx,

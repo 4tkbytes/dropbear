@@ -30,17 +30,8 @@ impl Keyboard for Editor {
             KeyCode::KeyG => {
                 if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::Gizmo;
-                    log::debug!("Switched to ViewportMode::Gizmo");
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Info,
-                            text: format!("Switched to Viewport::Gizmo").into(),
-                            options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(1.0)
-                                .show_progress(false),
-                            ..Default::default()
-                        });
-                    }
+                    crate::info!("Switched to Viewport::Gizmo");
+                    
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
                     }
@@ -51,17 +42,7 @@ impl Keyboard for Editor {
             KeyCode::KeyF => {
                 if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::CameraMove;
-                    log::debug!("Switched to ViewportMode::CameraMove");
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Info,
-                            text: format!("Switched to Viewport::CameraMove").into(),
-                            options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(1.0)
-                                .show_progress(false),
-                            ..Default::default()
-                        });
-                    }
+                    crate::info!("Switched to Viewport::CameraMove");
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(false);
 
@@ -80,16 +61,7 @@ impl Keyboard for Editor {
                 if let Some(_) = &self.selected_entity {
                     self.signal = Signal::Delete;
                 } else {
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Warning,
-                            text: format!("Failed to delete: No entity selected").into(),
-                            options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(3.0)
-                                .show_progress(true),
-                            ..Default::default()
-                        });
-                    }
+                    crate::warn!("Failed to delete: No entity selected");
                 }
             }
             KeyCode::Escape => {
@@ -100,17 +72,7 @@ impl Keyboard for Editor {
                     }
                 } else if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::None;
-                    log::debug!("Switched to Viewport::None");
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Info,
-                            text: "Switched to Viewport::None".into(),
-                            options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(1.0)
-                                .show_progress(false),
-                            ..Default::default()
-                        });
-                    }
+                    crate::warn!("Switched to Viewport::None");
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
                     }
@@ -123,31 +85,11 @@ impl Keyboard for Editor {
                     match self.save_project_config() {
                         Ok(_) => {}
                         Err(e) => {
-                            log::error!("Error saving project: {}", e);
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Error,
-                                    text: format!("Error saving project: {}", e).into(),
-                                    options: ToastOptions::default()
-                                        .duration_in_seconds(5.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::fatal!("Error saving project: {}", e);
                         }
                     }
                     log::info!("Successfully saved project, about to quit...");
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Success,
-                            text: format!("Successfully saved project").into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(5.0)
-                                .show_progress(true),
-                            ..Default::default()
-                        });
-                        self.scene_command = SceneCommand::Quit;
-                    }
+                    crate::success!("Successfully saved project");
                 }
             }
             KeyCode::KeyC => {
@@ -168,59 +110,17 @@ impl Keyboard for Editor {
                                 };
                                 self.signal = Signal::Copy(s_entity);
 
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Info,
-                                        text: format!("Copied!").into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(1.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
+                                crate::info!("Copied!");
 
                                 log::debug!("Copied selected entity");
                             } else {
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Warning,
-                                        text: format!("Unable to copy entity: Unable to fetch world entity properties").into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(3.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-                                log::warn!(
-                                    "Unable to copy entity: Unable to fetch world entity properties"
-                                );
+                                crate::warn!("Unable to copy entity: Unable to fetch world entity properties");
                             }
                         } else {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!("Unable to copy entity: Unable to obtain lock")
-                                        .into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
-                            log::warn!("Unable to copy entity: Unable to obtain lock");
+                            crate::warn!("Unable to copy entity: Unable to obtain lock");
                         }
                     } else {
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Warning,
-                                text: format!("Unable to copy entity: None selected").into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(3.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                        }
-                        log::warn!("Unable to copy entity: None selected");
+                        crate::warn!("Unable to copy entity: None selected");
                         self.pressed_keys.insert(key);
                     }
                 }
@@ -232,19 +132,7 @@ impl Keyboard for Editor {
                             self.signal = Signal::Paste(entity.clone());
                         }
                         _ => {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!(
-                                        "Unable to paste: You haven't selected anything!"
-                                    )
-                                    .into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::warn!("Unable to paste: You haven't selected anything!");
                         }
                     }
                 } else {
@@ -255,30 +143,10 @@ impl Keyboard for Editor {
                 if ctrl_pressed {
                     match self.save_project_config() {
                         Ok(_) => {
-                            log::info!("Successfully saved project");
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Success,
-                                    text: format!("Successfully saved project").into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(5.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::success!("Successfully saved project");
                         }
                         Err(e) => {
-                            log::error!("Error saving project: {}", e);
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Error,
-                                    text: format!("Error saving project: {}", e).into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(5.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::fatal!("Error saving project: {}", e);
                         }
                     }
                 } else {

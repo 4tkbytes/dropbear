@@ -8,7 +8,6 @@ use dropbear_engine::entity::Transform;
 use egui::{self, CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
-use egui_toast_fork::{Toast, ToastKind};
 use log;
 use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
@@ -635,15 +634,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                                 asset.name, spawn_position
                                                             );
 
-                                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                                toasts.add(Toast {
-                                                                    kind: ToastKind::Success,
-                                                                    text: format!("Spawned {} at camera", asset.name).into(),
-                                                                    options: ToastOptions::default()
-                                                                        .duration_in_seconds(2.0),
-                                                                    ..Default::default()
-                                                                });
-                                                            }
+                                                            crate::success!("Spawned {} at camera", asset.name);
                                                         }
                                                         Err(e) => {
                                                             log::error!(
@@ -651,18 +642,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             asset.name,
                                                             e);
 
-                                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                                toasts.add(Toast {
-                                                                    kind: ToastKind::Error,
-                                                                    text: format!(
-                                                                        "Failed to spawn {}: {}",
-                                                                        asset.name, e
-                                                                    ).into(),
-                                                                    options: ToastOptions::default()
-                                                                        .duration_in_seconds(3.0),
-                                                                    ..Default::default()
-                                                                });
-                                                            }
+                                                            crate::fatal!("Failed to spawn {}: {}",
+                                                                        asset.name, e);
                                                         }
                                                     }
                                                 }
@@ -990,16 +971,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     });
                                                 },
                                                 Err(e) => {
-                                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                        toasts.add(Toast {
-                                                            kind: ToastKind::Error,
-                                                            text: format!("Failed to create script file: {}", e).into(),
-                                                            options: ToastOptions::default()
-                                                                .duration_in_seconds(3.0),
-                                                            ..Default::default()
-                                                        });
-                                                    }
-                                                    log::error!("Failed to create script file: {}", e);
+                                                    crate::warn!("Failed to create script file: {}", e);
                                                 },
                                             }
                                         }
@@ -1101,27 +1073,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             match import_object() {
                                 Ok(_) => {
-                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                        toasts.add(Toast {
-                                            kind: ToastKind::Success,
-                                            text: "Resource(s) imported successfully!".into(),
-                                            options: ToastOptions::default()
-                                                .duration_in_seconds(3.0),
-                                            ..Default::default()
-                                        });
-                                    }
+                                    crate::success!("Resource(s) imported successfully!");
                                 }
                                 Err(e) => {
-                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                        toasts.add(Toast {
-                                            kind: ToastKind::Error,
-                                            text: format!("Failed to import resource(s): {e}")
-                                                .into(),
-                                            options: ToastOptions::default()
-                                                .duration_in_seconds(5.0),
-                                            ..Default::default()
-                                        });
-                                    }
+                                    crate::warn!("Failed to import resource(s): {e}");
                                 }
                             }
                             cfg.show_context_menu = false;
@@ -1134,29 +1089,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 match res.update_mem() {
                                     Ok(res_cfg) => {
                                         *res = res_cfg;
-                                        log::info!("Assets refreshed successfully.");
-                                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                            toasts.add(Toast {
-                                                kind: ToastKind::Success,
-                                                text: "Assets refreshed successfully!".into(),
-                                                options: ToastOptions::default()
-                                                    .duration_in_seconds(2.0),
-                                                ..Default::default()
-                                            });
-                                        }
+                                        crate::success!("Assets refreshed successfully!");
                                     }
                                     Err(e) => {
-                                        log::error!("Failed to refresh assets: {}", e);
-                                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                            toasts.add(Toast {
-                                                kind: ToastKind::Error,
-                                                text: format!("Failed to refresh assets: {}", e)
-                                                    .into(),
-                                                options: ToastOptions::default()
-                                                    .duration_in_seconds(3.0),
-                                                ..Default::default()
-                                            });
-                                        }
+                                        crate::fatal!("Failed to refresh assets: {}", e);
                                     }
                                 }
                             }

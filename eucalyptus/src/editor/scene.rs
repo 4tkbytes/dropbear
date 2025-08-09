@@ -157,34 +157,11 @@ impl Scene for Editor {
                             entity_id
                         );
 
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Success,
-                                text: format!("Paste!").into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(1.0)
-                                    .show_progress(false),
-                                ..Default::default()
-                            });
-                        }
+                        crate::success_without_console!("Paste!");
                         self.signal = Signal::Copy(scene_entity.clone());
                     }
                     Err(e) => {
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Warning,
-                                text: format!(
-                                    "Failed to paste-spawn {}: {}",
-                                    scene_entity.label, e
-                                )
-                                .into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(3.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                        }
-                        log::error!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                        crate::warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
                     }
                 }
             }
@@ -192,29 +169,11 @@ impl Scene for Editor {
                 if let Some(sel_e) = &self.selected_entity {
                     match self.world.despawn(*sel_e) {
                         Ok(_) => {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Success,
-                                    text: format!("Decimated entity").into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::info!("Decimated entity");
                             self.signal = Signal::None;
                         }
                         Err(e) => {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!("Failed to delete entity: {}", e).into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::warn!("Failed to delete entity: {}", e);
                         }
                     }
                 }
@@ -223,41 +182,14 @@ impl Scene for Editor {
                 if let Some(action) = self.undo_stack.pop() {
                     match action.undo(&mut self.world) {
                         Ok(_) => {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Success,
-                                    text: format!("Undid action").into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(1.0)
-                                        .show_progress(false),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::info!("Undid action");
                         }
                         Err(e) => {
-                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                toasts.add(egui_toast_fork::Toast {
-                                    kind: egui_toast_fork::ToastKind::Warning,
-                                    text: format!("Failed to undo action: {}", e).into(),
-                                    options: egui_toast_fork::ToastOptions::default()
-                                        .duration_in_seconds(3.0)
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
-                            }
+                            crate::warn!("Failed to undo action: {}", e);
                         }
                     }
                 } else {
-                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                        toasts.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Warning,
-                            text: format!("Nothing to undo").into(),
-                            options: egui_toast_fork::ToastOptions::default()
-                                .duration_in_seconds(1.0)
-                                .show_progress(false),
-                            ..Default::default()
-                        });
-                    }
+                    crate::warn_without_console!("Nothing to undo");
                     log::debug!("No undoable actions in stack");
                 }
                 self.signal = Signal::None;
@@ -291,21 +223,9 @@ impl Scene for Editor {
                                     ) {
                                         Ok(_) => false,
                                         Err(e) => {
-                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                toasts.add(egui_toast_fork::Toast {
-                                                    kind: egui_toast_fork::ToastKind::Error,
-                                                    text: format!("Failed to attach: {}", e).into(),
-                                                    options: egui_toast_fork::ToastOptions::default()
-                                                        .duration_in_seconds(3.0)
-                                                        .show_progress(true),
-                                                    ..Default::default()
-                                                });
-                                            }
-                                            log::error!(
-                                                "Failed to attach script to entity {:?}: {}",
+                                            crate::fatal!("Failed to attach script to entity {:?}: {}",
                                                 selected_entity,
-                                                e
-                                            );
+                                                e);
                                             self.signal = Signal::None;
                                             return;
                                         }
@@ -322,27 +242,11 @@ impl Scene for Editor {
                                     );
                                 }
 
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Success,
-                                        text: if replaced {
-                                            format!("Reattached script '{}'", script_name)
-                                        } else {
-                                            format!("Attached script '{}'", script_name)
-                                        }
-                                        .into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(2.5)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-
-                                log::info!(
-                                    "{} script '{}' at {:?} to entity {:?}",
+                                crate::success!(
+                                    "{} script '{}' at {} to entity {:?}",
                                     if replaced { "Reattached" } else { "Attached" },
                                     script_name,
-                                    moved_path,
+                                    moved_path.display(),
                                     selected_entity
                                 );
                             }
@@ -366,17 +270,7 @@ impl Scene for Editor {
                                     ) {
                                         Ok(_) => false,
                                         Err(e) => {
-                                            if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                                toasts.add(egui_toast_fork::Toast {
-                                                    kind: egui_toast_fork::ToastKind::Error,
-                                                    text: format!("Failed to attach: {}", e).into(),
-                                                    options: egui_toast_fork::ToastOptions::default()
-                                                        .duration_in_seconds(3.0)
-                                                        .show_progress(true),
-                                                    ..Default::default()
-                                                });
-                                            }
-                                            log::error!(
+                                            crate::fatal!(
                                                 "Failed to attach script to entity {:?}: {}",
                                                 selected_entity,
                                                 e
@@ -397,60 +291,20 @@ impl Scene for Editor {
                                     );
                                 }
 
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Success,
-                                        text: if replaced {
-                                            format!("Reattached script '{}'", script_name)
-                                        } else {
-                                            format!("Attached script '{}'", script_name)
-                                        }
-                                        .into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(2.5)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-
-                                log::info!(
+                                crate::success!(
                                     "{} script '{}' at {:?} to entity {:?}",
                                     if replaced { "Reattached" } else { "Attached" },
                                     script_name,
-                                    script_path.clone(),
+                                    script_path.display(),
                                     selected_entity
                                 );
                             }
                             Err(e) => {
-                                if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                    toasts.add(egui_toast_fork::Toast {
-                                        kind: egui_toast_fork::ToastKind::Error,
-                                        text: format!("Move failed: {}", e).into(),
-                                        options: egui_toast_fork::ToastOptions::default()
-                                            .duration_in_seconds(3.0)
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
-                                }
-                                log::error!(
-                                    "Failed to move script {}: {}",
-                                    script_path.display(),
-                                    e
-                                );
+                                crate::fatal!("Move failed: {}", e);
                             }
                         }
                     } else {
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Warning,
-                                text: "No selected entity to attach script".into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(2.0)
-                                    .show_progress(false),
-                                ..Default::default()
-                            });
-                        }
-                        log::warn!("AttachScript requested but no entity is selected");
+                        crate::fatal!("AttachScript requested but no entity is selected");
                     }
 
                     self.signal = Signal::None;
@@ -479,21 +333,7 @@ impl Scene for Editor {
                             ) {
                                 Ok(_) => false,
                                 Err(e) => {
-                                    if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                                        toasts.add(egui_toast_fork::Toast {
-                                            kind: egui_toast_fork::ToastKind::Error,
-                                            text: format!("Failed to attach new script: {}", e).into(),
-                                            options: egui_toast_fork::ToastOptions::default()
-                                                .duration_in_seconds(3.0)
-                                                .show_progress(true),
-                                            ..Default::default()
-                                        });
-                                    }
-                                    log::error!(
-                                        "Failed to attach newly created script to entity {:?}: {}",
-                                        selected_entity,
-                                        e
-                                    );
+                                    crate::fatal!("Failed to attach new script: {}", e);
                                     self.signal = Signal::None;
                                     return;
                                 }
@@ -507,40 +347,15 @@ impl Scene for Editor {
                             log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                         }
 
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Success,
-                                text: if replaced {
-                                    format!("Replaced script with new '{}'", script_name)
-                                } else {
-                                    format!("Created & attached script '{}'", script_name)
-                                }
-                                .into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(2.5)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                        }
-
-                        log::info!(
-                            "{} new script '{}' at {:?} to entity {:?}",
+                        crate::success!(
+                            "{} new script '{}' at {} to entity {:?}",
                             if replaced { "Replaced" } else { "Attached" },
                             script_name,
-                            script_path,
+                            script_path.display(),
                             selected_entity
                         );
                     } else {
-                        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-                            toasts.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Warning,
-                                text: "No selected entity to attach new script".into(),
-                                options: egui_toast_fork::ToastOptions::default()
-                                    .duration_in_seconds(2.0)
-                                    .show_progress(false),
-                                ..Default::default()
-                            });
-                        }
+                        crate::warn_without_console!("No selected entity to attach new script");
                         log::warn!("CreateAndAttachScript requested but no entity is selected");
                     }
                     self.signal = Signal::None;
@@ -548,8 +363,8 @@ impl Scene for Editor {
                 ScriptAction::RemoveScript => {
                     // log::debug!("Not implemented: RemoveScript");
 
-                    // delete scene
-
+                    // delete script
+                    
 
                     self.signal = Signal::None;
                 }
@@ -589,9 +404,7 @@ impl Scene for Editor {
         self.show_ui(&graphics.get_egui_context());
 
         self.window = Some(graphics.state.window.clone());
-        if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-            toasts.show(graphics.get_egui_context());
-        }
+        crate::logging::render(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             {
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();

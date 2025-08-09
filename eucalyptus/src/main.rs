@@ -1,8 +1,10 @@
 mod editor;
 mod menu;
+
 pub(crate) mod scripting;
 pub(crate) mod states;
 pub(crate) mod utils;
+pub(crate) mod logging;
 
 use std::{cell::RefCell, rc::Rc};
 
