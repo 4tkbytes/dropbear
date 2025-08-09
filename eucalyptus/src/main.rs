@@ -1,12 +1,12 @@
 mod editor;
 mod menu;
 
+pub(crate) mod build;
+pub(crate) mod camera;
+pub(crate) mod logging;
 pub(crate) mod scripting;
 pub(crate) mod states;
 pub(crate) mod utils;
-pub(crate) mod logging;
-pub(crate) mod build;
-pub(crate) mod camera;
 
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
@@ -20,7 +20,6 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
 
 #[tokio::main]
 async fn main() {
-
     let matches = Command::new("eucalyptus")
         .about("A visual game editor")
         .version("1.0.0")
@@ -33,8 +32,8 @@ async fn main() {
                     Arg::new("project")
                         .help("Path to the .eucp project file")
                         .value_name("PROJECT_FILE")
-                        .required(false)
-                )
+                        .required(false),
+                ),
         )
         .subcommand(
             Command::new("package")
@@ -43,28 +42,23 @@ async fn main() {
                     Arg::new("project")
                         .help("Path to the .eucp project file")
                         .value_name("PROJECT_FILE")
-                        .required(false)
-                )
+                        .required(false),
+                ),
         )
-        .subcommand(
-            Command::new("health")
-                .about("Check the health of the eucalyptus installation")
-        )
+        .subcommand(Command::new("health").about("Check the health of the eucalyptus installation"))
         .get_matches();
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {
                 Some(path) => PathBuf::from(path),
-                None => {
-                    match find_eucp_file() {
-                        Ok(path) => path,
-                        Err(e) => {
-                            eprintln!("Error: {}", e);
-                            std::process::exit(1);
-                        }
+                None => match find_eucp_file() {
+                    Ok(path) => path,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
                     }
-                }
+                },
             };
 
             crate::build::build(project_path, sub_matches);
@@ -72,15 +66,13 @@ async fn main() {
         Some(("package", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {
                 Some(path) => PathBuf::from(path),
-                None => {
-                    match find_eucp_file() {
-                        Ok(path) => path,
-                        Err(e) => {
-                            eprintln!("Error: {}", e);
-                            std::process::exit(1);
-                        }
+                None => match find_eucp_file() {
+                    Ok(path) => path,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
                     }
-                }
+                },
             };
 
             crate::build::package(project_path, sub_matches);
@@ -105,7 +97,12 @@ async fn main() {
                     main_menu,
                     "main_menu",
                 );
-                scene::add_scene_with_input(&mut scene_manager, &mut input_manager, editor, "editor");
+                scene::add_scene_with_input(
+                    &mut scene_manager,
+                    &mut input_manager,
+                    editor,
+                    "editor",
+                );
 
                 scene_manager.switch("main_menu");
 
@@ -117,15 +114,13 @@ async fn main() {
     }
 }
 
-fn find_eucp_file() -> Result<PathBuf, String> {    
-    let current_dir = std::env::current_dir()
-        .map_err(|_| "Failed to get current directory")?;
-    
-    let entries = fs::read_dir(&current_dir)
-        .map_err(|_| "Failed to read current directory")?;
-    
+fn find_eucp_file() -> Result<PathBuf, String> {
+    let current_dir = std::env::current_dir().map_err(|_| "Failed to get current directory")?;
+
+    let entries = fs::read_dir(&current_dir).map_err(|_| "Failed to read current directory")?;
+
     let mut eucp_files = Vec::new();
-    
+
     for entry in entries {
         if let Ok(entry) = entry {
             if let Some(file_name) = entry.file_name().to_str() {
@@ -135,10 +130,13 @@ fn find_eucp_file() -> Result<PathBuf, String> {
             }
         }
     }
-    
+
     match eucp_files.len() {
         0 => Err("No .eucp files found in current directory".to_string()),
         1 => Ok(eucp_files[0].clone()),
-        _ => Err(format!("Multiple .eucp files found: {:#?}. Please specify which one to use.", eucp_files)),
+        _ => Err(format!(
+            "Multiple .eucp files found: {:#?}. Please specify which one to use.",
+            eucp_files
+        )),
     }
 }

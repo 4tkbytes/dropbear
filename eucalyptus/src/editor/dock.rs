@@ -1,14 +1,12 @@
 use super::*;
-use std::{
-    collections::HashSet,
-    sync::{LazyLock, Mutex},
-};
+use std::{collections::HashSet, sync::LazyLock};
 
 use dropbear_engine::entity::Transform;
 use egui::{self, CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use log;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
     Gizmo, GizmoConfig, GizmoExt, GizmoMode,
@@ -17,6 +15,7 @@ use transform_gizmo_egui::{
 
 use crate::{
     APP_INFO,
+    camera::CameraAction,
     editor::scene::PENDING_SPAWNS,
     scripting::TEMPLATE_SCRIPT,
     states::{EntityNode, Node, RESOURCES, ResourceType},
@@ -36,12 +35,12 @@ pub struct EditorTabViewer<'a> {
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub camera: &'a mut Camera,
     pub world: &'a mut hecs::World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
+    pub camera_manager: &'a mut CameraManager,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -53,8 +52,8 @@ impl<'a> EditorTabViewer<'a> {
     ) -> anyhow::Result<()> {
         let mut transform = Transform::default();
         transform.position = position;
-
-        if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
+        {
+            let mut pending_spawns = PENDING_SPAWNS.lock();
             if let Some(props) = properties {
                 pending_spawns.push(PendingSpawn {
                     asset_path: asset.path.clone(),
@@ -70,27 +69,47 @@ impl<'a> EditorTabViewer<'a> {
                     properties: ModelProperties::default(),
                 });
             }
-
             Ok(())
-        } else {
-            return Err(anyhow::anyhow!(
-                "Failed to retrieve the lock from the PENDING_SPAWNS const"
-            ));
         }
+
+        // if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
+        //     if let Some(props) = properties {
+        //         pending_spawns.push(PendingSpawn {
+        //             asset_path: asset.path.clone(),
+        //             asset_name: asset.name.clone(),
+        //             transform,
+        //             properties: props,
+        //         });
+        //     } else {
+        //         pending_spawns.push(PendingSpawn {
+        //             asset_path: asset.path.clone(),
+        //             asset_name: asset.name.clone(),
+        //             transform,
+        //             properties: ModelProperties::default(),
+        //         });
+        //     }
+
+        //     Ok(())
+        // } else {
+        //     return Err(anyhow::anyhow!(
+        //         "Failed to retrieve the lock from the PENDING_SPAWNS const"
+        //     ));
+        // }
     }
 
     #[allow(dead_code)]
     // purely for debug, nothing else...
     fn debug_camera_state(&self) {
+        let camera = self.camera_manager.get_active().unwrap();
         log::debug!("Camera state:");
-        log::debug!("  Eye: {:?}", self.camera.eye);
-        log::debug!("  Target: {:?}", self.camera.target);
-        log::debug!("  Up: {:?}", self.camera.up);
-        log::debug!("  FOV Y: {}", self.camera.fov_y);
-        log::debug!("  Aspect: {}", self.camera.aspect);
-        log::debug!("  Z Near: {}", self.camera.znear);
-        log::debug!("  Proj Mat finite: {}", self.camera.proj_mat.is_finite());
-        log::debug!("  View Mat finite: {}", self.camera.view_mat.is_finite());
+        log::debug!("  Eye: {:?}", camera.eye);
+        log::debug!("  Target: {:?}", camera.target);
+        log::debug!("  Up: {:?}", camera.up);
+        log::debug!("  FOV Y: {}", camera.fov_y);
+        log::debug!("  Aspect: {}", camera.aspect);
+        log::debug!("  Z Near: {}", camera.znear);
+        log::debug!("  Proj Mat finite: {}", camera.proj_mat.is_finite());
+        log::debug!("  View Mat finite: {}", camera.view_mat.is_finite());
     }
 }
 
@@ -98,15 +117,10 @@ impl<'a> EditorTabViewer<'a> {
 pub struct DraggedAsset {
     pub name: String,
     pub path: PathBuf,
-    // originally used for dragging stuff
-    // pub asset_type: ResourceType,
 }
 
 pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
-
-// pub static DRAGGED_ASSET: LazyLock<Mutex<Option<DraggedAsset>>> =
-//     LazyLock::new(|| Mutex::new(None));
 
 #[derive(Default)]
 pub(crate) struct INeedABetterNameForThisStruct {
@@ -133,7 +147,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
-        let mut cfg = TABS_GLOBAL.lock().unwrap();
+        let mut cfg = TABS_GLOBAL.lock();
 
         ui.ctx().input(|i| {
             if i.pointer.button_pressed(egui::PointerButton::Secondary) {
@@ -149,27 +163,51 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
         match tab {
             EditorTab::Viewport => {
-                let size = ui.available_size();
-                let new_tex_width = size.x.max(1.0) as u32;
-                let new_tex_height = size.y.max(1.0) as u32;
+                let camera = self.camera_manager.get_active().unwrap();
 
-                // idk why its here...
-                // todo: remove this part or look at its usefulness
-                if self.tex_size.width != new_tex_width || self.tex_size.height != new_tex_height {
-                    self.tex_size.width = new_tex_width;
-                    self.tex_size.height = new_tex_height;
+                let available_rect = ui.available_rect_before_wrap();
+                let available_size = available_rect.size();
+                
+                let tex_aspect = self.tex_size.width as f32 / self.tex_size.height as f32;
+                let available_aspect = available_size.x / available_size.y;
+                
+                let (display_width, display_height) = if available_aspect > tex_aspect {
+                    let height = available_size.y * 0.95;
+                    let width = height * tex_aspect;
+                    (width, height)
+                } else {
+                    let width = available_size.x * 0.95;
+                    let height = width / tex_aspect;
+                    (width, height)
+                };
 
-                    let new_aspect = new_tex_width as f64 / new_tex_height as f64;
-                    self.camera.aspect = new_aspect;
-                }
-
-                let image_response = ui.add(
-                    egui::Image::new((
-                        self.view,
-                        [self.tex_size.width as f32, self.tex_size.height as f32].into(),
-                    ))
-                    .sense(egui::Sense::click_and_drag()),
+                let center_x = available_rect.center().x;
+                let center_y = available_rect.center().y;
+                
+                let image_rect = egui::Rect::from_center_size(
+                    egui::pos2(center_x, center_y),
+                    egui::vec2(display_width, display_height)
                 );
+
+                let (_rect, _response) = ui.allocate_exact_size(
+                    available_size,
+                    egui::Sense::click_and_drag()
+                );
+
+                let _image_response = ui.allocate_rect(image_rect, egui::Sense::click_and_drag());
+
+                ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
+                    ui.add_sized(
+                        [display_width, display_height],
+                        egui::Image::new((
+                            self.view,
+                            [display_width, display_height].into(),
+                        ))
+                        .fit_to_exact_size([display_width, display_height].into())
+                    )
+                });
+
+                let image_response = ui.interact(image_rect, ui.id().with("viewport_image"), egui::Sense::click_and_drag());
 
                 if image_response.clicked() {
                     if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
@@ -179,31 +217,28 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         let ndc_x = (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
                         let ndc_y = 1.0 - (2.0 * local_pos.y / viewport_rect.height());
 
-                        let view_matrix = glam::DMat4::look_at_lh(
-                            self.camera.eye,
-                            self.camera.target,
-                            self.camera.up,
-                        );
+                        let view_matrix =
+                            glam::DMat4::look_at_lh(camera.eye, camera.target, camera.up);
 
                         let proj_matrix = glam::DMat4::perspective_lh(
-                            self.camera.fov_y.to_radians(),
-                            self.camera.aspect,
-                            self.camera.znear,
-                            self.camera.zfar,
+                            camera.fov_y.to_radians(),
+                            camera.aspect,
+                            camera.znear,
+                            camera.zfar,
                         );
 
                         log::debug!(
                             "Camera - eye: {:?}, target: {:?}, up: {:?}",
-                            self.camera.eye,
-                            self.camera.target,
-                            self.camera.up
+                            camera.eye,
+                            camera.target,
+                            camera.up
                         );
                         log::debug!(
                             "Camera - fov_y: {:.3}°, aspect: {:.3}, znear: {:.3}, zfar: {:.3}",
-                            self.camera.fov_y,
-                            self.camera.aspect,
-                            self.camera.znear,
-                            self.camera.zfar
+                            camera.fov_y,
+                            camera.aspect,
+                            camera.znear,
+                            camera.zfar
                         );
 
                         if !view_matrix.is_finite() {
@@ -353,29 +388,25 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 self.gizmo.update_config(GizmoConfig {
                     view_matrix: DMat4::look_at_lh(
                         DVec3::new(
-                            self.camera.eye.x as f64,
-                            self.camera.eye.y as f64,
-                            self.camera.eye.z as f64,
+                            camera.eye.x as f64,
+                            camera.eye.y as f64,
+                            camera.eye.z as f64,
                         ),
                         DVec3::new(
-                            self.camera.target.x as f64,
-                            self.camera.target.y as f64,
-                            self.camera.target.z as f64,
+                            camera.target.x as f64,
+                            camera.target.y as f64,
+                            camera.target.z as f64,
                         ),
-                        DVec3::new(
-                            self.camera.up.x as f64,
-                            self.camera.up.y as f64,
-                            self.camera.up.z as f64,
-                        ),
+                        DVec3::new(camera.up.x as f64, camera.up.y as f64, camera.up.z as f64),
                     )
                     .into(),
                     projection_matrix: DMat4::perspective_infinite_reverse_lh(
-                        self.camera.fov_y as f64,
-                        self.camera.aspect as f64,
-                        self.camera.znear as f64,
+                        camera.fov_y as f64,
+                        display_width as f64 / display_height as f64,
+                        camera.znear as f64,
                     )
                     .into(),
-                    viewport: image_response.rect,
+                    viewport: image_rect,
                     modes: GizmoMode::all(),
                     orientation: transform_gizmo_egui::GizmoOrientation::Global,
                     snapping,
@@ -555,7 +586,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                     }
 
-                    let mut logged = LOGGED.lock().unwrap();
+                    let mut logged = LOGGED.lock();
                     recursive_search_nodes_and_attach_thumbnail(
                         &res.nodes,
                         &mut assets,
@@ -619,7 +650,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                             if is_d_clicked {
                                                 if matches!(asset_type, ResourceType::Model) {
-                                                    let spawn_position = self.camera.eye;
+                                                    let spawn_position = self.camera_manager.get_active().unwrap().eye;
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
                                                         path: asset_path.clone(),
@@ -684,19 +715,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if let Some(script) = q.get() {
                                 script_loc = format!("{}", script.path.display());
                             } else {
-                            script_loc = String::from("None");
+                                script_loc = String::from("None");
                             }
                         } else {
                             script_loc = "None".to_string();
                         }
                     }
-                    
+
                     match self
                         .world
                         .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(
                             *entity,
                         ) {
                         Ok((e, transform, _props)) => {
+                            let label = e.label().clone();
                             let model = e.model_mut();
                             ui.group(|ui| {
                                 ui.horizontal(|ui| {
@@ -705,294 +737,415 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 })
                             });
 
-                            CollapsingHeader::new("Transform")
-                                .default_open(true)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label("Position:");
-                                    });
+                            ui.group(|ui| {
+                                CollapsingHeader::new("Transform").default_open(true).show(
+                                    ui,
+                                    |ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.label("Position:");
+                                        });
 
-                                    let mut pos_changed = false;
-                                    ui.horizontal(|ui| {
-                                        ui.label("X:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.x)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            )
-                                            .changed()
-                                        {
-                                            pos_changed = true;
-                                        }
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("Y:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.y)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            )
-                                            .changed()
-                                        {
-                                            pos_changed = true;
-                                        }
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("Z:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.z)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            )
-                                            .changed()
-                                        {
-                                            pos_changed = true;
-                                        }
-                                    });
-                                    if ui.button("Reset Position").clicked() {
-                                        transform.position = glam::DVec3::ZERO;
-                                    }
-
-                                    ui.add_space(5.0);
-
-                                    ui.horizontal(|ui| {
-                                        ui.label("Rotation:");
-                                    });
-
-                                    let mut rotation_changed = false;
-                                    let (mut x_rot, mut y_rot, mut z_rot) =
-                                        transform.rotation.to_euler(glam::EulerRot::XYZ);
-
-                                    ui.horizontal(|ui| {
-                                        ui.label("X:");
-                                        if ui
-                                            .add(
-                                                egui::Slider::new(
-                                                    &mut x_rot,
-                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                        let mut pos_changed = false;
+                                        ui.horizontal(|ui| {
+                                            ui.label("X:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut transform.position.x)
+                                                        .speed(0.1)
+                                                        .fixed_decimals(3),
                                                 )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            )
-                                            .changed()
-                                        {
-                                            rotation_changed = true;
-                                        }
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("Y:");
-                                        if ui
-                                            .add(
-                                                egui::Slider::new(
-                                                    &mut y_rot,
-                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                                .changed()
+                                            {
+                                                pos_changed = true;
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Y:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut transform.position.y)
+                                                        .speed(0.1)
+                                                        .fixed_decimals(3),
                                                 )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            )
-                                            .changed()
-                                        {
-                                            rotation_changed = true;
-                                        }
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("Z:");
-                                        if ui
-                                            .add(
-                                                egui::Slider::new(
-                                                    &mut z_rot,
-                                                    -std::f64::consts::PI..=std::f64::consts::PI,
+                                                .changed()
+                                            {
+                                                pos_changed = true;
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Z:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut transform.position.z)
+                                                        .speed(0.1)
+                                                        .fixed_decimals(3),
                                                 )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            )
-                                            .changed()
-                                        {
-                                            rotation_changed = true;
+                                                .changed()
+                                            {
+                                                pos_changed = true;
+                                            }
+                                        });
+                                        if ui.button("Reset Position").clicked() {
+                                            transform.position = glam::DVec3::ZERO;
                                         }
-                                    });
 
-                                    if rotation_changed {
-                                        transform.rotation = glam::DQuat::from_euler(
-                                            glam::EulerRot::XYZ,
-                                            x_rot,
-                                            y_rot,
-                                            z_rot,
-                                        );
-                                    }
-                                    if ui.button("Reset Rotation").clicked() {
-                                        transform.rotation = glam::DQuat::IDENTITY;
-                                    }
-                                    ui.add_space(5.0);
+                                        ui.add_space(5.0);
 
-                                    ui.horizontal(|ui| {
-                                        ui.label("Scale:");
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                let lock_icon =
-                                                    if cfg.scale_locked { "🔒" } else { "🔓" };
-                                                if ui
-                                                    .button(lock_icon)
-                                                    .on_hover_text("Lock uniform scaling")
-                                                    .clicked()
-                                                {
-                                                    cfg.scale_locked = !cfg.scale_locked;
+                                        ui.horizontal(|ui| {
+                                            ui.label("Rotation:");
+                                        });
+
+                                        let mut rotation_changed = false;
+                                        let (mut x_rot, mut y_rot, mut z_rot) =
+                                            transform.rotation.to_euler(glam::EulerRot::XYZ);
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("X:");
+                                            if ui
+                                                .add(
+                                                    egui::Slider::new(
+                                                        &mut x_rot,
+                                                        -std::f64::consts::PI
+                                                            ..=std::f64::consts::PI,
+                                                    )
+                                                    .step_by(0.01)
+                                                    .custom_formatter(|n, _| {
+                                                        format!("{:.1}°", n.to_degrees())
+                                                    })
+                                                    .custom_parser(|s| {
+                                                        s.trim_end_matches('°')
+                                                            .parse::<f64>()
+                                                            .ok()
+                                                            .map(|v| v.to_radians())
+                                                    }),
+                                                )
+                                                .changed()
+                                            {
+                                                rotation_changed = true;
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Y:");
+                                            if ui
+                                                .add(
+                                                    egui::Slider::new(
+                                                        &mut y_rot,
+                                                        -std::f64::consts::PI
+                                                            ..=std::f64::consts::PI,
+                                                    )
+                                                    .step_by(0.01)
+                                                    .custom_formatter(|n, _| {
+                                                        format!("{:.1}°", n.to_degrees())
+                                                    })
+                                                    .custom_parser(|s| {
+                                                        s.trim_end_matches('°')
+                                                            .parse::<f64>()
+                                                            .ok()
+                                                            .map(|v| v.to_radians())
+                                                    }),
+                                                )
+                                                .changed()
+                                            {
+                                                rotation_changed = true;
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Z:");
+                                            if ui
+                                                .add(
+                                                    egui::Slider::new(
+                                                        &mut z_rot,
+                                                        -std::f64::consts::PI
+                                                            ..=std::f64::consts::PI,
+                                                    )
+                                                    .step_by(0.01)
+                                                    .custom_formatter(|n, _| {
+                                                        format!("{:.1}°", n.to_degrees())
+                                                    })
+                                                    .custom_parser(|s| {
+                                                        s.trim_end_matches('°')
+                                                            .parse::<f64>()
+                                                            .ok()
+                                                            .map(|v| v.to_radians())
+                                                    }),
+                                                )
+                                                .changed()
+                                            {
+                                                rotation_changed = true;
+                                            }
+                                        });
+
+                                        if rotation_changed {
+                                            transform.rotation = glam::DQuat::from_euler(
+                                                glam::EulerRot::XYZ,
+                                                x_rot,
+                                                y_rot,
+                                                z_rot,
+                                            );
+                                        }
+                                        if ui.button("Reset Rotation").clicked() {
+                                            transform.rotation = glam::DQuat::IDENTITY;
+                                        }
+                                        ui.add_space(5.0);
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Scale:");
+                                            ui.with_layout(
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    let lock_icon = if cfg.scale_locked {
+                                                        "🔒"
+                                                    } else {
+                                                        "🔓"
+                                                    };
+                                                    if ui
+                                                        .button(lock_icon)
+                                                        .on_hover_text("Lock uniform scaling")
+                                                        .clicked()
+                                                    {
+                                                        cfg.scale_locked = !cfg.scale_locked;
+                                                    }
+                                                },
+                                            );
+                                        });
+
+                                        let mut scale_changed = false;
+                                        let mut new_scale = transform.scale;
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("X:");
+                                            if ui
+                                                .add(
+                                                    egui::DragValue::new(&mut new_scale.x)
+                                                        .speed(0.01)
+                                                        .fixed_decimals(3),
+                                                )
+                                                .changed()
+                                            {
+                                                scale_changed = true;
+                                                if cfg.scale_locked {
+                                                    let scale_factor =
+                                                        new_scale.x / transform.scale.x;
+                                                    new_scale.y = transform.scale.y * scale_factor;
+                                                    new_scale.z = transform.scale.z * scale_factor;
                                                 }
-                                            },
-                                        );
-                                    });
+                                            }
+                                        });
 
-                                    let mut scale_changed = false;
-                                    let mut new_scale = transform.scale;
+                                        ui.horizontal(|ui| {
+                                            ui.label("Y:");
+                                            let y_slider = egui::DragValue::new(&mut new_scale.y)
+                                                .speed(0.01)
+                                                .fixed_decimals(3);
 
-                                    ui.horizontal(|ui| {
-                                        ui.label("X:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut new_scale.x)
-                                                    .speed(0.01)
-                                                    .fixed_decimals(3),
-                                            )
-                                            .changed()
-                                        {
-                                            scale_changed = true;
                                             if cfg.scale_locked {
-                                                let scale_factor = new_scale.x / transform.scale.x;
-                                                new_scale.y = transform.scale.y * scale_factor;
-                                                new_scale.z = transform.scale.z * scale_factor;
+                                                scale_changed = true;
+                                            }
+
+                                            if ui.add_enabled(!cfg.scale_locked, y_slider).changed()
+                                            {
+                                                scale_changed = true;
+                                            }
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Z:");
+                                            let z_slider = egui::DragValue::new(&mut new_scale.z)
+                                                .speed(0.01)
+                                                .fixed_decimals(3);
+
+                                            if ui.add_enabled(!cfg.scale_locked, z_slider).changed()
+                                            {
+                                                scale_changed = true;
+                                            }
+                                        });
+
+                                        if scale_changed {
+                                            transform.scale = new_scale;
+                                        }
+                                        if ui.button("Reset Scale").clicked() {
+                                            transform.scale = glam::DVec3::ONE;
+                                        }
+                                        ui.add_space(5.0);
+
+                                        // maybe use? probs not :/
+                                        // if pos_changed || rotation_changed || scale_changed {
+                                        //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
+                                        // }
+                                    },
+                                );
+                            });
+                            ui.group(|ui| {
+                                CollapsingHeader::new("Scripting")
+                                    .default_open(true)
+                                    .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if ui.button("Browse").clicked() {
+                                            if let Some(script_file) = rfd::FileDialog::new()
+                                                .add_filter("Rhai Script", &["rhai"])
+                                                .pick_file()
+                                            {
+                                                let script_name = script_file
+                                                    .file_stem()
+                                                    .unwrap_or_default()
+                                                    .to_string_lossy()
+                                                    .to_string();
+                                                *self.signal = Signal::ScriptAction(ScriptAction::AttachScript {
+                                                    script_path: script_file,
+                                                    script_name,
+                                                });
+                                            }
+                                        }
+
+                                        if ui.button("New").clicked() {
+                                            if let Some(script_path) = rfd::FileDialog::new()
+                                                .add_filter("Rhai Script", &["rhai"])
+                                                .set_file_name(format!("{}_script.rhai", e.label()))
+                                                .save_file()
+                                            {
+                                                match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
+                                                    Ok(_) => {
+                                                        let script_name = script_path
+                                                            .file_stem()
+                                                            .unwrap_or_default()
+                                                            .to_string_lossy()
+                                                            .to_string();
+                                                        *self.signal = Signal::ScriptAction(ScriptAction::CreateAndAttachScript {
+                                                            script_path,
+                                                            script_name,
+                                                        });
+                                                    },
+                                                    Err(e) => {
+                                                        crate::warn!("Failed to create script file: {}", e);
+                                                    },
+                                                }
                                             }
                                         }
                                     });
 
-                                    ui.horizontal(|ui| {
-                                        ui.label("Y:");
-                                        let y_slider = egui::DragValue::new(&mut new_scale.y)
-                                            .speed(0.01)
-                                            .fixed_decimals(3);
+                                    ui.separator();
 
-                                        if cfg.scale_locked {
-                                            scale_changed = true;
-                                        }
-
-                                        if ui.add_enabled(!cfg.scale_locked, y_slider).changed() {
-                                            scale_changed = true;
-                                        }
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label("Script Location:");
+                                        ui.label(script_loc);
                                     });
 
+                                    if ui.button("Remove").clicked() {
+                                        *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
+                                    }
+                                    ui.separator();
                                     ui.horizontal(|ui| {
-                                        ui.label("Z:");
-                                        let z_slider = egui::DragValue::new(&mut new_scale.z)
-                                            .speed(0.01)
-                                            .fixed_decimals(3);
-
-                                        if ui.add_enabled(!cfg.scale_locked, z_slider).changed() {
-                                            scale_changed = true;
+                                        if ui.button("Edit Script").clicked() {
+                                            *self.signal = Signal::ScriptAction(ScriptAction::EditScript);
                                         }
                                     });
-
-                                    if scale_changed {
-                                        transform.scale = new_scale;
-                                    }
-                                    if ui.button("Reset Scale").clicked() {
-                                        transform.scale = glam::DVec3::ONE;
-                                    }
-                                    ui.add_space(5.0);
-
-                                    // maybe use? probs not :/
-                                    // if pos_changed || rotation_changed || scale_changed {
-                                    //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
-                                    // }
                                 });
-                            CollapsingHeader::new("Scripting").default_open(true).show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    if ui.button("Browse").clicked() {
-                                        if let Some(script_file) = rfd::FileDialog::new()
-                                            .add_filter("Rhai Script", &["rhai"])
-                                            .pick_file()
-                                        {
-                                            let script_name = script_file
-                                                .file_stem()
-                                                .unwrap_or_default()
-                                                .to_string_lossy()
-                                                .to_string();
-                                            *self.signal = Signal::ScriptAction(ScriptAction::AttachScript {
-                                                script_path: script_file,
-                                                script_name,
+                            });
+                            let entity_id_copy = *entity;
+                            let entity_label = label.clone();
+                            let entity_position = transform.position;
+                            let camera_manager = &self.camera_manager;
+                            let signal = &mut *self.signal;
+                            let get_player_camera_target =
+                                camera_manager.get_player_camera_target();
+                            let get_player_camera_offset =
+                                camera_manager.get_player_camera_offset();
+                            let get_active_type = camera_manager.get_active_type();
+                            let get_active_eye = camera_manager.get_active().unwrap().eye;
+
+                            let followed_entity_label = if let Some(target_entity) =
+                                get_player_camera_target
+                            {
+                                if target_entity != entity_id_copy {
+                                    if let Ok((followed_entity, _, _)) = self.world
+                                        .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
+                                    {
+                                        Some(followed_entity.label().to_string())
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
+                            ui.group(|ui| {
+                                CollapsingHeader::new("Camera")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if ui.button("Capture Camera Position relative to Entity").clicked() {
+                                            let current_camera_pos = get_active_eye;
+                                            let calculated_offset = current_camera_pos - entity_position;
+                                            log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}", 
+                                                entity_position, current_camera_pos, calculated_offset);
+                                            *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
+                                                entity: entity_id_copy,
+                                                offset: calculated_offset,
+                                            });
+                                            crate::success!("Camera attached to {} with offset {:?}", entity_label, calculated_offset);
+                                        }
+                                    });
+                                    ui.separator();
+                                    ui.horizontal(|ui| {
+                                        ui.label("Status:");
+                                        let status_text = match get_active_type {
+                                            crate::camera::CameraType::Debug => {
+                                                egui::RichText::new("Debug Camera (Free)")
+                                                    .color(egui::Color32::LIGHT_BLUE)
+                                            },
+                                            crate::camera::CameraType::Player => {
+                                                if let Some(target_entity) = get_player_camera_target {
+                                                    if target_entity == entity_id_copy {
+                                                        egui::RichText::new("Following THIS Entity")
+                                                            .color(egui::Color32::LIGHT_GREEN)
+                                                            .strong()
+                                                    } else {
+                                                        if let Some(followed_label) = &followed_entity_label {
+                                                            egui::RichText::new(format!("Following: {}", followed_label))
+                                                                .color(egui::Color32::YELLOW)
+                                                        } else {
+                                                            egui::RichText::new("Following: Unknown Entity")
+                                                                .color(egui::Color32::RED)
+                                                        }
+                                                    }
+                                                } else {
+                                                    egui::RichText::new("Player Camera (Free)")
+                                                        .color(egui::Color32::LIGHT_GRAY)
+                                                }
+                                            }
+                                        };
+                                        ui.label(status_text);
+                                    });
+
+                                    ui.separator();
+
+                                    if let Some(target_entity) = get_player_camera_target {
+                                        if target_entity == entity_id_copy {
+                                            ui.horizontal(|ui| {
+                                                ui.label("Camera Offset:");
+                                                if let Some(offset) = get_player_camera_offset {
+                                                    ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
+                                                } else {
+                                                    ui.label("Unknown");
+                                                }
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.label("Distance:");
+                                                let camera_pos = get_active_eye;
+                                                let distance = (camera_pos - entity_position).length();
+                                                ui.label(format!("{:.2} units", distance));
                                             });
                                         }
                                     }
 
-                                    if ui.button("New").clicked() {
-                                        if let Some(script_path) = rfd::FileDialog::new()
-                                            .add_filter("Rhai Script", &["rhai"])
-                                            .set_file_name(format!("{}_script.rhai", e.label()))
-                                            .save_file()
-                                        {
-                                            match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
-                                                Ok(_) => {
-                                                    let script_name = script_path
-                                                        .file_stem()
-                                                        .unwrap_or_default()
-                                                        .to_string_lossy()
-                                                        .to_string();
-                                                    *self.signal = Signal::ScriptAction(ScriptAction::CreateAndAttachScript {
-                                                        script_path,
-                                                        script_name,
-                                                    });
-                                                },
-                                                Err(e) => {
-                                                    crate::warn!("Failed to create script file: {}", e);
-                                                },
-                                            }
+                                    ui.horizontal(|ui| {
+                                        if ui.button("Clear Camera Target").clicked() {
+                                            *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
                                         }
-                                    }
-                                });
-
-                                ui.separator();
-
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label("Script Location:");
-                                    ui.label(script_loc);
-                                });
-
-                                if ui.button("Remove").clicked() {
-                                    *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
-                                }
-                                
-                                ui.separator();
-                                
-                                ui.horizontal(|ui| {                                    
-                                    if ui.button("Edit Script").clicked() {
-                                        *self.signal = Signal::ScriptAction(ScriptAction::EditScript);
-                                    }
+                                    });
                                 });
                             });
                         }

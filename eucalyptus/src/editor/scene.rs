@@ -6,6 +6,7 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use log;
+use parking_lot::Mutex;
 use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
@@ -53,11 +54,8 @@ impl Scene for Editor {
 
             if cube_path != PathBuf::new() {
                 let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
-                self.world.spawn((
-                    cube,
-                    Transform::default(),
-                    ModelProperties::default(),
-                ));
+                self.world
+                    .spawn((cube, Transform::default(), ModelProperties::default()));
                 log::info!("Added default cube since no entities were loaded from scene");
             } else {
                 log::warn!("cube path is empty :(")
@@ -72,7 +70,7 @@ impl Scene for Editor {
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();
-        
+
         if let Some(camera) = self.camera_manager.get_active() {
             let pipeline = graphics.create_render_pipline(
                 &shader,
@@ -91,7 +89,8 @@ impl Scene for Editor {
             self.is_viewport_focused = false;
         }
 
-        if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
+        {
+            let mut pending_spawns = PENDING_SPAWNS.lock();
             for spawn in pending_spawns.drain(..) {
                 match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
                     Ok(adopted) => {
@@ -120,152 +119,99 @@ impl Scene for Editor {
 
         if self.is_viewport_focused
             && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
-            && self.is_using_debug_camera()
+        // && self.is_using_debug_camera()
         {
-            // Filter only movement keys for camera input
-            let movement_keys: std::collections::HashSet<KeyCode> = self.pressed_keys
+            let movement_keys: std::collections::HashSet<KeyCode> = self
+                .pressed_keys
                 .iter()
-                .filter(|&&key| matches!(key, 
-                    KeyCode::KeyW | KeyCode::KeyA | KeyCode::KeyS | KeyCode::KeyD | 
-                    KeyCode::Space | KeyCode::ShiftLeft
-                ))
+                .filter(|&&key| {
+                    matches!(
+                        key,
+                        KeyCode::KeyW
+                            | KeyCode::KeyA
+                            | KeyCode::KeyS
+                            | KeyCode::KeyD
+                            | KeyCode::Space
+                            | KeyCode::ShiftLeft
+                    )
+                })
                 .copied()
                 .collect();
 
-            self.camera_manager.handle_input(&movement_keys, self.mouse_delta);
+            self.camera_manager
+                .handle_input(&movement_keys, self.mouse_delta);
         }
 
         match &self.signal {
             Signal::Paste(scene_entity) => {
-                        match AdoptedEntity::new(
-                            graphics,
-                            &scene_entity.model_path,
-                            Some(&scene_entity.label),
-                        ) {
-                            Ok(adopted) => {
-                                let entity_id = self.world.spawn((
-                                    adopted,
-                                    scene_entity.transform,
-                                    ModelProperties::default(),
-                                ));
-                                self.selected_entity = Some(entity_id);
-                                log::debug!(
-                                    "Successfully paste-spawned {} with ID {:?}",
-                                    scene_entity.label,
-                                    entity_id
-                                );
+                match AdoptedEntity::new(
+                    graphics,
+                    &scene_entity.model_path,
+                    Some(&scene_entity.label),
+                ) {
+                    Ok(adopted) => {
+                        let entity_id = self.world.spawn((
+                            adopted,
+                            scene_entity.transform,
+                            ModelProperties::default(),
+                        ));
+                        self.selected_entity = Some(entity_id);
+                        log::debug!(
+                            "Successfully paste-spawned {} with ID {:?}",
+                            scene_entity.label,
+                            entity_id
+                        );
 
-                                crate::success_without_console!("Paste!");
-                                self.signal = Signal::Copy(scene_entity.clone());
-                            }
-                            Err(e) => {
-                                crate::warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
-                            }
-                        }
+                        crate::success_without_console!("Paste!");
+                        self.signal = Signal::Copy(scene_entity.clone());
                     }
+                    Err(e) => {
+                        crate::warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                    }
+                }
+            }
             Signal::Delete => {
-                        if let Some(sel_e) = &self.selected_entity {
-                            match self.world.despawn(*sel_e) {
-                                Ok(_) => {
-                                    crate::info!("Decimated entity");
-                                    self.signal = Signal::None;
-                                }
-                                Err(e) => {
-                                    crate::warn!("Failed to delete entity: {}", e);
-                                }
-                            }
+                if let Some(sel_e) = &self.selected_entity {
+                    match self.world.despawn(*sel_e) {
+                        Ok(_) => {
+                            crate::info!("Decimated entity");
+                            self.signal = Signal::None;
+                        }
+                        Err(e) => {
+                            crate::warn!("Failed to delete entity: {}", e);
                         }
                     }
+                }
+            }
             Signal::Undo => {
-                        if let Some(action) = self.undo_stack.pop() {
-                            match action.undo(&mut self.world) {
-                                Ok(_) => {
-                                    crate::info!("Undid action");
-                                }
-                                Err(e) => {
-                                    crate::warn!("Failed to undo action: {}", e);
-                                }
-                            }
-                        } else {
-                            crate::warn_without_console!("Nothing to undo");
-                            log::debug!("No undoable actions in stack");
+                if let Some(action) = self.undo_stack.pop() {
+                    match action.undo(&mut self.world) {
+                        Ok(_) => {
+                            crate::info!("Undid action");
                         }
-                        self.signal = Signal::None;
+                        Err(e) => {
+                            crate::warn!("Failed to undo action: {}", e);
+                        }
                     }
+                } else {
+                    crate::warn_without_console!("Nothing to undo");
+                    log::debug!("No undoable actions in stack");
+                }
+                self.signal = Signal::None;
+            }
             Signal::None => {}
             Signal::Copy(_) => {}
             Signal::ScriptAction(action) => match action {
-                        ScriptAction::AttachScript {
-                            script_path,
-                            script_name,
-                        } => {
-                            if let Some(selected_entity) = self.selected_entity {
-                                match crate::scripting::move_script_to_src(script_path) {
-                                    Ok(moved_path) => {
-                                        let new_script = ScriptComponent {
-                                            name: script_name.clone(),
-                                            path: moved_path.clone(),
-                                        };
-
-                                        let replaced = if let Ok(mut sc) =
-                                            self.world.get::<&mut ScriptComponent>(selected_entity)
-                                        {
-                                            sc.name = new_script.name.clone();
-                                            sc.path = new_script.path.clone();
-                                            true
-                                        } else {
-                                            match crate::scripting::attach_script_to_entity(
-                                                &mut self.world,
-                                                selected_entity,
-                                                new_script.clone(),
-                                            ) {
-                                                Ok(_) => false,
-                                                Err(e) => {
-                                                    crate::fatal!("Failed to attach script to entity {:?}: {}",
-                                                        selected_entity,
-                                                        e);
-                                                    self.signal = Signal::None;
-                                                    return;
-                                                }
-                                            }
-                                        };
-
-                                        if let Err(e) = crate::scripting::convert_entity_to_group(
-                                            &self.world,
-                                            selected_entity,
-                                        ) {
-                                            log::warn!(
-                                                "convert_entity_to_group failed (non-fatal): {}",
-                                                e
-                                            );
-                                        }
-
-                                        crate::success!(
-                                            "{} script '{}' at {} to entity {:?}",
-                                            if replaced { "Reattached" } else { "Attached" },
-                                            script_name,
-                                            moved_path.display(),
-                                            selected_entity
-                                        );
-                                    }
-                                    Err(e) => {
-                                        crate::fatal!("Move failed: {}", e);
-                                    }
-                                }
-                            } else {
-                                crate::fatal!("AttachScript requested but no entity is selected");
-                            }
-
-                            self.signal = Signal::None;
-                        }
-                        ScriptAction::CreateAndAttachScript {
-                            script_path,
-                            script_name,
-                        } => {
-                            if let Some(selected_entity) = self.selected_entity {
+                ScriptAction::AttachScript {
+                    script_path,
+                    script_name,
+                } => {
+                    if let Some(selected_entity) = self.selected_entity {
+                        match crate::scripting::move_script_to_src(script_path) {
+                            Ok(moved_path) => {
                                 let new_script = ScriptComponent {
                                     name: script_name.clone(),
-                                    path: script_path.clone(),
+                                    path: moved_path.clone(),
                                 };
 
                                 let replaced = if let Ok(mut sc) =
@@ -282,7 +228,11 @@ impl Scene for Editor {
                                     ) {
                                         Ok(_) => false,
                                         Err(e) => {
-                                            crate::fatal!("Failed to attach new script: {}", e);
+                                            crate::fatal!(
+                                                "Failed to attach script to entity {:?}: {}",
+                                                selected_entity,
+                                                e
+                                            );
                                             self.signal = Signal::None;
                                             return;
                                         }
@@ -297,65 +247,155 @@ impl Scene for Editor {
                                 }
 
                                 crate::success!(
-                                    "{} new script '{}' at {} to entity {:?}",
-                                    if replaced { "Replaced" } else { "Attached" },
+                                    "{} script '{}' at {} to entity {:?}",
+                                    if replaced { "Reattached" } else { "Attached" },
                                     script_name,
-                                    script_path.display(),
+                                    moved_path.display(),
                                     selected_entity
                                 );
-                            } else {
-                                crate::warn_without_console!("No selected entity to attach new script");
-                                log::warn!("CreateAndAttachScript requested but no entity is selected");
                             }
-                            self.signal = Signal::None;
+                            Err(e) => {
+                                crate::fatal!("Move failed: {}", e);
+                            }
                         }
-                        ScriptAction::RemoveScript => {
-                            if let Some(selected_entity) = self.selected_entity {
-                                if let Ok(_) = self.world.remove_one::<ScriptComponent>(selected_entity) {
-                                    crate::success!("Removed script from entity {:?}", selected_entity);
-                            
-                                    if let Err(e) = crate::scripting::convert_entity_to_group(
-                                        &self.world,
-                                        selected_entity,
-                                    ) {
-                                        log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
-                                    }
-                                } else {
-                                    crate::warn!("No script component found on entity {:?}", selected_entity);
-                                }
-                            } else {
-                                crate::warn!("No entity selected to remove script from");
-                            }
+                    } else {
+                        crate::fatal!("AttachScript requested but no entity is selected");
+                    }
 
-                            self.signal = Signal::None;
-                        }
-                        ScriptAction::EditScript => {
-                            if let Some(selected_entity) = self.selected_entity {
-                                if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity) {
-                                    if let Some(script) = q.get() {
-                                        match open::that(script.path.clone()) {
-                                            Ok(()) => {crate::success!("Opened {}", script.name)},
-                                            Err(e) => {
-                                                crate::warn!("Error while opening {}: {}", script.name, e);
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    crate::warn!("No script component found on entity {:?}", selected_entity);
-                                }
-                            } else {
-                                crate::warn!("No entity selected to edit script");
-                            }
-                            self.signal = Signal::None;
-                        }
-                    },
-                Signal::Play => {
-                    log::debug!("Not implemented: Play");
-                    
                     self.signal = Signal::None;
-                },
+                }
+                ScriptAction::CreateAndAttachScript {
+                    script_path,
+                    script_name,
+                } => {
+                    if let Some(selected_entity) = self.selected_entity {
+                        let new_script = ScriptComponent {
+                            name: script_name.clone(),
+                            path: script_path.clone(),
+                        };
+
+                        let replaced = if let Ok(mut sc) =
+                            self.world.get::<&mut ScriptComponent>(selected_entity)
+                        {
+                            sc.name = new_script.name.clone();
+                            sc.path = new_script.path.clone();
+                            true
+                        } else {
+                            match crate::scripting::attach_script_to_entity(
+                                &mut self.world,
+                                selected_entity,
+                                new_script.clone(),
+                            ) {
+                                Ok(_) => false,
+                                Err(e) => {
+                                    crate::fatal!("Failed to attach new script: {}", e);
+                                    self.signal = Signal::None;
+                                    return;
+                                }
+                            }
+                        };
+
+                        if let Err(e) =
+                            crate::scripting::convert_entity_to_group(&self.world, selected_entity)
+                        {
+                            log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                        }
+
+                        crate::success!(
+                            "{} new script '{}' at {} to entity {:?}",
+                            if replaced { "Replaced" } else { "Attached" },
+                            script_name,
+                            script_path.display(),
+                            selected_entity
+                        );
+                    } else {
+                        crate::warn_without_console!("No selected entity to attach new script");
+                        log::warn!("CreateAndAttachScript requested but no entity is selected");
+                    }
+                    self.signal = Signal::None;
+                }
+                ScriptAction::RemoveScript => {
+                    if let Some(selected_entity) = self.selected_entity {
+                        if let Ok(_) = self.world.remove_one::<ScriptComponent>(selected_entity) {
+                            crate::success!("Removed script from entity {:?}", selected_entity);
+
+                            if let Err(e) = crate::scripting::convert_entity_to_group(
+                                &self.world,
+                                selected_entity,
+                            ) {
+                                log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                            }
+                        } else {
+                            crate::warn!(
+                                "No script component found on entity {:?}",
+                                selected_entity
+                            );
+                        }
+                    } else {
+                        crate::warn!("No entity selected to remove script from");
+                    }
+
+                    self.signal = Signal::None;
+                }
+                ScriptAction::EditScript => {
+                    if let Some(selected_entity) = self.selected_entity {
+                        if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity)
+                        {
+                            if let Some(script) = q.get() {
+                                match open::that(script.path.clone()) {
+                                    Ok(()) => {
+                                        crate::success!("Opened {}", script.name)
+                                    }
+                                    Err(e) => {
+                                        crate::warn!("Error while opening {}: {}", script.name, e);
+                                    }
+                                }
+                            }
+                        } else {
+                            crate::warn!(
+                                "No script component found on entity {:?}",
+                                selected_entity
+                            );
+                        }
+                    } else {
+                        crate::warn!("No entity selected to edit script");
+                    }
+                    self.signal = Signal::None;
+                }
+            },
+            Signal::Play => {
+                log::debug!("Not implemented: Play");
+
+                self.signal = Signal::None;
+            }
+            Signal::CameraAction(action) => match action {
+                CameraAction::SetPlayerTarget { entity, offset } => {
+                    self.camera_manager
+                        .set_player_camera_target(*entity, *offset);
+                    // crate::info!(
+                    //     "Set player camera to follow entity {:?} with offset {:?}",
+                    //     entity,
+                    //     offset
+                    // );
+                    self.signal = Signal::None;
+                }
+                CameraAction::ClearPlayerTarget => {
+                    self.camera_manager.clear_player_camera_target();
+                    crate::info!("Cleared player camera target");
+                    self.signal = Signal::None;
+                }
+            },
         }
 
+        let current_size = graphics.state.viewport_texture.size;
+        self.size = current_size;
+        
+        let new_aspect = current_size.width as f64 / current_size.height as f64;
+        if let Some(camera) = self.camera_manager.get_active_mut() {
+            camera.aspect = new_aspect;
+        }
+
+        self.camera_manager.update_camera_following(&self.world, dt);
         self.camera_manager.update_all(dt, graphics);
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();

@@ -1,9 +1,9 @@
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
-use rhai::{Scope, AST};
-use std::{collections::HashMap, fs};
+use rhai::{AST, Scope};
 use std::path::PathBuf;
+use std::{collections::HashMap, fs};
 
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
 
@@ -43,7 +43,10 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
     let dest_path = scripts_dir.join(filename);
 
     if dest_path.exists() {
-        log::info!("Script file already exists at {:?}, returning existing path", dest_path);
+        log::info!(
+            "Script file already exists at {:?}, returning existing path",
+            dest_path
+        );
         return Ok(dest_path);
     }
 
@@ -59,7 +62,10 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
                 break;
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                log::warn!("Script file already exists at {:?}, continuing anyway", dest_path);
+                log::warn!(
+                    "Script file already exists at {:?}, continuing anyway",
+                    dest_path
+                );
                 last_err = None;
                 break;
             }
@@ -163,40 +169,34 @@ impl ScriptManager {
 
         // transform
         engine.register_fn("new_transform", Transform::new);
-        engine.register_get_set("position", 
+        engine.register_get_set(
+            "position",
             |t: &mut Transform| t.position,
-            |t: &mut Transform, pos: DVec3| t.position = pos
+            |t: &mut Transform, pos: DVec3| t.position = pos,
         );
-        engine.register_get_set("rotation",
+        engine.register_get_set(
+            "rotation",
             |t: &mut Transform| t.rotation,
-            |t: &mut Transform, rot: DQuat| t.rotation = rot
+            |t: &mut Transform, rot: DQuat| t.rotation = rot,
         );
-        engine.register_get_set("scale",
+        engine.register_get_set(
+            "scale",
             |t: &mut Transform| t.scale,
-            |t: &mut Transform, scale: DVec3| t.scale = scale
+            |t: &mut Transform, scale: DVec3| t.scale = scale,
         );
 
         // vector methods
         engine.register_type_with_name::<DVec3>("Vector3");
         engine.register_fn("vec3", |x: f64, y: f64, z: f64| DVec3::new(x, y, z));
-        engine.register_get_set("x", 
-            |v: &mut DVec3| v.x,
-            |v: &mut DVec3, x: f64| v.x = x
-        );
-        engine.register_get_set("y",
-            |v: &mut DVec3| v.y, 
-            |v: &mut DVec3, y: f64| v.y = y
-        );
-        engine.register_get_set("z",
-            |v: &mut DVec3| v.z,
-            |v: &mut DVec3, z: f64| v.z = z
-        );
+        engine.register_get_set("x", |v: &mut DVec3| v.x, |v: &mut DVec3, x: f64| v.x = x);
+        engine.register_get_set("y", |v: &mut DVec3| v.y, |v: &mut DVec3, y: f64| v.y = y);
+        engine.register_get_set("z", |v: &mut DVec3| v.z, |v: &mut DVec3, z: f64| v.z = z);
 
         // utils
         engine.register_fn("log", |msg: &str| {
             log::info!("[Script] {}", msg);
         });
-        
+
         engine.register_fn("sin", |x: f64| x.sin());
         engine.register_fn("cos", |x: f64| x.cos());
         engine.register_fn("time", || {
@@ -214,18 +214,23 @@ impl ScriptManager {
     }
 
     #[allow(dead_code)]
-    pub fn init_entity_script(&mut self, entity_id: hecs::Entity, script_name: &str, world: &mut World) -> anyhow::Result<()> {
+    pub fn init_entity_script(
+        &mut self,
+        entity_id: hecs::Entity,
+        script_name: &str,
+        world: &mut World,
+    ) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             let mut scope = Scope::new();
-            
+
             if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
                 scope.push("transform", *transform);
             }
-            
+
             if let Ok(_) = self.engine.call_fn::<()>(&mut scope, ast, "init", ()) {
                 log::debug!("Called init for entity {:?}", entity_id);
             }
-            
+
             self.script_scopes.insert(entity_id, scope);
             Ok(())
         } else {
@@ -234,13 +239,19 @@ impl ScriptManager {
     }
 
     #[allow(dead_code)]
-    pub fn update_entity_script(&mut self, entity_id: hecs::Entity, script_name: &str, world: &mut World, dt: f32) -> anyhow::Result<()> {
+    pub fn update_entity_script(
+        &mut self,
+        entity_id: hecs::Entity,
+        script_name: &str,
+        world: &mut World,
+        dt: f32,
+    ) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             if let Some(scope) = self.script_scopes.get_mut(&entity_id) {
                 if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
                     scope.set_value("transform", *transform);
                 }
-                
+
                 if let Ok(_) = self.engine.call_fn::<()>(scope, ast, "update", (dt,)) {
                     if let Some(modified_transform) = scope.get_value::<Transform>("transform") {
                         if let Ok(mut transform) = world.get::<&mut Transform>(entity_id) {
@@ -257,13 +268,17 @@ impl ScriptManager {
     pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
         self.script_scopes.remove(&entity_id);
     }
-    
+
     #[allow(dead_code)]
-    pub fn reload_script(&mut self, script_name: &str, script_path: &PathBuf) -> anyhow::Result<()> {
+    pub fn reload_script(
+        &mut self,
+        script_name: &str,
+        script_path: &PathBuf,
+    ) -> anyhow::Result<()> {
         let script_content = fs::read_to_string(script_path)?;
         let ast = self.engine.compile(&script_content)?;
         self.compiled_scripts.insert(script_name.to_string(), ast);
-        
+
         log::info!("Reloaded script: {}", script_name);
         Ok(())
     }
@@ -271,14 +286,15 @@ impl ScriptManager {
     #[allow(dead_code)]
     pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
         let script_content = fs::read_to_string(script_path)?;
-        let script_name = script_path.file_stem()
+        let script_name = script_path
+            .file_stem()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-            
+
         let ast = self.engine.compile(&script_content)?;
         self.compiled_scripts.insert(script_name.clone(), ast);
-        
+
         log::info!("Loaded script: {}", script_name);
         Ok(script_name)
     }

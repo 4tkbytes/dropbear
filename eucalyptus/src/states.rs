@@ -5,7 +5,11 @@
 //! as well as public structs related to that config and docs (hopefully).
 
 use std::{
-    collections::HashMap, fmt::{self, Display, Formatter}, fs, path::PathBuf, sync::RwLock
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+    fs,
+    path::PathBuf,
+    sync::RwLock,
 };
 
 use chrono::Utc;
@@ -501,7 +505,7 @@ impl EntityNode {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     pub scene_name: String,
     pub path: PathBuf,
@@ -512,7 +516,7 @@ pub struct SceneConfig {
     // pub settings: SceneSettings,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SceneCameraConfig {
     pub position: [f64; 3],
     pub target: [f64; 3],
@@ -521,6 +525,9 @@ pub struct SceneCameraConfig {
     pub fov: f32,
     pub near: f32,
     pub far: f32,
+
+    pub follow_target_entity_label: Option<String>,
+    pub follow_offset: Option<[f64; 3]>,
 }
 
 impl Default for SceneCameraConfig {
@@ -533,6 +540,8 @@ impl Default for SceneCameraConfig {
             fov: 45.0,
             near: 0.1,
             far: 100.0,
+            follow_target_entity_label: None,
+            follow_offset: None,
         }
     }
 }
@@ -570,12 +579,12 @@ impl ModelProperties {
             custom_properties: HashMap::new(),
         }
     }
-    
+
     #[allow(dead_code)]
     pub fn set_property(&mut self, key: String, value: PropertyValue) {
         self.custom_properties.insert(key, value);
     }
-    
+
     #[allow(dead_code)]
     pub fn get_property(&self, key: &str) -> Option<&PropertyValue> {
         self.custom_properties.get(key)
@@ -592,26 +601,34 @@ impl SceneConfig {
     /// Creates a new instance of the scene config
     pub fn new(scene_name: String, path: PathBuf) -> Self {
         let mut camera_configs = HashMap::new();
-        
-        camera_configs.insert(CameraType::Debug, SceneCameraConfig {
-            position: [0.0, 5.0, 10.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
-            aspect: 16.0 / 9.0,
-            fov: 45.0,
-            near: 0.1,
-            far: 100.0,
-        });
-        
-        camera_configs.insert(CameraType::Player, SceneCameraConfig {
-            position: [0.0, 0.0, 0.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
-            aspect: 16.0 / 9.0,
-            fov: 45.0,
-            near: 0.1,
-            far: 100.0,
-        });
+
+        camera_configs.insert(
+            CameraType::Debug,
+            SceneCameraConfig {
+                position: [0.0, 5.0, 10.0],
+                target: [0.0, 0.0, 0.0],
+                up: [0.0, 1.0, 0.0],
+                aspect: 16.0 / 9.0,
+                fov: 45.0,
+                near: 0.1,
+                far: 100.0,
+                ..Default::default()
+            },
+        );
+
+        camera_configs.insert(
+            CameraType::Player,
+            SceneCameraConfig {
+                position: [0.0, 2.0, 5.0],
+                target: [0.0, 0.0, 0.0],
+                up: [0.0, 1.0, 0.0],
+                aspect: 16.0 / 9.0,
+                fov: 45.0,
+                near: 0.1,
+                far: 100.0,
+                ..Default::default()
+            },
+        );
 
         Self {
             scene_name,
@@ -644,12 +661,12 @@ impl SceneConfig {
         Ok(config)
     }
 
-     pub fn load_into_world(
+    pub fn load_into_world(
         &self,
         world: &mut hecs::World,
         graphics: &Graphics,
-        camera_manager: &mut crate::camera::CameraManager,
     ) -> anyhow::Result<()> {
+        // Clear the world
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
@@ -681,8 +698,6 @@ impl SceneConfig {
             }
         }
 
-        self.load_cameras_into_manager(camera_manager, graphics)?;
-
         Ok(())
     }
 
@@ -690,9 +705,10 @@ impl SceneConfig {
         &self,
         camera_manager: &mut crate::camera::CameraManager,
         graphics: &Graphics,
+        world: &hecs::World,
     ) -> anyhow::Result<()> {
         use crate::camera::{DebugCameraController, PlayerCameraController};
-        
+
         if let Some(debug_config) = self.camera.get(&CameraType::Debug) {
             let debug_camera = Camera::new(
                 graphics,
@@ -725,6 +741,32 @@ impl SceneConfig {
             );
             let player_controller = Box::new(PlayerCameraController::new());
             camera_manager.add_camera(CameraType::Player, player_camera, player_controller);
+
+            if let (Some(target_label), Some(offset_array)) = (
+                &player_config.follow_target_entity_label,
+                &player_config.follow_offset,
+            ) {
+                let target_entity = world
+                    .query::<&AdoptedEntity>()
+                    .iter()
+                    .find(|(_, adopted_entity)| adopted_entity.label() == target_label)
+                    .map(|(entity_id, _)| entity_id);
+
+                if let Some(entity_id) = target_entity {
+                    let offset = glam::DVec3::from_array(*offset_array);
+                    camera_manager.set_player_camera_target(entity_id, offset);
+                    log::info!(
+                        "Restored player camera follow target: {} with offset {:?}",
+                        target_label,
+                        offset
+                    );
+                } else {
+                    log::warn!(
+                        "Could not find entity '{}' to restore camera follow target",
+                        target_label
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -734,31 +776,74 @@ impl SceneConfig {
     pub fn save_cameras_from_manager(
         &mut self,
         camera_manager: &crate::camera::CameraManager,
+        world: &hecs::World,
     ) {
         self.camera.clear();
 
         if let Some(debug_camera) = camera_manager.get_camera(&CameraType::Debug) {
-            self.camera.insert(CameraType::Debug, SceneCameraConfig {
-                position: [debug_camera.eye.x, debug_camera.eye.y, debug_camera.eye.z],
-                target: [debug_camera.target.x, debug_camera.target.y, debug_camera.target.z],
-                up: [debug_camera.up.x, debug_camera.up.y, debug_camera.up.z],
-                aspect: debug_camera.aspect,
-                fov: debug_camera.fov_y as f32,
-                near: debug_camera.znear as f32,
-                far: debug_camera.zfar as f32,
-            });
+            self.camera.insert(
+                CameraType::Debug,
+                SceneCameraConfig {
+                    position: [debug_camera.eye.x, debug_camera.eye.y, debug_camera.eye.z],
+                    target: [
+                        debug_camera.target.x,
+                        debug_camera.target.y,
+                        debug_camera.target.z,
+                    ],
+                    up: [debug_camera.up.x, debug_camera.up.y, debug_camera.up.z],
+                    aspect: debug_camera.aspect,
+                    fov: debug_camera.fov_y as f32,
+                    near: debug_camera.znear as f32,
+                    far: debug_camera.zfar as f32,
+                    follow_target_entity_label: None,
+                    follow_offset: None,
+                },
+            );
         }
 
         if let Some(player_camera) = camera_manager.get_camera(&CameraType::Player) {
-            self.camera.insert(CameraType::Player, SceneCameraConfig {
-                position: [player_camera.eye.x, player_camera.eye.y, player_camera.eye.z],
-                target: [player_camera.target.x, player_camera.target.y, player_camera.target.z],
-                up: [player_camera.up.x, player_camera.up.y, player_camera.up.z],
-                aspect: player_camera.aspect,
-                fov: player_camera.fov_y as f32,
-                near: player_camera.znear as f32,
-                far: player_camera.zfar as f32,
-            });
+            let (follow_entity_label, follow_offset) =
+                if let Some(target_entity) = camera_manager.get_player_camera_target() {
+                    let entity_label = world
+                        .query_one::<&AdoptedEntity>(target_entity)
+                        .ok()
+                        .and_then(|mut entity_ref| {
+                            entity_ref
+                                .get()
+                                .map(|adopted_entity| adopted_entity.label().clone())
+                        });
+
+                    let offset = camera_manager
+                        .get_player_camera_offset()
+                        .map(|offset| [offset.x, offset.y, offset.z]);
+
+                    (entity_label, offset)
+                } else {
+                    (None, None)
+                };
+
+            self.camera.insert(
+                CameraType::Player,
+                SceneCameraConfig {
+                    position: [
+                        player_camera.eye.x,
+                        player_camera.eye.y,
+                        player_camera.eye.z,
+                    ],
+                    target: [
+                        player_camera.target.x,
+                        player_camera.target.y,
+                        player_camera.target.z,
+                    ],
+                    up: [player_camera.up.x, player_camera.up.y, player_camera.up.z],
+                    aspect: player_camera.aspect,
+                    fov: player_camera.fov_y as f32,
+                    near: player_camera.znear as f32,
+                    far: player_camera.zfar as f32,
+                    follow_target_entity_label: follow_entity_label,
+                    follow_offset: follow_offset,
+                },
+            );
         }
     }
 }

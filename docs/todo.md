@@ -6,6 +6,7 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [x] a basic resource inspector
 - [ ] scripting functionality
   - [ ] play mode (compiling on the fly)
+    - [x] attaching a camera to a player
 - [ ] global settings page
 - [ ] menu bar stuff
   - [ ] undo and redo
@@ -19,6 +20,8 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] dragging and combining different objects and stuff
 - [ ] documentation
 - [ ] controller support
+- [ ] autosave (would be easy to impl)
+- [ ] attaching texture onto model
 
 ## fixing
 

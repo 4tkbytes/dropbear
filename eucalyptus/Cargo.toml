@@ -28,6 +28,7 @@ log.workspace = true
 model_to_image.workspace = true
 once_cell.workspace = true
 open.workspace = true
+parking_lot.workspace = true
 rfd.workspace = true
 rhai.workspace = true
 ron.workspace = true

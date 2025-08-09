@@ -31,7 +31,10 @@ where
 
 /// Progress events for project creation
 pub enum ProjectProgress {
-    Step { _progress: f32, _message: String },
+    Step {
+        _progress: f32,
+        _message: String,
+    },
     #[allow(dead_code)] // idk why its giving me this warning :(
     Error(String),
     Done,

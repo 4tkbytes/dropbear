@@ -15,6 +15,4 @@ pub(crate) fn health() {
 }
 
 #[allow(dead_code)]
-pub(crate) fn play(_project_path: &PathBuf) {
-
-}
+pub(crate) fn play(_project_path: &PathBuf) {}

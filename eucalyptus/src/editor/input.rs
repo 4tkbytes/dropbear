@@ -31,7 +31,7 @@ impl Keyboard for Editor {
                 if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::Gizmo;
                     crate::info!("Switched to Viewport::Gizmo");
-                    
+
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
                     }
@@ -72,7 +72,7 @@ impl Keyboard for Editor {
                     }
                 } else if self.is_viewport_focused {
                     self.viewport_mode = crate::utils::ViewportMode::None;
-                    crate::warn!("Switched to Viewport::None");
+                    crate::info!("Switched to Viewport::None");
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
                     }
@@ -115,7 +115,9 @@ impl Keyboard for Editor {
 
                                 log::debug!("Copied selected entity");
                             } else {
-                                crate::warn!("Unable to copy entity: Unable to fetch world entity properties");
+                                crate::warn!(
+                                    "Unable to copy entity: Unable to fetch world entity properties"
+                                );
                             }
                         } else {
                             crate::warn!("Unable to copy entity: Unable to obtain lock");
@@ -212,8 +214,7 @@ impl Mouse for Editor {
 }
 
 impl Controller for Editor {
-    fn button_down(&mut self, _button: Button, _id: GamepadId) {
-    }
+    fn button_down(&mut self, _button: Button, _id: GamepadId) {}
 
     fn button_up(&mut self, _button: Button, _id: GamepadId) {}
 

@@ -7,7 +7,7 @@ pub(crate) use crate::editor::dock::*;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -22,12 +22,18 @@ use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use glam::DVec3;
 use hecs::World;
 use log;
+use parking_lot::Mutex;
 use transform_gizmo_egui::Gizmo;
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    camera::{CameraManager, CameraType, DebugCameraController, PlayerCameraController}, scripting::{ScriptAction, ScriptManager}, states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
+    camera::{
+        CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
+    },
+    scripting::{ScriptAction, ScriptManager},
+    states::{EntityNode, ModelProperties, PROJECT, SCENES, SceneEntity, ScriptComponent},
+    utils::ViewportMode,
 };
 
 pub struct Editor {
@@ -79,6 +85,25 @@ impl Editor {
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let deadlocks = parking_lot::deadlock::check_deadlock();
+                if deadlocks.is_empty() {
+                    continue;
+                }
+
+                println!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    println!("Deadlock #{}", i);
+                    for t in threads {
+                        println!("Thread Id {:#?}", t.thread_id());
+                        println!("{:#?}", t.backtrace());
+                    }
+                }
+            }
+        });
+
         Self {
             scene_command: SceneCommand::None,
             dock_state,
@@ -123,26 +148,24 @@ impl Editor {
         self.last_key_press_times.insert(key, now);
         false
     }
-
-    pub fn save_project_config(&self) -> anyhow::Result<()> {
-        let mut config = PROJECT.write().unwrap();
-        config.dock_layout = Some(self.dock_state.clone());
-        self.save_current_scene()?;
-        config.write_to_all()
-    }
+    // pub fn save_project_config(&self) -> anyhow::Result<()> {
+    //     let mut config = PROJECT.write().unwrap();
+    //     config.dock_layout = Some(self.dock_state.clone());
+    //     self.save_current_scene()?;
+    //     config.write_to_all()
+    // }
 
     /// Save the current world state to the active scene
-    pub fn save_current_scene(&self) -> anyhow::Result<()> {
+    pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
         let mut scenes = SCENES.write().unwrap();
 
         let scene_index = if scenes.is_empty() {
-            panic!("Paradoxical error: Scene is empty despite a scene already loaded?");
+            return Err(anyhow::anyhow!("No scenes loaded to save"));
         } else {
             0
         };
 
         let scene = &mut scenes[scene_index];
-
         scene.entities.clear();
 
         for (id, (adopted, transform, properties)) in self
@@ -161,10 +184,8 @@ impl Editor {
                 }
             });
 
-            let model_path = adopted.model().path.clone();
-
             let scene_entity = SceneEntity {
-                model_path,
+                model_path: adopted.model().path.clone(),
                 label: adopted.model().label.clone(),
                 transform: *transform,
                 properties: properties.clone(),
@@ -175,13 +196,37 @@ impl Editor {
             scene.entities.push(scene_entity);
         }
 
-        scene.save_cameras_from_manager(&self.camera_manager);
+        scene.save_cameras_from_manager(&self.camera_manager, &mut self.world);
 
         log::info!(
-            "Saved {} entities to scene '{}'",
+            "Saved {} entities and camera configs to scene '{}'",
             scene.entities.len(),
             scene.scene_name
         );
+
+        Ok(())
+    }
+
+    pub fn save_project_config(&mut self) -> anyhow::Result<()> {
+        self.save_current_scene()?;
+
+        {
+            let mut config = PROJECT.write().unwrap();
+            config.dock_layout = Some(self.dock_state.clone());
+        }
+
+        {
+            let (scene_clone, project_path) = {
+                let scenes = SCENES.read().unwrap();
+                let project = PROJECT.read().unwrap();
+                (scenes[0].clone(), project.project_path.clone())
+            };
+
+            scene_clone.write_to(&project_path)?;
+
+            let mut config = PROJECT.write().unwrap();
+            config.write_to_all()?;
+        }
 
         Ok(())
     }
@@ -198,22 +243,29 @@ impl Editor {
         {
             let scenes = SCENES.read().unwrap();
             if let Some(first_scene) = scenes.first() {
-                first_scene.load_cameras_into_manager(&mut self.camera_manager, graphics)?;
-                
-                first_scene.load_into_world(&mut self.world, graphics, &mut self.camera_manager)?;
-                
+                first_scene.load_into_world(&mut self.world, graphics)?;
+
+                first_scene.load_cameras_into_manager(
+                    &mut self.camera_manager,
+                    graphics,
+                    &self.world,
+                )?;
+
                 log::info!(
-                    "Successfully loaded scene with {} entities",
+                    "Successfully loaded scene with {} entities and camera configs",
                     first_scene.entities.len()
                 );
             } else {
+                log::info!("No scenes found, creating default cameras and scene");
+
                 let debug_camera = Camera::predetermined(graphics);
                 let debug_controller = Box::new(DebugCameraController::new());
-                self.camera_manager.add_camera(CameraType::Debug, debug_camera, debug_controller);
+                self.camera_manager
+                    .add_camera(CameraType::Debug, debug_camera, debug_controller);
 
                 let player_camera = Camera::new(
                     graphics,
-                    DVec3::new(0.0, 5.0, 10.0),
+                    DVec3::new(0.0, 2.0, 5.0),
                     DVec3::new(0.0, 0.0, 0.0),
                     DVec3::Y,
                     graphics.state.config.width as f64 / graphics.state.config.height as f64,
@@ -224,7 +276,11 @@ impl Editor {
                     0.001,
                 );
                 let player_controller = Box::new(PlayerCameraController::new());
-                self.camera_manager.add_camera(CameraType::Player, player_camera, player_controller);
+                self.camera_manager.add_camera(
+                    CameraType::Player,
+                    player_camera,
+                    player_controller,
+                );
             }
         }
 
@@ -343,21 +399,16 @@ impl Editor {
                         nodes: EntityNode::from_world(&self.world),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
-                        camera: self.camera_manager.get_active_mut().unwrap(),
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,
                         signal: &mut self.signal,
                         // engine: &mut self.rhai_engine,
+                        camera_manager: &mut self.camera_manager,
                     },
                 );
         });
-
-        // dup from scene.render()
-        // if let Ok(mut toasts) = GLOBAL_TOASTS.lock() {
-        //     toasts.show(ctx);
-        // }
 
         crate::utils::show_new_project_window(
             ctx,
@@ -378,12 +429,12 @@ impl Editor {
 
     pub fn switch_to_debug_camera(&mut self) {
         self.camera_manager.set_active(CameraType::Debug);
-        log::debug!("Switched to debug camera");
+        crate::info!("Switched to debug camera");
     }
 
     pub fn switch_to_player_camera(&mut self) {
         self.camera_manager.set_active(CameraType::Player);
-        log::debug!("Switched to player camera");
+        crate::info!("Switched to player camera");
     }
 
     pub fn is_using_debug_camera(&self) -> bool {
@@ -490,6 +541,7 @@ pub enum Signal {
     Undo,
     ScriptAction(ScriptAction),
     Play,
+    CameraAction(CameraAction),
 }
 
 impl Default for Editor {

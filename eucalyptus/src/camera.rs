@@ -1,6 +1,6 @@
-use std::collections::HashSet;
+use std::{any::Any, collections::HashSet};
 
-use dropbear_engine::camera::Camera;
+use dropbear_engine::{camera::Camera, entity::Transform};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use winit::keyboard::KeyCode;
@@ -9,6 +9,9 @@ pub trait CameraController {
     fn update(&mut self, camera: &mut Camera, dt: f32);
     fn handle_keyboard_input(&mut self, camera: &mut Camera, pressed_keys: &HashSet<KeyCode>);
     fn handle_mouse_input(&mut self, camera: &mut Camera, mouse_delta: Option<(f64, f64)>);
+
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 pub struct DebugCameraController {
@@ -31,7 +34,11 @@ impl CameraController for DebugCameraController {
         // Debug camera doesn't need frame-based updates
     }
 
-    fn handle_keyboard_input(&mut self, camera: &mut Camera, pressed_keys: &std::collections::HashSet<KeyCode>) {
+    fn handle_keyboard_input(
+        &mut self,
+        camera: &mut Camera,
+        pressed_keys: &std::collections::HashSet<KeyCode>,
+    ) {
         for key in pressed_keys {
             match key {
                 KeyCode::KeyW => camera.move_forwards(),
@@ -50,6 +57,14 @@ impl CameraController for DebugCameraController {
             camera.track_mouse_delta(dx * self.sensitivity, dy * self.sensitivity);
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 #[allow(dead_code)]
@@ -60,6 +75,7 @@ pub struct PlayerCameraController {
     pub look_sensitivity: f64,
 }
 
+#[allow(dead_code)]
 impl PlayerCameraController {
     pub fn new() -> Self {
         Self {
@@ -70,9 +86,20 @@ impl PlayerCameraController {
         }
     }
 
-    #[allow(dead_code)]
     pub fn set_follow_target(&mut self, entity: hecs::Entity) {
         self.follow_target = Some(entity);
+    }
+
+    pub fn clear_follow_target(&mut self) {
+        self.follow_target = None;
+    }
+
+    pub fn set_offset(&mut self, offset: DVec3) {
+        self.offset = offset;
+    }
+
+    pub fn get_follow_target(&self) -> Option<hecs::Entity> {
+        self.follow_target
     }
 }
 
@@ -81,14 +108,37 @@ impl CameraController for PlayerCameraController {
         // todo: implement following the entity
     }
 
-    fn handle_keyboard_input(&mut self, _camera: &mut Camera, _pressed_keys: &std::collections::HashSet<KeyCode>) {
+    fn handle_keyboard_input(
+        &mut self,
+        camera: &mut Camera,
+        pressed_keys: &std::collections::HashSet<KeyCode>,
+    ) {
         // todo: handle keyboard input, make it custom according to user
+        for key in pressed_keys {
+            match key {
+                KeyCode::KeyW => camera.move_forwards(),
+                KeyCode::KeyA => camera.move_left(),
+                KeyCode::KeyD => camera.move_right(),
+                KeyCode::KeyS => camera.move_back(),
+                KeyCode::ShiftLeft => camera.move_down(),
+                KeyCode::Space => camera.move_up(),
+                _ => {}
+            }
+        }
     }
 
     fn handle_mouse_input(&mut self, camera: &mut Camera, mouse_delta: Option<(f64, f64)>) {
         if let Some((dx, dy)) = mouse_delta {
             camera.track_mouse_delta(dx * self.look_sensitivity, dy * self.look_sensitivity);
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -115,7 +165,12 @@ impl CameraManager {
         }
     }
 
-    pub fn add_camera(&mut self, camera_type: CameraType, camera: Camera, controller: Box<dyn CameraController>) {
+    pub fn add_camera(
+        &mut self,
+        camera_type: CameraType,
+        camera: Camera,
+        controller: Box<dyn CameraController>,
+    ) {
         self.cameras.insert(camera_type, camera);
         self.controllers.insert(camera_type, controller);
     }
@@ -147,13 +202,80 @@ impl CameraManager {
         }
     }
 
-    pub fn handle_input(&mut self, pressed_keys: &std::collections::HashSet<KeyCode>, mouse_delta: Option<(f64, f64)>) {
+    pub fn handle_input(
+        &mut self,
+        pressed_keys: &std::collections::HashSet<KeyCode>,
+        mouse_delta: Option<(f64, f64)>,
+    ) {
         if let Some(camera) = self.cameras.get_mut(&self.active_camera) {
             if let Some(controller) = self.controllers.get_mut(&self.active_camera) {
                 controller.handle_keyboard_input(camera, pressed_keys);
                 controller.handle_mouse_input(camera, mouse_delta);
             }
         }
+    }
+
+    pub fn update_camera_following(&mut self, world: &hecs::World, dt: f32) {
+        if let Some(player_camera) = self.cameras.get_mut(&CameraType::Player) {
+            if let Some(player_controller) = self.controllers.get_mut(&CameraType::Player) {
+                if let Some(controller) = player_controller
+                    .as_any_mut()
+                    .downcast_mut::<PlayerCameraController>()
+                {
+                    if let Some(target_entity) = controller.follow_target {
+                        if let Ok(transform) = world.get::<&Transform>(target_entity) {
+                            let target_pos = transform.position + controller.offset;
+
+                            let current_pos = player_camera.eye;
+                            let lerp_factor = (controller.follow_speed * dt as f64).min(1.0);
+                            let new_pos = current_pos.lerp(target_pos, lerp_factor);
+
+                            let look_direction =
+                                (player_camera.target - player_camera.eye).normalize();
+                            player_camera.eye = new_pos;
+                            player_camera.target = new_pos + look_direction;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn set_player_camera_target(&mut self, entity: hecs::Entity, offset: DVec3) {
+        if let Some(controller) = self.controllers.get_mut(&CameraType::Player) {
+            if let Some(player_controller) = controller
+                .as_any_mut()
+                .downcast_mut::<PlayerCameraController>()
+            {
+                player_controller.set_follow_target(entity);
+                player_controller.set_offset(offset);
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn clear_player_camera_target(&mut self) {
+        if let Some(controller) = self.controllers.get_mut(&CameraType::Player) {
+            if let Some(player_controller) = controller
+                .as_any_mut()
+                .downcast_mut::<PlayerCameraController>()
+            {
+                player_controller.clear_follow_target();
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_player_camera_target(&self) -> Option<hecs::Entity> {
+        if let Some(controller) = self.controllers.get(&CameraType::Player) {
+            if let Some(player_controller) =
+                controller.as_any().downcast_ref::<PlayerCameraController>()
+            {
+                return player_controller.get_follow_target();
+            }
+        }
+        None
     }
 
     pub fn get_camera(&self, camera_type: &CameraType) -> Option<&Camera> {
@@ -180,4 +302,21 @@ impl CameraManager {
         self.cameras.clear();
         self.controllers.clear();
     }
+
+    pub fn get_player_camera_offset(&self) -> Option<DVec3> {
+        if let Some(controller) = self.controllers.get(&CameraType::Player) {
+            if let Some(player_controller) =
+                controller.as_any().downcast_ref::<PlayerCameraController>()
+            {
+                return Some(player_controller.offset);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug)]
+pub enum CameraAction {
+    SetPlayerTarget { entity: hecs::Entity, offset: DVec3 },
+    ClearPlayerTarget,
 }
