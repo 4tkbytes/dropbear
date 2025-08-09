@@ -19,6 +19,7 @@ use dropbear_engine::{
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
+use glam::DVec3;
 use hecs::World;
 use log;
 use transform_gizmo_egui::Gizmo;
@@ -26,9 +27,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    scripting::{ScriptAction, ScriptManager},
-    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
-    utils::ViewportMode,
+    camera::{CameraManager, CameraType, DebugCameraController, PlayerCameraController}, scripting::{ScriptAction, ScriptManager}, states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
 };
 
 pub struct Editor {
@@ -38,8 +37,10 @@ pub struct Editor {
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
     render_pipeline: Option<RenderPipeline>,
-    camera: Camera,
     color: Color,
+
+    camera_manager: CameraManager,
+    mouse_delta: Option<(f64, f64)>,
 
     is_viewport_focused: bool,
     pressed_keys: HashSet<KeyCode>,
@@ -62,6 +63,7 @@ pub struct Editor {
     last_key_press_times: HashMap<KeyCode, Instant>,
     double_press_threshold: Duration,
 
+    #[allow(dead_code)]
     script_manager: ScriptManager,
 }
 
@@ -83,7 +85,7 @@ impl Editor {
             texture_id: None,
             size: Extent3d::default(),
             render_pipeline: None,
-            camera: Camera::default(),
+            camera_manager: CameraManager::new(),
             color: Color::default(),
             is_viewport_focused: false,
             pressed_keys: HashSet::new(),
@@ -101,7 +103,8 @@ impl Editor {
             undo_stack: Vec::new(),
             last_key_press_times: HashMap::new(),
             double_press_threshold: Duration::from_millis(300),
-            script_manager: ScriptManager::new()
+            script_manager: ScriptManager::new(),
+            mouse_delta: None,
         }
     }
 
@@ -132,7 +135,6 @@ impl Editor {
     pub fn save_current_scene(&self) -> anyhow::Result<()> {
         let mut scenes = SCENES.write().unwrap();
 
-        // todo: fix this
         let scene_index = if scenes.is_empty() {
             panic!("Paradoxical error: Scene is empty despite a scene already loaded?");
         } else {
@@ -173,19 +175,7 @@ impl Editor {
             scene.entities.push(scene_entity);
         }
 
-        scene.camera = crate::states::SceneCameraConfig {
-            position: [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z],
-            target: [
-                self.camera.target.x,
-                self.camera.target.y,
-                self.camera.target.z,
-            ],
-            up: [self.camera.up.x, self.camera.up.y, self.camera.up.z],
-            aspect: self.camera.aspect,
-            fov: self.camera.fov_y as f32,
-            near: self.camera.znear as f32,
-            far: self.camera.zfar as f32,
-        };
+        scene.save_cameras_from_manager(&self.camera_manager);
 
         log::info!(
             "Saved {} entities to scene '{}'",
@@ -196,28 +186,51 @@ impl Editor {
         Ok(())
     }
 
-    pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<Camera> {
+    pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<()> {
         let config = PROJECT.read().unwrap();
 
         if let Some(layout) = &config.dock_layout {
             self.dock_state = layout.clone();
         }
 
+        self.camera_manager.clear_cameras();
+
         {
             let scenes = SCENES.read().unwrap();
             if let Some(first_scene) = scenes.first() {
-                let result = first_scene.load_into_world(&mut self.world, graphics)?;
+                first_scene.load_cameras_into_manager(&mut self.camera_manager, graphics)?;
+                
+                first_scene.load_into_world(&mut self.world, graphics, &mut self.camera_manager)?;
+                
                 log::info!(
                     "Successfully loaded scene with {} entities",
                     first_scene.entities.len()
                 );
-                return Ok(result);
+            } else {
+                let debug_camera = Camera::predetermined(graphics);
+                let debug_controller = Box::new(DebugCameraController::new());
+                self.camera_manager.add_camera(CameraType::Debug, debug_camera, debug_controller);
+
+                let player_camera = Camera::new(
+                    graphics,
+                    DVec3::new(0.0, 5.0, 10.0),
+                    DVec3::new(0.0, 0.0, 0.0),
+                    DVec3::Y,
+                    graphics.state.config.width as f64 / graphics.state.config.height as f64,
+                    45.0,
+                    0.1,
+                    100.0,
+                    0.1,
+                    0.001,
+                );
+                let player_controller = Box::new(PlayerCameraController::new());
+                self.camera_manager.add_camera(CameraType::Player, player_camera, player_controller);
             }
         }
 
-        return Err(anyhow::anyhow!(
-            "Unable to load scene, most likely there are no scenes? I don't know check the backlog..."
-        ));
+        self.camera_manager.set_active(CameraType::Debug);
+
+        Ok(())
     }
 
     pub fn show_ui(&mut self, ctx: &Context) {
@@ -242,7 +255,7 @@ impl Editor {
                     }
                     if ui.button("Project Settings").clicked() {};
                     if ui.button("Play").clicked() {
-                        log::debug!("Play hit!")
+                        self.signal = Signal::Play;
                     }
                     ui.separator();
                     if ui.button("Quit").clicked() {
@@ -330,7 +343,7 @@ impl Editor {
                         nodes: EntityNode::from_world(&self.world),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
-                        camera: &mut self.camera,
+                        camera: self.camera_manager.get_active_mut().unwrap(),
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
@@ -361,6 +374,20 @@ impl Editor {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
             self.pending_scene_switch = false;
         }
+    }
+
+    pub fn switch_to_debug_camera(&mut self) {
+        self.camera_manager.set_active(CameraType::Debug);
+        log::debug!("Switched to debug camera");
+    }
+
+    pub fn switch_to_player_camera(&mut self) {
+        self.camera_manager.set_active(CameraType::Player);
+        log::debug!("Switched to player camera");
+    }
+
+    pub fn is_using_debug_camera(&self) -> bool {
+        matches!(self.camera_manager.get_active_type(), CameraType::Debug)
     }
 }
 

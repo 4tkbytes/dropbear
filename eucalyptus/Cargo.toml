@@ -36,6 +36,7 @@ tokio.workspace = true
 transform-gizmo-egui.workspace = true
 wgpu.workspace = true
 winit.workspace = true
+clap.workspace = true
 
 [build-dependencies]
 anyhow = "1.0"

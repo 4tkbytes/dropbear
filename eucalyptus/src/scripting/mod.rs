@@ -147,6 +147,7 @@ pub fn attach_script_to_entity(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub struct ScriptManager {
     pub engine: rhai::Engine,
     compiled_scripts: HashMap<String, AST>,
@@ -212,6 +213,7 @@ impl ScriptManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn init_entity_script(&mut self, entity_id: hecs::Entity, script_name: &str, world: &mut World) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             let mut scope = Scope::new();
@@ -231,6 +233,7 @@ impl ScriptManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_entity_script(&mut self, entity_id: hecs::Entity, script_name: &str, world: &mut World, dt: f32) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             if let Some(scope) = self.script_scopes.get_mut(&entity_id) {
@@ -250,10 +253,12 @@ impl ScriptManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
         self.script_scopes.remove(&entity_id);
     }
     
+    #[allow(dead_code)]
     pub fn reload_script(&mut self, script_name: &str, script_path: &PathBuf) -> anyhow::Result<()> {
         let script_content = fs::read_to_string(script_path)?;
         let ast = self.engine.compile(&script_content)?;
@@ -263,6 +268,7 @@ impl ScriptManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
         let script_content = fs::read_to_string(script_path)?;
         let script_name = script_path.file_stem()

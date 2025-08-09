@@ -21,7 +21,7 @@ use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
-use crate::editor::EditorTab;
+use crate::{camera::CameraType, editor::EditorTab};
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -506,7 +506,8 @@ pub struct SceneConfig {
     pub scene_name: String,
     pub path: PathBuf,
     pub entities: Vec<SceneEntity>,
-    pub camera: SceneCameraConfig,
+    // pub camera: (SceneCameraConfig, CameraType),
+    pub camera: HashMap<CameraType, SceneCameraConfig>,
     // todo later
     // pub settings: SceneSettings,
 }
@@ -590,11 +591,33 @@ impl Default for ModelProperties {
 impl SceneConfig {
     /// Creates a new instance of the scene config
     pub fn new(scene_name: String, path: PathBuf) -> Self {
+        let mut camera_configs = HashMap::new();
+        
+        camera_configs.insert(CameraType::Debug, SceneCameraConfig {
+            position: [0.0, 5.0, 10.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            aspect: 16.0 / 9.0,
+            fov: 45.0,
+            near: 0.1,
+            far: 100.0,
+        });
+        
+        camera_configs.insert(CameraType::Player, SceneCameraConfig {
+            position: [0.0, 0.0, 0.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            aspect: 16.0 / 9.0,
+            fov: 45.0,
+            near: 0.1,
+            far: 100.0,
+        });
+
         Self {
             scene_name,
             path,
             entities: Vec::new(),
-            camera: SceneCameraConfig::default(),
+            camera: camera_configs,
         }
     }
 
@@ -621,54 +644,12 @@ impl SceneConfig {
         Ok(config)
     }
 
-    #[allow(dead_code)]
-    // todo: perhaps delete this if not required?
-    pub fn from_world(world: &hecs::World, scene_name: String, camera: &Camera) -> Self {
-        let mut entities = Vec::new();
-
-        for (id, (adopted, transform)) in world.query::<(&AdoptedEntity, &Transform)>().iter() {
-            let script = world
-                .get::<&ScriptComponent>(id)
-                .ok()
-                .map(|s| ScriptComponent {
-                    name: s.name.clone(),
-                    path: s.path.clone(),
-                });
-
-            let model_path = adopted.model().path.clone();
-
-            entities.push(SceneEntity {
-                model_path,
-                label: adopted.model().label.clone(),
-                transform: *transform,
-                properties: ModelProperties::default(),
-                script,
-                entity_id: Some(id),
-            });
-        }
-
-        Self {
-            scene_name,
-            path: PathBuf::new(),
-            entities,
-            camera: SceneCameraConfig {
-                position: [camera.eye.x, camera.eye.y, camera.eye.z],
-                target: [camera.target.x, camera.target.y, camera.target.z],
-                up: [camera.up.x, camera.up.y, camera.up.z],
-                aspect: camera.aspect,
-                fov: camera.fov_y as f32,
-                near: camera.znear as f32,
-                far: camera.zfar as f32,
-            },
-        }
-    }
-
-    pub fn load_into_world(
+     pub fn load_into_world(
         &self,
         world: &mut hecs::World,
         graphics: &Graphics,
-    ) -> anyhow::Result<Camera> {
-        // todo: prompt user about clearing world
+        camera_manager: &mut crate::camera::CameraManager,
+    ) -> anyhow::Result<()> {
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
@@ -700,19 +681,84 @@ impl SceneConfig {
             }
         }
 
-        let camera = Camera::new(
-            graphics,
-            glam::DVec3::from_array(self.camera.position),
-            glam::DVec3::from_array(self.camera.target),
-            glam::DVec3::from_array(self.camera.up),
-            self.camera.aspect,
-            self.camera.fov as f64,
-            self.camera.near as f64,
-            self.camera.far as f64,
-            0.125 as f64,
-            0.002 as f64,
-        );
+        self.load_cameras_into_manager(camera_manager, graphics)?;
 
-        Ok(camera)
+        Ok(())
+    }
+
+    pub fn load_cameras_into_manager(
+        &self,
+        camera_manager: &mut crate::camera::CameraManager,
+        graphics: &Graphics,
+    ) -> anyhow::Result<()> {
+        use crate::camera::{DebugCameraController, PlayerCameraController};
+        
+        if let Some(debug_config) = self.camera.get(&CameraType::Debug) {
+            let debug_camera = Camera::new(
+                graphics,
+                glam::DVec3::from_array(debug_config.position),
+                glam::DVec3::from_array(debug_config.target),
+                glam::DVec3::from_array(debug_config.up),
+                debug_config.aspect,
+                debug_config.fov as f64,
+                debug_config.near as f64,
+                debug_config.far as f64,
+                0.125,
+                0.002,
+            );
+            let debug_controller = Box::new(DebugCameraController::new());
+            camera_manager.add_camera(CameraType::Debug, debug_camera, debug_controller);
+        }
+
+        if let Some(player_config) = self.camera.get(&CameraType::Player) {
+            let player_camera = Camera::new(
+                graphics,
+                glam::DVec3::from_array(player_config.position),
+                glam::DVec3::from_array(player_config.target),
+                glam::DVec3::from_array(player_config.up),
+                player_config.aspect,
+                player_config.fov as f64,
+                player_config.near as f64,
+                player_config.far as f64,
+                0.1,
+                0.001,
+            );
+            let player_controller = Box::new(PlayerCameraController::new());
+            camera_manager.add_camera(CameraType::Player, player_camera, player_controller);
+        }
+
+        Ok(())
+    }
+
+    /// Save cameras from camera manager to scene config
+    pub fn save_cameras_from_manager(
+        &mut self,
+        camera_manager: &crate::camera::CameraManager,
+    ) {
+        self.camera.clear();
+
+        if let Some(debug_camera) = camera_manager.get_camera(&CameraType::Debug) {
+            self.camera.insert(CameraType::Debug, SceneCameraConfig {
+                position: [debug_camera.eye.x, debug_camera.eye.y, debug_camera.eye.z],
+                target: [debug_camera.target.x, debug_camera.target.y, debug_camera.target.z],
+                up: [debug_camera.up.x, debug_camera.up.y, debug_camera.up.z],
+                aspect: debug_camera.aspect,
+                fov: debug_camera.fov_y as f32,
+                near: debug_camera.znear as f32,
+                far: debug_camera.zfar as f32,
+            });
+        }
+
+        if let Some(player_camera) = camera_manager.get_camera(&CameraType::Player) {
+            self.camera.insert(CameraType::Player, SceneCameraConfig {
+                position: [player_camera.eye.x, player_camera.eye.y, player_camera.eye.z],
+                target: [player_camera.target.x, player_camera.target.y, player_camera.target.z],
+                up: [player_camera.up.x, player_camera.up.y, player_camera.up.z],
+                aspect: player_camera.aspect,
+                fov: player_camera.fov_y as f32,
+                near: player_camera.znear as f32,
+                far: player_camera.zfar as f32,
+            });
+        }
     }
 }

@@ -1,5 +1,4 @@
 use glam::{DMat4, DQuat, DVec3, Mat4};
-// use nalgebra::{Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages,

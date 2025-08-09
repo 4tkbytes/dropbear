@@ -167,6 +167,13 @@ impl Keyboard for Editor {
                     self.pressed_keys.insert(key);
                 }
             }
+            KeyCode::F1 => {
+                if self.is_using_debug_camera() {
+                    self.switch_to_player_camera();
+                } else {
+                    self.switch_to_debug_camera();
+                }
+            }
             _ => {
                 self.pressed_keys.insert(key);
             }
@@ -190,7 +197,8 @@ impl Mouse for Editor {
 
                 let dx = position.x - center.x;
                 let dy = position.y - center.y;
-                self.camera.track_mouse_delta(dx, dy);
+                let camera = self.camera_manager.get_active_mut().unwrap();
+                camera.track_mouse_delta(dx, dy);
 
                 let _ = window.set_cursor_position(center);
                 window.set_cursor_visible(false);
@@ -204,24 +212,7 @@ impl Mouse for Editor {
 }
 
 impl Controller for Editor {
-    fn button_down(&mut self, button: Button, _id: GamepadId) {
-        match button {
-            Button::South => {
-                self.camera.move_up();
-            }
-            Button::East => {
-                self.camera.move_down();
-            }
-            Button::LeftTrigger2 => {
-                self.camera.move_up();
-            }
-            Button::RightTrigger2 => {
-                self.camera.move_down();
-            }
-            _ => {
-                log::debug!("Controller button pressed: {:?}", button);
-            }
-        }
+    fn button_down(&mut self, _button: Button, _id: GamepadId) {
     }
 
     fn button_up(&mut self, _button: Button, _id: GamepadId) {}

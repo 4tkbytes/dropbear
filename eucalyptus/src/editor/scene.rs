@@ -20,7 +20,7 @@ pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut Graphics) {
-        let camera = self.load_project_config(graphics).unwrap();
+        self.load_project_config(graphics).unwrap();
 
         let shader = Shader::new(
             graphics,
@@ -53,15 +53,10 @@ impl Scene for Editor {
 
             if cube_path != PathBuf::new() {
                 let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
-                // let script = ScriptComponent {
-                //     name: "DummyScript".to_string(),
-                //     path: PathBuf::from("dummy/path/to/script.rs"),
-                // };
                 self.world.spawn((
                     cube,
                     Transform::default(),
                     ModelProperties::default(),
-                    // script
                 ));
                 log::info!("Added default cube since no entities were loaded from scene");
             } else {
@@ -77,17 +72,19 @@ impl Scene for Editor {
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
         let model_layout = graphics.create_model_uniform_bind_group_layout();
-        let pipeline = graphics.create_render_pipline(
-            &shader,
-            vec![texture_bind_group, camera.layout(), &model_layout],
-        );
+        
+        if let Some(camera) = self.camera_manager.get_active() {
+            let pipeline = graphics.create_render_pipline(
+                &shader,
+                vec![texture_bind_group, camera.layout(), &model_layout],
+            );
+            self.render_pipeline = Some(pipeline);
+        }
 
-        self.camera = camera;
-        self.render_pipeline = Some(pipeline);
         self.window = Some(graphics.state.window.clone());
     }
 
-    fn update(&mut self, _dt: f32, graphics: &mut Graphics) {
+    fn update(&mut self, dt: f32, graphics: &mut Graphics) {
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
@@ -123,18 +120,19 @@ impl Scene for Editor {
 
         if self.is_viewport_focused
             && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
+            && self.is_using_debug_camera()
         {
-            for key in &self.pressed_keys {
-                match key {
-                    KeyCode::KeyW => self.camera.move_forwards(),
-                    KeyCode::KeyA => self.camera.move_left(),
-                    KeyCode::KeyD => self.camera.move_right(),
-                    KeyCode::KeyS => self.camera.move_back(),
-                    KeyCode::ShiftLeft => self.camera.move_down(),
-                    KeyCode::Space => self.camera.move_up(),
-                    _ => {}
-                }
-            }
+            // Filter only movement keys for camera input
+            let movement_keys: std::collections::HashSet<KeyCode> = self.pressed_keys
+                .iter()
+                .filter(|&&key| matches!(key, 
+                    KeyCode::KeyW | KeyCode::KeyA | KeyCode::KeyS | KeyCode::KeyD | 
+                    KeyCode::Space | KeyCode::ShiftLeft
+                ))
+                .copied()
+                .collect();
+
+            self.camera_manager.handle_input(&movement_keys, self.mouse_delta);
         }
 
         match &self.signal {
@@ -332,7 +330,6 @@ impl Scene for Editor {
                             self.signal = Signal::None;
                         }
                         ScriptAction::EditScript => {
-                            // log::debug!("Not implemented: EditScript");
                             if let Some(selected_entity) = self.selected_entity {
                                 if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity) {
                                     if let Some(script) = q.get() {
@@ -353,15 +350,13 @@ impl Scene for Editor {
                         }
                     },
                 Signal::Play => {
-                    log::debug!("Not implemented: Play")
+                    log::debug!("Not implemented: Play");
+                    
+                    self.signal = Signal::None;
                 },
         }
 
-        let new_size = graphics.state.viewport_texture.size;
-        let new_aspect = new_size.width as f64 / new_size.height as f64;
-        self.camera.aspect = new_aspect;
-
-        self.camera.update(graphics);
+        self.camera_manager.update_all(dt, graphics);
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
@@ -384,13 +379,13 @@ impl Scene for Editor {
         self.window = Some(graphics.state.window.clone());
         crate::logging::render(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
-            {
+            if let Some(camera) = self.camera_manager.get_active() {
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
                 let mut render_pass = graphics.clear_colour(color);
                 render_pass.set_pipeline(pipeline);
 
                 for (_, (entity, _)) in query.iter() {
-                    entity.render(&mut render_pass, &self.camera);
+                    entity.render(&mut render_pass, camera);
                 }
             }
         }

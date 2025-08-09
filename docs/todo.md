@@ -13,15 +13,15 @@ Just a list of stuff i need to work on/a list of items i need to implement
   - [x] copy and paste
     - [x] add to menu bar
   - [x] delete
-- [ ] using arrow keys to move the camera
-- [ ] using the controller to move the camera
 - [ ] basic physics
 - [ ] basic lighting
-- [ ] getting redback (the build system) to work
-- [ ] drag and drop system for the asset viewer
+- [ ] ~~getting redback (the build system) to work~~ get the build system inside eucalyptus to work
+- [ ] dragging and combining different objects and stuff
+- [ ] documentation
+- [ ] controller support
 
 ## fixing
 
 - [x] scaling an object
-- [ ] camera aspect ratio
+- [x] camera aspect ratio
 - [ ] drag and drop system, it dont work :(
