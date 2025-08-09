@@ -241,6 +241,10 @@ impl Editor {
                         crate::success!("Successfully saved project");
                     }
                     if ui.button("Project Settings").clicked() {};
+                    if ui.button("Play").clicked() {
+                        log::debug!("Play hit!")
+                    }
+                    ui.separator();
                     if ui.button("Quit").clicked() {
                         match self.save_project_config() {
                             Ok(_) => {}

@@ -6,7 +6,7 @@ package.repository = "https://github.com/4tkbytes/dropbear-engine"
 package.readme = "README.md"
 
 resolver = "3"
-members = ["dropbear-engine", "eucalyptus", "redback"]
+members = ["dropbear-engine", "eucalyptus"]
 
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }

@@ -37,9 +37,6 @@ transform-gizmo-egui.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 
-[package.metadata.cargo-machete]
-ignored = ["rhai"]
-
 [build-dependencies]
 anyhow = "1.0"
 app_dirs2 = "2.5"
