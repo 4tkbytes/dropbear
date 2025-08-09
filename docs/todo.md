@@ -5,6 +5,7 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [x] write object locations to file (basic save, needs polishing)
 - [x] a basic resource inspector
 - [ ] scripting functionality
+  - [ ] play mode (compiling on the fly)
 - [ ] global settings page
 - [ ] menu bar stuff
   - [ ] undo and redo

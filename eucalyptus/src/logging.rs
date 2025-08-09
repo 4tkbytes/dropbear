@@ -77,7 +77,7 @@ macro_rules! fatal {
 macro_rules! success {
     ($($arg:tt)*) => {{
         let _msg = format!($($arg)*);
-        log::info!("{}", _msg);
+        log::debug!("{}", _msg);
 
         {
             use egui_toast_fork::{Toast, ToastKind};

@@ -18,7 +18,7 @@ use transform_gizmo_egui::{
 use crate::{
     APP_INFO,
     editor::scene::PENDING_SPAWNS,
-    scripting::RHAI_TEMPLATE_SCRIPT,
+    scripting::TEMPLATE_SCRIPT,
     states::{EntityNode, Node, RESOURCES, ResourceType},
     utils::PendingSpawn,
 };
@@ -42,8 +42,6 @@ pub struct EditorTabViewer<'a> {
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
-    #[allow(dead_code)]
-    pub engine: &'a mut rhai::Engine,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -937,7 +935,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 ui.horizontal(|ui| {
                                     if ui.button("Browse").clicked() {
                                         if let Some(script_file) = rfd::FileDialog::new()
-                                            .add_filter("Rhai Files", &["rhai"])
+                                            .add_filter("Rhai Script", &["rhai"])
                                             .pick_file()
                                         {
                                             let script_name = script_file
@@ -958,7 +956,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             .set_file_name(format!("{}_script.rhai", e.label()))
                                             .save_file()
                                         {
-                                            match std::fs::write(&script_path, RHAI_TEMPLATE_SCRIPT) {
+                                            match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
                                                 Ok(_) => {
                                                     let script_name = script_path
                                                         .file_stem()
@@ -991,11 +989,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 
                                 ui.separator();
                                 
-                                ui.horizontal(|ui| {
-                                    if ui.button("Execute Script").clicked() {
-                                        *self.signal = Signal::ScriptAction(ScriptAction::ExecuteScript);
-                                    }
-                                    
+                                ui.horizontal(|ui| {                                    
                                     if ui.button("Edit Script").clicked() {
                                         *self.signal = Signal::ScriptAction(ScriptAction::EditScript);
                                     }
@@ -1004,7 +998,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         Err(e) => {
                             ui.label(format!("Error: Unable to query entity: {}", e));
-                            // log::error!("Unable to query entity: {}", e);
                         }
                     }
                 } else {

@@ -5,10 +5,7 @@
 //! as well as public structs related to that config and docs (hopefully).
 
 use std::{
-    fmt::{self, Display, Formatter},
-    fs,
-    path::PathBuf,
-    sync::RwLock,
+    collections::HashMap, fmt::{self, Display, Formatter}, fs, path::PathBuf, sync::RwLock
 };
 
 use chrono::Utc;
@@ -554,17 +551,39 @@ pub struct SceneEntity {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModelProperties {
-    pub check: bool,
-    pub str: String,
+    pub custom_properties: HashMap<String, PropertyValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PropertyValue {
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Vec3([f32; 3]),
+}
+
+impl ModelProperties {
+    pub fn new() -> Self {
+        Self {
+            custom_properties: HashMap::new(),
+        }
+    }
+    
+    #[allow(dead_code)]
+    pub fn set_property(&mut self, key: String, value: PropertyValue) {
+        self.custom_properties.insert(key, value);
+    }
+    
+    #[allow(dead_code)]
+    pub fn get_property(&self, key: &str) -> Option<&PropertyValue> {
+        self.custom_properties.get(key)
+    }
 }
 
 impl Default for ModelProperties {
     fn default() -> Self {
-        // any values i change up, add here :)
-        Self {
-            str: Default::default(),
-            check: Default::default(),
-        }
+        Self::new()
     }
 }
 

@@ -26,12 +26,10 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    scripting::ScriptAction,
-    states::{EntityNode, ModelProperties, PROJECT, SCENES, SceneEntity, ScriptComponent},
+    scripting::{ScriptAction, ScriptManager},
+    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
     utils::ViewportMode,
 };
-
-
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -64,64 +62,7 @@ pub struct Editor {
     last_key_press_times: HashMap<KeyCode, Instant>,
     double_press_threshold: Duration,
 
-    rhai_engine: rhai::Engine,
-}
-
-/// Describes an action that is undoable
-#[derive(Debug)]
-pub enum UndoableAction {
-    Transform(hecs::Entity, Transform),
-    Spawn(hecs::Entity),
-}
-
-impl UndoableAction {
-    pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
-        undo_stack.push(action);
-        log::debug!("Undo Stack contents: {:?}", undo_stack);
-    }
-
-    pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
-        match self {
-            UndoableAction::Transform(entity, transform) => {
-                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
-                    if let Some(e_t) = q.get() {
-                        *e_t = *transform;
-                        log::debug!("Reverted transform");
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Unable to query the entity"))
-                    }
-                } else {
-                    Err(anyhow::anyhow!("Could not find an entity to query"))
-                }
-            }
-            UndoableAction::Spawn(entity) => {
-                if world.despawn(*entity).is_ok() {
-                    log::debug!("Undid spawn by despawning entity {:?}", entity);
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
-                }
-            }
-        }
-    }
-}
-
-/// This enum will be used to describe the type of command/signal. This is only between
-/// the editor and unlike SceneCommand, this will ping a signal everywhere in that scene
-pub enum Signal {
-    None,
-    Copy(SceneEntity),
-    Paste(SceneEntity),
-    Delete,
-    Undo,
-    ScriptAction(ScriptAction),
-}
-
-impl Default for Editor {
-    fn default() -> Self {
-        Editor::new()
-    }
+    script_manager: ScriptManager,
 }
 
 impl Editor {
@@ -160,7 +101,7 @@ impl Editor {
             undo_stack: Vec::new(),
             last_key_press_times: HashMap::new(),
             double_press_threshold: Duration::from_millis(300),
-            rhai_engine: rhai::Engine::new(),
+            script_manager: ScriptManager::new()
         }
     }
 
@@ -178,37 +119,6 @@ impl Editor {
 
         self.last_key_press_times.insert(key, now);
         false
-    }
-
-    #[allow(dead_code)]
-    /// A helper function that gets the selected entity and returns the entity reference and
-    /// the scene entity information.
-    fn get_selected_entity(&self) -> Option<(hecs::Entity, SceneEntity)> {
-        if let Some(entity) = &self.selected_entity {
-            let id = entity.clone();
-            if let Ok(mut q) = self
-                .world
-                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity)
-            {
-                if let Some((e, t, properties)) = q.get() {
-                    let entity = SceneEntity {
-                        model_path: e.model().path.clone(),
-                        label: e.model().label.clone(),
-                        transform: *t,
-                        properties: properties.clone(),
-                        script: None,
-                        entity_id: Some(entity.clone()),
-                    };
-                    return Some((id, entity));
-                } else {
-                    return None;
-                }
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
     }
 
     pub fn save_project_config(&self) -> anyhow::Result<()> {
@@ -422,7 +332,7 @@ impl Editor {
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,
                         signal: &mut self.signal,
-                        engine: &mut self.rhai_engine,
+                        // engine: &mut self.rhai_engine,
                     },
                 );
         });
@@ -497,4 +407,62 @@ fn show_entity_tree(
             });
         }
     });
+}
+
+/// Describes an action that is undoable
+#[derive(Debug)]
+pub enum UndoableAction {
+    Transform(hecs::Entity, Transform),
+    Spawn(hecs::Entity),
+}
+
+impl UndoableAction {
+    pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
+        undo_stack.push(action);
+        log::debug!("Undo Stack contents: {:?}", undo_stack);
+    }
+
+    pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
+        match self {
+            UndoableAction::Transform(entity, transform) => {
+                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
+                    if let Some(e_t) = q.get() {
+                        *e_t = *transform;
+                        log::debug!("Reverted transform");
+                        Ok(())
+                    } else {
+                        Err(anyhow::anyhow!("Unable to query the entity"))
+                    }
+                } else {
+                    Err(anyhow::anyhow!("Could not find an entity to query"))
+                }
+            }
+            UndoableAction::Spawn(entity) => {
+                if world.despawn(*entity).is_ok() {
+                    log::debug!("Undid spawn by despawning entity {:?}", entity);
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
+                }
+            }
+        }
+    }
+}
+
+/// This enum will be used to describe the type of command/signal. This is only between
+/// the editor and unlike SceneCommand, this will ping a signal everywhere in that scene
+pub enum Signal {
+    None,
+    Copy(SceneEntity),
+    Paste(SceneEntity),
+    Delete,
+    Undo,
+    ScriptAction(ScriptAction),
+    Play,
+}
+
+impl Default for Editor {
+    fn default() -> Self {
+        Editor::new()
+    }
 }

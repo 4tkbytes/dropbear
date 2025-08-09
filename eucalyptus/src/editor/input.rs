@@ -89,7 +89,8 @@ impl Keyboard for Editor {
                         }
                     }
                     log::info!("Successfully saved project, about to quit...");
-                    crate::success!("Successfully saved project");
+                    crate::success_without_console!("Successfully saved project");
+                    self.scene_command = SceneCommand::Quit;
                 }
             }
             KeyCode::KeyC => {
