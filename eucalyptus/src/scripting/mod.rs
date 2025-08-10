@@ -1,7 +1,9 @@
+pub mod math;
+
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
-use rhai::{AST, Scope};
+use rhai::*;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -70,7 +72,6 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
                 break;
             }
             Err(e) => {
-                // Windows sharing violation = raw_os_error 32
                 if e.raw_os_error() == Some(32) && attempt < MAX_RETRIES {
                     log::warn!(
                         "Sharing violation copying script (attempt {}/{}). Retrying in {}ms: {}",
@@ -164,6 +165,9 @@ impl ScriptManager {
     pub fn new() -> Self {
         let mut engine = rhai::Engine::new();
 
+        // REGISTER FUNCTIONS HERE
+        math::register_math_functions(&mut engine);
+        
         engine.register_type_with_name::<Transform>("Transform");
         engine.register_type_with_name::<DQuat>("Quaternion");
 
@@ -194,17 +198,31 @@ impl ScriptManager {
 
         // utils
         engine.register_fn("log", |msg: &str| {
-            log::info!("[Script] {}", msg);
+            println!("[Script] {}", msg);
         });
-
-        engine.register_fn("sin", |x: f64| x.sin());
-        engine.register_fn("cos", |x: f64| x.cos());
         engine.register_fn("time", || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs_f64()
         });
+
+        // operators
+        engine.register_fn("<", |a: f64, b: f32| a < b as f64);
+        engine.register_fn("<=", |a: f64, b: f32| a <= b as f64);
+        engine.register_fn(">", |a: f64, b: f32| a > b as f64);
+        engine.register_fn(">=", |a: f64, b: f32| a >= b as f64);
+        engine.register_fn("==", |a: f64, b: f32| a == b as f64);
+        engine.register_fn("!=", |a: f64, b: f32| a != b as f64);
+
+        engine.register_fn("<", |a: f32, b: f64| (a as f64) < b);
+        engine.register_fn("<=", |a: f32, b: f64| (a as f64) <= b);
+        engine.register_fn(">", |a: f32, b: f64| (a as f64) > b);
+        engine.register_fn(">=", |a: f32, b: f64| (a as f64) >= b);
+        engine.register_fn("==", |a: f32, b: f64| (a as f64) == b);
+        engine.register_fn("!=", |a: f32, b: f64| (a as f64) != b);
+
+        // input
 
         Self {
             engine,
@@ -213,7 +231,6 @@ impl ScriptManager {
         }
     }
 
-    #[allow(dead_code)]
     pub fn init_entity_script(
         &mut self,
         entity_id: hecs::Entity,
@@ -238,7 +255,6 @@ impl ScriptManager {
         }
     }
 
-    #[allow(dead_code)]
     pub fn update_entity_script(
         &mut self,
         entity_id: hecs::Entity,
@@ -252,38 +268,34 @@ impl ScriptManager {
                     scope.set_value("transform", *transform);
                 }
 
-                if let Ok(_) = self.engine.call_fn::<()>(scope, ast, "update", (dt,)) {
-                    if let Some(modified_transform) = scope.get_value::<Transform>("transform") {
-                        if let Ok(mut transform) = world.get::<&mut Transform>(entity_id) {
-                            *transform = modified_transform;
+                match self.engine.call_fn::<()>(scope, ast, "update", (dt,)) {
+                    Ok(_) => {
+                        match scope.get_value::<Transform>("transform") {
+                            Some(modified_transform) => {
+                                if let Ok(mut transform) = world.get::<&mut Transform>(entity_id) {
+                                    *transform = modified_transform;
+                                } else {
+                                    log::error!("Unable to get transform value");
+                                }
+                            },
+                            None => {
+                                log::error!("Transform property for script {} returned \"None\"", script_name);
+                            },
                         }
-                    }
+                    },
+                    Err(e) => {
+                        log::error!("Unable to call update: {}", e);
+                    },
                 }
+            } else {
+                log::error!("Unable to get scope of entity {:?}", entity_id);
             }
+        } else {
+            log::error!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
         }
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
-        self.script_scopes.remove(&entity_id);
-    }
-
-    #[allow(dead_code)]
-    pub fn reload_script(
-        &mut self,
-        script_name: &str,
-        script_path: &PathBuf,
-    ) -> anyhow::Result<()> {
-        let script_content = fs::read_to_string(script_path)?;
-        let ast = self.engine.compile(&script_content)?;
-        self.compiled_scripts.insert(script_name.to_string(), ast);
-
-        log::info!("Reloaded script: {}", script_name);
-        Ok(())
-    }
-
-    #[allow(dead_code)]
     pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
         let script_content = fs::read_to_string(script_path)?;
         let script_name = script_path
@@ -298,4 +310,22 @@ impl ScriptManager {
         log::info!("Loaded script: {}", script_name);
         Ok(script_name)
     }
+
+    pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
+        self.script_scopes.remove(&entity_id);
+    }
+
+    // maybe useful later???
+    // pub fn reload_script(
+    //     &mut self,
+    //     script_name: &str,
+    //     script_path: &PathBuf,
+    // ) -> anyhow::Result<()> {
+    //     let script_content = fs::read_to_string(script_path)?;
+    //     let ast = self.engine.compile(&script_content)?;
+    //     self.compiled_scripts.insert(script_name.to_string(), ast);
+
+    //     log::info!("Reloaded script: {}", script_name);
+    //     Ok(())
+    // }
 }

@@ -23,9 +23,9 @@ use glam::DVec3;
 use hecs::World;
 use log;
 use parking_lot::Mutex;
-use transform_gizmo_egui::Gizmo;
+use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
-use winit::{keyboard::KeyCode, window::Window};
+use winit::{event::MouseButton, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{
@@ -68,9 +68,109 @@ pub struct Editor {
     // redo_stack: Vec<UndoableAction>,
     last_key_press_times: HashMap<KeyCode, Instant>,
     double_press_threshold: Duration,
+    mouse_pos: (f64, f64),
+    mouse_button: HashSet<MouseButton>,
 
-    #[allow(dead_code)]
+    editor_state: EditorState,
+    gizmo_mode: EnumSet<GizmoMode>,
+
     script_manager: ScriptManager,
+    play_mode_backup: Option<PlayModeBackup>,
+}
+
+#[derive(Clone)]
+pub struct PlayModeBackup {
+    entities: Vec<(hecs::Entity, Transform, ModelProperties, Option<ScriptComponent>)>,
+    camera_positions: HashMap<CameraType, (DVec3, DVec3)>, // pos, target
+}
+
+impl PlayModeBackup {
+    pub fn create_backup(editor: &mut Editor) -> anyhow::Result<()> {
+        let mut entities = Vec::new();
+        
+        for (entity_id, (_, transform, properties)) in editor
+            .world
+            .query::<(&AdoptedEntity, &Transform, &ModelProperties)>()
+            .iter()
+        {
+            let script = editor.world.query_one::<&ScriptComponent>(entity_id).ok().map(|mut s| {
+                if let Some(script) = s.get() {
+                    Some(script.clone())
+                } else {
+                    None
+                }
+            }).unwrap();
+            entities.push((entity_id, *transform, properties.clone(), script));
+        }
+
+        let mut camera_positions = HashMap::new();
+        
+        if let Some(debug_camera) = editor.camera_manager.get_camera(&CameraType::Debug) {
+            camera_positions.insert(CameraType::Debug, (debug_camera.eye, debug_camera.target));
+        }
+        
+        if let Some(player_camera) = editor.camera_manager.get_camera(&CameraType::Player) {
+            camera_positions.insert(CameraType::Player, (player_camera.eye, player_camera.target));
+        }
+
+        editor.play_mode_backup = Some(PlayModeBackup {
+            entities,
+            camera_positions,
+        });
+
+        log::info!("Created play mode backup with {} entities", editor.play_mode_backup.as_ref().unwrap().entities.len());
+        Ok(())
+    }
+
+    pub fn restore(editor: &mut Editor) -> anyhow::Result<()> {
+        if let Some(backup) = &editor.play_mode_backup {
+            for (entity_id, original_transform, original_properties, original_script) in &backup.entities {
+                if let Ok(mut transform) = editor.world.get::<&mut Transform>(*entity_id) {
+                    *transform = *original_transform;
+                }
+                
+                if let Ok(mut properties) = editor.world.get::<&mut ModelProperties>(*entity_id) {
+                    *properties = original_properties.clone();
+                }
+                
+                let has_script = editor.world.get::<&ScriptComponent>(*entity_id).is_ok();
+                match (has_script, original_script) {
+                    (true, Some(original)) => {
+                        if let Ok(mut script) = editor.world.get::<&mut ScriptComponent>(*entity_id) {
+                            *script = original.clone();
+                        }
+                    }
+                    (true, None) => {
+                        let _ = editor.world.remove_one::<ScriptComponent>(*entity_id);
+                    }
+                    (false, Some(original)) => {
+                        let _ = editor.world.insert_one(*entity_id, original.clone());
+                    }
+                    (false, None) => {
+                    }
+                }
+            }
+
+            for (camera_type, (position, target)) in &backup.camera_positions {
+                if let Some(camera) = editor.camera_manager.get_camera_mut(camera_type) {
+                    camera.eye = *position;
+                    camera.target = *target;
+                }
+            }
+
+            log::info!("Restored scene from play mode backup");
+            
+            editor.play_mode_backup = None;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No play mode backup found to restore"))
+        }
+    }
+}
+
+pub enum EditorState {
+    Editing,
+    Playing,
 }
 
 impl Editor {
@@ -85,6 +185,7 @@ impl Editor {
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
+        // this shit doesnt work :(
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
@@ -130,6 +231,13 @@ impl Editor {
             double_press_threshold: Duration::from_millis(300),
             script_manager: ScriptManager::new(),
             mouse_delta: None,
+            editor_state: EditorState::Editing,
+            gizmo_mode: EnumSet::empty(),
+            mouse_pos: Default::default(),
+            mouse_button: Default::default(),
+            play_mode_backup: None,
+            // ..Default::default()
+            // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
     }
 
@@ -310,8 +418,14 @@ impl Editor {
                         crate::success!("Successfully saved project");
                     }
                     if ui.button("Project Settings").clicked() {};
-                    if ui.button("Play").clicked() {
-                        self.signal = Signal::Play;
+                    if matches!(self.editor_state, EditorState::Playing) {
+                        if ui.button("Stop").clicked() {
+                            self.signal = Signal::StopPlaying;
+                        }
+                    } else {
+                        if ui.button("Play").clicked() {
+                            self.signal = Signal::Play;
+                        }
                     }
                     ui.separator();
                     if ui.button("Quit").clicked() {
@@ -406,6 +520,8 @@ impl Editor {
                         signal: &mut self.signal,
                         // engine: &mut self.rhai_engine,
                         camera_manager: &mut self.camera_manager,
+                        gizmo_mode: &mut self.gizmo_mode,
+                        editor_mode: &mut self.editor_state,
                     },
                 );
         });
@@ -540,8 +656,9 @@ pub enum Signal {
     Delete,
     Undo,
     ScriptAction(ScriptAction),
-    Play,
     CameraAction(CameraAction),
+    Play,
+    StopPlaying,
 }
 
 impl Default for Editor {

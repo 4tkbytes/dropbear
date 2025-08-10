@@ -215,7 +215,7 @@ impl CameraManager {
         }
     }
 
-    pub fn update_camera_following(&mut self, world: &hecs::World, dt: f32) {
+    pub fn update_camera_following(&mut self, world: &hecs::World, _dt: f32) {
         if let Some(player_camera) = self.cameras.get_mut(&CameraType::Player) {
             if let Some(player_controller) = self.controllers.get_mut(&CameraType::Player) {
                 if let Some(controller) = player_controller
@@ -226,14 +226,9 @@ impl CameraManager {
                         if let Ok(transform) = world.get::<&Transform>(target_entity) {
                             let target_pos = transform.position + controller.offset;
 
-                            let current_pos = player_camera.eye;
-                            let lerp_factor = (controller.follow_speed * dt as f64).min(1.0);
-                            let new_pos = current_pos.lerp(target_pos, lerp_factor);
-
-                            let look_direction =
-                                (player_camera.target - player_camera.eye).normalize();
-                            player_camera.eye = new_pos;
-                            player_camera.target = new_pos + look_direction;
+                            let look_direction = (player_camera.target - player_camera.eye).normalize();
+                            player_camera.eye = target_pos;
+                            player_camera.target = target_pos + look_direction;
                         }
                     }
                 }

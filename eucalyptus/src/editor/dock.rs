@@ -9,8 +9,7 @@ use log;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
-    Gizmo, GizmoConfig, GizmoExt, GizmoMode,
-    math::{DMat4, DVec3},
+    math::{DMat4, DVec3}, EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode
 };
 
 use crate::{
@@ -41,6 +40,8 @@ pub struct EditorTabViewer<'a> {
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
     pub camera_manager: &'a mut CameraManager,
+    pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
+    pub editor_mode: &'a mut EditorState,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -71,30 +72,6 @@ impl<'a> EditorTabViewer<'a> {
             }
             Ok(())
         }
-
-        // if let Ok(mut pending_spawns) = PENDING_SPAWNS.lock() {
-        //     if let Some(props) = properties {
-        //         pending_spawns.push(PendingSpawn {
-        //             asset_path: asset.path.clone(),
-        //             asset_name: asset.name.clone(),
-        //             transform,
-        //             properties: props,
-        //         });
-        //     } else {
-        //         pending_spawns.push(PendingSpawn {
-        //             asset_path: asset.path.clone(),
-        //             asset_name: asset.name.clone(),
-        //             transform,
-        //             properties: ModelProperties::default(),
-        //         });
-        //     }
-
-        //     Ok(())
-        // } else {
-        //     return Err(anyhow::anyhow!(
-        //         "Failed to retrieve the lock from the PENDING_SPAWNS const"
-        //     ));
-        // }
     }
 
     #[allow(dead_code)]
@@ -363,18 +340,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                         log::debug!("Total entities checked: {}", entity_count);
 
-                        if let Some(entity_id) = selected_entity_id {
-                            *self.selected_entity = Some(entity_id);
-                            log::debug!("Selected entity: {:?}", entity_id);
-                        } else {
-                            // *self.selected_entity = None;
-                            if entity_count == 0 {
-                                log::debug!("No entities in world to select");
+                        if !matches!(self.editor_mode, EditorState::Playing) {
+                            if let Some(entity_id) = selected_entity_id {
+                                *self.selected_entity = Some(entity_id);
+                                log::debug!("Selected entity: {:?}", entity_id);
                             } else {
-                                log::debug!(
-                                    "No entity hit by ray (checked {} entities)",
-                                    entity_count
-                                );
+                                // *self.selected_entity = None;
+                                if entity_count == 0 {
+                                    log::debug!("No entities in world to select");
+                                } else {
+                                    log::debug!(
+                                        "No entity hit by ray (checked {} entities)",
+                                        entity_count
+                                    );
+                                }
                             }
                         }
                     }
@@ -407,7 +386,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     )
                     .into(),
                     viewport: image_rect,
-                    modes: GizmoMode::all(),
+                    modes: *self.gizmo_mode,
                     orientation: transform_gizmo_egui::GizmoOrientation::Global,
                     snapping,
                     ..Default::default()
@@ -421,7 +400,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let was_focused = cfg.is_focused;
                             cfg.is_focused = self.gizmo.is_focused();
 
-                            // Update old_pos when gizmo becomes focused (start of interaction)
                             if cfg.is_focused && !was_focused {
                                 cfg.old_pos = *transform;
                             }
@@ -1085,7 +1063,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 entity: entity_id_copy,
                                                 offset: calculated_offset,
                                             });
-                                            crate::success!("Camera attached to {} with offset {:?}", entity_label, calculated_offset);
+                                            crate::success_without_console!("Camera successfully attached to {}", entity_label);
                                         }
                                     });
                                     ui.separator();

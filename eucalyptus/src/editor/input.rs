@@ -5,6 +5,7 @@ use dropbear_engine::{
 };
 use gilrs::{Button, GamepadId};
 use log;
+use transform_gizmo_egui::GizmoMode;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
@@ -26,9 +27,11 @@ impl Keyboard for Editor {
 
         let is_double_press = self.is_double_key_press(key);
 
+        let is_playing = matches!(self.editor_state, EditorState::Playing);
+
         match key {
             KeyCode::KeyG => {
-                if self.is_viewport_focused {
+                if self.is_viewport_focused && !is_playing {
                     self.viewport_mode = crate::utils::ViewportMode::Gizmo;
                     crate::info!("Switched to Viewport::Gizmo");
 
@@ -40,7 +43,7 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyF => {
-                if self.is_viewport_focused {
+                if self.is_viewport_focused && !is_playing {
                     self.viewport_mode = crate::utils::ViewportMode::CameraMove;
                     crate::info!("Switched to Viewport::CameraMove");
                     if let Some(window) = &self.window {
@@ -58,19 +61,23 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::Delete => {
-                if let Some(_) = &self.selected_entity {
-                    self.signal = Signal::Delete;
+                if !is_playing {
+                    if let Some(_) = &self.selected_entity {
+                        self.signal = Signal::Delete;
+                    } else {
+                        crate::warn!("Failed to delete: No entity selected");
+                    }
                 } else {
-                    crate::warn!("Failed to delete: No entity selected");
+                    self.pressed_keys.insert(key);
                 }
             }
             KeyCode::Escape => {
                 if is_double_press {
                     if let Some(_) = &self.selected_entity {
                         self.selected_entity = None;
-                        log::debug!("deselected entity");
+                        log::debug!("Deselected entity");
                     }
-                } else if self.is_viewport_focused {
+                } else if self.is_viewport_focused && !is_playing {
                     self.viewport_mode = crate::utils::ViewportMode::None;
                     crate::info!("Switched to Viewport::None");
                     if let Some(window) = &self.window {
@@ -81,7 +88,7 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyQ => {
-                if ctrl_pressed {
+                if ctrl_pressed && !is_playing {
                     match self.save_project_config() {
                         Ok(_) => {}
                         Err(e) => {
@@ -91,10 +98,12 @@ impl Keyboard for Editor {
                     log::info!("Successfully saved project, about to quit...");
                     crate::success_without_console!("Successfully saved project");
                     self.scene_command = SceneCommand::Quit;
+                } else if is_playing {
+                    crate::warn!("Unable to save-quit project, please pause your playing state, then try again");
                 }
             }
             KeyCode::KeyC => {
-                if ctrl_pressed {
+                if ctrl_pressed && !is_playing {
                     if let Some(entity) = &self.selected_entity {
                         let query = self
                             .world
@@ -124,12 +133,16 @@ impl Keyboard for Editor {
                         }
                     } else {
                         crate::warn!("Unable to copy entity: None selected");
-                        self.pressed_keys.insert(key);
                     }
+                } else if matches!(self.viewport_mode, ViewportMode::Gizmo) {
+                    crate::info!("GizmoMode set to scale");
+                    self.gizmo_mode = GizmoMode::all_scale();
+                } else {
+                    self.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyV => {
-                if ctrl_pressed {
+                if ctrl_pressed && !is_playing {
                     match &self.signal {
                         Signal::Copy(entity) => {
                             self.signal = Signal::Paste(entity.clone());
@@ -138,26 +151,32 @@ impl Keyboard for Editor {
                             crate::warn!("Unable to paste: You haven't selected anything!");
                         }
                     }
-                } else {
+                } 
+                else {
                     self.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyS => {
                 if ctrl_pressed {
-                    match self.save_project_config() {
-                        Ok(_) => {
-                            crate::success!("Successfully saved project");
+                    if !is_playing {
+                        match self.save_project_config() {
+                            Ok(_) => {
+                                crate::success!("Successfully saved project");
+                            }
+                            Err(e) => {
+                                crate::fatal!("Error saving project: {}", e);
+                            }
                         }
-                        Err(e) => {
-                            crate::fatal!("Error saving project: {}", e);
-                        }
+                    } else {
+                        crate::warn!("Unable to save project config, please quit your playing and try again");
                     }
+                    
                 } else {
                     self.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyZ => {
-                if ctrl_pressed {
+                if ctrl_pressed && !is_playing {
                     if shift_pressed {
                         // redo
                     } else {
@@ -165,15 +184,28 @@ impl Keyboard for Editor {
                         log::debug!("Undo signal sent");
                         self.signal = Signal::Undo;
                     }
+                } else if matches!(self.viewport_mode, ViewportMode::Gizmo) && !is_playing {
+                    crate::info!("GizmoMode set to translate");
+                    self.gizmo_mode = GizmoMode::all_translate();
                 } else {
                     self.pressed_keys.insert(key);
                 }
             }
             KeyCode::F1 => {
-                if self.is_using_debug_camera() {
-                    self.switch_to_player_camera();
+                if !is_playing {
+                    if self.is_using_debug_camera() {
+                        self.switch_to_player_camera();
+                    } else {
+                        self.switch_to_debug_camera();
+                    }
+                }
+            }
+            KeyCode::KeyX => {
+                if matches!(self.viewport_mode, ViewportMode::Gizmo) && !is_playing {
+                    crate::info!("GizmoMode set to rotate");
+                    self.gizmo_mode = GizmoMode::all_rotate();
                 } else {
-                    self.switch_to_debug_camera();
+                    self.pressed_keys.insert(key);
                 }
             }
             _ => {
@@ -206,11 +238,18 @@ impl Mouse for Editor {
                 window.set_cursor_visible(false);
             }
         }
+        self.mouse_pos = (position.x, position.y);
     }
 
-    fn mouse_down(&mut self, _button: MouseButton) {}
+    fn mouse_down(&mut self, button: MouseButton) {
+        match button {
+            _ => { self.mouse_button.insert(button); }
+        }
+    }
 
-    fn mouse_up(&mut self, _button: MouseButton) {}
+    fn mouse_up(&mut self, button: MouseButton) {
+        self.mouse_button.remove(&button);
+    }
 }
 
 impl Controller for Editor {
