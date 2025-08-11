@@ -56,5 +56,5 @@ pub mod math_functions {
 }
 
 pub fn register_math_functions(engine: &mut Engine) {
-    engine.register_global_module(exported_module!(math_functions).into());
+    engine.register_static_module("math", exported_module!(math_functions).into());
 }

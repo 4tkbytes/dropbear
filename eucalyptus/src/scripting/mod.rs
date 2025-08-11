@@ -1,4 +1,5 @@
 pub mod math;
+pub mod input;
 
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
@@ -154,7 +155,6 @@ pub fn attach_script_to_entity(
     Ok(())
 }
 
-#[allow(dead_code)]
 pub struct ScriptManager {
     pub engine: rhai::Engine,
     compiled_scripts: HashMap<String, AST>,
@@ -167,6 +167,7 @@ impl ScriptManager {
 
         // REGISTER FUNCTIONS HERE
         math::register_math_functions(&mut engine);
+        input::InputState::register_input_modules(&mut engine);
         
         engine.register_type_with_name::<Transform>("Transform");
         engine.register_type_with_name::<DQuat>("Quaternion");
@@ -236,6 +237,7 @@ impl ScriptManager {
         entity_id: hecs::Entity,
         script_name: &str,
         world: &mut World,
+        input_state: &input::InputState,
     ) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             let mut scope = Scope::new();
@@ -243,6 +245,8 @@ impl ScriptManager {
             if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
                 scope.push("transform", *transform);
             }
+
+            scope.push("input", input_state.clone());
 
             if let Ok(_) = self.engine.call_fn::<()>(&mut scope, ast, "init", ()) {
                 log::debug!("Called init for entity {:?}", entity_id);
@@ -260,6 +264,7 @@ impl ScriptManager {
         entity_id: hecs::Entity,
         script_name: &str,
         world: &mut World,
+        input_state: &input::InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
         if let Some(ast) = self.compiled_scripts.get(script_name) {
@@ -267,6 +272,8 @@ impl ScriptManager {
                 if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
                     scope.set_value("transform", *transform);
                 }
+
+                scope.set_value("input", input_state.clone());
 
                 match self.engine.call_fn::<()>(scope, ast, "update", (dt,)) {
                     Ok(_) => {
@@ -292,6 +299,7 @@ impl ScriptManager {
             }
         } else {
             log::error!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
+            println!("{:#?}", self.compiled_scripts);
         }
         Ok(())
     }
@@ -304,7 +312,10 @@ impl ScriptManager {
             .to_string_lossy()
             .to_string();
 
-        let ast = self.engine.compile(&script_content)?;
+        let ast = self.engine.compile(&script_content).map_err(|e| {
+            log::error!("Compiling AST for script path [{}] returned an error: {}", script_path.display(), e);
+            e
+        })?;
         self.compiled_scripts.insert(script_name.clone(), ast);
 
         log::info!("Loaded script: {}", script_name);

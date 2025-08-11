@@ -23,6 +23,7 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] autosave (would be easy to impl)
 - [ ] attaching texture onto model
 - [ ] user defined keybinds
+- [ ] console tab
 
 ## fixing
 

@@ -41,6 +41,8 @@ If you do not want to build it locally, you are able to download the latest acti
 
 Depsite it looking like a dependency for `eucalyptus`, it can serve as a framework too. Looking through the `docs.rs` will you find related documentation onhow to use it and for rendering your own projects.
 
+The rhai reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. [Here is the entrance](https://github.com/4tkbytes/dropbear/blob/main/docs/README.md)
+
 ## Compability
 
 |            | Windows | macOS | Linux | Web | Android | iOS |

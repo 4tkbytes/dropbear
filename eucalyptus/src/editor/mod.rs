@@ -25,14 +25,14 @@ use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
-use winit::{event::MouseButton, keyboard::KeyCode, window::Window};
+use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{
         CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
     },
-    scripting::{ScriptAction, ScriptManager},
-    states::{EntityNode, ModelProperties, PROJECT, SCENES, SceneEntity, ScriptComponent},
+    scripting::{input::InputState, ScriptAction, ScriptManager},
+    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
     utils::ViewportMode,
 };
 
@@ -46,10 +46,8 @@ pub struct Editor {
     color: Color,
 
     camera_manager: CameraManager,
-    mouse_delta: Option<(f64, f64)>,
 
     is_viewport_focused: bool,
-    pressed_keys: HashSet<KeyCode>,
     // is_cursor_locked: bool,
     window: Option<Arc<Window>>,
 
@@ -66,16 +64,21 @@ pub struct Editor {
     undo_stack: Vec<UndoableAction>,
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
-    last_key_press_times: HashMap<KeyCode, Instant>,
-    double_press_threshold: Duration,
-    mouse_pos: (f64, f64),
-    mouse_button: HashSet<MouseButton>,
+
+    // last_key_press_times: HashMap<KeyCode, Instant>,
+    // double_press_threshold: Duration,
+    // mouse_pos: (f64, f64),
+    // mouse_button: HashSet<MouseButton>,    
+    // pressed_keys: HashSet<KeyCode>,
+    // mouse_delta: Option<(f64, f64)>,
 
     editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
     script_manager: ScriptManager,
     play_mode_backup: Option<PlayModeBackup>,
+
+    input_state: InputState,
 }
 
 #[derive(Clone)]
@@ -214,7 +217,6 @@ impl Editor {
             camera_manager: CameraManager::new(),
             color: Color::default(),
             is_viewport_focused: false,
-            pressed_keys: HashSet::new(),
             // is_cursor_locked: false,
             window: None,
             world: World::new(),
@@ -227,15 +229,17 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            last_key_press_times: HashMap::new(),
-            double_press_threshold: Duration::from_millis(300),
             script_manager: ScriptManager::new(),
-            mouse_delta: None,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
-            mouse_pos: Default::default(),
-            mouse_button: Default::default(),
             play_mode_backup: None,
+            input_state: InputState::new(),
+            // mouse_pos: Default::default(),
+            // mouse_button: Default::default(),
+            // pressed_keys: HashSet::new(),
+            // last_key_press_times: HashMap::new(),
+            // double_press_threshold: Duration::from_millis(300),
+            // mouse_delta: None,
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
@@ -244,16 +248,16 @@ impl Editor {
     fn is_double_key_press(&mut self, key: KeyCode) -> bool {
         let now = Instant::now();
 
-        if let Some(last_time) = self.last_key_press_times.get(&key) {
+        if let Some(last_time) = self.input_state.last_key_press_times.get(&key) {
             let time_diff = now.duration_since(*last_time);
 
-            if time_diff <= self.double_press_threshold {
-                self.last_key_press_times.remove(&key);
+            if time_diff <= self.input_state.double_press_threshold {
+                self.input_state.last_key_press_times.remove(&key);
                 return true;
             }
         }
 
-        self.last_key_press_times.insert(key, now);
+        self.input_state.last_key_press_times.insert(key, now);
         false
     }
     // pub fn save_project_config(&self) -> anyhow::Result<()> {

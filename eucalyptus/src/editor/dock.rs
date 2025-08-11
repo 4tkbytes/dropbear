@@ -204,19 +204,19 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             camera.zfar,
                         );
 
-                        log::debug!(
-                            "Camera - eye: {:?}, target: {:?}, up: {:?}",
-                            camera.eye,
-                            camera.target,
-                            camera.up
-                        );
-                        log::debug!(
-                            "Camera - fov_y: {:.3}°, aspect: {:.3}, znear: {:.3}, zfar: {:.3}",
-                            camera.fov_y,
-                            camera.aspect,
-                            camera.znear,
-                            camera.zfar
-                        );
+                        // log::debug!(
+                        //     "Camera - eye: {:?}, target: {:?}, up: {:?}",
+                        //     camera.eye,
+                        //     camera.target,
+                        //     camera.up
+                        // );
+                        // log::debug!(
+                        //     "Camera - fov_y: {:.3}°, aspect: {:.3}, znear: {:.3}, zfar: {:.3}",
+                        //     camera.fov_y,
+                        //     camera.aspect,
+                        //     camera.znear,
+                        //     camera.zfar
+                        // );
 
                         if !view_matrix.is_finite() {
                             log::error!("Invalid view matrix");
@@ -265,13 +265,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             return;
                         }
 
-                        log::debug!(
-                            "Click pos: {:?}, NDC: ({:.3}, {:.3})",
-                            click_pos,
-                            ndc_x,
-                            ndc_y
-                        );
-                        log::debug!("Ray start: {:?}, direction: {:?}", ray_start, ray_direction);
+                        // log::debug!(
+                        //     "Click pos: {:?}, NDC: ({:.3}, {:.3})",
+                        //     click_pos,
+                        //     ndc_x,
+                        //     ndc_y
+                        // );
+                        // log::debug!("Ray start: {:?}, direction: {:?}", ray_start, ray_direction);
 
                         let mut closest_distance = f64::INFINITY;
                         let mut selected_entity_id: Option<hecs::Entity> = None;
@@ -287,28 +287,28 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let to_sphere = entity_pos - ray_start;
                             let projection = to_sphere.dot(ray_direction);
 
-                            log::debug!(
-                                "Entity {:?}: pos={:?}, scale={:?}, radius={:.3}",
-                                entity_id,
-                                entity_pos,
-                                transform.scale,
-                                sphere_radius
-                            );
-                            log::debug!(
-                                "  to_sphere={:?}, projection={:.3}",
-                                to_sphere,
-                                projection
-                            );
+                            // log::debug!(
+                            //     "Entity {:?}: pos={:?}, scale={:?}, radius={:.3}",
+                            //     entity_id,
+                            //     entity_pos,
+                            //     transform.scale,
+                            //     sphere_radius
+                            // );
+                            // log::debug!(
+                            //     "  to_sphere={:?}, projection={:.3}",
+                            //     to_sphere,
+                            //     projection
+                            // );
 
                             if projection > 0.0 {
                                 let closest_point = ray_start + ray_direction * projection;
                                 let distance_to_sphere = (closest_point - entity_pos).length();
 
-                                log::debug!(
-                                    "  closest_point={:?}, distance_to_sphere={:.3}",
-                                    closest_point,
-                                    distance_to_sphere
-                                );
+                                // log::debug!(
+                                //     "  closest_point={:?}, distance_to_sphere={:.3}",
+                                //     closest_point,
+                                //     distance_to_sphere
+                                // );
 
                                 if distance_to_sphere <= sphere_radius {
                                     let discriminant = sphere_radius * sphere_radius
@@ -316,10 +316,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     if discriminant >= 0.0 {
                                         let intersection_distance =
                                             projection - discriminant.sqrt();
-                                        log::debug!(
-                                            "  HIT! intersection_distance={:.3}",
-                                            intersection_distance
-                                        );
+                                        // log::debug!(
+                                        //     "  HIT! intersection_distance={:.3}",
+                                        //     intersection_distance
+                                        // );
 
                                         if intersection_distance < closest_distance {
                                             closest_distance = intersection_distance;
@@ -327,14 +327,14 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         }
                                     }
                                 } else {
-                                    log::debug!(
-                                        "  MISS: distance {:.3} > radius {:.3}",
-                                        distance_to_sphere,
-                                        sphere_radius
-                                    );
+                                    // log::debug!(
+                                    //     "  MISS: distance {:.3} > radius {:.3}",
+                                    //     distance_to_sphere,
+                                    //     sphere_radius
+                                    // );
                                 }
                             } else {
-                                log::debug!("  BEHIND: projection {:.3} <= 0", projection);
+                                // log::debug!("  BEHIND: projection {:.3} <= 0", projection);
                             }
                         }
 

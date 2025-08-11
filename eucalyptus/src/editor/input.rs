@@ -13,17 +13,17 @@ use winit::{
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         #[cfg(not(target_os = "macos"))]
-        let ctrl_pressed = self.pressed_keys.contains(&KeyCode::ControlLeft)
-            || self.pressed_keys.contains(&KeyCode::ControlRight);
+        let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::ControlLeft)
+            || self.input_state.pressed_keys.contains(&KeyCode::ControlRight);
         #[cfg(target_os = "macos")]
-        let ctrl_pressed = self.pressed_keys.contains(&KeyCode::SuperLeft)
-            || self.pressed_keys.contains(&KeyCode::SuperRight);
+        let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
+            || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
 
-        let _alt_pressed = self.pressed_keys.contains(&KeyCode::AltLeft)
-            || self.pressed_keys.contains(&KeyCode::AltRight);
+        let _alt_pressed = self.input_state.pressed_keys.contains(&KeyCode::AltLeft)
+            || self.input_state.pressed_keys.contains(&KeyCode::AltRight);
 
-        let shift_pressed = self.pressed_keys.contains(&KeyCode::ShiftLeft)
-            || self.pressed_keys.contains(&KeyCode::ShiftRight);
+        let shift_pressed = self.input_state.pressed_keys.contains(&KeyCode::ShiftLeft)
+            || self.input_state.pressed_keys.contains(&KeyCode::ShiftRight);
 
         let is_double_press = self.is_double_key_press(key);
 
@@ -39,7 +39,7 @@ impl Keyboard for Editor {
                         window.set_cursor_visible(true);
                     }
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyF => {
@@ -57,7 +57,7 @@ impl Keyboard for Editor {
                         let _ = window.set_cursor_position(center);
                     }
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::Delete => {
@@ -68,7 +68,7 @@ impl Keyboard for Editor {
                         crate::warn!("Failed to delete: No entity selected");
                     }
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::Escape => {
@@ -84,7 +84,7 @@ impl Keyboard for Editor {
                         window.set_cursor_visible(true);
                     }
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyQ => {
@@ -138,7 +138,7 @@ impl Keyboard for Editor {
                     crate::info!("GizmoMode set to scale");
                     self.gizmo_mode = GizmoMode::all_scale();
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyV => {
@@ -153,7 +153,7 @@ impl Keyboard for Editor {
                     }
                 } 
                 else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyS => {
@@ -172,7 +172,7 @@ impl Keyboard for Editor {
                     }
                     
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyZ => {
@@ -188,7 +188,7 @@ impl Keyboard for Editor {
                     crate::info!("GizmoMode set to translate");
                     self.gizmo_mode = GizmoMode::all_translate();
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::F1 => {
@@ -205,17 +205,17 @@ impl Keyboard for Editor {
                     crate::info!("GizmoMode set to rotate");
                     self.gizmo_mode = GizmoMode::all_rotate();
                 } else {
-                    self.pressed_keys.insert(key);
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             _ => {
-                self.pressed_keys.insert(key);
+                self.input_state.pressed_keys.insert(key);
             }
         }
     }
 
     fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
-        self.pressed_keys.remove(&key);
+        self.input_state.pressed_keys.remove(&key);
     }
 }
 
@@ -238,17 +238,17 @@ impl Mouse for Editor {
                 window.set_cursor_visible(false);
             }
         }
-        self.mouse_pos = (position.x, position.y);
+        self.input_state.mouse_pos = (position.x, position.y);
     }
 
     fn mouse_down(&mut self, button: MouseButton) {
         match button {
-            _ => { self.mouse_button.insert(button); }
+            _ => { self.input_state.mouse_button.insert(button); }
         }
     }
 
     fn mouse_up(&mut self, button: MouseButton) {
-        self.mouse_button.remove(&button);
+        self.input_state.mouse_button.remove(&button);
     }
 }
 

@@ -118,7 +118,7 @@ impl Scene for Editor {
         }
 
         if matches!(self.editor_state, EditorState::Playing) {
-            if self.pressed_keys.contains(&KeyCode::Escape) {
+            if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
                 self.signal = Signal::StopPlaying;
             }
             
@@ -132,7 +132,7 @@ impl Scene for Editor {
             }
             
             for (entity_id, script_name) in script_entities {
-                if let Err(e) = self.script_manager.update_entity_script(entity_id, &script_name, &mut self.world, dt) {
+                if let Err(e) = self.script_manager.update_entity_script(entity_id, &script_name, &mut self.world, &self.input_state, dt) {
                     log::warn!("Failed to update script '{}' for entity {:?}: {}", script_name, entity_id, e);
                 }
             }
@@ -143,6 +143,7 @@ impl Scene for Editor {
         // && self.is_using_debug_camera()
         {
             let movement_keys: std::collections::HashSet<KeyCode> = self
+                .input_state
                 .pressed_keys
                 .iter()
                 .filter(|&&key| {
@@ -160,7 +161,7 @@ impl Scene for Editor {
                 .collect();
 
             self.camera_manager
-                .handle_input(&movement_keys, self.mouse_delta);
+                .handle_input(&movement_keys, self.input_state.mouse_delta);
         }
 
         match &self.signal {
@@ -405,7 +406,7 @@ impl Scene for Editor {
                     for (entity_id, script) in script_entities {
                         match self.script_manager.load_script(&script.path) {
                             Ok(script_name) => {
-                                if let Err(e) = self.script_manager.init_entity_script(entity_id, &script_name, &mut self.world) {
+                                if let Err(e) = self.script_manager.init_entity_script(entity_id, &script_name, &mut self.world, &self.input_state) {
                                     log::warn!("Failed to initialise script '{}' for entity {:?}: {}", script.name, entity_id, e);
                                 }
                             }
