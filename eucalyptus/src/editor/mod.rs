@@ -240,6 +240,7 @@ impl Editor {
             // last_key_press_times: HashMap::new(),
             // double_press_threshold: Duration::from_millis(300),
             // mouse_delta: None,
+            
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }

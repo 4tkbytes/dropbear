@@ -25,6 +25,7 @@ git2.workspace = true
 glam.workspace = true
 hecs.workspace = true
 log.workspace = true
+log-once.workspace = true
 model_to_image.workspace = true
 once_cell.workspace = true
 open.workspace = true

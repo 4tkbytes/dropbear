@@ -1,3 +1,6 @@
+// Docs:
+// https://github.com/4tkbytes/dropbear/blob/main/docs/README.md
+
 fn init() {
     print("Script initialized!");
     // Access the entity's transform

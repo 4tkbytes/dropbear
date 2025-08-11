@@ -97,7 +97,7 @@ impl ProjectConfig {
         let mut config: ProjectConfig = ron::de::from_str(&ron_str.as_str())?;
         config.project_path = path.parent().unwrap().to_path_buf();
         log::info!("Loaded project!");
-        log::debug!("Loaded config info: {:?}", config);
+        log::debug!("Loaded config info");
         log::debug!("Updating with new content");
         config.load_config_to_memory()?;
         config.write_to_all()?;
@@ -580,12 +580,10 @@ impl ModelProperties {
         }
     }
 
-    #[allow(dead_code)]
     pub fn set_property(&mut self, key: String, value: PropertyValue) {
         self.custom_properties.insert(key, value);
     }
 
-    #[allow(dead_code)]
     pub fn get_property(&self, key: &str) -> Option<&PropertyValue> {
         self.custom_properties.get(key)
     }

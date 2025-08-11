@@ -57,4 +57,5 @@ pub mod math_functions {
 
 pub fn register_math_functions(engine: &mut Engine) {
     engine.register_static_module("math", exported_module!(math_functions).into());
+    log::info!("[Script] Initialised math module");
 }

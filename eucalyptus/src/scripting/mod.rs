@@ -1,3 +1,4 @@
+pub mod entity;
 pub mod math;
 pub mod input;
 
@@ -8,7 +9,7 @@ use rhai::*;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 
-use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
+use crate::states::{EntityNode, ModelProperties, PropertyValue, ScriptComponent, PROJECT, SOURCE};
 
 pub const TEMPLATE_SCRIPT: &'static str = include_str!("../template.rhai");
 
@@ -168,6 +169,7 @@ impl ScriptManager {
         // REGISTER FUNCTIONS HERE
         math::register_math_functions(&mut engine);
         input::InputState::register_input_modules(&mut engine);
+        entity::register_model_props_module(&mut engine);
         
         engine.register_type_with_name::<Transform>("Transform");
         engine.register_type_with_name::<DQuat>("Quaternion");
@@ -246,10 +248,32 @@ impl ScriptManager {
                 scope.push("transform", *transform);
             }
 
+            if let Ok(properties) = world.query_one_mut::<&mut ModelProperties>(entity_id) {
+                scope.push("entity", properties.clone());
+            } else {
+                let mut default_props = ModelProperties::default();
+                default_props.set_property(String::from("speed"), PropertyValue::Float(1.0));
+                scope.push("entity", default_props);
+            }
+
             scope.push("input", input_state.clone());
 
             if let Ok(_) = self.engine.call_fn::<()>(&mut scope, ast, "init", ()) {
                 log::debug!("Called init for entity {:?}", entity_id);
+
+                if let Some(properties_from_scope) = scope.get_value::<ModelProperties>("entity") {
+                    if let Ok(properties) = world.query_one_mut::<&mut ModelProperties>(entity_id) {
+                        *properties = properties_from_scope;
+                    } else {
+                        let _ = world.insert_one(entity_id, properties_from_scope);
+                    }
+                }
+
+                if let Some(transform_from_scope) = scope.get_value::<Transform>("transform") {
+                    if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
+                        *transform = transform_from_scope;
+                    }
+                }
             }
 
             self.script_scopes.insert(entity_id, scope);
@@ -273,32 +297,37 @@ impl ScriptManager {
                     scope.set_value("transform", *transform);
                 }
 
+                if let Ok(mut properties_query) = world.query_one::<&ModelProperties>(entity_id) {
+                    if let Some(properties) = properties_query.get() {
+                        scope.set_value("entity", properties.clone());
+                    }
+                }
+
                 scope.set_value("input", input_state.clone());
 
                 match self.engine.call_fn::<()>(scope, ast, "update", (dt,)) {
                     Ok(_) => {
-                        match scope.get_value::<Transform>("transform") {
-                            Some(modified_transform) => {
-                                if let Ok(mut transform) = world.get::<&mut Transform>(entity_id) {
-                                    *transform = modified_transform;
-                                } else {
-                                    log::error!("Unable to get transform value");
-                                }
-                            },
-                            None => {
-                                log::error!("Transform property for script {} returned \"None\"", script_name);
-                            },
+                        if let Some(transform_from_scope) = scope.get_value::<Transform>("transform") {
+                            if let Ok(transform) = world.query_one_mut::<&mut Transform>(entity_id) {
+                                *transform = transform_from_scope;
+                            }
                         }
-                    },
+
+                        if let Some(properties_from_scope) = scope.get_value::<ModelProperties>("entity") {
+                            if let Ok(properties) = world.query_one_mut::<&mut ModelProperties>(entity_id) {
+                                *properties = properties_from_scope;
+                            }
+                        }
+                    }
                     Err(e) => {
-                        log::error!("Unable to call update: {}", e);
-                    },
+                        log_once::error_once!("Script execution error for entity {:?}: {}", entity_id, e);
+                    }
                 }
             } else {
-                log::error!("Unable to get scope of entity {:?}", entity_id);
+                log_once::error_once!("Unable to get scope of entity {:?}", entity_id);
             }
         } else {
-            log::error!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
+            log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
             println!("{:#?}", self.compiled_scripts);
         }
         Ok(())

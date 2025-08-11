@@ -208,6 +208,13 @@ impl Keyboard for Editor {
                     self.input_state.pressed_keys.insert(key);
                 }
             }
+            KeyCode::KeyP => {
+                if !is_playing {
+                    if ctrl_pressed {
+                        self.signal = Signal::Play
+                    }
+                }
+            }
             _ => {
                 self.input_state.pressed_keys.insert(key);
             }

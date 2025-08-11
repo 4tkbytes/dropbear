@@ -94,6 +94,7 @@ impl InputState {
         add_key!(Right, KeyCode::ArrowRight);
 
         engine.register_static_module("keys", kmod.into());
+        log::info!("[Script] Initialised input module");
     }
 }
 
