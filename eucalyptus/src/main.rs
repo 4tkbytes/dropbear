@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
         }
         None => {
             let config = WindowConfiguration {
-                title: "Eucalyptus, built with dropbear",
+                title: "Eucalyptus, built with dropbear".into(),
                 windowed_mode: dropbear_engine::WindowedModes::Maximised,
                 max_fps: dropbear_engine::App::NO_FPS_CAP,
             };

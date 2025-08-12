@@ -12,6 +12,7 @@ use std::{
     sync::RwLock,
 };
 
+use bincode::{Encode, Decode};
 use chrono::Utc;
 use dropbear_engine::{
     camera::Camera,
@@ -876,4 +877,16 @@ impl SceneConfig {
             );
         }
     }
+}
+
+#[derive(Decode, Encode, serde::Serialize, serde::Deserialize, Debug)]
+pub struct RuntimeData {
+    #[bincode(with_serde)]
+    pub project_config: ProjectConfig,
+    #[bincode(with_serde)]
+    pub source_config: SourceConfig,
+    #[bincode(with_serde)]
+    pub scene_data: Vec<SceneConfig>,
+    #[bincode(with_serde)]
+    pub scripts: HashMap<String, String>, // name, script_content
 }

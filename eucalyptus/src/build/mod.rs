@@ -1,9 +1,8 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
-use bincode::{Decode, Encode};
 use clap::ArgMatches;
 
-use crate::states::{ProjectConfig, SceneConfig, SourceConfig, SCENES, SOURCE};
+use crate::states::{ProjectConfig, RuntimeData, SCENES, SOURCE};
 
 pub fn package(_project_path: PathBuf, _sub_matches: &ArgMatches) {
     todo!()
@@ -69,18 +68,6 @@ pub fn build(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Result
 
     println!("Build completed successfully. Output at {:?}", runtime_file.display());
     Ok(())
-}
-
-#[derive(Decode, Encode, serde::Serialize, serde::Deserialize, Debug)]
-pub struct RuntimeData {
-    #[bincode(with_serde)]
-    project_config: ProjectConfig,
-    #[bincode(with_serde)]
-    source_config: SourceConfig,
-    #[bincode(with_serde)]
-    scene_data: Vec<SceneConfig>,
-    #[bincode(with_serde)]
-    scripts: HashMap<String, String>,
 }
 
 pub fn health() {
