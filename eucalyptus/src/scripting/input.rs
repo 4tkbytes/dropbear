@@ -30,7 +30,6 @@ impl InputState {
             mouse_delta: None,
         }
     }
-
     pub fn register_input_modules(engine: &mut Engine) {
         engine.register_type_with_name::<InputState>("InputState");
         engine.register_type_with_name::<Key>("Key");

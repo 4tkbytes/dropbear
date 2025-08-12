@@ -1,16 +1,26 @@
+#[cfg(feature = "editor")]
 use std::{
-    fs,
-    path::PathBuf,
-    sync::mpsc::{self, Receiver},
+    fs, sync::mpsc::{self, Receiver},
 };
 
+use std::path::PathBuf;
+
+#[cfg(feature = "editor")]
 use anyhow::anyhow;
-use dropbear_engine::{camera::Camera, entity::Transform, scene::SceneCommand};
+use dropbear_engine::{camera::Camera, entity::Transform};
+#[cfg(feature = "editor")]
+use dropbear_engine::scene::SceneCommand;
+#[cfg(feature = "editor")]
 use egui::Context;
+
+#[cfg(feature = "editor")]
 use egui_toast_fork::{Toast, ToastOptions, Toasts};
+#[cfg(feature = "editor")]
 use git2::Repository;
 
-use crate::states::{ModelProperties, Node, PROJECT, ProjectConfig};
+use crate::states::{ModelProperties, Node};
+#[cfg(feature = "editor")]
+use crate::states::{PROJECT, ProjectConfig};
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
@@ -43,6 +53,7 @@ pub enum ProjectProgress {
 /// Open a project file and update the global state.
 /// Returns Ok(Some(SceneCommand::SwitchScene)) on success, or an error string on failure.
 #[allow(dead_code)]
+#[cfg(feature = "editor")]
 pub fn open_project(
     scene_command: &mut SceneCommand,
     toast: &mut Toasts,
@@ -79,6 +90,8 @@ pub fn open_project(
 
 /// Start creating a new project in a background thread.
 /// Returns a Receiver for progress updates.
+/// 
+#[cfg(feature = "editor")]
 pub fn start_project_creation(
     project_name: String,
     project_path: Option<PathBuf>,
@@ -159,6 +172,7 @@ pub fn start_project_creation(
     Some(rx)
 }
 
+#[cfg(feature = "editor")]
 pub fn show_new_project_window<F>(
     ctx: &Context,
     show_new_project: &mut bool,

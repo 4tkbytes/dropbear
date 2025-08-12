@@ -11,34 +11,89 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
-anyhow.workspace = true
-app_dirs2.workspace = true
-chrono.workspace = true
-dropbear-engine.workspace = true
-egui-toast-fork.workspace = true
-egui.workspace = true
-egui_dnd.workspace = true
-egui_dock-fork.workspace = true
-egui_extras.workspace = true
-gilrs.workspace = true
-git2.workspace = true
-glam.workspace = true
-hecs.workspace = true
-log.workspace = true
-log-once.workspace = true
-model_to_image.workspace = true
-once_cell.workspace = true
-open.workspace = true
-parking_lot.workspace = true
-rfd.workspace = true
-rhai.workspace = true
-ron.workspace = true
-serde.workspace = true
-tokio.workspace = true
-transform-gizmo-egui.workspace = true
-wgpu.workspace = true
-winit.workspace = true
-clap.workspace = true
+anyhow = { workspace = true, optional = true }
+app_dirs2 = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+dropbear-engine = { workspace = true, optional = true }
+egui-toast-fork = { workspace = true, optional = true }
+egui = { workspace = true, optional = true }
+egui_dnd = { workspace = true, optional = true }
+egui_dock-fork = { workspace = true, optional = true }
+egui_extras = { workspace = true, optional = true }
+gilrs = { workspace = true, optional = true }
+git2 = { workspace = true, optional = true }
+glam = { workspace = true, optional = true }
+hecs = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+log-once = { workspace = true, optional = true }
+model_to_image = { workspace = true, optional = true }
+once_cell = { workspace = true, optional = true }
+open = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+rfd = { workspace = true, optional = true }
+rhai = { workspace = true, optional = true }
+ron = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+transform-gizmo-egui = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[features]
+editor = [
+    "anyhow",
+    "app_dirs2",
+    "bincode",
+    "chrono",
+    "dropbear-engine",
+    "egui-toast-fork",
+    "egui",
+    "egui_dnd",
+    "egui_dock-fork",
+    "egui_extras",
+    "gilrs",
+    "git2",
+    "glam",
+    "hecs",
+    "log",
+    "log-once",
+    "model_to_image",
+    "once_cell",
+    "open",
+    "parking_lot",
+    "rfd",
+    "rhai",
+    "ron",
+    "serde",
+    "tokio",
+    "transform-gizmo-egui",
+    "wgpu",
+    "winit",
+    "clap"
+]
+default = ["editor"]
+
+data-only = [
+    "serde",
+    "bincode",
+    "anyhow",
+    "tokio",
+    "glam",
+    "log",
+    "dropbear-engine",
+    "rhai",
+    "winit",
+    "hecs",
+    "ron",
+    "git2",
+    "log-once",
+    "once_cell",
+    "egui",
+    "chrono",
+    "parking_lot",
+]
 
 [build-dependencies]
 anyhow = "1.0"

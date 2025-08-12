@@ -1,25 +1,14 @@
-mod editor;
-mod menu;
-
-pub(crate) mod build;
-pub(crate) mod camera;
-pub(crate) mod logging;
-pub(crate) mod scripting;
-pub(crate) mod states;
-pub(crate) mod utils;
-
-use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
-
+#[cfg(feature = "editor")]
+use std::{cell::RefCell, rc::Rc, fs, path::PathBuf};
+#[cfg(feature = "editor")]
 use clap::{Arg, Command};
+
+#[cfg(feature = "editor")]
 use dropbear_engine::{WindowConfiguration, scene};
 
-pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
-    name: "Eucalyptus",
-    author: "4tkbytes",
-};
-
 #[tokio::main]
-async fn main() {
+#[cfg(feature = "editor")]
+async fn main() -> anyhow::Result<()> {
     let matches = Command::new("eucalyptus")
         .about("A visual game editor")
         .version("1.0.0")
@@ -45,6 +34,15 @@ async fn main() {
                         .required(false),
                 ),
         )
+        .subcommand(Command::new("read")
+            .about("Reads and displays the contents of a .eupak file for debugging")
+            .arg(
+                    Arg::new("eupak_file")
+                        .help("Path to the .eupak file")
+                        .value_name("RESOURCE_FILE")
+                        .required(false),
+                ),
+        )
         .subcommand(Command::new("health").about("Check the health of the eucalyptus installation"))
         .get_matches();
 
@@ -61,7 +59,7 @@ async fn main() {
                 },
             };
 
-            crate::build::build(project_path, sub_matches);
+            eucalyptus::build::build(project_path, sub_matches)?;
         }
         Some(("package", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {
@@ -75,10 +73,24 @@ async fn main() {
                 },
             };
 
-            crate::build::package(project_path, sub_matches);
+            eucalyptus::build::package(project_path, sub_matches);
         }
         Some(("health", _)) => {
-            crate::build::health();
+            eucalyptus::build::health();
+        }
+        Some(("read", sub_matches)) => {
+            let project_path = match sub_matches.get_one::<String>("eupak_file") {
+                Some(path) => PathBuf::from(path),
+                None => match find_eucp_file() {
+                    Ok(path) => path,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+            };
+
+            eucalyptus::build::read_from_eupak(project_path)?;
         }
         None => {
             let config = WindowConfiguration {
@@ -88,8 +100,8 @@ async fn main() {
             };
 
             let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
-                let main_menu = Rc::new(RefCell::new(menu::MainMenu::new()));
-                let editor = Rc::new(RefCell::new(editor::Editor::new()));
+                let main_menu = Rc::new(RefCell::new(eucalyptus::menu::MainMenu::new()));
+                let editor = Rc::new(RefCell::new(eucalyptus::editor::Editor::new()));
 
                 scene::add_scene_with_input(
                     &mut scene_manager,
@@ -112,8 +124,16 @@ async fn main() {
         }
         _ => unreachable!(),
     }
+    Ok(())
 }
 
+#[cfg(not(feature = "editor"))]
+fn main() {
+    panic!("You have not enabled the \"editor\" feature, therefore cannot use the eucalyptus editor. 
+Ether import as a lib to use its structs and enums or enable the editor feature");
+}
+
+#[cfg(feature = "editor")]
 fn find_eucp_file() -> Result<PathBuf, String> {
     let current_dir = std::env::current_dir().map_err(|_| "Failed to get current directory")?;
 

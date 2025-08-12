@@ -18,14 +18,19 @@ use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
     graphics::Graphics,
 };
+
+#[cfg(feature = "editor")]
 use egui_dock_fork::DockState;
+
 use hecs;
 use log;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
-use crate::{camera::CameraType, editor::EditorTab};
+use crate::camera::CameraType;
+#[cfg(feature = "editor")]
+use crate::editor::EditorTab;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -42,6 +47,7 @@ pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = Lazy::new(|| RwLock::new(Vec
 /// # Location
 /// This file is {project_name}.eucp and is located at {project_dir}/
 #[derive(Debug, Deserialize, Serialize, Default)]
+#[cfg(feature = "editor")]
 pub struct ProjectConfig {
     pub project_name: String,
     pub project_path: PathBuf,
@@ -51,21 +57,47 @@ pub struct ProjectConfig {
     pub dock_layout: Option<DockState<EditorTab>>,
 }
 
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[cfg(not(feature = "editor"))]
+pub struct ProjectConfig {
+    pub project_name: String,
+    pub project_path: PathBuf,
+    pub date_created: String,
+    pub date_last_accessed: String,
+    // #[serde(default)]
+    // pub dock_layout: Option<DockState<EditorTab>>,
+}
+
 impl ProjectConfig {
     /// Creates a new instance of the ProjectConfig. This function is typically used when creating
     /// a new project, with it creating new defaults for everything.
     pub fn new(project_name: String, project_path: &PathBuf) -> Self {
         let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         let date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        let mut result = Self {
-            project_name,
-            project_path: project_path.to_path_buf(),
-            date_created,
-            date_last_accessed,
-            dock_layout: None,
-        };
-        let _ = result.load_config_to_memory(); // TODO: Deal with later...
-        result
+        #[cfg(not(feature = "editor"))]
+        {
+            let mut result = Self {
+                project_name,
+                project_path: project_path.to_path_buf(),
+                date_created,
+                date_last_accessed,
+            };
+            let _ = result.load_config_to_memory(); // TODO: Deal with later...
+            result
+        }
+
+        #[cfg(feature = "editor")]
+        {
+            let mut result = Self {
+                project_name,
+                project_path: project_path.to_path_buf(),
+                date_created,
+                date_last_accessed,
+                dock_layout: None,
+            };
+            let _ = result.load_config_to_memory(); // TODO: Deal with later...
+            result
+        }
     }
 
     /// This function writes the [`ProjectConfig`] struct (and other PathBufs) to a file of the choice
@@ -240,20 +272,20 @@ pub(crate) fn path_contains_folder(path: &PathBuf, folder: &str) -> bool {
     path.components().any(|comp| comp.as_os_str() == folder)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Node {
     File(File),
     Folder(Folder),
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct File {
     pub name: String,
     pub path: PathBuf,
     pub resource_type: Option<ResourceType>,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Folder {
     pub name: String,
     pub path: PathBuf,
@@ -337,7 +369,7 @@ impl ResourceConfig {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SourceConfig {
     /// The path to the resource folder.
     pub path: PathBuf,
