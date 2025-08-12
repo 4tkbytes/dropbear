@@ -11,6 +11,7 @@ pub struct InputState {
     pub mouse_button: HashSet<MouseButton>,    
     pub pressed_keys: HashSet<KeyCode>,
     pub mouse_delta: Option<(f64, f64)>,
+    pub is_cursor_locked: bool,
 }
 
 impl Default for InputState {
@@ -28,8 +29,16 @@ impl InputState {
             last_key_press_times: HashMap::new(),
             double_press_threshold: Duration::from_millis(300),
             mouse_delta: None,
+            is_cursor_locked: false,
         }
     }
+
+    /// Locks the cursor. If its true, it locks the cursor, hiding the mouse and setting the value
+    /// or is_cursor_locked true, which can be used for mouse movement in the scene. 
+    pub fn lock_cursor(&mut self, toggle: bool) {
+        self.is_cursor_locked = toggle;
+    }
+
     pub fn register_input_modules(engine: &mut Engine) {
         engine.register_type_with_name::<InputState>("InputState");
         engine.register_type_with_name::<Key>("Key");
@@ -40,7 +49,8 @@ impl InputState {
             .register_get("mouse_y", |s: &mut InputState| s.mouse_pos.1)
             .register_get("has_mouse_delta", |s: &mut InputState| s.mouse_delta.is_some())
             .register_fn("mouse_dx", |s: &mut InputState| s.mouse_delta.map(|d| d.0).unwrap_or(0.0))
-            .register_fn("mouse_dy", |s: &mut InputState| s.mouse_delta.map(|d| d.1).unwrap_or(0.0));
+            .register_fn("mouse_dy", |s: &mut InputState| s.mouse_delta.map(|d| d.1).unwrap_or(0.0))
+            .register_fn("lock_cursor", |s: &mut InputState, value: bool| s.is_cursor_locked = value);
 
         let mut kmod = Module::new();
 

@@ -697,7 +697,6 @@ impl SceneConfig {
         world: &mut hecs::World,
         graphics: &Graphics,
     ) -> anyhow::Result<()> {
-        // Clear the world
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
