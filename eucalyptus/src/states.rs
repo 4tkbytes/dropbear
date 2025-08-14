@@ -543,7 +543,6 @@ pub struct SceneConfig {
     pub scene_name: String,
     pub path: PathBuf,
     pub entities: Vec<SceneEntity>,
-    // pub camera: (SceneCameraConfig, CameraType),
     pub camera: HashMap<CameraType, SceneCameraConfig>,
     // todo later
     // pub settings: SceneSettings,
@@ -576,6 +575,12 @@ impl Default for SceneCameraConfig {
             follow_target_entity_label: None,
             follow_offset: None,
         }
+    }
+}
+
+impl SceneCameraConfig {
+    pub fn into_camera(&self, graphics: &mut Graphics) -> Camera {
+        Camera::new(graphics, self.position.into(), self.target.into(), self.up.into(), self.aspect.into(), self.fov.into(), self.near.into(), self.far.into(), 5.0, 0.0125)
     }
 }
 

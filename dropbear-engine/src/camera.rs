@@ -14,7 +14,7 @@ pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.5, 1.0],
 ];
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Camera {
     pub eye: DVec3,
     pub target: DVec3,

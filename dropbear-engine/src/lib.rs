@@ -338,7 +338,7 @@ impl App {
             unsafe { std::env::set_var("RUST_LOG", log_config) };
         }
 
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
 

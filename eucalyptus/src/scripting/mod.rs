@@ -333,6 +333,17 @@ impl ScriptManager {
         Ok(())
     }
 
+    pub fn load_script_from_source(&mut self, script_name: &String, script_content: &String) -> anyhow::Result<String> {
+        let ast = self.engine.compile(&script_content).map_err(|e| {
+            log::error!("Compiling AST for script [{}] returned an error: {}", script_name, e);
+            e
+        })?;
+        self.compiled_scripts.insert(script_name.clone(), ast);
+
+        log::info!("Loaded script: {}", script_name);
+        Ok(script_name.to_string())
+    }
+
     pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
         let script_content = fs::read_to_string(script_path)?;
         let script_name = script_path
