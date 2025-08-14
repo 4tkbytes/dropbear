@@ -100,7 +100,7 @@ pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
     LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
 
 #[derive(Default)]
-pub(crate) struct INeedABetterNameForThisStruct {
+pub struct INeedABetterNameForThisStruct {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
     context_menu_tab: Option<EditorTab>,

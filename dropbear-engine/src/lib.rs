@@ -36,6 +36,10 @@ use crate::{
     graphics::{Graphics, Texture},
 };
 
+pub use winit;
+pub use wgpu;
+pub use gilrs;
+
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
     pub surface: Surface<'static>,
@@ -334,7 +338,7 @@ impl App {
             unsafe { std::env::set_var("RUST_LOG", log_config) };
         }
 
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
 
@@ -371,7 +375,7 @@ macro_rules! run_app {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut window_attributes = Window::default_attributes().with_title(self.config.title);
+        let mut window_attributes = Window::default_attributes().with_title(self.config.title.clone());
 
         if self.config.windowed_mode.is_windowed() {
             if let Some((width, height)) = self.config.windowed_mode.windowed_size() {
@@ -515,7 +519,7 @@ impl ApplicationHandler for App {
 #[derive(Debug, Clone)]
 pub struct WindowConfiguration {
     pub windowed_mode: WindowedModes,
-    pub title: &'static str,
+    pub title: String,
     /// This reads from a config file.
     /// This will read from a client config file under {exe}/client.props, and on game exit will save the properties to the file.
     ///

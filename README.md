@@ -7,7 +7,7 @@ If you might have not realised, all the crates/projects names are after Australi
 ## Related projects
 
 - [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) is the visual editor used to create games visually, taking inspiration from Unity and other engines.
-- [redback](https://github.com/4tkbytes/dropbear/tree/main/redback) is the build system used by [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) to bind, build and ship games made with the engine.
+- [redback](https://github.com/4tkbytes/dropbear/tree/main/redback) is the runtime used to load .eupak files and run the games loaded on them.
 
 ## Build
 

@@ -228,8 +228,9 @@ impl Keyboard for Editor {
 
 impl Mouse for Editor {
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if self.is_viewport_focused
-            && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
+        if (self.is_viewport_focused
+            && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove))
+            || (matches!(self.editor_state, EditorState::Playing) && !self.input_state.is_cursor_locked)
         {
             if let Some(window) = &self.window {
                 let size = window.inner_size();

@@ -5,7 +5,7 @@ use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use winit::keyboard::KeyCode;
 
-pub trait CameraController {
+pub trait CameraController: std::fmt::Debug {
     fn update(&mut self, camera: &mut Camera, dt: f32);
     fn handle_keyboard_input(&mut self, camera: &mut Camera, pressed_keys: &HashSet<KeyCode>);
     fn handle_mouse_input(&mut self, camera: &mut Camera, mouse_delta: Option<(f64, f64)>);
@@ -14,6 +14,7 @@ pub trait CameraController {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
+#[derive(Debug)]
 pub struct DebugCameraController {
     #[allow(dead_code)]
     pub speed: f64,
@@ -68,6 +69,7 @@ impl CameraController for DebugCameraController {
 }
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct PlayerCameraController {
     pub follow_target: Option<hecs::Entity>,
     pub offset: DVec3,
@@ -150,6 +152,7 @@ pub enum CameraType {
     Player,
 }
 
+#[derive(Debug)]
 pub struct CameraManager {
     cameras: HashMap<CameraType, Camera>,
     controllers: HashMap<CameraType, Box<dyn CameraController>>,

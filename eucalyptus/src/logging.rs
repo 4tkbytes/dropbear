@@ -5,11 +5,18 @@
 //! - Console
 //! - File (to be implemented)
 
+#[cfg(feature = "editor")]
 use egui::Context;
+
+#[cfg(feature = "editor")]
 use egui_toast_fork::Toasts;
+
+#[cfg(feature = "editor")]
 use once_cell::sync::Lazy;
+#[cfg(feature = "editor")]
 use parking_lot::Mutex;
 
+#[cfg(feature = "editor")]
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
         Toasts::new()
@@ -21,6 +28,7 @@ pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
 /// Renders the toasts. Requires an egui context.
 ///
 /// Useful when paired with a function that contains [`crate`]
+#[cfg(feature = "editor")]
 pub(crate) fn render(context: &Context) {
     let mut toasts = GLOBAL_TOASTS.lock();
     toasts.show(context);
@@ -38,6 +46,7 @@ macro_rules! fatal {
         let _msg = format!($($arg)*);
         log::error!("{}", _msg);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -66,6 +75,7 @@ macro_rules! success {
         let _msg = format!($($arg)*);
         log::debug!("{}", _msg);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -95,6 +105,7 @@ macro_rules! warn {
         let _msg = format!($($arg)*);
         log::warn!("{}", _msg);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -123,6 +134,7 @@ macro_rules! info {
         let _msg = format!($($arg)*);
         log::debug!("{}", _msg);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -152,6 +164,7 @@ macro_rules! info_without_console {
     ($($arg:tt)*) => {
         let _msg = format!($($arg)*);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -181,6 +194,7 @@ macro_rules! success_without_console {
     ($($arg:tt)*) => {
         let _msg = format!($($arg)*);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
@@ -210,6 +224,7 @@ macro_rules! warn_without_console {
     ($($arg:tt)*) => {
         let _msg = format!($($arg)*);
 
+        #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
             use crate::logging::GLOBAL_TOASTS;
