@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .arg_required_else_help(false)
         .subcommand(
             Command::new("build")
-                .about("Build a eucalyptus project")
+                .about("Build a eucalyptus project, but only the .eupak file and its resources")
                 .arg(
                     Arg::new("project")
                         .help("Path to the .eucp project file")
@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .subcommand(
             Command::new("package")
-                .about("Package a eucalyptus project")
+                .about("Package a eucalyptus project, which compiles the runtime and the resource .eupak file")
                 .arg(
                     Arg::new("project")
                         .help("Path to the .eucp project file")
@@ -73,10 +73,10 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
 
-            eucalyptus::build::package(project_path, sub_matches);
+            eucalyptus::build::package(project_path, sub_matches)?;
         }
         Some(("health", _)) => {
-            eucalyptus::build::health();
+            eucalyptus::build::health()?;
         }
         Some(("read", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("eupak_file") {

@@ -11,7 +11,7 @@ members = ["dropbear-engine", "eucalyptus", "redback-runtime"]
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
 app_dirs2 = "2.5"
-bincode = {version = "2.0", features = ["serde"] }
+bincode = { version = "2.0", features = ["serde"] }
 bytemuck = { version = "1.23", features = ["derive"] }
 chrono = "0.4"
 clap = "4.5"
@@ -47,6 +47,8 @@ tokio = { version = "1", features = ["full"] }
 transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
 wgpu = "25"
 winit = { version = "0.30", features = [] }
+zip = "0.6"
+walkdir = "2.3"
 
 [workspace.dependencies.image]
 version = "0.25"

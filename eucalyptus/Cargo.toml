@@ -40,6 +40,8 @@ transform-gizmo-egui = { workspace = true, optional = true }
 wgpu = { workspace = true, optional = true }
 winit = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+zip = { workspace = true, optional = true }
 
 [features]
 editor = [
@@ -71,7 +73,9 @@ editor = [
     "transform-gizmo-egui",
     "wgpu",
     "winit",
-    "clap"
+    "clap",
+    "walkdir",
+    "zip"
 ]
 default = ["editor"]
 
@@ -93,6 +97,8 @@ data-only = [
     "egui",
     "chrono",
     "parking_lot",
+    "walkdir",
+    "zip"
 ]
 
 [build-dependencies]

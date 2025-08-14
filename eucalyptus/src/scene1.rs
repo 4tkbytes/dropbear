@@ -48,7 +48,6 @@ impl TestingScene1 {
     }
 }
 
-#[async_trait]
 impl Scene for TestingScene1 {
     fn load(&mut self, graphics: &mut Graphics) {
         let shader = Shader::new(
@@ -121,6 +120,22 @@ impl Scene for TestingScene1 {
             a: 1.0,
         };
 
+        // Note: new versions use egui rendering for viewport instead
+        // of using the full window
+        let texture_id = graphics.state.texture_id.clone();
+        let (display_width, display_height) = graphics.screen_size;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new())
+            .show(graphics.get_egui_context(), |ui| {
+                let rect = ui.max_rect();
+                ui.put(
+                    rect,
+                    egui::Image::new((texture_id, [display_width, display_height].into()))
+                        .fit_to_exact_size([display_width, display_height].into()),
+                );
+            });
+
+        // render everything here
         if let Some(pipeline) = &self.render_pipeline {
             {
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
