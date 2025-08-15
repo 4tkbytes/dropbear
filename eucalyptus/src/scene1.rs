@@ -113,10 +113,11 @@ impl Scene for TestingScene1 {
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
+        // cornflower blue
         let color = Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
+            r: 100.0 / 255.0,
+            g: 149.0 / 255.0,
+            b: 237.0 / 255.0,
             a: 1.0,
         };
 

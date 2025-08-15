@@ -328,7 +328,6 @@ impl ScriptManager {
             }
         } else {
             log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
-            println!("{:#?}", self.compiled_scripts);
         }
         Ok(())
     }

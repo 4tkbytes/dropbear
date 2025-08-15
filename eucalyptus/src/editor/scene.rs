@@ -477,12 +477,14 @@ impl Scene for Editor {
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
+        // cornflower blue
         let color = Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
+            r: 100.0 / 255.0,
+            g: 149.0 / 255.0,
+            b: 237.0 / 255.0,
             a: 1.0,
         };
+
         self.color = color.clone();
         self.size = graphics.state.viewport_texture.size.clone();
         self.texture_id = Some(graphics.state.texture_id.clone());
