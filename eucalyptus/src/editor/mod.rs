@@ -28,12 +28,9 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{
-    camera::{
+    build::build, camera::{
         CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
-    },
-    scripting::{input::InputState, ScriptAction, ScriptManager},
-    states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES},
-    utils::ViewportMode,
+    }, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
 };
 
 pub struct Editor {
@@ -432,6 +429,22 @@ impl Editor {
                             self.signal = Signal::Play;
                         }
                     }
+                    ui.menu_button("Export", |ui| {
+                        // todo: create a window for better build menu
+                        if ui.button("Build").clicked() {
+                            {
+                                if let Ok(proj) = PROJECT.read() {
+                                    match build(proj.project_path.clone()) {
+                                        Ok(thingy) => crate::success!("Project output at {}", thingy.display()),
+                                        Err(e) => {
+                                            crate::fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);
+                                        },
+                                    }
+                                }
+                            }
+                        }
+                        ui.label("Package"); // todo: create a window for label
+                    });
                     ui.separator();
                     if ui.button("Quit").clicked() {
                         match self.save_project_config() {

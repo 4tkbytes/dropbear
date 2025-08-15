@@ -24,6 +24,7 @@ Just a list of stuff i need to work on/a list of items i need to implement
 - [ ] attaching texture onto model
 - [ ] user defined keybinds
 - [ ] console tab
+- [ ] android build (in progress, unfinished)
 
 ## fixing
 

@@ -20,7 +20,7 @@ use std::{
     u32,
 };
 use wgpu::{
-    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, TextureFormat,
+    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat
 };
 use winit::{
     application::ApplicationHandler,
@@ -90,7 +90,7 @@ impl State {
 
         let info = adapter.get_info();
         println!(
-            "==================== BACKEND INFO ====================
+"==================== BACKEND INFO ====================
 Backend: {}
 
 Hardware:
@@ -100,7 +100,7 @@ Hardware:
     Type: {:?}
     Driver: {}
     Driver Info: {}
-
+=======================================================
 ",
             info.backend.to_string(),
             info.name,
@@ -128,6 +128,8 @@ Hardware:
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        surface.configure(&device, &config);
 
         let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
         let viewport_texture =
@@ -169,7 +171,7 @@ Hardware:
             device,
             queue,
             config,
-            is_surface_configured: false,
+            is_surface_configured: true,
             depth_texture,
             texture_bind_layout: texture_bind_group_layout,
             window,
@@ -213,12 +215,33 @@ Hardware:
             return Ok(());
         }
 
+        let output = match self.surface.get_current_texture() {
+            Ok(val) => val,
+            Err(e) => {
+                match e {
+                    SurfaceError::Lost | SurfaceError::Outdated => {
+                        self.surface.configure(&self.device, &self.config);
+                        return Ok(());
+                    }
+                    SurfaceError::Timeout | SurfaceError::OutOfMemory => {
+                        return Err(anyhow::anyhow!("Surface error: {:?}", e));
+                    }
+                    SurfaceError::Other => {
+                        log::warn!("Encountered SurfaceError::Other: {:?}. Attempting to reconfigure and skip this frame.", e);
+                        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            self.surface.configure(&self.device, &self.config);
+                        }));
+                        return Ok(());
+                    },
+                }
+            }
+        };
+
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.config.width, self.config.height],
             pixels_per_point: self.window.scale_factor() as f32,
         };
 
-        let output = self.surface.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -333,11 +356,12 @@ impl App {
     {
         if cfg!(debug_assertions) {
             log::info!("Running in dev mode");
-            // let package_name = std::env::var("CARGO_BIN_NAME").unwrap();
-            let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_name);
+            let app_target = app_name.replace('-', "_");
+            let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
             unsafe { std::env::set_var("RUST_LOG", log_config) };
         }
 
+        #[cfg(not(target_os = "android"))]
         let _ = env_logger::try_init();
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
@@ -392,6 +416,11 @@ impl ApplicationHandler for App {
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
+
+        if let Some(state) = &mut self.state {
+            let size = state.window.inner_size();
+            state.resize(size.width, size.height);
+        }
 
         self.next_frame_time = Some(Instant::now());
     }

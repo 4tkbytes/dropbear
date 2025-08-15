@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
 
-            eucalyptus::build::build(project_path, sub_matches)?;
+            eucalyptus::build::build(project_path)?;
         }
         Some(("package", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 
 use clap::ArgMatches;
+use zip::write::SimpleFileOptions;
 
 use crate::states::{ProjectConfig, RuntimeData, SCENES, SOURCE};
 
@@ -53,14 +54,17 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     }
 
     println!("Building {} for release", project_name);
-    let cargo_build = Command::new("cargo")
+    let mut cargo_build = Command::new("cargo")
         .args(&["build", "--release"])
         .current_dir(&runtime_dir)
-        .output()?;
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()?;
 
-    if !cargo_build.status.success() {
-        let stderr = String::from_utf8_lossy(&cargo_build.stderr);
-        return Err(anyhow::anyhow!("Failed to build {}:\n{}", project_name, stderr));
+    let exit_status = cargo_build.wait()?;
+
+    if !exit_status.success() {
+        return Err(anyhow::anyhow!("Failed to build {}", project_name));
     }
     println!("{} built successfully!", project_name);
 
@@ -77,7 +81,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     }
 
     println!("Building project data (.eupak file)");
-    build(project_path.clone(), _sub_matches)?;
+    build(project_path.clone())?;
 
     let output_dir = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("build").join("package");
     std::fs::create_dir_all(&output_dir)?;
@@ -260,7 +264,8 @@ fn create_zip_package(source_dir: &PathBuf, zip_path: &PathBuf) -> anyhow::Resul
             let relative_path = path.strip_prefix(source_dir)?;
             let name = relative_path.to_string_lossy();
             
-            zip.start_file(name, zip::write::FileOptions::default())?;
+            let options: SimpleFileOptions = Default::default();
+            zip.start_file(name, options.into())?;
             let mut file = std::fs::File::open(path)?;
             std::io::copy(&mut file, &mut zip)?;
         }
@@ -278,7 +283,10 @@ pub fn read_from_eupak(eupak_path: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn build(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Result<()> {
+pub fn build(
+        project_path: PathBuf,
+        // _sub_matches: &ArgMatches
+    ) -> anyhow::Result<PathBuf> {
     if !project_path.exists() {
         return Err(anyhow::anyhow!("Unable to locate project config file"));
     }
@@ -330,7 +338,7 @@ pub fn build(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Result
     std::fs::write(&runtime_file, serialized)?;
 
     println!("Build completed successfully. Output at {:?}", runtime_file.display());
-    Ok(())
+    Ok(runtime_file)
 }
 
 pub fn health() -> anyhow::Result<()> {
