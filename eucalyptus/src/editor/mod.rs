@@ -12,10 +12,7 @@ use std::{
 };
 
 use dropbear_engine::{
-    camera::Camera,
-    entity::{AdoptedEntity, Transform},
-    graphics::Graphics,
-    scene::SceneCommand,
+    camera::Camera, entity::{AdoptedEntity, Transform}, graphics::Graphics, lighting::LightManager, scene::SceneCommand
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
@@ -40,6 +37,7 @@ pub struct Editor {
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
     render_pipeline: Option<RenderPipeline>,
+    light_manager: LightManager,
     color: Color,
 
     camera_manager: CameraManager,
@@ -231,6 +229,7 @@ impl Editor {
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,
             input_state: InputState::new(),
+            light_manager: LightManager::new(),
             // mouse_pos: Default::default(),
             // mouse_button: Default::default(),
             // pressed_keys: HashSet::new(),

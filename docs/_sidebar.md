@@ -1,6 +1,4 @@
-- Getting Started
-  - [Guide](guide.md)
-- API Reference
+- **API Reference**
   - Math
     - [abs](math/abs.md)
     - [acos](math/acos.md)
@@ -38,5 +36,5 @@
     - [Keyboard](input/keyboard.md)
     - [Mouse](input/mouse.md)
     - [Controller](input/controller.md)
-- Development
+- **Development**
   - [TODO](todo.md)

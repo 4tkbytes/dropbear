@@ -1,3 +1,4 @@
+pub mod lighting;
 pub mod buffer;
 pub mod camera;
 pub mod egui_renderer;

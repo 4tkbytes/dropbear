@@ -55,12 +55,13 @@ impl<'a> Graphics<'a> {
         &mut self,
         shader: &Shader,
         bind_group_layouts: Vec<&BindGroupLayout>,
+        label: Option<&str>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
             self.state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Descriptor"),
+                    label: Some(label.unwrap_or("Render Pipeline Descriptor")),
                     bind_group_layouts: bind_group_layouts.as_slice(),
                     push_constant_ranges: &[],
                 });
@@ -69,7 +70,7 @@ impl<'a> Graphics<'a> {
             self.state
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Render Pipeline"),
+                    label: Some(label.unwrap_or("Render Pipeline")),
                     layout: Some(&render_pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &shader.module,

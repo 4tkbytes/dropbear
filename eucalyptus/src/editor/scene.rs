@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use dropbear_engine::{
-    entity::{AdoptedEntity, Transform},
-    graphics::{Graphics, Shader},
-    scene::{Scene, SceneCommand},
+    entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightType}, scene::{Scene, SceneCommand}
 };
 use log;
 use parking_lot::Mutex;
@@ -69,14 +67,27 @@ impl Scene for Editor {
 
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
-        let model_layout = graphics.create_model_uniform_bind_group_layout();
+        let main_light = Light::new(graphics, DVec3::Y, DVec3 { x: 1.0, y: 1.0, z: 1.0 }, LightType::Diffuse, Some("Light"));
+        self.light_manager.add("Main Light", main_light);
 
-        if let Some(camera) = self.camera_manager.get_active() {
+        if let (Some(camera), Some(light)) = (self.camera_manager.get_active(), self.light_manager.get("Main Light")) {
             let pipeline = graphics.create_render_pipline(
                 &shader,
-                vec![texture_bind_group, camera.layout(), &model_layout],
+                vec![
+                    texture_bind_group, 
+                    camera.layout(),
+                    light.layout(),
+                ],
+                None,
             );
             self.render_pipeline = Some(pipeline);
+            self.light_manager.create_render_pipeline(
+                graphics, 
+                "Main Light", 
+                include_str!("../light.wgsl"), 
+                camera, 
+                Some("Light Pipeline")
+            );
         }
 
         self.window = Some(graphics.state.window.clone());
@@ -496,10 +507,12 @@ impl Scene for Editor {
             if let Some(camera) = self.camera_manager.get_active() {
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
                 let mut render_pass = graphics.clear_colour(color);
-                render_pass.set_pipeline(pipeline);
+
+                self.light_manager.update_all(graphics);
+                self.light_manager.render(&mut render_pass, camera);
 
                 for (_, (entity, _)) in query.iter() {
-                    entity.render(&mut render_pass, camera);
+                    entity.render(&mut render_pass, pipeline, camera, &self.light_manager);
                 }
             }
         }

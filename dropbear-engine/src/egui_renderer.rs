@@ -1,3 +1,6 @@
+// I took this from someone but I do not know exactly who and cannot seem to find it. 
+// If you find it, lmk so I can put the necessary license
+
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{Renderer, ScreenDescriptor, wgpu};
