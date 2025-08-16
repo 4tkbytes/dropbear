@@ -129,8 +129,8 @@ async fn main() -> anyhow::Result<()> {
 
 #[cfg(not(feature = "editor"))]
 fn main() {
-    panic!("You have not enabled the \"editor\" feature, therefore cannot use the eucalyptus editor. 
-Ether import as a lib to use its structs and enums or enable the editor feature");
+    compile_error!("\n\nYou have not enabled the \"editor\" feature, therefore cannot use the eucalyptus editor. 
+Either import as a lib to use its structs and enums or enable the editor feature or enable the \"editor\" feature or just the default features\n\n");
 }
 
 #[cfg(feature = "editor")]

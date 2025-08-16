@@ -434,7 +434,7 @@ impl Editor {
                         if ui.button("Build").clicked() {
                             {
                                 if let Ok(proj) = PROJECT.read() {
-                                    match build(proj.project_path.clone()) {
+                                    match build(proj.project_path.join(format!("{}.eucp", proj.project_name.clone())).clone()) {
                                         Ok(thingy) => crate::success!("Project output at {}", thingy.display()),
                                         Err(e) => {
                                             crate::fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);

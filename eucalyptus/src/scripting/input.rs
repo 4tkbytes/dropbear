@@ -47,9 +47,8 @@ impl InputState {
             .register_fn("is_pressed", |s: &mut InputState, k: Key| s.pressed_keys.contains(&k.0))
             .register_get("mouse_x", |s: &mut InputState| s.mouse_pos.0)
             .register_get("mouse_y", |s: &mut InputState| s.mouse_pos.1)
-            .register_get("has_mouse_delta", |s: &mut InputState| s.mouse_delta.is_some())
-            .register_fn("mouse_dx", |s: &mut InputState| s.mouse_delta.map(|d| d.0).unwrap_or(0.0))
-            .register_fn("mouse_dy", |s: &mut InputState| s.mouse_delta.map(|d| d.1).unwrap_or(0.0))
+            .register_get("mouse_dx", |s: &mut InputState| s.mouse_delta.map(|d| d.0).unwrap_or(0.0))
+            .register_get("mouse_dy", |s: &mut InputState| s.mouse_delta.map(|d| d.1).unwrap_or(0.0))
             .register_fn("lock_cursor", |s: &mut InputState, value: bool| s.is_cursor_locked = value);
 
         let mut kmod = Module::new();

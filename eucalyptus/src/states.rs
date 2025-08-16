@@ -781,11 +781,36 @@ impl SceneConfig {
                 &player_config.follow_target_entity_label,
                 &player_config.follow_offset,
             ) {
+                for (entity_id, adopted_entity) in world.query::<&AdoptedEntity>().iter() {
+                    log::debug!(
+                        "World entity {:?} -> label='{}' path='{}'",
+                        entity_id,
+                        adopted_entity.label(),
+                        adopted_entity.model().path.display()
+                    );
+                }
+
                 let target_entity = world
                     .query::<&AdoptedEntity>()
                     .iter()
-                    .find(|(_, adopted_entity)| adopted_entity.label() == target_label)
-                    .map(|(entity_id, _)| entity_id);
+                    .find_map(|(entity_id, adopted_entity)| {
+                        if adopted_entity.label() == target_label {
+                            Some(entity_id)
+                        } else {
+                            let stem_match = adopted_entity
+                                .model()
+                                .path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s == target_label)
+                                .unwrap_or(false);
+                            if stem_match {
+                                Some(entity_id)
+                            } else {
+                                None
+                            }
+                        }
+                    });
 
                 if let Some(entity_id) = target_entity {
                     let offset = glam::DVec3::from_array(*offset_array);

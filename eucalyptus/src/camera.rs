@@ -226,16 +226,40 @@ impl CameraManager {
                     .downcast_mut::<PlayerCameraController>()
                 {
                     if let Some(target_entity) = controller.follow_target {
-                        if let Ok(transform) = world.get::<&Transform>(target_entity) {
-                            let target_pos = transform.position + controller.offset;
+                        match world.get::<&Transform>(target_entity) {
+                            Ok(transform) => {
+                                let target_pos = transform.position + controller.offset;
 
-                            let look_direction = (player_camera.target - player_camera.eye).normalize();
-                            player_camera.eye = target_pos;
-                            player_camera.target = target_pos + look_direction;
+                                let raw_dir = player_camera.target - player_camera.eye;
+                                let look_direction = if raw_dir.length() > 1e-6 {
+                                    raw_dir.normalize()
+                                } else {
+                                    let fwd = player_camera.forward();
+                                    if fwd.length().is_finite() && fwd.length() > 1e-6 {
+                                        fwd
+                                    } else {
+                                        glam::DVec3::new(0.0, 0.0, 1.0)
+                                    }
+                                };
+
+                                player_camera.eye = target_pos;
+                                player_camera.target = target_pos + look_direction;
+                            }
+                            Err(_) => {
+                                log_once::error_once!("Follow target entity {:?} not present in world", target_entity);
+                            }
                         }
+                    } else {
+                        log_once::error_once!("Unable to follow camera: No follow target exists in controller");
                     }
+                } else {
+                    log_once::error_once!("Unable to follow camera: Failed to downcast mut");
                 }
+            } else {
+                log_once::error_once!("Unable to follow camera: No player controller exists");
             }
+        } else {
+            log_once::error_once!("Unable to follow camera: No camera exists for player");
         }
     }
 

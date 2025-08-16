@@ -9,7 +9,7 @@ use rhai::*;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 
-use crate::states::{EntityNode, ModelProperties, PropertyValue, ScriptComponent, PROJECT, SOURCE};
+use crate::states::{EntityNode, ModelProperties, ScriptComponent, PROJECT, SOURCE};
 
 pub const TEMPLATE_SCRIPT: &'static str = include_str!("../template.rhai");
 
@@ -241,6 +241,20 @@ impl ScriptManager {
         world: &mut World,
         input_state: &input::InputState,
     ) -> anyhow::Result<()> {
+        if let Ok(mut q) = world.query_one::<&AdoptedEntity>(entity_id) {
+                if let Some(adopted) = q.get() {
+                    log_once::debug_once!(
+                    "init_entity_script: '{}' for entity {:?} -> label='{}' path='{}'",
+                    script_name,
+                    entity_id,
+                    adopted.label(),
+                    adopted.model().path.display()
+                );
+            }
+        } else {
+            log_once::debug_once!("init_entity_script: '{}' for entity {:?}", script_name, entity_id);
+        }
+
         if let Some(ast) = self.compiled_scripts.get(script_name) {
             let mut scope = Scope::new();
 
@@ -251,8 +265,8 @@ impl ScriptManager {
             if let Ok(properties) = world.query_one_mut::<&mut ModelProperties>(entity_id) {
                 scope.push("entity", properties.clone());
             } else {
-                let mut default_props = ModelProperties::default();
-                default_props.set_property(String::from("speed"), PropertyValue::Float(1.0));
+                let default_props = ModelProperties::default();
+                // default_props.set_property(String::from("speed"), PropertyValue::Float(1.0));
                 scope.push("entity", default_props);
             }
 

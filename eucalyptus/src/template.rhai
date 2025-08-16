@@ -2,7 +2,7 @@
 // https://github.com/4tkbytes/dropbear/blob/main/docs/README.md
 
 fn init() {
-    print("Script initialized!");
+    print("Script initialised!");
     // Access the entity's transform
     // transform.position.x = 0.0;
 }
