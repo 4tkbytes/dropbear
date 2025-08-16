@@ -1,7 +1,6 @@
 - Getting Started
   - [Guide](guide.md)
 - API Reference
-  - Input
   - Math
     - [abs](math/abs.md)
     - [acos](math/acos.md)
