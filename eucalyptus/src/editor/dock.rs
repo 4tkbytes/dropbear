@@ -96,20 +96,35 @@ pub struct DraggedAsset {
     pub path: PathBuf,
 }
 
-pub static TABS_GLOBAL: LazyLock<Mutex<INeedABetterNameForThisStruct>> =
-    LazyLock::new(|| Mutex::new(INeedABetterNameForThisStruct::default()));
+pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
+    LazyLock::new(|| Mutex::new(StaticallyKept::default()));
 
+
+/// Variables kept statically. 
+/// 
+/// The entire module (including the tab viewer) due to it
+/// being part of an update/render function, therefore this is used to ensure
+/// progress is not lost. 
 #[derive(Default)]
-pub struct INeedABetterNameForThisStruct {
+pub struct StaticallyKept {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
     context_menu_tab: Option<EditorTab>,
     is_focused: bool,
     old_pos: Transform,
     scale_locked: bool,
+
+    old_label_entity: Option<hecs::Entity>,
+    label_original: Option<String>,
+    label_last_edit: Option<Instant>,
+
+    transform_old_entity: Option<hecs::Entity>,
+    transform_original_transform: Option<Transform>,
+
+    transform_in_progress: bool,
 }
 
-impl INeedABetterNameForThisStruct {}
+impl StaticallyKept {}
 
 impl<'a> TabViewer for EditorTabViewer<'a> {
     type Tab = EditorTab;
@@ -711,7 +726,33 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             ui.group(|ui| {
                                 ui.horizontal(|ui| {
                                     ui.label("Name: ");
-                                    ui.text_edit_singleline(&mut model.label);
+
+                                    let resp = ui.text_edit_singleline(&mut model.label);
+
+                                    if resp.changed() {
+                                        if cfg.old_label_entity.is_none() {
+                                            cfg.old_label_entity = Some(entity.clone());
+                                            cfg.label_original = Some(label.clone());
+                                        }
+                                        cfg.label_last_edit = Some(Instant::now());
+                                    }
+
+                                    if resp.lost_focus() {
+                                        if let Some(ent) = cfg.old_label_entity.take() {
+                                            if ent == *entity {
+                                                if let Some(orig) = cfg.label_original.take() {
+                                                    UndoableAction::push_to_undo(
+                                                        &mut self.undo_stack,
+                                                        UndoableAction::Label(ent, orig),
+                                                    );
+                                                    log::debug!("Pushed label change to undo stack (immediate)");
+                                                }
+                                            } else {
+                                                cfg.label_original = None;
+                                            }
+                                        }
+                                        cfg.label_last_edit = None;
+                                    }
                                 })
                             });
 
@@ -723,44 +764,86 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             ui.label("Position:");
                                         });
 
-                                        let mut pos_changed = false;
                                         ui.horizontal(|ui| {
                                             ui.label("X:");
-                                            if ui
-                                                .add(
-                                                    egui::DragValue::new(&mut transform.position.x)
-                                                        .speed(0.1)
-                                                        .fixed_decimals(3),
-                                                )
-                                                .changed()
-                                            {
-                                                pos_changed = true;
+                                            let response = ui.add(
+                                                egui::DragValue::new(&mut transform.position.x)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed X transform change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
                                         ui.horizontal(|ui| {
                                             ui.label("Y:");
-                                            if ui
-                                                .add(
-                                                    egui::DragValue::new(&mut transform.position.y)
-                                                        .speed(0.1)
-                                                        .fixed_decimals(3),
-                                                )
-                                                .changed()
-                                            {
-                                                pos_changed = true;
+                                            let response = ui.add(
+                                                egui::DragValue::new(&mut transform.position.y)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Y transform change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
+                                        
                                         ui.horizontal(|ui| {
                                             ui.label("Z:");
-                                            if ui
-                                                .add(
-                                                    egui::DragValue::new(&mut transform.position.z)
-                                                        .speed(0.1)
-                                                        .fixed_decimals(3),
-                                                )
-                                                .changed()
-                                            {
-                                                pos_changed = true;
+                                            let response = ui.add(
+                                                egui::DragValue::new(&mut transform.position.z)
+                                                    .speed(0.1)
+                                                    .fixed_decimals(3),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Z transform change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
                                         if ui.button("Reset Position").clicked() {
@@ -779,77 +862,133 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                         ui.horizontal(|ui| {
                                             ui.label("X:");
-                                            if ui
-                                                .add(
-                                                    egui::Slider::new(
-                                                        &mut x_rot,
-                                                        -std::f64::consts::PI
-                                                            ..=std::f64::consts::PI,
-                                                    )
-                                                    .step_by(0.01)
-                                                    .custom_formatter(|n, _| {
-                                                        format!("{:.1}°", n.to_degrees())
-                                                    })
-                                                    .custom_parser(|s| {
-                                                        s.trim_end_matches('°')
-                                                            .parse::<f64>()
-                                                            .ok()
-                                                            .map(|v| v.to_radians())
-                                                    }),
+                                            let response = ui.add(
+                                                egui::Slider::new(
+                                                    &mut x_rot,
+                                                    -std::f64::consts::PI
+                                                        ..=std::f64::consts::PI,
                                                 )
-                                                .changed()
-                                            {
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 rotation_changed = true;
                                             }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed X rotation change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
+                                            }
                                         });
+                                        
                                         ui.horizontal(|ui| {
                                             ui.label("Y:");
-                                            if ui
-                                                .add(
-                                                    egui::Slider::new(
-                                                        &mut y_rot,
-                                                        -std::f64::consts::PI
-                                                            ..=std::f64::consts::PI,
-                                                    )
-                                                    .step_by(0.01)
-                                                    .custom_formatter(|n, _| {
-                                                        format!("{:.1}°", n.to_degrees())
-                                                    })
-                                                    .custom_parser(|s| {
-                                                        s.trim_end_matches('°')
-                                                            .parse::<f64>()
-                                                            .ok()
-                                                            .map(|v| v.to_radians())
-                                                    }),
+                                            let response = ui.add(
+                                                egui::Slider::new(
+                                                    &mut y_rot,
+                                                    -std::f64::consts::PI
+                                                        ..=std::f64::consts::PI,
                                                 )
-                                                .changed()
-                                            {
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 rotation_changed = true;
                                             }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Y rotation change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
+                                            }
                                         });
+                                        
                                         ui.horizontal(|ui| {
                                             ui.label("Z:");
-                                            if ui
-                                                .add(
-                                                    egui::Slider::new(
-                                                        &mut z_rot,
-                                                        -std::f64::consts::PI
-                                                            ..=std::f64::consts::PI,
-                                                    )
-                                                    .step_by(0.01)
-                                                    .custom_formatter(|n, _| {
-                                                        format!("{:.1}°", n.to_degrees())
-                                                    })
-                                                    .custom_parser(|s| {
-                                                        s.trim_end_matches('°')
-                                                            .parse::<f64>()
-                                                            .ok()
-                                                            .map(|v| v.to_radians())
-                                                    }),
+                                            let response = ui.add(
+                                                egui::Slider::new(
+                                                    &mut z_rot,
+                                                    -std::f64::consts::PI
+                                                        ..=std::f64::consts::PI,
                                                 )
-                                                .changed()
-                                            {
+                                                .step_by(0.01)
+                                                .custom_formatter(|n, _| {
+                                                    format!("{:.1}°", n.to_degrees())
+                                                })
+                                                .custom_parser(|s| {
+                                                    s.trim_end_matches('°')
+                                                        .parse::<f64>()
+                                                        .ok()
+                                                        .map(|v| v.to_radians())
+                                                }),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 rotation_changed = true;
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Z rotation change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
 
@@ -892,21 +1031,38 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                         ui.horizontal(|ui| {
                                             ui.label("X:");
-                                            if ui
-                                                .add(
-                                                    egui::DragValue::new(&mut new_scale.x)
-                                                        .speed(0.01)
-                                                        .fixed_decimals(3),
-                                                )
-                                                .changed()
-                                            {
+                                            let response = ui.add(
+                                                egui::DragValue::new(&mut new_scale.x)
+                                                    .speed(0.01)
+                                                    .fixed_decimals(3),
+                                            );
+                                            
+                                            if response.drag_started() {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 scale_changed = true;
                                                 if cfg.scale_locked {
-                                                    let scale_factor =
-                                                        new_scale.x / transform.scale.x;
+                                                    let scale_factor = new_scale.x / transform.scale.x;
                                                     new_scale.y = transform.scale.y * scale_factor;
                                                     new_scale.z = transform.scale.z * scale_factor;
                                                 }
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed X scale change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
 
@@ -916,13 +1072,29 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 .speed(0.01)
                                                 .fixed_decimals(3);
 
-                                            if cfg.scale_locked {
+                                            let response = ui.add_enabled(!cfg.scale_locked, y_slider);
+                                            
+                                            if response.drag_started() && !cfg.scale_locked {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 scale_changed = true;
                                             }
-
-                                            if ui.add_enabled(!cfg.scale_locked, y_slider).changed()
-                                            {
-                                                scale_changed = true;
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Y scale change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
 
@@ -932,9 +1104,29 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 .speed(0.01)
                                                 .fixed_decimals(3);
 
-                                            if ui.add_enabled(!cfg.scale_locked, z_slider).changed()
-                                            {
+                                            let response = ui.add_enabled(!cfg.scale_locked, z_slider);
+                                            
+                                            if response.drag_started() && !cfg.scale_locked {
+                                                cfg.transform_old_entity = Some(entity.clone());
+                                                cfg.transform_original_transform = Some((*transform).clone());
+                                                cfg.transform_in_progress = true;
+                                            }
+                                            
+                                            if response.changed() {
                                                 scale_changed = true;
+                                            }
+                                            
+                                            if response.drag_stopped() && cfg.transform_in_progress {
+                                                if let Some(ent) = cfg.transform_old_entity.take() {
+                                                    if let Some(orig) = cfg.transform_original_transform.take() {
+                                                        UndoableAction::push_to_undo(
+                                                            &mut self.undo_stack,
+                                                            UndoableAction::Transform(ent, orig),
+                                                        );
+                                                        log::debug!("Pushed Z scale change to undo stack");
+                                                    }
+                                                }
+                                                cfg.transform_in_progress = false;
                                             }
                                         });
 
@@ -1126,6 +1318,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     });
                                 });
                             });
+
+                            if let Some(t) = cfg.label_last_edit {
+                                if t.elapsed() >= Duration::from_millis(500) {
+                                    if let Some(ent) = cfg.old_label_entity.take() {
+                                        if let Some(orig) = cfg.label_original.take() {
+                                            UndoableAction::push_to_undo(
+                                                &mut self.undo_stack,
+                                                UndoableAction::Label(ent, orig),
+                                            );
+                                            log::debug!("Pushed label change to undo stack after 500ms debounce period");
+                                        }
+                                    }
+                                    cfg.label_last_edit = None;
+                                }
+                            }
                         }
                         Err(e) => {
                             ui.label(format!("Error: Unable to query entity: {}", e));

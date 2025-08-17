@@ -184,6 +184,7 @@ impl Editor {
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
         // this shit doesnt work :(
+        // nvm it works (sorta)
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
@@ -192,12 +193,12 @@ impl Editor {
                     continue;
                 }
 
-                println!("{} deadlocks detected", deadlocks.len());
+                log::error!("{} deadlocks detected", deadlocks.len());
                 for (i, threads) in deadlocks.iter().enumerate() {
-                    println!("Deadlock #{}", i);
+                    log::error!("Deadlock #{}", i);
                     for t in threads {
-                        println!("Thread Id {:#?}", t.thread_id());
-                        println!("{:#?}", t.backtrace());
+                        log::error!("Thread Id {:#?}", t.thread_id());
+                        log::error!("{:#?}", t.backtrace());
                     }
                 }
             }
@@ -629,37 +630,51 @@ fn show_entity_tree(
 pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
     Spawn(hecs::Entity),
+    Label(hecs::Entity, String),
 }
 
 impl UndoableAction {
     pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
         undo_stack.push(action);
-        log::debug!("Undo Stack contents: {:?}", undo_stack);
+        log::debug!("Undo Stack contents: {:#?}", undo_stack);
     }
 
     pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
         match self {
             UndoableAction::Transform(entity, transform) => {
-                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
-                    if let Some(e_t) = q.get() {
-                        *e_t = *transform;
-                        log::debug!("Reverted transform");
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Unable to query the entity"))
+                        if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
+                            if let Some(e_t) = q.get() {
+                                *e_t = *transform;
+                                log::debug!("Reverted transform");
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!("Unable to query the entity"))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find an entity to query"))
+                        }
                     }
-                } else {
-                    Err(anyhow::anyhow!("Could not find an entity to query"))
-                }
-            }
             UndoableAction::Spawn(entity) => {
-                if world.despawn(*entity).is_ok() {
-                    log::debug!("Undid spawn by despawning entity {:?}", entity);
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
-                }
-            }
+                        if world.despawn(*entity).is_ok() {
+                            log::debug!("Undid spawn by despawning entity {:?}", entity);
+                            Ok(())
+                        } else {
+                            Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
+                        }
+                    }
+            UndoableAction::Label(entity, original_label) => {
+                        if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.model_mut().label = original_label.clone();
+                                log::debug!("Reverted label for entity {:?} to '{}'", entity, original_label);
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!("Unable to query the entity for label revert"))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find an entity to query for label revert"))
+                        }
+                    },
         }
     }
 }

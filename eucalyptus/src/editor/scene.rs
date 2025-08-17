@@ -85,7 +85,7 @@ impl Scene for Editor {
                 graphics, 
                 "Main Light", 
                 include_str!("../light.wgsl"), 
-                camera, 
+                camera,
                 Some("Light Pipeline")
             );
         }

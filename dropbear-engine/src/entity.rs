@@ -20,7 +20,7 @@ pub struct AdoptedEntity {
     instance_buffer: Option<Buffer>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 pub struct Transform {
     pub position: DVec3,
     pub rotation: DQuat,
