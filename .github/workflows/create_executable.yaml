@@ -29,6 +29,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Install libudev-dev (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -49,11 +51,6 @@ jobs:
 
       - name: Build eucalyptus
         run: cargo build --release --package eucalyptus --target ${{ matrix.target }}
-
-      - name: Download README.md from gist (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          curl -L -o README.md https://gist.github.com/4tkbytes/05576d43fa12e7e2331dd7eb4e606bca/raw/README.md
 
       - name: Prepare artifact
         run: |
