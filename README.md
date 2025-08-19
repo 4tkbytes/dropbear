@@ -47,9 +47,9 @@ The rhai reference for the eucalyptus editor is under the /docs folder of this r
 
 |            | Windows | macOS | Linux | Web | Android | iOS |
 |------------|---------|-------|-------|-----|---------|-----|
-| dropbear   |    ✅    |   ✅   |   ✅   |  ❌  |    ❌    |  ❌  |
 | eucalyptus |    ✅    |   ✅   |   ✅   |  ❌  |    ❌    |  ❌  |
-| redback    |    ✅    |   ✅   |   ✅   |  ❌  |    ❌    |  ❌  |
+| redback    |    ✅    |   ✅   |   ✅   |  ❌  |    ❌*    |  ❌  |
+* made some progress on implementing
 
 To be fair, I do not plan on supporting web, android or iOS yet (as it isnt even completed with the basic idea). Maybe I will...?
 
