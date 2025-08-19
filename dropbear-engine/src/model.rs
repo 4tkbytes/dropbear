@@ -1,6 +1,6 @@
 use std::{mem, ops::Range, path::PathBuf};
 
-use russimp::{
+use russimp_ng::{
     Vector3D,
     material::{DataContent, TextureType},
     scene::{PostProcess, Scene},

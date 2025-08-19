@@ -19,14 +19,12 @@ futures.workspace = true
 gilrs.workspace = true
 glam.workspace = true
 log.workspace = true
-# nalgebra.workspace = true
-# russimp.workspace = true
+russimp-ng.workspace = true
 pollster.workspace = true
 serde.workspace = true
 spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
-russimp = { version = "3.2", features = ["prebuilt", "static-link"] }
 
 
 [dependencies.image]
