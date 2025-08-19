@@ -57,7 +57,6 @@ features = ["png"]
 [patch.crates-io]
 dropbear-engine = { path = "dropbear-engine" }
 eucalyptus = { path = "eucalyptus" }
-russimp-sys = { git = "https://github.com/skillissuedev/russimp-sys" }
 
 [profile.dev]
 opt-level = 0
