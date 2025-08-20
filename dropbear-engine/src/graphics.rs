@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use egui::Context;
-use glam::{DMat4, DQuat, DVec3};
+use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
@@ -420,6 +420,7 @@ impl Instance {
             DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
         InstanceRaw {
             model: model_matrix.as_mat4().to_cols_array_2d(),
+            normal: Mat3::from_quat(self.rotation.as_quat()).to_cols_array_2d(),
         }
     }
 
@@ -442,6 +443,7 @@ impl Instance {
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
+    normal: [[f32; 3]; 3],
 }
 
 impl InstanceRaw {
@@ -450,6 +452,7 @@ impl InstanceRaw {
             array_stride: size_of::<InstanceRaw>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
+                // model
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 5,
@@ -469,6 +472,23 @@ impl InstanceRaw {
                     offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+
+                // normal
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }
