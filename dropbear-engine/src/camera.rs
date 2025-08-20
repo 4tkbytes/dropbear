@@ -139,7 +139,7 @@ impl Camera {
                 .create_bind_group_layout(&BindGroupLayoutDescriptor {
                     entries: &[BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: ShaderStages::VERTEX,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -236,13 +236,20 @@ impl Camera {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
+    pub view_position: [f32; 4],
     pub view_proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
+            view_position: [0.0; 4],
             view_proj: Mat4::IDENTITY.to_cols_array_2d(),
         }
+    }
+
+    pub fn update(&mut self, camera: &mut Camera) {
+        self.view_position = camera.eye.as_vec3().extend(1.0).to_array();
+        self.view_proj = (DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * camera.build_vp()).as_mat4().to_cols_array_2d();
     }
 }

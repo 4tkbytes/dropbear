@@ -67,7 +67,7 @@ impl Scene for Editor {
 
         let texture_bind_group = &graphics.texture_bind_group().clone();
 
-        let main_light = Light::new(graphics, DVec3::Y, DVec3 { x: 1.0, y: 1.0, z: 1.0 }, LightType::Diffuse, Some("Light"));
+        let main_light = Light::new(graphics, DVec3::Y, DVec3 { x: 1.0, y: 1.0, z: 1.0 }, LightType::Directional, Some("Light"));
         self.light_manager.add("Main Light", main_light);
 
         if let (Some(camera), Some(light)) = (self.camera_manager.get_active(), self.light_manager.get("Main Light")) {

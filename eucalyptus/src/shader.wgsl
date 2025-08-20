@@ -1,4 +1,5 @@
 struct CameraUniform {
+    view_pos: vec4<f32>,
     view_proj: mat4x4<f32>,
 };
 @group(1) @binding(0)
@@ -75,22 +76,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let ambient_strength = 0.1; // could be potential value to update???
 
-    if (light.light_type == 0) {
-        let ambient_color = light.color * ambient_strength;
+    // ambient
+    let ambient_color = light.color * ambient_strength;
 
-        let result = ambient_color * tex_color.xyz;
-        return vec4<f32>(result, tex_color.a);
-    } else if (light.light_type == 1) {
-        let ambient_color = light.color * ambient_strength;
+    let light_dir = normalize(light.position - in.world_position);
 
-        let light_dir = normalize(light.position - in.world_position);
+    // dihffuse
+    let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
+    let diffuse_color = light.color * diffuse_strength;
 
-        let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
-        let diffuse_color = light.color * diffuse_strength;
+    // specular
+    let view_dir = normalize(camera.view_pos.xyz - in.world_position);
+    let half_dir = normalize(view_dir + light_dir);
 
-        let result = (ambient_color + diffuse_color) * tex_color.xyz;
-        return vec4<f32>(result, tex_color.a);
-    } else {
-        return tex_color;
-    }
+    let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0);
+    let specular_color = specular_strength * light.color;
+
+    let result = (ambient_color + diffuse_color + specular_color) * tex_color.xyz;
+
+    return vec4<f32>(result, tex_color.a);
 }

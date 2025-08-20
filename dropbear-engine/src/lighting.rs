@@ -34,15 +34,20 @@ impl LightUniform {
 
 #[derive(Clone, Copy)]
 pub enum LightType {
-    Ambient = 0,
-    Diffuse = 1,
+    // Example: Sunlight
+    Directional = 0,
+    // Example: Lamp
+    Point = 1,
+    // Example: Flashlight
+    Spot = 2,
 }
 
 impl Into<u32> for LightType {
     fn into(self) -> u32 {
         match self {
-            LightType::Ambient => 0,
-            LightType::Diffuse => 1,
+            LightType::Directional => 0,
+            LightType::Point => 1,
+            LightType::Spot => 2,
         }
     }
 }
