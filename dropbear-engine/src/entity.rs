@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPass, RenderPipeline};
+use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPass};
 
 use crate::{
-    camera::Camera, graphics::{Graphics, Instance}, lighting::LightManager, model::{DrawModel, Model}
+    camera::Camera, graphics::{Graphics, Instance}, lighting::Light, model::{DrawModel, Model}
 };
 
 #[derive(Default)]
@@ -146,13 +146,11 @@ impl AdoptedEntity {
         }
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, pipeline: &RenderPipeline, camera: &'a Camera, light_manager: &'a LightManager) {
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, lights: &'a Vec<&'a Light>, camera: &'a Camera) {
         if let Some(model) = &self.model {
             render_pass.set_vertex_buffer(1, self.instance_buffer.as_ref().unwrap().slice(..));
-
-            render_pass.set_pipeline(pipeline);
             render_pass.set_bind_group(2, self.uniform_bind_group.as_ref().unwrap(), &[]);
-            for (_, light) in light_manager.iter() {
+            for light in lights {
                 render_pass.draw_model(model, camera.bind_group(), light.bind_group());
             }
         }

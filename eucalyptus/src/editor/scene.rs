@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dropbear_engine::{
-    entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightType}, scene::{Scene, SceneCommand}
+    entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::DrawLight, scene::{Scene, SceneCommand}
 };
 use log;
 use parking_lot::Mutex;
@@ -65,30 +65,52 @@ impl Scene for Editor {
             );
         }
 
+        let main_light_transform = Transform {
+            position: DVec3::new(2.0, 4.0, 2.0),
+            ..Default::default()
+        };
+        let main_light_component = LightComponent::directional(DVec3::ONE, 1.0);
+        let main_adopted_light = Light::new(graphics, &main_light_component, &main_light_transform, Some("Main Light"));
+
+        let second_light_transform = Transform {
+            position: DVec3::new(-2.0, 3.0, -1.0),
+            ..Default::default()
+        };
+        let second_light_component = LightComponent::point(DVec3::new(1.0, 0.5, 1.0), 0.8);
+        let second_adopted_light = Light::new(graphics, &second_light_component, &second_light_transform, Some("Second Light"));
+        
         let texture_bind_group = &graphics.texture_bind_group().clone();
-
-        let main_light = Light::new(graphics, DVec3::Y, DVec3 { x: 1.0, y: 1.0, z: 1.0 }, LightType::Directional, Some("Light"));
-        self.light_manager.add("Main Light", main_light);
-
-        if let (Some(camera), Some(light)) = (self.camera_manager.get_active(), self.light_manager.get("Main Light")) {
+        if let Some(camera) = self.camera_manager.get_active() {
             let pipeline = graphics.create_render_pipline(
                 &shader,
                 vec![
                     texture_bind_group, 
                     camera.layout(),
-                    light.layout(),
+                    main_adopted_light.layout()
                 ],
                 None,
             );
             self.render_pipeline = Some(pipeline);
+            
             self.light_manager.create_render_pipeline(
                 graphics, 
-                "Main Light", 
                 include_str!("../light.wgsl"), 
                 camera,
                 Some("Light Pipeline")
             );
         }
+
+        self.world.spawn((
+            main_light_component,
+            main_light_transform,
+            main_adopted_light,
+        ));
+
+        self.world.spawn((
+            second_light_component,
+            second_light_transform,
+            second_adopted_light,
+        ));
 
         self.window = Some(graphics.state.window.clone());
     }
@@ -505,14 +527,33 @@ impl Scene for Editor {
         crate::logging::render(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(camera) = self.camera_manager.get_active() {
+                let mut lights: Vec<&Light> = Vec::new();
+
                 let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
-                let mut render_pass = graphics.clear_colour(color);
+                let mut light_query = self.world.query::<(&Light, &LightComponent)>();
+                {
+                    let mut render_pass = graphics.clear_colour(color);
 
-                self.light_manager.update_all(graphics);
-                self.light_manager.render(&mut render_pass, camera);
+                    if let Some(pipeline) = &self.light_manager.pipeline {
+                        render_pass.set_pipeline(pipeline);
+                        for (_, (light, component)) in light_query.iter() {
+                            if component.enabled {
+                                render_pass.draw_light_model(
+                                    light.model(),
+                                    camera.bind_group(), 
+                                    light.bind_group()
+                                );
+                            }
+                            lights.push(light);
+                        }
+                    } else {
+                        log::error!("No pipeline found");
+                    }
 
-                for (_, (entity, _)) in query.iter() {
-                    entity.render(&mut render_pass, pipeline, camera, &self.light_manager);
+                    render_pass.set_pipeline(pipeline);
+                    for (_, (entity, _)) in query.iter() {
+                        entity.render(&mut render_pass, &lights, camera);
+                    }
                 }
             }
         }

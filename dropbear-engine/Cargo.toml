@@ -25,6 +25,7 @@ serde.workspace = true
 spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
+hecs.workspace = true
 
 
 [dependencies.image]

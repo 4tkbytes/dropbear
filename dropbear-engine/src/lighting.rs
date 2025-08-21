@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
-use glam::{DQuat, DVec3};
+use glam::DVec3;
 use wgpu::{BindGroup, BindGroupLayout, Buffer, CompareFunction, DepthBiasState, RenderPass, RenderPipeline, StencilState};
 
-use crate::{camera::Camera, entity::AdoptedEntity, graphics::{Graphics, Shader}, model::{self, DrawLight, Model, Vertex}};
+use crate::{camera::Camera, entity::Transform, graphics::{Graphics, Shader}, model::{self, DrawLight, Model, Vertex}};
 
 
 #[repr(C)]
@@ -32,7 +30,7 @@ impl LightUniform {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub enum LightType {
     // Example: Sunlight
     Directional = 0,
@@ -52,26 +50,64 @@ impl Into<u32> for LightType {
     }
 }
 
-pub struct Light {
-    pub label: String,
-    pub position: DVec3,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LightComponent {
     pub colour: DVec3,
     pub light_type: LightType,
+    pub intensity: f32,
+    pub enabled: bool,
+}
 
+impl Default for LightComponent {
+    fn default() -> Self {
+        Self {
+            colour: DVec3::ONE,
+            light_type: LightType::Directional,
+            intensity: 1.0,
+            enabled: true,
+        }
+    }
+}
+
+impl LightComponent {
+    pub fn new(colour: DVec3, light_type: LightType, intensity: f32) -> Self {
+        Self {
+            colour,
+            light_type,
+            intensity,
+            enabled: true,
+        }
+    }
+
+    pub fn directional(colour: DVec3, intensity: f32) -> Self {
+        Self::new(colour, LightType::Directional, intensity)
+    }
+
+    pub fn point(colour: DVec3, intensity: f32) -> Self {
+        Self::new(colour, LightType::Point, intensity)
+    }
+
+    pub fn spot(colour: DVec3, intensity: f32) -> Self {
+        Self::new(colour, LightType::Spot, intensity)
+    }
+}
+
+pub struct Light {
     pub uniform: LightUniform,
-    // cannot be public, must be accessed with helper funcs
     buffer: Option<Buffer>,
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
+    cube_model: Model,
+    label: String,
 }
 
 impl Light {
-    pub fn new(graphics: &Graphics, position: DVec3, colour: DVec3, light_type: LightType, label: Option<&str>) -> Self {
+    pub fn new(graphics: &Graphics, light: &LightComponent, transform: &Transform, label: Option<&str>) -> Self {
         let uniform = LightUniform {
-            position: position.as_vec3().to_array(),
+            position: transform.position.as_vec3().to_array(),
             _padding: 0,
-            colour: colour.as_vec3().to_array(),
-            light_type: light_type.into(),
+            colour: (light.colour * light.intensity as f64).as_vec3().to_array(),
+            light_type: light.light_type.into(),
         };
 
         let buffer = graphics.create_uniform(uniform, label);
@@ -99,6 +135,15 @@ impl Light {
             label,
         });
 
+        let cube_model = Model::load_from_memory(
+            graphics, 
+            include_bytes!("../../resources/cube.obj"), 
+            label
+        ).unwrap();
+
+        let label_str = label.unwrap_or("Light").to_string();
+        log::debug!("Created new adopted light [{}]", label_str);
+
         if let Some(label) = label {
             log::debug!("Created new light [{}]", label);
         } else {
@@ -106,68 +151,84 @@ impl Light {
         }
         
         Self {
-            label: label.unwrap_or("Light").to_string(),
-            position,
-            colour,
             uniform,
             buffer: Some(buffer),
             layout: Some(layout),
             bind_group: Some(bind_group),
-            light_type: light_type,
+            cube_model,
+            label: label_str,
         }
-    }
-
-    pub fn uniform_buffer(&self) -> &Buffer {
-        self.buffer.as_ref().unwrap()
-    }
-
-    pub fn layout(&self) -> &BindGroupLayout {
-        self.layout.as_ref().unwrap()
     }
 
     pub fn bind_group(&self) -> &BindGroup {
         self.bind_group.as_ref().unwrap()
     }
 
-    pub fn update(&mut self, graphics: &Graphics) {
-        let old_position = self.position;
-        self.uniform.position = (DQuat::from_axis_angle(DVec3::Y, 1.0_f64.to_radians()) * old_position).as_vec3().to_array();
-        if let Some(buffer) = &self.buffer {
-            graphics.state.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[self.uniform]));
-        } else {
-            log::error!("Writing to buffer failed: No buffer available/created for light [{}]", self.label);
+    pub fn layout(&self) -> &BindGroupLayout {
+        self.layout.as_ref().unwrap()
+    }
+
+    pub fn model(&self) -> &Model {
+        &self.cube_model
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer.as_ref().unwrap()
+    }
+
+    pub fn render<'a>(&'a self, render_pass: &'a mut RenderPass<'a>, component: &'a LightComponent, camera: &'a Camera) {
+        if component.enabled {
+            render_pass.draw_light_model(
+                self.model(),
+                camera.bind_group(), 
+                self.bind_group()
+            );
         }
     }
 }
 
 pub struct LightManager {
-    pub lights: HashMap<String, Light>,
     pub pipeline: Option<RenderPipeline>,
-    cube: AdoptedEntity,
 }
 
 impl LightManager {
     pub fn new() -> Self {
         log::debug!("Initialised lighting");
         Self {
-            lights: HashMap::new(),
             pipeline: None,
-            cube: AdoptedEntity::default(),
         }
     }
 
-    pub fn create_render_pipeline(&mut self, graphics: &mut Graphics, light_name: &str, shader_contents: &str, camera: &Camera, label: Option<&str>) {
-        self.cube = AdoptedEntity::adopt(graphics, Model::load_from_memory(graphics, include_bytes!("../../resources/cube.obj"), Some("Cube")).unwrap(), Some("Cube"));
-        if let Some(light) = self.get(light_name) {
-            let light_pipeline = {
-                let shader = Shader::new(graphics, shader_contents, label);
-                Self::create_render_pipeline_for_lighting(graphics, &shader, vec![camera.layout(), light.layout()], label)
-            };
-            self.pipeline = Some(light_pipeline);
-            log::debug!("Created new render pipeline")
-        } else {
-            log::warn!("No light was available to create render pipeline :(");
-        }
+    pub fn create_render_pipeline(&mut self, graphics: &mut Graphics, shader_contents: &str, camera: &Camera, label: Option<&str>) {
+        let shader = Shader::new(graphics, shader_contents, label);
+        
+        let dummy_layout = graphics.state.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("Dummy Light Layout"),
+        });
+
+        let pipeline = Self::create_render_pipeline_for_lighting(
+            graphics, 
+            &shader, 
+            vec![camera.layout(), &dummy_layout], 
+            label
+        );
+        
+        self.pipeline = Some(pipeline);
+        log::debug!("Created ECS light render pipeline");
     }
 
     fn create_render_pipeline_for_lighting(graphics: &mut Graphics, shader: &Shader, bind_group_layouts: Vec<&BindGroupLayout>, label: Option<&str>) -> RenderPipeline {
@@ -229,57 +290,14 @@ impl LightManager {
         })
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, camera: &'a Camera) {
-        render_pass.set_pipeline(&self.pipeline.as_ref().unwrap());
-        for (_, light) in self.iter() {
-            // todo: fix up error management in the model_load_from_mem function and the renderpass...
-            render_pass.draw_light_model(&self.cube.model(), camera.bind_group(), light.bind_group());
+    pub fn set_pipeline<'a>(
+        &'a self,
+        render_pass: &mut RenderPass<'a>, 
+    ) {
+        if let Some(pipeline) = &self.pipeline {
+            render_pass.set_pipeline(pipeline);
+        } else {
+            log::error!("No pipeline found");
         }
-    }
-
-    pub fn add(&mut self, name: impl Into<String>, light: Light) {
-        self.lights.insert(name.into(), light);
-    }
-
-    pub fn remove(&mut self, name: &str) -> Option<Light> {
-        self.lights.remove(name)
-    }
-
-    pub fn get(&self, name: &str) -> Option<&Light> {
-        self.lights.get(name)
-    }
-
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut Light> {
-        self.lights.get_mut(name)
-    }
-
-    pub fn has(&self, name: &str) -> bool {
-        self.lights.contains_key(name)
-    }
-
-    pub fn clear(&mut self) {
-        self.lights.clear();
-    }
-
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, String, Light> {
-        self.lights.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> std::collections::hash_map::IterMut<'_, String, Light> {
-        self.lights.iter_mut()
-    }
-
-    pub fn update_all(&mut self, graphics: &Graphics) {
-        for (_name, light) in self.lights.iter_mut() {
-            light.update(graphics);
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.lights.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.lights.is_empty()
     }
 }
