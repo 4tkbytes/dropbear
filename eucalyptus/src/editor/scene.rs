@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dropbear_engine::{
-    entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::DrawLight, scene::{Scene, SceneCommand}
+    entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::{DrawLight, DrawModel}, scene::{Scene, SceneCommand}
 };
 use log;
 use parking_lot::Mutex;
@@ -65,6 +65,8 @@ impl Scene for Editor {
             );
         }
 
+        self.light_manager.create_light_array_resources(graphics);
+
         let main_light_transform = Transform {
             position: DVec3::new(2.0, 4.0, 2.0),
             ..Default::default()
@@ -73,7 +75,7 @@ impl Scene for Editor {
         let main_adopted_light = Light::new(graphics, &main_light_component, &main_light_transform, Some("Main Light"));
 
         let second_light_transform = Transform {
-            position: DVec3::new(-2.0, 3.0, -1.0),
+            position: DVec3::new(-10.0, 3.0, -1.0),
             ..Default::default()
         };
         let second_light_component = LightComponent::point(DVec3::new(1.0, 0.5, 1.0), 0.8);
@@ -86,7 +88,7 @@ impl Scene for Editor {
                 vec![
                     texture_bind_group, 
                     camera.layout(),
-                    main_adopted_light.layout()
+                    self.light_manager.layout()
                 ],
                 None,
             );
@@ -490,8 +492,6 @@ impl Scene for Editor {
             
         }
 
-        
-
         let current_size = graphics.state.viewport_texture.size;
         self.size = current_size;
         
@@ -507,6 +507,13 @@ impl Scene for Editor {
         for (_, (entity, transform)) in query {
             entity.update(&graphics, transform);
         }
+
+        let light_query = self.world.query_mut::<(&LightComponent, &Transform, &mut Light)>();
+        for (_, (light_component, transform, light)) in light_query {
+            light.update(light_component, transform);
+        }
+
+        self.light_manager.update(graphics, &self.world);
     }
 
     fn render(&mut self, graphics: &mut Graphics) {
@@ -527,34 +534,33 @@ impl Scene for Editor {
         crate::logging::render(graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(camera) = self.camera_manager.get_active() {
-                let mut lights: Vec<&Light> = Vec::new();
-
-                let mut query = self.world.query::<(&AdoptedEntity, &Transform)>();
                 let mut light_query = self.world.query::<(&Light, &LightComponent)>();
+                let mut entity_query = self.world.query::<(&AdoptedEntity, &Transform)>();
                 {
                     let mut render_pass = graphics.clear_colour(color);
-
-                    if let Some(pipeline) = &self.light_manager.pipeline {
-                        render_pass.set_pipeline(pipeline);
+                    if let Some(light_pipeline) = &self.light_manager.pipeline {
+                        render_pass.set_pipeline(light_pipeline);
                         for (_, (light, component)) in light_query.iter() {
                             if component.enabled {
                                 render_pass.draw_light_model(
                                     light.model(),
                                     camera.bind_group(), 
-                                    light.bind_group()
+                                    light.bind_group(),
                                 );
                             }
-                            lights.push(light);
                         }
-                    } else {
-                        log::error!("No pipeline found");
                     }
 
                     render_pass.set_pipeline(pipeline);
-                    for (_, (entity, _)) in query.iter() {
-                        entity.render(&mut render_pass, &lights, camera);
+
+                    for (_, (entity, _)) in entity_query.iter() {
+                        render_pass.set_vertex_buffer(1, entity.instance_buffer.as_ref().unwrap().slice(..));
+                        render_pass.set_bind_group(2, entity.uniform_bind_group.as_ref().unwrap(), &[]);
+                        render_pass.draw_model(entity.model(), camera.bind_group(), self.light_manager.bind_group());
                     }
                 }
+
+                
             }
         }
     }

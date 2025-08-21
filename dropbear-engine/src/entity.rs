@@ -3,21 +3,21 @@ use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPass};
+use wgpu::{util::DeviceExt, BindGroup, Buffer};
 
 use crate::{
-    camera::Camera, graphics::{Graphics, Instance}, lighting::Light, model::{DrawModel, Model}
+    graphics::{Graphics, Instance}, model::Model
 };
 
 #[derive(Default)]
 pub struct AdoptedEntity {
-    model: Option<Model>,
-    uniform: ModelUniform,
-    uniform_buffer: Option<Buffer>,
-    uniform_bind_group: Option<BindGroup>,
+    pub model: Option<Model>,
+    pub uniform: ModelUniform,
+    pub uniform_buffer: Option<Buffer>,
+    pub uniform_bind_group: Option<BindGroup>,
     #[allow(unused)]
-    instance: Instance,
-    instance_buffer: Option<Buffer>,
+    pub instance: Instance,
+    pub instance_buffer: Option<Buffer>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
@@ -143,16 +143,6 @@ impl AdoptedEntity {
                 0,
                 bytemuck::cast_slice(&[instance_raw]),
             );
-        }
-    }
-
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, lights: &'a Vec<&'a Light>, camera: &'a Camera) {
-        if let Some(model) = &self.model {
-            render_pass.set_vertex_buffer(1, self.instance_buffer.as_ref().unwrap().slice(..));
-            render_pass.set_bind_group(2, self.uniform_bind_group.as_ref().unwrap(), &[]);
-            for light in lights {
-                render_pass.draw_model(model, camera.bind_group(), light.bind_group());
-            }
         }
     }
 

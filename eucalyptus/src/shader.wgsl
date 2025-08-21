@@ -1,3 +1,5 @@
+const MAX_LIGHTS: u32 = 8;
+
 struct CameraUniform {
     view_pos: vec4<f32>,
     view_proj: mat4x4<f32>,
@@ -10,8 +12,14 @@ struct Light {
     color: vec3<f32>,
     light_type: u32,
 }
+
+struct LightArray {
+    lights: array<Light, MAX_LIGHTS>,
+    light_count: u32,
+}
+
 @group(2) @binding(0)
-var<uniform> light: Light;
+var<uniform> light_array: LightArray;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -67,6 +75,21 @@ var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
 
+fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>) -> vec3<f32> {
+    let light_dir = normalize(light.position - world_pos);
+    
+    // dihfuse
+    let diffuse_strength = max(dot(world_normal, light_dir), 0.0);
+    let diffuse_color = light.color * diffuse_strength;
+    
+    // specular
+    let half_dir = normalize(view_dir + light_dir);
+    let specular_strength = pow(max(dot(world_normal, half_dir), 0.0), 32.0);
+    let specular_color = specular_strength * light.color;
+    
+    return diffuse_color + specular_color;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
@@ -74,25 +97,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    let ambient_strength = 0.1; // could be potential value to update???
-
-    // ambient
-    let ambient_color = light.color * ambient_strength;
-
-    let light_dir = normalize(light.position - in.world_position);
-
-    // dihffuse
-    let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
-
-    // specular
+    let ambient_strength = 0.1;
     let view_dir = normalize(camera.view_pos.xyz - in.world_position);
-    let half_dir = normalize(view_dir + light_dir);
-
-    let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0);
-    let specular_color = specular_strength * light.color;
-
-    let result = (ambient_color + diffuse_color + specular_color) * tex_color.xyz;
-
-    return vec4<f32>(result, tex_color.a);
+    let world_normal = normalize(in.world_normal);
+    
+    var final_color = vec3<f32>(0.0);
+    var total_ambient = vec3<f32>(0.0);
+    
+    for (var i: u32 = 0u; i < light_array.light_count; i = i + 1u) {
+        let light = light_array.lights[i];
+        
+        total_ambient += light.color * ambient_strength;
+        
+        final_color += calculate_light(light, in.world_position, world_normal, view_dir);
+    }
+    
+    final_color = (total_ambient + final_color) * tex_color.xyz;
+    
+    return vec4<f32>(final_color, tex_color.a);
 }
