@@ -510,7 +510,7 @@ impl Scene for Editor {
 
         let light_query = self.world.query_mut::<(&LightComponent, &Transform, &mut Light)>();
         for (_, (light_component, transform, light)) in light_query {
-            light.update(light_component, transform);
+            light.update(graphics, light_component, transform);
         }
 
         self.light_manager.update(graphics, &self.world);
@@ -531,7 +531,7 @@ impl Scene for Editor {
         self.show_ui(&graphics.get_egui_context());
 
         self.window = Some(graphics.state.window.clone());
-        crate::logging::render(graphics.get_egui_context());
+        crate::logging::render(&graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(camera) = self.camera_manager.get_active() {
                 let mut light_query = self.world.query::<(&Light, &LightComponent)>();
