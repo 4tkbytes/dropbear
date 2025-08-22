@@ -1,7 +1,7 @@
 use super::*;
 use std::{collections::HashSet, sync::LazyLock};
 
-use dropbear_engine::entity::Transform;
+use dropbear_engine::{entity::Transform, lighting::{Light, LightComponent}};
 use egui::{self, CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
@@ -715,12 +715,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                     }
 
-                    match self
+                    if let Ok((e, transform, _props)) = self
                         .world
-                        .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(
-                            *entity,
-                        ) {
-                        Ok((e, transform, _props)) => {
+                        .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(*entity) {
                             let label = e.label().clone();
                             let model = e.model_mut();
                             ui.group(|ui| {
@@ -743,7 +740,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 if let Some(orig) = cfg.label_original.take() {
                                                     UndoableAction::push_to_undo(
                                                         &mut self.undo_stack,
-                                                        UndoableAction::Label(ent, orig),
+                                                        UndoableAction::Label(ent, orig, EntityType::Entity),
                                                     );
                                                     log::debug!("Pushed label change to undo stack (immediate)");
                                                 }
@@ -1325,7 +1322,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         if let Some(orig) = cfg.label_original.take() {
                                             UndoableAction::push_to_undo(
                                                 &mut self.undo_stack,
-                                                UndoableAction::Label(ent, orig),
+                                                UndoableAction::Label(ent, orig, EntityType::Entity),
                                             );
                                             log::debug!("Pushed label change to undo stack after 500ms debounce period");
                                         }
@@ -1334,9 +1331,56 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 }
                             }
                         }
-                        Err(e) => {
-                            ui.label(format!("Error: Unable to query entity: {}", e));
-                        }
+                    
+                    if let Ok((light, _transform, _props)) = self.world.query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity) {
+                        let label = light.label.clone();
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Name: ");
+
+                                    let resp = ui.text_edit_singleline(&mut light.label);
+
+                                    if resp.changed() {
+                                        if cfg.old_label_entity.is_none() {
+                                            cfg.old_label_entity = Some(entity.clone());
+                                            cfg.label_original = Some(label.clone().to_string());
+                                        }
+                                        cfg.label_last_edit = Some(Instant::now());
+                                    }
+
+                                    if resp.lost_focus() {
+                                        if let Some(ent) = cfg.old_label_entity.take() {
+                                            if ent == *entity {
+                                                if let Some(orig) = cfg.label_original.take() {
+                                                    UndoableAction::push_to_undo(
+                                                        &mut self.undo_stack,
+                                                        UndoableAction::Label(ent, orig, EntityType::Light),
+                                                    );
+                                                    log::debug!("Pushed label change to undo stack (immediate)");
+                                                }
+                                            } else {
+                                                cfg.label_original = None;
+                                            }
+                                        }
+                                        cfg.label_last_edit = None;
+                                    }
+                                })
+                            });
+
+                            if let Some(t) = cfg.label_last_edit {
+                                if t.elapsed() >= Duration::from_millis(500) {
+                                    if let Some(ent) = cfg.old_label_entity.take() {
+                                        if let Some(orig) = cfg.label_original.take() {
+                                            UndoableAction::push_to_undo(
+                                                &mut self.undo_stack,
+                                                UndoableAction::Label(ent, orig, EntityType::Light),
+                                            );
+                                            log::debug!("Pushed label change to undo stack after 500ms debounce period");
+                                        }
+                                    }
+                                    cfg.label_last_edit = None;
+                                }
+                            }
                     }
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
@@ -1478,6 +1522,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
         }
     }
 }
+
 
 pub(crate) fn import_object() -> anyhow::Result<()> {
     let model_ext = vec!["glb", "fbx", "obj"];

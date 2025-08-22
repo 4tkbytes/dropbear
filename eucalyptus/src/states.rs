@@ -17,7 +17,7 @@ use chrono::Utc;
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
-    graphics::Graphics,
+    graphics::Graphics, lighting::{Light, LightComponent},
 };
 
 #[cfg(feature = "editor")]
@@ -474,6 +474,10 @@ pub enum EntityNode {
         name: String,
         path: PathBuf,
     },
+    Light {
+        id: hecs::Entity,
+        name: String,
+    },
     Group {
         name: String,
         children: Vec<EntityNode>,
@@ -502,6 +506,7 @@ impl EntityNode {
         {
             let name = adopted.model().label.clone();
 
+            // grouped entity (entity + script)
             nodes.push(EntityNode::Group {
                 name: name.clone(),
                 children: vec![
@@ -519,6 +524,7 @@ impl EntityNode {
             handled.insert(id);
         }
 
+        // single entity
         for (id, (_, adopted)) in world
             .query::<(
                 &dropbear_engine::entity::Transform,
@@ -534,6 +540,21 @@ impl EntityNode {
             nodes.push(EntityNode::Entity { id, name });
         }
 
+        // lights
+        for (id, (_transform, _light_comp, light)) in world
+            .query::<(&dropbear_engine::entity::Transform, &LightComponent, &Light)>()
+            .iter()
+        {
+            if handled.contains(&id) {
+                continue;
+            }
+            nodes.push(EntityNode::Light {
+                id,
+                name: light.label().to_string(),
+            });
+            handled.insert(id);
+        }
+
         nodes
     }
 }
@@ -541,11 +562,13 @@ impl EntityNode {
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     pub scene_name: String,
-    pub path: PathBuf,
     pub entities: Vec<SceneEntity>,
     pub camera: HashMap<CameraType, SceneCameraConfig>,
+    pub lights: Vec<LightConfig>,
     // todo later
     // pub settings: SceneSettings,
+    #[serde(skip)]
+    pub path: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -671,6 +694,7 @@ impl SceneConfig {
             path,
             entities: Vec::new(),
             camera: camera_configs,
+            lights: Vec::new(),
         }
     }
 
@@ -733,6 +757,31 @@ impl SceneConfig {
             }
         }
 
+        for light_config in &self.lights {
+            log::debug!("Loading light: {}", light_config.label);
+
+            let light = Light::new(
+                graphics,
+                &light_config.light_component,
+                &light_config.transform,
+                Some(&light_config.label),
+            );
+
+            world.spawn((light_config.light_component.clone(), light_config.transform, light, ModelProperties::default()));
+        }
+
+        if world.query::<(&LightComponent, &Light)>().iter().next().is_none() {
+            log::info!("No lights in scene, spawning default light");
+            let default_transform = Transform {
+                position: glam::DVec3::new(2.0, 4.0, 2.0),
+                ..Default::default()
+            };
+            let default_component = LightComponent::directional(glam::DVec3::ONE, 1.0);
+            let default_light = Light::new(graphics, &default_component, &default_transform, Some("Default Light"));
+            world.spawn((default_component, default_transform, default_light, ModelProperties::default()));
+        }
+
+        log::info!("Loaded {} entities and {} lights", self.entities.len(), self.lights.len());
         Ok(())
     }
 
@@ -918,4 +967,27 @@ pub struct RuntimeData {
     pub scene_data: Vec<SceneConfig>,
     #[bincode(with_serde)]
     pub scripts: HashMap<String, String>, // name, script_content
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LightConfig {
+    pub label: String,
+    pub transform: Transform,
+    pub light_component: LightComponent,
+    pub enabled: bool,
+
+    #[serde(skip)]
+    pub entity_id: Option<hecs::Entity>,
+}
+
+impl Default for LightConfig {
+    fn default() -> Self {
+        Self {
+            label: "New Light".to_string(),
+            transform: Transform::default(),
+            light_component: LightComponent::default(),
+            enabled: true,
+            entity_id: None,
+        }
+    }
 }

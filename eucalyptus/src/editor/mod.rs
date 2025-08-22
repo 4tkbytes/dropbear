@@ -12,7 +12,7 @@ use std::{
 };
 
 use dropbear_engine::{
-    camera::Camera, entity::{AdoptedEntity, Transform}, graphics::Graphics, lighting::LightManager, scene::SceneCommand
+    camera::Camera, entity::{AdoptedEntity, Transform}, graphics::Graphics, lighting::{Light, LightManager}, scene::SceneCommand
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
@@ -27,7 +27,7 @@ use winit::{keyboard::KeyCode, window::Window};
 use crate::{
     build::build, camera::{
         CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
-    }, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{EntityNode, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
+    }, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
 };
 
 pub struct Editor {
@@ -231,13 +231,7 @@ impl Editor {
             play_mode_backup: None,
             input_state: InputState::new(),
             light_manager: LightManager::new(),
-            // mouse_pos: Default::default(),
-            // mouse_button: Default::default(),
-            // pressed_keys: HashSet::new(),
-            // last_key_press_times: HashMap::new(),
-            // double_press_threshold: Duration::from_millis(300),
-            // mouse_delta: None,
-            
+
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
@@ -258,12 +252,6 @@ impl Editor {
         self.input_state.last_key_press_times.insert(key, now);
         false
     }
-    // pub fn save_project_config(&self) -> anyhow::Result<()> {
-    //     let mut config = PROJECT.write().unwrap();
-    //     config.dock_layout = Some(self.dock_state.clone());
-    //     self.save_current_scene()?;
-    //     config.write_to_all()
-    // }
 
     /// Save the current world state to the active scene
     pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
@@ -277,6 +265,7 @@ impl Editor {
 
         let scene = &mut scenes[scene_index];
         scene.entities.clear();
+        scene.lights.clear();
 
         for (id, (adopted, transform, properties)) in self
             .world
@@ -304,6 +293,28 @@ impl Editor {
             };
 
             scene.entities.push(scene_entity);
+            log::debug!("Pushed entity: {}", adopted.label());
+        }
+
+        for (id, (light_component, transform, light)) in self
+            .world
+            .query::<(
+                &dropbear_engine::lighting::LightComponent,
+                &dropbear_engine::entity::Transform,
+                &dropbear_engine::lighting::Light,
+            )>()
+            .iter()
+        {
+            let light_config = LightConfig {
+                label: light.label().to_string(),
+                transform: *transform,
+                light_component: light_component.clone(),
+                enabled: light_component.enabled,
+                entity_id: Some(id),
+            };
+
+            scene.lights.push(light_config);
+            log::debug!("Pushed light into lights: {}", light.label())
         }
 
         scene.save_cameras_from_manager(&self.camera_manager, &mut self.world);
@@ -590,7 +601,7 @@ fn show_entity_tree(
         EntityNode::Entity { id, name } => {
             ui.horizontal(|ui| {
                 handle.ui(ui, |ui| {
-                    ui.label("|||");
+                    ui.label("⏹️");
                 });
                 let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
                 if resp.clicked() {
@@ -601,7 +612,7 @@ fn show_entity_tree(
         EntityNode::Script { name, path: _ } => {
             ui.horizontal(|ui| {
                 handle.ui(ui, |ui| {
-                    ui.label("|||");
+                    ui.label("📜");
                 });
                 ui.label(format!("{name}"));
             });
@@ -622,6 +633,20 @@ fn show_entity_tree(
                 });
             });
         }
+        EntityNode::Light {
+            id,
+            name,
+        } => {
+            ui.horizontal(|ui| {
+                handle.ui(ui, |ui| {
+                    ui.label("💡");
+                });
+                let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
+                if resp.clicked() {
+                    *selected = Some(id);
+                }
+            });
+        }
     });
 }
 
@@ -630,7 +655,12 @@ fn show_entity_tree(
 pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
     Spawn(hecs::Entity),
-    Label(hecs::Entity, String),
+    Label(hecs::Entity, String, EntityType),
+}
+#[derive(Debug)]
+pub enum EntityType {
+    Entity,
+    Light,
 }
 
 impl UndoableAction {
@@ -662,7 +692,9 @@ impl UndoableAction {
                             Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
                         }
                     }
-            UndoableAction::Label(entity, original_label) => {
+            UndoableAction::Label(entity, original_label, entity_type) => {
+                match entity_type {
+                    EntityType::Entity => {
                         if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
                             if let Some(adopted) = q.get() {
                                 adopted.model_mut().label = original_label.clone();
@@ -675,6 +707,21 @@ impl UndoableAction {
                             Err(anyhow::anyhow!("Could not find an entity to query for label revert"))
                         }
                     },
+                    EntityType::Light => {
+                        if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.label = original_label.clone();
+                                log::debug!("Reverted label for entity {:?} to '{}'", entity, original_label);
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!("Unable to query the light for label revert"))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find a light to query for label revert"))
+                        }
+                    },
+                }
+            },
         }
     }
 }

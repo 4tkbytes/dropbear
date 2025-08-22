@@ -108,7 +108,7 @@ impl LightComponent {
 pub struct Light {
     pub uniform: LightUniform,
     cube_model: Model,
-    label: String,
+    pub label: String,
     buffer: Option<Buffer>,
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
