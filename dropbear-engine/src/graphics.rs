@@ -116,7 +116,7 @@ impl<'a> Graphics<'a> {
         render_pipeline
     }
 
-    pub fn get_egui_context(&mut self) -> &Context {
+    pub fn get_egui_context(&mut self) -> Context {
         self.state.egui_renderer.context()
     }
 
@@ -131,6 +131,7 @@ impl<'a> Graphics<'a> {
                         load: wgpu::LoadOp::Clear(color),
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.state.depth_texture.view,
@@ -203,6 +204,7 @@ impl Shader {
     }
 }
 
+#[derive(Clone)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub sampler: Sampler,

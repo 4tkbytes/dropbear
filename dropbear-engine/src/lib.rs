@@ -10,7 +10,7 @@ pub mod resources;
 pub mod scene;
 
 use egui::TextureId;
-use egui_wgpu::ScreenDescriptor;
+use egui_wgpu_backend::ScreenDescriptor;
 use futures::FutureExt;
 use gilrs::{Gilrs, GilrsBuilder};
 use spin_sleep::SpinSleeper;
@@ -66,6 +66,7 @@ impl State {
         // create backend
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
+            // flags: wgpu::InstanceFlags::empty(),
             ..Default::default()
         });
 
@@ -159,9 +160,9 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let mut egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
+        let mut egui_renderer = EguiRenderer::new(&device, config.format, 1, &window);
 
-        let texture_id = egui_renderer.renderer().register_native_texture(
+        let texture_id = egui_renderer.renderer().egui_texture_from_wgpu_texture(
             &device,
             &viewport_texture.view,
             wgpu::FilterMode::Linear,
@@ -198,7 +199,7 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        self.texture_id = self.egui_renderer.renderer().register_native_texture(
+        self.texture_id = self.egui_renderer.renderer().egui_texture_from_wgpu_texture(
             &self.device,
             &self.viewport_texture.view,
             wgpu::FilterMode::Linear,
@@ -220,27 +221,37 @@ Hardware:
             Ok(val) => val,
             Err(e) => {
                 match e {
-                    SurfaceError::Lost | SurfaceError::Outdated => {
+                    SurfaceError::Lost => {
+                        log_once::warn_once!("Surface lost, reconfiguring...");
                         self.surface.configure(&self.device, &self.config);
                         return Ok(());
                     }
-                    SurfaceError::Timeout | SurfaceError::OutOfMemory => {
-                        return Err(anyhow::anyhow!("Surface error: {:?}", e));
+                    SurfaceError::Outdated => {
+                        log_once::warn_once!("Surface outdated, reconfiguring...");
+                        self.surface.configure(&self.device, &self.config);
+                        return Ok(());
+                    }
+                    SurfaceError::Timeout => {
+                        log_once::warn_once!("Surface timeout, skipping frame");
+                        return Ok(());
+                    }
+                    SurfaceError::OutOfMemory => {
+                        return Err(anyhow::anyhow!("Surface out of memory: {:?}", e));
                     }
                     SurfaceError::Other => {
-                        log::warn!("Encountered SurfaceError::Other: {:?}. Attempting to reconfigure and skip this frame.", e);
-                        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            self.surface.configure(&self.device, &self.config);
-                        }));
+                        log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
                         return Ok(());
-                    },
+                    }
                 }
             }
         };
 
+        let size = self.window.inner_size();
+
         let screen_descriptor = ScreenDescriptor {
-            size_in_pixels: [self.config.width, self.config.height],
-            pixels_per_point: self.window.scale_factor() as f32,
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: self.window.scale_factor() as f32,
         };
 
         let view = output
@@ -254,7 +265,7 @@ Hardware:
 
         let viewport_view = { &self.viewport_texture.view.clone() };
 
-        self.egui_renderer.begin_frame(&self.window);
+        self.egui_renderer.begin_frame();
 
         let mut graphics = Graphics::new(self, viewport_view, &mut encoder);
 
@@ -272,8 +283,27 @@ Hardware:
             screen_descriptor,
         );
 
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        let command_buffer = encoder.finish();
+        
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.queue.submit(std::iter::once(command_buffer));
+        })) {
+            Ok(_) => {},
+            Err(_) => {
+                log::error!("Failed to submit command buffer, device may be lost");
+                return Err(anyhow::anyhow!("Command buffer submission failed"));
+            }
+        }
+
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            output.present();
+        })) {
+            Ok(_) => {},
+            Err(_) => {
+                log::error!("Failed to present frame, surface may be lost");
+                return Err(anyhow::anyhow!("Frame presentation failed"));
+            }
+        }
 
         Ok(())
     }
@@ -437,7 +467,7 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        state.egui_renderer.handle_input(&state.window, &event);
+        state.egui_renderer.handle_input(&event);
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),

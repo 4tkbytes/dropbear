@@ -18,8 +18,8 @@ clap = "4.5"
 dropbear-engine = { path = "dropbear-engine" }
 egui = "0.32"
 egui-toast-fork = "0.18"
-egui-wgpu = { version = "0.32", features = ["winit"] }
-egui-winit = "0.32"
+egui_wgpu_backend = { version = "0.35", git = "https://github.com/hasenbanck/egui_wgpu_backend"}
+egui_winit_platform = { version = "0.27", git = "https://github.com/hasenbanck/egui_winit_platform" }
 egui_dnd = "0.13"
 egui_dock-fork = { version = "0.17", features = ["serde"] }
 egui_extras = { version = "0.32", features = ["all_loaders"] }
@@ -45,7 +45,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 spin_sleep = "1.3"
 tokio = { version = "1", features = ["full"] }
 transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
-wgpu = "25"
+wgpu = "26"
 winit = { version = "0.30", features = [] }
 zip = "4.3"
 walkdir = "2.3"

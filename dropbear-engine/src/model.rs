@@ -47,6 +47,7 @@ impl Vertex for ModelVertex {
     }
 }
 
+#[derive(Clone)]
 pub struct Model {
     pub label: String,
     pub path: PathBuf,
@@ -54,12 +55,14 @@ pub struct Model {
     pub materials: Vec<Material>,
 }
 
+#[derive(Clone)]
 pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
 }
 
+#[derive(Clone)]
 pub struct Mesh {
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,

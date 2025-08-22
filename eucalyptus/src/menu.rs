@@ -161,7 +161,7 @@ impl Scene for MainMenu {
 
         egui::CentralPanel::default()
                 .frame(Frame::new())
-                .show(egui_ctx, |ui| {
+                .show(&egui_ctx, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(64.0);
                         ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
@@ -239,7 +239,7 @@ impl Scene for MainMenu {
             .resizable(true)
             .collapsible(false)
             .fixed_size(screen_size)
-            .show(egui_ctx, |ui| {
+            .show(&egui_ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Project Name:");
                     ui.add_space(5.0);
@@ -305,7 +305,7 @@ impl Scene for MainMenu {
                 .collapsible(true)
                 .resizable(false)
                 .fixed_size([400.0, 120.0])
-                .show(egui_ctx, |ui| {
+                .show(&egui_ctx, |ui| {
                     ui.label(&self.progress_message);
                     ui.add_space(10.0);
 
@@ -319,7 +319,7 @@ impl Scene for MainMenu {
                 });
         }
 
-        self.toast.show(graphics.get_egui_context());
+        self.toast.show(&graphics.get_egui_context());
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
