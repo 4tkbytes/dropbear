@@ -9,17 +9,6 @@ use crate::{
     graphics::{Graphics, Instance}, model::Model
 };
 
-#[derive(Default)]
-pub struct AdoptedEntity {
-    pub model: Option<Model>,
-    pub uniform: ModelUniform,
-    pub uniform_buffer: Option<Buffer>,
-    pub uniform_bind_group: Option<BindGroup>,
-    #[allow(unused)]
-    pub instance: Instance,
-    pub instance_buffer: Option<Buffer>,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 pub struct Transform {
     pub position: DVec3,
@@ -65,6 +54,17 @@ impl Transform {
     pub fn scale(&mut self, scale: DVec3) {
         self.scale *= scale;
     }
+}
+
+#[derive(Default)]
+pub struct AdoptedEntity {
+    pub model: Option<Model>,
+    pub uniform: ModelUniform,
+    pub uniform_buffer: Option<Buffer>,
+    pub uniform_bind_group: Option<BindGroup>,
+    #[allow(unused)]
+    pub instance: Instance,
+    pub instance_buffer: Option<Buffer>,
 }
 
 impl AdoptedEntity {

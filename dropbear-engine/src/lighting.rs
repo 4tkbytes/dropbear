@@ -1,7 +1,7 @@
 use glam::{DMat4, DQuat, DVec3};
-use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, CompareFunction, util::DeviceExt, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, BufferAddress};
 
-use crate::{camera::Camera, entity::Transform, graphics, graphics::{Graphics, Shader}, model::{self, Model, Vertex}};
+use crate::{camera::Camera, entity::Transform, graphics::{Graphics, Shader}, model::{self, Model, Vertex}};
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -112,8 +112,7 @@ pub struct Light {
     buffer: Option<Buffer>,
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
-
-    instance_buffer: Option<Buffer>,
+    pub instance_buffer: Option<Buffer>,
 }
 
 impl Light {
@@ -158,7 +157,7 @@ impl Light {
             label,
         });
 
-        let instance = Instance::new(DVec3::ONE, DQuat::IDENTITY, DVec3::ONE);
+        let instance = Instance::new(transform.position, transform.rotation, transform.scale);
 
         let instance_buffer =
             graphics
@@ -186,21 +185,10 @@ impl Light {
         }
     }
 
-    pub fn update(&mut self, graphics: &Graphics, light: &LightComponent, transform: &Transform) {
+    pub fn update(&mut self, light: &LightComponent, transform: &Transform) {
         self.uniform.position = transform.position.as_vec3().to_array();
         self.uniform.colour = (light.colour * light.intensity as f64).as_vec3().to_array();
         self.uniform.light_type = light.light_type.into();
-
-        let instance = Instance::from_matrix(transform.matrix());
-
-        if let Some(instance_buffer) = &self.instance_buffer {
-            let instance_raw = instance.to_raw();
-            graphics.state.queue.write_buffer(
-                instance_buffer,
-                0,
-                bytemuck::cast_slice(&[instance_raw]),
-            );
-        }
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -225,10 +213,6 @@ impl Light {
 
     pub fn buffer(&self) -> &Buffer {
         &self.buffer.as_ref().unwrap()
-    }
-
-    pub fn instance_buffer(&self) -> &Buffer {
-        &self.instance_buffer.as_ref().unwrap()
     }
 }
 
@@ -285,10 +269,22 @@ impl LightManager {
         let mut light_array = LightArrayUniform::default();
         let mut light_index = 0;
 
-        for (_, (light_component, _, light)) in world
-            .query::<(&LightComponent, &Transform, &Light)>()
+        for (_, (light_component, transform, light)) in world
+            .query::<(&LightComponent, &Transform, &mut Light)>()
             .iter()
         {
+            // if it fails to update, the cause it probably the ModelVertex or smth like that
+            let instance = Instance::from_matrix(transform.matrix());
+
+            if let Some(instance_buffer) = &light.instance_buffer {
+                let instance_raw = instance.to_raw();
+                graphics.state.queue.write_buffer(
+                    instance_buffer,
+                    0,
+                    bytemuck::cast_slice(&[instance_raw]),
+                );
+            }
+
             if light_component.enabled && light_index < MAX_LIGHTS {
                 light_array.lights[light_index] = light.uniform().clone();
                 light_index += 1;
@@ -299,8 +295,6 @@ impl LightManager {
 
         if let Some(buffer) = &self.light_array_buffer {
             graphics.state.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[light_array]));
-        } else {
-            log_once::error_once!("No buffer to render to...");
         }
     }
 
@@ -328,69 +322,54 @@ impl LightManager {
         log::debug!("Created ECS light render pipeline");
     }
 
-
-    fn create_render_pipeline_for_lighting(
-        graphics: &mut Graphics,
-        shader: &Shader,
-        bind_group_layouts: Vec<&BindGroupLayout>,
-        label: Option<&str>,
-    ) -> RenderPipeline {
-        let render_pipeline_layout =
-            graphics.state.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Light Render Pipeline Layout"),
-                bind_group_layouts: &bind_group_layouts,
+    fn create_render_pipeline_for_lighting(graphics: &mut Graphics, shader: &Shader, bind_group_layouts: Vec<&BindGroupLayout>, label: Option<&str>) -> RenderPipeline {
+        let render_pipeline_layout = graphics.state.device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(label.unwrap_or("Light Render Pipeline Descriptor")),
+                bind_group_layouts: bind_group_layouts.as_slice(),
                 push_constant_ranges: &[],
             });
 
         graphics.state.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label,
+            label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader.module,
                 entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[
-                    // Vertex buffer layout (location 0)
-                    wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &[
-                            wgpu::VertexAttribute {
-                                offset: 0,
-                                shader_location: 0,
-                                format: wgpu::VertexFormat::Float32x3,
-                            },
-                        ],
-                    },
-                    // Instance buffer layout (locations 5-8)
-                    InstanceRaw::desc(),
-                ],
+                buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: graphics.state.config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState {
+                        alpha: wgpu::BlendComponent::REPLACE,
+                        color: wgpu::BlendComponent::REPLACE,
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
+                compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: graphics::Texture::DEPTH_FORMAT,
+                format: crate::Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
+                depth_compare: CompareFunction::Greater,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState {
                 count: 1,
@@ -408,6 +387,8 @@ pub struct Instance {
     pub position: DVec3,
     pub rotation: DQuat,
     pub scale: DVec3,
+
+    buffer: Option<Buffer>,
 }
 
 impl Instance {
@@ -416,6 +397,7 @@ impl Instance {
             position,
             rotation,
             scale,
+            buffer: None,
         }
     }
 
@@ -427,12 +409,17 @@ impl Instance {
         }
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        self.buffer.as_ref().unwrap()
+    }
+
     pub fn from_matrix(mat: DMat4) -> Self {
         let (scale, rotation, position) = mat.to_scale_rotation_translation();
         Instance {
             position,
             rotation,
             scale,
+            buffer: None,
         }
     }
 }

@@ -21,7 +21,7 @@ struct InstanceInput {
     @location(6) model_matrix_1: vec4<f32>,
     @location(7) model_matrix_2: vec4<f32>,
     @location(8) model_matrix_3: vec4<f32>,
-};
+}
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -45,7 +45,8 @@ fn vs_main(
     );
     let scale = 0.25;
     var out: VertexOutput;
-    out.clip_position = camera.view_proj * vec4<f32>(model.position * scale + light.position, 1.0);
+//    out.clip_position = camera.view_proj * vec4<f32>(model.position * scale + light.position, 1.0);
+    out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
     out.color = light.color;
     return out;
 }

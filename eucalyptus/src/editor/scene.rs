@@ -542,6 +542,7 @@ impl Scene for Editor {
                         render_pass.set_pipeline(light_pipeline);
                         for (_, (light, component)) in light_query.iter() {
                             if component.enabled {
+                                render_pass.set_vertex_buffer(1, light.instance_buffer.as_ref().unwrap().slice(..));
                                 render_pass.draw_light_model(
                                     light.model(),
                                     camera.bind_group(), 
@@ -555,12 +556,10 @@ impl Scene for Editor {
 
                     for (_, (entity, _)) in entity_query.iter() {
                         render_pass.set_vertex_buffer(1, entity.instance_buffer.as_ref().unwrap().slice(..));
-                        render_pass.set_bind_group(2, entity.uniform_bind_group.as_ref().unwrap(), &[]);
+                        // render_pass.set_bind_group(2, entity.uniform_bind_group.as_ref().unwrap(), &[]);
                         render_pass.draw_model(entity.model(), camera.bind_group(), self.light_manager.bind_group());
                     }
                 }
-
-                
             }
         }
     }
