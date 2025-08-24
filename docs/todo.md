@@ -16,9 +16,10 @@ Just a list of stuff i need to work on/a list of items i need to implement
     - [x] add to menu bar
   - [x] delete
 - [ ] basic physics
-- [ ] basic lighting | Status: In progress
-  - [ ] complete normal matrix, specular lighting and the half direction from tutorial
-  - [ ] get the gizmo to work with the lighting system
+- [x] basic lighting | Status: In progress
+  - [x] complete normal matrix, specular lighting and the half direction from tutorial
+  - [x] get the gizmo to work with the lighting system
+- [ ] add resource inspector values to lighting
 - [x] ~~getting redback (the build system) to work~~ get the build system inside eucalyptus to work
 - [ ] dragging and combining different objects and stuff
   - [ ] lighting support for the entity list
