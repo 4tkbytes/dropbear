@@ -25,7 +25,7 @@ impl Keyboard for Editor {
         let shift_pressed = self.input_state.pressed_keys.contains(&KeyCode::ShiftLeft)
             || self.input_state.pressed_keys.contains(&KeyCode::ShiftRight);
 
-        let is_double_press = self.is_double_key_press(key);
+        let is_double_press = self.double_key_pressed(key);
 
         let is_playing = matches!(self.editor_state, EditorState::Playing);
 

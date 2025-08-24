@@ -16,10 +16,10 @@ use crate::{
     APP_INFO,
     camera::CameraAction,
     editor::scene::PENDING_SPAWNS,
-    scripting::TEMPLATE_SCRIPT,
     states::{EntityNode, Node, RESOURCES, ResourceType},
     utils::PendingSpawn,
 };
+use crate::editor::component::Component;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum EditorTab {
@@ -112,16 +112,16 @@ pub struct StaticallyKept {
     context_menu_tab: Option<EditorTab>,
     is_focused: bool,
     old_pos: Transform,
-    scale_locked: bool,
+    pub(crate) scale_locked: bool,
 
-    old_label_entity: Option<hecs::Entity>,
-    label_original: Option<String>,
-    label_last_edit: Option<Instant>,
+    pub(crate) old_label_entity: Option<hecs::Entity>,
+    pub(crate) label_original: Option<String>,
+    pub(crate) label_last_edit: Option<Instant>,
 
-    transform_old_entity: Option<hecs::Entity>,
-    transform_original_transform: Option<Transform>,
+    pub(crate) transform_old_entity: Option<hecs::Entity>,
+    pub(crate) transform_original_transform: Option<Transform>,
 
-    transform_in_progress: bool,
+    pub(crate) transform_in_progress: bool,
 }
 
 impl StaticallyKept {}
@@ -140,7 +140,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         let mut cfg = TABS_GLOBAL.lock();
-
+        
         ui.ctx().input(|i| {
             if i.pointer.button_pressed(egui::PointerButton::Secondary) {
                 if let Some(pos) = i.pointer.hover_pos() {
@@ -219,20 +219,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             camera.zfar,
                         );
 
-                        // log::debug!(
-                        //     "Camera - eye: {:?}, target: {:?}, up: {:?}",
-                        //     camera.eye,
-                        //     camera.target,
-                        //     camera.up
-                        // );
-                        // log::debug!(
-                        //     "Camera - fov_y: {:.3}°, aspect: {:.3}, znear: {:.3}, zfar: {:.3}",
-                        //     camera.fov_y,
-                        //     camera.aspect,
-                        //     camera.znear,
-                        //     camera.zfar
-                        // );
-
                         if !view_matrix.is_finite() {
                             log::error!("Invalid view matrix");
                             return;
@@ -280,14 +266,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             return;
                         }
 
-                        // log::debug!(
-                        //     "Click pos: {:?}, NDC: ({:.3}, {:.3})",
-                        //     click_pos,
-                        //     ndc_x,
-                        //     ndc_y
-                        // );
-                        // log::debug!("Ray start: {:?}, direction: {:?}", ray_start, ray_direction);
-
                         let mut closest_distance = f64::INFINITY;
                         let mut selected_entity_id: Option<hecs::Entity> = None;
                         let mut entity_count = 0;
@@ -302,28 +280,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let to_sphere = entity_pos - ray_start;
                             let projection = to_sphere.dot(ray_direction);
 
-                            // log::debug!(
-                            //     "Entity {:?}: pos={:?}, scale={:?}, radius={:.3}",
-                            //     entity_id,
-                            //     entity_pos,
-                            //     transform.scale,
-                            //     sphere_radius
-                            // );
-                            // log::debug!(
-                            //     "  to_sphere={:?}, projection={:.3}",
-                            //     to_sphere,
-                            //     projection
-                            // );
-
                             if projection > 0.0 {
                                 let closest_point = ray_start + ray_direction * projection;
                                 let distance_to_sphere = (closest_point - entity_pos).length();
-
-                                // log::debug!(
-                                //     "  closest_point={:?}, distance_to_sphere={:.3}",
-                                //     closest_point,
-                                //     distance_to_sphere
-                                // );
 
                                 if distance_to_sphere <= sphere_radius {
                                     let discriminant = sphere_radius * sphere_radius
@@ -331,25 +290,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     if discriminant >= 0.0 {
                                         let intersection_distance =
                                             projection - discriminant.sqrt();
-                                        // log::debug!(
-                                        //     "  HIT! intersection_distance={:.3}",
-                                        //     intersection_distance
-                                        // );
 
                                         if intersection_distance < closest_distance {
                                             closest_distance = intersection_distance;
                                             selected_entity_id = Some(entity_id);
                                         }
                                     }
-                                } else {
-                                    // log::debug!(
-                                    //     "  MISS: distance {:.3} > radius {:.3}",
-                                    //     distance_to_sphere,
-                                    //     sphere_radius
-                                    // );
                                 }
-                            } else {
-                                // log::debug!("  BEHIND: projection {:.3} <= 0", projection);
                             }
                         }
 
@@ -700,673 +647,148 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
-                    #[allow(unused_assignments)]
-                    let mut script_loc: String = String::new();
-                    {
-                        let script = self.world.query_one::<&mut ScriptComponent>(*entity);
-                        if let Ok(mut q) = script {
-                            if let Some(script) = q.get() {
-                                script_loc = format!("{}", script.path.display());
-                            } else {
-                                script_loc = String::from("None");
-                            }
-                        } else {
-                            script_loc = "None".to_string();
+                    if let Ok((e, transform, _props, script)) = self
+                    .world
+                    .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties, Option<&mut ScriptComponent>)>(*entity) {
+                        let label = e.label().clone();
+
+                        e.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                        transform.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
+
+                        if let Some(script) = script {
+                            script.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         }
-                    }
 
-                    if let Ok((e, transform, _props)) = self
-                        .world
-                        .query_one_mut::<(&mut AdoptedEntity, &mut Transform, &ModelProperties)>(*entity) {
-                            let label = e.label().clone();
-                            let model = e.model_mut();
-                            ui.group(|ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label("Name: ");
+                        // todo: convert camera into component
+                        let entity_id_copy = *entity;
+                        let entity_label = label.clone();
+                        let entity_position = transform.position;
+                        let camera_manager = &self.camera_manager;
+                        let signal = &mut *self.signal;
+                        let get_player_camera_target =
+                            camera_manager.get_player_camera_target();
+                        let get_player_camera_offset =
+                            camera_manager.get_player_camera_offset();
+                        let get_active_type = camera_manager.get_active_type();
+                        let get_active_eye = camera_manager.get_active().unwrap().eye;
 
-                                    let resp = ui.text_edit_singleline(&mut model.label);
-
-                                    if resp.changed() {
-                                        if cfg.old_label_entity.is_none() {
-                                            cfg.old_label_entity = Some(entity.clone());
-                                            cfg.label_original = Some(label.clone());
-                                        }
-                                        cfg.label_last_edit = Some(Instant::now());
-                                    }
-
-                                    if resp.lost_focus() {
-                                        if let Some(ent) = cfg.old_label_entity.take() {
-                                            if ent == *entity {
-                                                if let Some(orig) = cfg.label_original.take() {
-                                                    UndoableAction::push_to_undo(
-                                                        &mut self.undo_stack,
-                                                        UndoableAction::Label(ent, orig, EntityType::Entity),
-                                                    );
-                                                    log::debug!("Pushed label change to undo stack (immediate)");
-                                                }
-                                            } else {
-                                                cfg.label_original = None;
-                                            }
-                                        }
-                                        cfg.label_last_edit = None;
-                                    }
-                                })
-                            });
-
-                            ui.group(|ui| {
-                                CollapsingHeader::new("Transform").default_open(true).show(
-                                    ui,
-                                    |ui| {
-                                        ui.horizontal(|ui| {
-                                            ui.label("Position:");
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("X:");
-                                            let response = ui.add(
-                                                egui::DragValue::new(&mut transform.position.x)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed X transform change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-                                        ui.horizontal(|ui| {
-                                            ui.label("Y:");
-                                            let response = ui.add(
-                                                egui::DragValue::new(&mut transform.position.y)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Y transform change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-                                        
-                                        ui.horizontal(|ui| {
-                                            ui.label("Z:");
-                                            let response = ui.add(
-                                                egui::DragValue::new(&mut transform.position.z)
-                                                    .speed(0.1)
-                                                    .fixed_decimals(3),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Z transform change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-                                        if ui.button("Reset Position").clicked() {
-                                            transform.position = glam::DVec3::ZERO;
-                                        }
-
-                                        ui.add_space(5.0);
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Rotation:");
-                                        });
-
-                                        let mut rotation_changed = false;
-                                        let (mut x_rot, mut y_rot, mut z_rot) =
-                                            transform.rotation.to_euler(glam::EulerRot::XYZ);
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("X:");
-                                            let response = ui.add(
-                                                egui::Slider::new(
-                                                    &mut x_rot,
-                                                    -std::f64::consts::PI
-                                                        ..=std::f64::consts::PI,
-                                                )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                rotation_changed = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed X rotation change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-                                        
-                                        ui.horizontal(|ui| {
-                                            ui.label("Y:");
-                                            let response = ui.add(
-                                                egui::Slider::new(
-                                                    &mut y_rot,
-                                                    -std::f64::consts::PI
-                                                        ..=std::f64::consts::PI,
-                                                )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                rotation_changed = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Y rotation change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-                                        
-                                        ui.horizontal(|ui| {
-                                            ui.label("Z:");
-                                            let response = ui.add(
-                                                egui::Slider::new(
-                                                    &mut z_rot,
-                                                    -std::f64::consts::PI
-                                                        ..=std::f64::consts::PI,
-                                                )
-                                                .step_by(0.01)
-                                                .custom_formatter(|n, _| {
-                                                    format!("{:.1}°", n.to_degrees())
-                                                })
-                                                .custom_parser(|s| {
-                                                    s.trim_end_matches('°')
-                                                        .parse::<f64>()
-                                                        .ok()
-                                                        .map(|v| v.to_radians())
-                                                }),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                rotation_changed = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Z rotation change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-
-                                        if rotation_changed {
-                                            transform.rotation = glam::DQuat::from_euler(
-                                                glam::EulerRot::XYZ,
-                                                x_rot,
-                                                y_rot,
-                                                z_rot,
-                                            );
-                                        }
-                                        if ui.button("Reset Rotation").clicked() {
-                                            transform.rotation = glam::DQuat::IDENTITY;
-                                        }
-                                        ui.add_space(5.0);
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Scale:");
-                                            ui.with_layout(
-                                                egui::Layout::right_to_left(egui::Align::Center),
-                                                |ui| {
-                                                    let lock_icon = if cfg.scale_locked {
-                                                        "🔒"
-                                                    } else {
-                                                        "🔓"
-                                                    };
-                                                    if ui
-                                                        .button(lock_icon)
-                                                        .on_hover_text("Lock uniform scaling")
-                                                        .clicked()
-                                                    {
-                                                        cfg.scale_locked = !cfg.scale_locked;
-                                                    }
-                                                },
-                                            );
-                                        });
-
-                                        let mut scale_changed = false;
-                                        let mut new_scale = transform.scale;
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("X:");
-                                            let response = ui.add(
-                                                egui::DragValue::new(&mut new_scale.x)
-                                                    .speed(0.01)
-                                                    .fixed_decimals(3),
-                                            );
-                                            
-                                            if response.drag_started() {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                scale_changed = true;
-                                                if cfg.scale_locked {
-                                                    let scale_factor = new_scale.x / transform.scale.x;
-                                                    new_scale.y = transform.scale.y * scale_factor;
-                                                    new_scale.z = transform.scale.z * scale_factor;
-                                                }
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed X scale change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Y:");
-                                            let y_slider = egui::DragValue::new(&mut new_scale.y)
-                                                .speed(0.01)
-                                                .fixed_decimals(3);
-
-                                            let response = ui.add_enabled(!cfg.scale_locked, y_slider);
-                                            
-                                            if response.drag_started() && !cfg.scale_locked {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                scale_changed = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Y scale change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Z:");
-                                            let z_slider = egui::DragValue::new(&mut new_scale.z)
-                                                .speed(0.01)
-                                                .fixed_decimals(3);
-
-                                            let response = ui.add_enabled(!cfg.scale_locked, z_slider);
-                                            
-                                            if response.drag_started() && !cfg.scale_locked {
-                                                cfg.transform_old_entity = Some(entity.clone());
-                                                cfg.transform_original_transform = Some((*transform).clone());
-                                                cfg.transform_in_progress = true;
-                                            }
-                                            
-                                            if response.changed() {
-                                                scale_changed = true;
-                                            }
-                                            
-                                            if response.drag_stopped() && cfg.transform_in_progress {
-                                                if let Some(ent) = cfg.transform_old_entity.take() {
-                                                    if let Some(orig) = cfg.transform_original_transform.take() {
-                                                        UndoableAction::push_to_undo(
-                                                            &mut self.undo_stack,
-                                                            UndoableAction::Transform(ent, orig),
-                                                        );
-                                                        log::debug!("Pushed Z scale change to undo stack");
-                                                    }
-                                                }
-                                                cfg.transform_in_progress = false;
-                                            }
-                                        });
-
-                                        if scale_changed {
-                                            transform.scale = new_scale;
-                                        }
-                                        if ui.button("Reset Scale").clicked() {
-                                            transform.scale = glam::DVec3::ONE;
-                                        }
-                                        ui.add_space(5.0);
-
-                                        // maybe use? probs not :/
-                                        // if pos_changed || rotation_changed || scale_changed {
-                                        //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
-                                        // }
-                                    },
-                                );
-                            });
-                            ui.group(|ui| {
-                                CollapsingHeader::new("Scripting")
-                                    .default_open(true)
-                                    .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        if ui.button("Browse").clicked() {
-                                            if let Some(script_file) = rfd::FileDialog::new()
-                                                .add_filter("Rhai Script", &["rhai"])
-                                                .pick_file()
-                                            {
-                                                let script_name = script_file
-                                                    .file_stem()
-                                                    .unwrap_or_default()
-                                                    .to_string_lossy()
-                                                    .to_string();
-                                                *self.signal = Signal::ScriptAction(ScriptAction::AttachScript {
-                                                    script_path: script_file,
-                                                    script_name,
-                                                });
-                                            }
-                                        }
-
-                                        if ui.button("New").clicked() {
-                                            if let Some(script_path) = rfd::FileDialog::new()
-                                                .add_filter("Rhai Script", &["rhai"])
-                                                .set_file_name(format!("{}_script.rhai", e.label()))
-                                                .save_file()
-                                            {
-                                                match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
-                                                    Ok(_) => {
-                                                        let script_name = script_path
-                                                            .file_stem()
-                                                            .unwrap_or_default()
-                                                            .to_string_lossy()
-                                                            .to_string();
-                                                        *self.signal = Signal::ScriptAction(ScriptAction::CreateAndAttachScript {
-                                                            script_path,
-                                                            script_name,
-                                                        });
-                                                    },
-                                                    Err(e) => {
-                                                        crate::warn!("Failed to create script file: {}", e);
-                                                    },
-                                                }
-                                            }
-                                        }
-                                    });
-
-                                    ui.separator();
-
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.label("Script Location:");
-                                        ui.label(script_loc);
-                                    });
-
-                                    if ui.button("Remove").clicked() {
-                                        *self.signal = Signal::ScriptAction(ScriptAction::RemoveScript);
-                                    }
-                                    ui.separator();
-                                    ui.horizontal(|ui| {
-                                        if ui.button("Edit Script").clicked() {
-                                            *self.signal = Signal::ScriptAction(ScriptAction::EditScript);
-                                        }
-                                    });
-                                });
-                            });
-                            let entity_id_copy = *entity;
-                            let entity_label = label.clone();
-                            let entity_position = transform.position;
-                            let camera_manager = &self.camera_manager;
-                            let signal = &mut *self.signal;
-                            let get_player_camera_target =
-                                camera_manager.get_player_camera_target();
-                            let get_player_camera_offset =
-                                camera_manager.get_player_camera_offset();
-                            let get_active_type = camera_manager.get_active_type();
-                            let get_active_eye = camera_manager.get_active().unwrap().eye;
-
-                            let followed_entity_label = if let Some(target_entity) =
-                                get_player_camera_target
-                            {
-                                if target_entity != entity_id_copy {
-                                    if let Ok((followed_entity, _, _)) = self.world
-                                        .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
-                                    {
-                                        Some(followed_entity.label().to_string())
-                                    } else {
-                                        None
-                                    }
+                        let followed_entity_label = if let Some(target_entity) =
+                            get_player_camera_target
+                        {
+                            if target_entity != entity_id_copy {
+                                if let Ok((followed_entity, _, _)) = self.world
+                                    .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
+                                {
+                                    Some(followed_entity.label().to_string())
                                 } else {
                                     None
                                 }
                             } else {
                                 None
-                            };
-
-                            ui.group(|ui| {
-                                CollapsingHeader::new("Camera")
-                                .default_open(true)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        if ui.button("Capture Camera Position relative to Entity").clicked() {
-                                            let current_camera_pos = get_active_eye;
-                                            let calculated_offset = current_camera_pos - entity_position;
-                                            log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}", 
-                                                entity_position, current_camera_pos, calculated_offset);
-                                            *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
-                                                entity: entity_id_copy,
-                                                offset: calculated_offset,
-                                            });
-                                            crate::success_without_console!("Camera successfully attached to {}", entity_label);
-                                        }
-                                    });
-                                    ui.separator();
-                                    ui.horizontal(|ui| {
-                                        ui.label("Status:");
-                                        let status_text = match get_active_type {
-                                            crate::camera::CameraType::Debug => {
-                                                egui::RichText::new("Debug Camera (Free)")
-                                                    .color(egui::Color32::LIGHT_BLUE)
-                                            },
-                                            crate::camera::CameraType::Player => {
-                                                if let Some(target_entity) = get_player_camera_target {
-                                                    if target_entity == entity_id_copy {
-                                                        egui::RichText::new("Following THIS Entity")
-                                                            .color(egui::Color32::LIGHT_GREEN)
-                                                            .strong()
-                                                    } else {
-                                                        if let Some(followed_label) = &followed_entity_label {
-                                                            egui::RichText::new(format!("Following: {}", followed_label))
-                                                                .color(egui::Color32::YELLOW)
-                                                        } else {
-                                                            egui::RichText::new("Following: Unknown Entity")
-                                                                .color(egui::Color32::RED)
-                                                        }
-                                                    }
-                                                } else {
-                                                    egui::RichText::new("Player Camera (Free)")
-                                                        .color(egui::Color32::LIGHT_GRAY)
-                                                }
-                                            }
-                                        };
-                                        ui.label(status_text);
-                                    });
-
-                                    ui.separator();
-
-                                    if let Some(target_entity) = get_player_camera_target {
-                                        if target_entity == entity_id_copy {
-                                            ui.horizontal(|ui| {
-                                                ui.label("Camera Offset:");
-                                                if let Some(offset) = get_player_camera_offset {
-                                                    ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
-                                                } else {
-                                                    ui.label("Unknown");
-                                                }
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.label("Distance:");
-                                                let camera_pos = get_active_eye;
-                                                let distance = (camera_pos - entity_position).length();
-                                                ui.label(format!("{:.2} units", distance));
-                                            });
-                                        }
-                                    }
-
-                                    ui.horizontal(|ui| {
-                                        if ui.button("Clear Camera Target").clicked() {
-                                            *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
-                                        }
-                                    });
-                                });
-                            });
-
-                            if let Some(t) = cfg.label_last_edit {
-                                if t.elapsed() >= Duration::from_millis(500) {
-                                    if let Some(ent) = cfg.old_label_entity.take() {
-                                        if let Some(orig) = cfg.label_original.take() {
-                                            UndoableAction::push_to_undo(
-                                                &mut self.undo_stack,
-                                                UndoableAction::Label(ent, orig, EntityType::Entity),
-                                            );
-                                            log::debug!("Pushed label change to undo stack after 500ms debounce period");
-                                        }
-                                    }
-                                    cfg.label_last_edit = None;
-                                }
                             }
-                        }
-                    
-                    if let Ok((light, _transform, _props)) = self.world.query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity) {
-                        let label = light.label.clone();
-                            ui.group(|ui| {
+                        } else {
+                            None
+                        };
+
+                        ui.group(|ui| {
+                            CollapsingHeader::new("Camera")
+                            .default_open(true)
+                            .show(ui, |ui| {
                                 ui.horizontal(|ui| {
-                                    ui.label("Name: ");
-
-                                    let resp = ui.text_edit_singleline(&mut light.label);
-
-                                    if resp.changed() {
-                                        if cfg.old_label_entity.is_none() {
-                                            cfg.old_label_entity = Some(entity.clone());
-                                            cfg.label_original = Some(label.clone().to_string());
-                                        }
-                                        cfg.label_last_edit = Some(Instant::now());
+                                    if ui.button("Capture Camera Position relative to Entity").clicked() {
+                                        let current_camera_pos = get_active_eye;
+                                        let calculated_offset = current_camera_pos - entity_position;
+                                        log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}",
+                                            entity_position, current_camera_pos, calculated_offset);
+                                        *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
+                                            entity: entity_id_copy,
+                                            offset: calculated_offset,
+                                        });
+                                        crate::success_without_console!("Camera successfully attached to {}", entity_label);
                                     }
-
-                                    if resp.lost_focus() {
-                                        if let Some(ent) = cfg.old_label_entity.take() {
-                                            if ent == *entity {
-                                                if let Some(orig) = cfg.label_original.take() {
-                                                    UndoableAction::push_to_undo(
-                                                        &mut self.undo_stack,
-                                                        UndoableAction::Label(ent, orig, EntityType::Light),
-                                                    );
-                                                    log::debug!("Pushed label change to undo stack (immediate)");
+                                });
+                                ui.separator();
+                                ui.horizontal(|ui| {
+                                    ui.label("Status:");
+                                    let status_text = match get_active_type {
+                                        crate::camera::CameraType::Debug => {
+                                            egui::RichText::new("Debug Camera (Free)")
+                                                .color(egui::Color32::LIGHT_BLUE)
+                                        },
+                                        crate::camera::CameraType::Player => {
+                                            if let Some(target_entity) = get_player_camera_target {
+                                                if target_entity == entity_id_copy {
+                                                    egui::RichText::new("Following THIS Entity")
+                                                        .color(egui::Color32::LIGHT_GREEN)
+                                                        .strong()
+                                                } else {
+                                                    if let Some(followed_label) = &followed_entity_label {
+                                                        egui::RichText::new(format!("Following: {}", followed_label))
+                                                            .color(egui::Color32::YELLOW)
+                                                    } else {
+                                                        egui::RichText::new("Following: Unknown Entity")
+                                                            .color(egui::Color32::RED)
+                                                    }
                                                 }
                                             } else {
-                                                cfg.label_original = None;
+                                                egui::RichText::new("Player Camera (Free)")
+                                                    .color(egui::Color32::LIGHT_GRAY)
                                             }
                                         }
-                                        cfg.label_last_edit = None;
-                                    }
-                                })
-                            });
+                                    };
+                                    ui.label(status_text);
+                                });
 
+                                ui.separator();
+
+                                if let Some(target_entity) = get_player_camera_target {
+                                    if target_entity == entity_id_copy {
+                                        ui.horizontal(|ui| {
+                                            ui.label("Camera Offset:");
+                                            if let Some(offset) = get_player_camera_offset {
+                                                ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
+                                            } else {
+                                                ui.label("Unknown");
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Distance:");
+                                            let camera_pos = get_active_eye;
+                                            let distance = (camera_pos - entity_position).length();
+                                            ui.label(format!("{:.2} units", distance));
+                                        });
+                                    }
+                                }
+
+                                ui.horizontal(|ui| {
+                                    if ui.button("Clear Camera Target").clicked() {
+                                        *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
+                                    }
+                                });
+                            });
+                        });
+
+                        if let Some(t) = cfg.label_last_edit {
+                            if t.elapsed() >= Duration::from_millis(500) {
+                                if let Some(ent) = cfg.old_label_entity.take() {
+                                    if let Some(orig) = cfg.label_original.take() {
+                                        UndoableAction::push_to_undo(
+                                            &mut self.undo_stack,
+                                            UndoableAction::Label(ent, orig, EntityType::Entity),
+                                        );
+                                        log::debug!("Pushed label change to undo stack after 500ms debounce period");
+                                    }
+                                }
+                                cfg.label_last_edit = None;
+                            }
+                        }
+                    } else {
+                        log_once::debug_once!("Unable to query entity inside resource inspector");
+                    }
+                    
+                    if let Ok((light, transform, _props)) = self.world.query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity) {
+                            light.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                            transform.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut light.label);
                             if let Some(t) = cfg.label_last_edit {
                                 if t.elapsed() >= Duration::from_millis(500) {
                                     if let Some(ent) = cfg.old_label_entity.take() {
@@ -1426,8 +848,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTab::ResourceInspector => {
                             ui.set_min_width(150.0);
-                            if ui.selectable_label(false, "Inspect Resource").clicked() {
-                                menu_action = Some(EditorTabMenuAction::InspectResource);
+                            if ui.selectable_label(false, "Add Component").clicked() {
+                                menu_action = Some(EditorTabMenuAction::AddComponent);
                             }
                         }
                         EditorTab::Viewport => {
@@ -1488,14 +910,45 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             cfg.context_menu_tab = None;
                             return;
                         }
-                        EditorTabMenuAction::InspectResource => {
-                            log::debug!("Inspect Resource clicked");
+                        EditorTabMenuAction::AddComponent => {
+                            log::debug!("Add Component clicked");
+                            if let Some(entity) = self.selected_entity {
+                                if let Ok(..) = self.world.query_one_mut::<&AdoptedEntity>(*entity) {
+                                    log::debug!("Queried selected entity, it is an entity");
+                                    *self.signal = Signal::AddComponent(*entity, EntityType::Entity);
+                                }
+
+                                if let Ok(..) = self.world.query_one_mut::<&Light>(*entity) {
+                                    log::debug!("Queried selected entity, it is a light");
+                                    *self.signal = Signal::AddComponent(*entity, EntityType::Entity);
+                                }
+                            } else {
+                                crate::warn!("What are you adding a component to? Theres no entity selected...");
+                            }
+
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;
                         }
                         EditorTabMenuAction::ViewportOption => {
                             log::debug!("Viewport Option clicked");
+                            cfg.show_context_menu = false;
+                            cfg.context_menu_tab = None;
+                            return;
+                        },
+                        EditorTabMenuAction::RemoveComponent => {
+                            log::debug!("Remove Component clicked");
+                            if let Some(entity) = self.selected_entity {
+                                if let Ok(script) = self.world.query_one_mut::<&ScriptComponent>(*entity) {
+                                    log::debug!("Queried selected entity, it has a script component");
+                                    *self.signal = Signal::RemoveComponent(*entity, ComponentType::Script(script.clone()));
+                                } else {
+                                    crate::warn!("Selected entity does not have a script component to remove");
+                                }
+                            } else {
+                                panic!("Paradoxical error: Cannot remove a component when its not selected...");
+                            }
+
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;
@@ -1601,6 +1054,7 @@ pub enum EditorTabMenuAction {
     RefreshAssets,
     AddEntity,
     DeleteEntity,
-    InspectResource,
+    AddComponent,
+    RemoveComponent,
     ViewportOption,
 }

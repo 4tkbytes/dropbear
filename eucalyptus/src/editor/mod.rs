@@ -1,6 +1,7 @@
 pub mod dock;
 pub mod input;
 pub mod scene;
+mod component;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -17,7 +18,7 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use glam::DVec3;
-use hecs::World;
+use hecs::{World};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
@@ -60,13 +61,6 @@ pub struct Editor {
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
 
-    // last_key_press_times: HashMap<KeyCode, Instant>,
-    // double_press_threshold: Duration,
-    // mouse_pos: (f64, f64),
-    // mouse_button: HashSet<MouseButton>,    
-    // pressed_keys: HashSet<KeyCode>,
-    // mouse_delta: Option<(f64, f64)>,
-
     editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
@@ -74,6 +68,8 @@ pub struct Editor {
     play_mode_backup: Option<PlayModeBackup>,
 
     input_state: InputState,
+
+    show_add_component_window: bool,
 }
 
 #[derive(Clone)]
@@ -231,13 +227,13 @@ impl Editor {
             play_mode_backup: None,
             input_state: InputState::new(),
             light_manager: LightManager::new(),
-
+            show_add_component_window: false,
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
     }
 
-    fn is_double_key_press(&mut self, key: KeyCode) -> bool {
+    fn double_key_pressed(&mut self, key: KeyCode) -> bool {
         let now = Instant::now();
 
         if let Some(last_time) = self.input_state.last_key_press_times.get(&key) {
@@ -656,6 +652,7 @@ pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
     Spawn(hecs::Entity),
     Label(hecs::Entity, String, EntityType),
+    RemoveComponent(hecs::Entity, ComponentType)
 }
 #[derive(Debug)]
 pub enum EntityType {
@@ -722,6 +719,14 @@ impl UndoableAction {
                     },
                 }
             },
+            UndoableAction::RemoveComponent(entity, c_type) => {
+                match c_type {
+                    ComponentType::Script(component) => {
+                        world.insert_one(*entity, component.clone())?;
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -738,10 +743,18 @@ pub enum Signal {
     CameraAction(CameraAction),
     Play,
     StopPlaying,
+    AddComponent(hecs::Entity, EntityType),
+    RemoveComponent(hecs::Entity, ComponentType)
 }
 
 impl Default for Editor {
     fn default() -> Self {
         Editor::new()
     }
+}
+
+#[derive(Debug)]
+pub enum ComponentType {
+    Script(ScriptComponent),
+    // Camera,
 }

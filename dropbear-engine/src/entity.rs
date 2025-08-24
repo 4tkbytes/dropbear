@@ -76,6 +76,10 @@ impl AdoptedEntity {
     pub fn label(&self) -> &String {
         &self.model().label
     }
+    
+    pub fn label_mut(&mut self) -> &mut String {
+        &mut self.model_mut().label   
+    }
 
     pub fn set_label(&mut self, label: &str) {
         self.model_mut().label = label.to_string();

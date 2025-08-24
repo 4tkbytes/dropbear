@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-
+use egui::Align2;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::{DrawLight, DrawModel}, scene::{Scene, SceneCommand}
 };
@@ -347,7 +347,7 @@ impl Scene for Editor {
                         }
                         ScriptAction::RemoveScript => {
                             if let Some(selected_entity) = self.selected_entity {
-                                if let Ok(_) = self.world.remove_one::<ScriptComponent>(selected_entity) {
+                                if let Ok(script) = self.world.remove_one::<ScriptComponent>(selected_entity) {
                                     crate::success!("Removed script from entity {:?}", selected_entity);
 
                                     if let Err(e) = crate::scripting::convert_entity_to_group(
@@ -356,6 +356,8 @@ impl Scene for Editor {
                                     ) {
                                         log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                                     }
+                                    log::debug!("Pushing remove component to undo stack");
+                                    UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(selected_entity, ComponentType::Script(script)));
                                 } else {
                                     crate::warn!(
                                         "No script component found on entity {:?}",
@@ -463,7 +465,71 @@ impl Scene for Editor {
                             self.signal = Signal::None;
                         }
                     },
-            
+            Signal::AddComponent(entity, e_type) => {
+                // show add component window
+                match e_type {
+                    EntityType::Entity => {
+                        if let Ok(e) = self.world.query_one_mut::<&AdoptedEntity>(*entity) {
+                            let mut local_signal: Option<Signal> = None;
+                            let label = e.label().clone();
+                            self.show_add_component_window = true;
+                            egui::Window::new(format!("Add Component for {}", label))
+                                .scroll([false, true])
+                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                .fixed_size([180.0, 180.0])
+                                .enabled(self.show_add_component_window)
+                                .show(&graphics.get_egui_context(), |ui| {
+                                if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                    log::debug!("Adding scripting component to entity [{}]", label);
+                                    if let Err(e) = self.world.insert_one(*entity, ScriptComponent::default()) {
+                                        crate::warn!("Failed to add scripting component to entity: {}", e);
+                                    } else {
+                                        crate::success!("Added the scripting component");
+                                    }
+                                    self.show_add_component_window = false;
+                                    local_signal = Some(Signal::None);
+                                }
+                                if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
+                                    log::debug!("Adding camera component to entity [{}]", label);
+                                    log::debug!("Not implemented yet :(");
+                                    self.show_add_component_window = false;
+                                    local_signal = Some(Signal::None);
+                                }
+                            });
+                            if let Some(signal) = local_signal {
+                                self.signal = signal
+                            }
+                        }
+                    }
+                    EntityType::Light => {
+                        if let Ok(light) = self.world.query_one_mut::<&Light>(*entity) {
+                            self.show_add_component_window = true;
+                            egui::Window::new(format!("Add Component for {}", light.label)).scroll([false, true]).enabled(self.show_add_component_window).show(&graphics.get_egui_context(), |ui| {
+                                if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                    log::debug!("Adding scripting component to entity [{}]", light.label());
+                                    self.show_add_component_window = false;
+                                    self.signal = Signal::None;
+                                }
+                            });
+                        }
+                    }
+                }
+            },
+            Signal::RemoveComponent(entity, c_type) => {
+                match c_type {
+                    ComponentType::Script(_) => {
+                        match self.world.remove_one::<ScriptComponent>(*entity) {
+                            Ok(component) => {
+                                crate::success!("Removed script component from entity {:?}", entity);
+                                UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Script(component)));
+                            }
+                            Err(e) => {
+                                crate::warn!("Failed to remove script component from entity: {}", e);
+                            }
+                        }
+                    },
+                }
+            }
         }
 
         let current_size = graphics.state.viewport_texture.size;

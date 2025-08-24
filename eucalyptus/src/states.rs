@@ -485,7 +485,7 @@ pub enum EntityNode {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ScriptComponent {
     pub name: String,
     pub path: PathBuf,
@@ -563,7 +563,7 @@ impl EntityNode {
 pub struct SceneConfig {
     pub scene_name: String,
     pub entities: Vec<SceneEntity>,
-    pub camera: HashMap<CameraType, SceneCameraConfig>,
+    pub camera: HashMap<CameraType, SceneCameraConfig>, // TODO: Change to component
     pub lights: Vec<LightConfig>,
     // todo later
     // pub settings: SceneSettings,
@@ -602,7 +602,7 @@ impl Default for SceneCameraConfig {
 }
 
 impl SceneCameraConfig {
-    pub fn into_camera(&self, graphics: &mut Graphics) -> Camera {
+    pub fn camera(&self, graphics: &mut Graphics) -> Camera {
         Camera::new(graphics, self.position.into(), self.target.into(), self.up.into(), self.aspect.into(), self.fov.into(), self.near.into(), self.far.into(), 5.0, 0.0125)
     }
 }
