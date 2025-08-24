@@ -157,7 +157,7 @@ impl Light {
             label,
         });
 
-        let instance = Instance::new(transform.position, transform.rotation, transform.scale);
+        let instance = Instance::new(transform.position, transform.rotation, DVec3::new(0.25, 0.25, 0.25));
 
         let instance_buffer =
             graphics

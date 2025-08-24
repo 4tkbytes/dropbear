@@ -67,20 +67,6 @@ impl Scene for Editor {
 
         self.light_manager.create_light_array_resources(graphics);
 
-        // let main_light_transform = Transform {
-        //     position: DVec3::new(2.0, 4.0, 2.0),
-        //     ..Default::default()
-        // };
-        // let main_light_component = LightComponent::directional(DVec3::ONE, 1.0);
-        // let main_adopted_light = Light::new(graphics, &main_light_component, &main_light_transform, Some("Main Light"));
-
-        // let second_light_transform = Transform {
-        //     position: DVec3::new(-10.0, 3.0, -1.0),
-        //     ..Default::default()
-        // };
-        // let second_light_component = LightComponent::point(DVec3::new(1.0, 0.5, 1.0), 0.8);
-        // let second_adopted_light = Light::new(graphics, &second_light_component, &second_light_transform, Some("Second Light"));
-        
         let texture_bind_group = &graphics.texture_bind_group().clone();
         if let Some(camera) = self.camera_manager.get_active() {
             let pipeline = graphics.create_render_pipline(
@@ -101,18 +87,6 @@ impl Scene for Editor {
                 Some("Light Pipeline")
             );
         }
-
-        // self.world.spawn((
-        //     main_light_component,
-        //     main_light_transform,
-        //     main_adopted_light,
-        // ));
-
-        // self.world.spawn((
-        //     second_light_component,
-        //     second_light_transform,
-        //     second_adopted_light,
-        // ));
 
         self.window = Some(graphics.state.window.clone());
     }

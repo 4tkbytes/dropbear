@@ -293,6 +293,9 @@ impl Scene for MainMenu {
                         self.project_error.get_or_insert_with(Vec::new).push(err);
                     }
                     ProjectProgress::Done if self.project_error.is_none() => {
+                        self.is_in_file_dialogue = false;
+                        self.show_new_project = false;
+                        self.show_progress = false;
                         self.scene_command = SceneCommand::SwitchScene("editor".to_string());
                     }
                     ProjectProgress::Done => {}
