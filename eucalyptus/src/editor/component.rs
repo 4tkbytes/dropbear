@@ -1,10 +1,10 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
 use std::time::Instant;
-use egui::{CollapsingHeader, Ui};
+use egui::{CollapsingHeader, ComboBox, Ui};
 use hecs::Entity;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
-use dropbear_engine::lighting::Light;
+use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use crate::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use crate::states::ScriptComponent;
@@ -551,6 +551,23 @@ impl Component for Light {
                     cfg.label_last_edit = None;
                 }
             })
+        });
+    }
+}
+
+impl Component for LightComponent {
+    fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ComboBox::new("light_type", "Light Type")
+                    // .width(ui.available_width())
+                    .selected_text(self.light_type.to_string())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.light_type, LightType::Directional, "Directional");
+                        ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
+                        ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
+                    });
+            });
         });
     }
 }

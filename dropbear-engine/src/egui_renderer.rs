@@ -1,6 +1,3 @@
-// I took this from someone but I do not know exactly who and cannot seem to find it. 
-// If you find it, lmk so I can put the necessary license
-
 use egui::{Context, FontDefinitions};
 use wgpu::{CommandEncoder, Device, Queue, TextureFormat, TextureView};
 use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
@@ -93,6 +90,8 @@ impl EguiRenderer {
                 Some(wgpu::Color::BLACK),
             )
             .expect("egui execute ok");
+
+        // self.ppp(window.scale_factor() as f32);
 
         self.renderer
             .remove_textures(textures_delta)

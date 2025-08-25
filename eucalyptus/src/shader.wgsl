@@ -11,13 +11,17 @@ var<uniform> camera: CameraUniform;
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>,
-    color: vec4<f32>,
-//    light_type: u32,
+    color: vec4<f32>, // r, g, b, light_type (0, 1, 2)
+    constant: f32,
+    lin: f32,
+    quadratic: f32,
+//    ambient_strength: f32,
 }
 
 struct LightArray {
     lights: array<Light, MAX_LIGHTS>,
     light_count: u32,
+    ambient_strength: f32,
 }
 
 @group(2) @binding(0)
@@ -92,6 +96,47 @@ fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, 
     return diffuse_color + specular_color;
 }
 
+fn directional_light(
+    light: Light,
+    world_normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    tex_color: vec3<f32>
+) -> vec3<f32> {
+    let light_dir = normalize(-light.direction.xyz);
+
+    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+
+    let diff = max(dot(world_normal, light_dir), 0.0);
+    let diffuse = light.color.xyz * diff * tex_color;
+
+    let reflect_dir = reflect(-light_dir, world_normal);
+    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
+    let specular = light.color.xyz * spec * tex_color;
+
+    return ambient + diffuse + specular;
+}
+
+// https://learnopengl.com/code_viewer_gh.php?code=src/2.lighting/5.2.light_casters_point/5.2.light_casters.fs
+// deal with later. current issue: it is showing only yellow and white in point light (weird...)
+fn point_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>, tex_color: vec3<f32>) -> vec3<f32> {
+    let light_dir = normalize(light.position.xyz - world_pos);
+    let distance = length(light.position.xyz - world_pos);
+
+    let attenuation = 1.0 / (light.constant + light.lin * distance + light.quadratic * distance * distance);
+
+    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+
+    let diff = max(dot(world_normal, light_dir), 0.0);
+    let diffuse = light.color.xyz * diff * tex_color;
+
+    let reflect_dir = reflect(-light_dir, world_normal);
+    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
+    let specular = light.color.xyz * spec * tex_color;
+
+    return (ambient + diffuse + specular) * attenuation;
+}
+
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
@@ -99,7 +144,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    let ambient_strength = 0.1;
+    var ambient_strength = light_array.ambient_strength; // 0.1
     let view_dir = normalize(camera.view_pos.xyz - in.world_position);
     let world_normal = normalize(in.world_normal);
     
@@ -110,8 +155,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let light = light_array.lights[i];
         
         total_ambient += light.color.xyz * ambient_strength;
-        
-        final_color += calculate_light(light, in.world_position, world_normal, view_dir);
+
+        // light type is color.w
+        if light.color.w == 0.0 {
+            // directional
+            final_color += directional_light(light, world_normal, view_dir, tex_color.xyz);
+        } else if light.color.w == 1.0 {
+            // point
+            final_color += point_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
+        } else if light.color.w == 2.0 {
+            // spot
+//            final_color += spot_light(light, world_normal, view_dir);
+        }
+//        final_color += calculate_light(light, in.world_position, world_normal, view_dir);
     }
     
     final_color = (total_ambient + final_color) * tex_color.xyz;

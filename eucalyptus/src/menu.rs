@@ -148,7 +148,9 @@ impl MainMenu {
 }
 
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {}
+    fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {
+        log::info!("Loaded menu scene");
+    }
 
     fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
 

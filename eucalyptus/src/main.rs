@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 #[cfg(feature = "editor")]
 use std::{cell::RefCell, rc::Rc, fs, path::PathBuf};
 #[cfg(feature = "editor")]
@@ -5,6 +7,7 @@ use clap::{Arg, Command};
 
 #[cfg(feature = "editor")]
 use dropbear_engine::{WindowConfiguration, scene};
+use eucalyptus::APP_INFO;
 
 #[tokio::main]
 #[cfg(feature = "editor")]
@@ -97,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
                 title: "Eucalyptus, built with dropbear".into(),
                 windowed_mode: dropbear_engine::WindowedModes::Maximised,
                 max_fps: dropbear_engine::App::NO_FPS_CAP,
+                app_info: APP_INFO,
             };
 
             let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {

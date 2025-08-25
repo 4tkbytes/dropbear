@@ -10,8 +10,11 @@ var<uniform> camera: Camera;
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>,
-    color: vec4<f32>,
-//    light_type: u32,
+    color: vec4<f32>, // r, g, b, light_type (0, 1, 2)
+    constant: f32,
+    lin: f32,
+    quadratic: f32,
+//    ambient_strength: f32,
 }
 
 @group(1) @binding(0)

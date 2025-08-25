@@ -10,7 +10,10 @@ readme.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+arboard.workspace = true
+app_dirs2.workspace = true
 bytemuck.workspace = true
+chrono.workspace = true
 egui_wgpu_backend.workspace = true
 egui_winit_platform.workspace = true
 egui.workspace = true
@@ -20,6 +23,7 @@ gilrs.workspace = true
 glam.workspace = true
 log.workspace = true
 log-once.workspace = true
+rfd.workspace = true
 russimp-ng.workspace = true
 pollster.workspace = true
 serde.workspace = true

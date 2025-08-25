@@ -1,3 +1,4 @@
+use std::io::Write;
 pub mod lighting;
 pub mod buffer;
 pub mod camera;
@@ -8,7 +9,10 @@ pub mod input;
 pub mod model;
 pub mod resources;
 pub mod scene;
+mod attenuation;
+pub mod panic;
 
+use chrono::Local;
 use egui::TextureId;
 use egui_wgpu_backend::ScreenDescriptor;
 use futures::FutureExt;
@@ -20,6 +24,10 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     u32,
 };
+use std::fs::OpenOptions;
+use std::sync::Mutex;
+use app_dirs2::{AppDataType, AppInfo};
+use env_logger::Builder;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat
 };
@@ -40,6 +48,7 @@ use crate::{
 pub use winit;
 pub use wgpu;
 pub use gilrs;
+use log::LevelFilter;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -91,8 +100,8 @@ impl State {
             .await?;
 
         let info = adapter.get_info();
-        println!(
-"==================== BACKEND INFO ====================
+        log::info!(
+"\n==================== BACKEND INFO ====================
 Backend: {}
 
 Hardware:
@@ -385,15 +394,64 @@ impl App {
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
-        if cfg!(debug_assertions) {
-            log::info!("Running in dev mode");
-            let app_target = app_name.replace('-', "_");
-            let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
-            unsafe { std::env::set_var("RUST_LOG", log_config) };
-        }
+        // if cfg!(debug_assertions) {
+        //     log::info!("Running in dev mode");
+        //     let app_target = app_name.replace('-', "_");
+        //     let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
+        //     unsafe { std::env::set_var("RUST_LOG", log_config) };
+        // }
+        //
+        // #[cfg(not(target_os = "android"))]
+        // let _ = env_logger::try_init();
+
+        let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
+            .expect("Failed to get app data directory")
+            .join("logs");
+        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+
+        let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
+        let log_filename = format!("{}.{}.log", app_name, datetime_str);
+        let log_path = log_dir.join(log_filename);
+
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect("Failed to open log file");
+        let file = Mutex::new(file);
+
+        let app_target = app_name.replace('-', "_");
+        let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
+        unsafe { std::env::set_var("RUST_LOG", log_config) };
 
         #[cfg(not(target_os = "android"))]
-        let _ = env_logger::try_init();
+        {
+            Builder::new()
+                .format(move |buf, record| {
+                    let ts = Local::now().format("%Y-%m-%dT%H:%M:%S");
+                    let line = format!(
+                        "{}:{} {} [{}] - {}\n",
+                        record.file().unwrap_or("unknown"),
+                        record.line().unwrap_or(0),
+                        ts,
+                        record.level(),
+                        record.args()
+                    );
+
+                    write!(buf, "{}", line)?;
+
+                    if let Ok(mut fh) = file.lock() {
+                        let _ = fh.write_all(line.as_bytes());
+                    }
+                    Ok(())
+                })
+                .filter(Some("dropbear_engine"), LevelFilter::Trace)
+                .filter(Some(app_name.replace('-', "_").as_str()), LevelFilter::Debug)
+                .init();
+
+            // setup panic
+            panic::set_hook();
+        }
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
 
@@ -587,6 +645,7 @@ pub struct WindowConfiguration {
     // TODO: Implement config reading.
     // pub read_from_config: Option<String>,
     pub max_fps: u32,
+    pub app_info: AppInfo,
 }
 
 /// An enum displaying the different modes on initial startup

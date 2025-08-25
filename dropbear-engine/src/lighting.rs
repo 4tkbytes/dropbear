@@ -1,17 +1,24 @@
-use glam::{DMat4, DQuat, DVec3, DVec4};
+use std::fmt::{Display, Formatter};
+use glam::{DMat4, DQuat, DVec3};
 use wgpu::{BindGroup, BindGroupLayout, Buffer, CompareFunction, util::DeviceExt, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, BufferAddress};
 
 use crate::{camera::Camera, entity::Transform, graphics::{Graphics, Shader}, model::{self, Model, Vertex}};
+use crate::attenuation::{Attenuation, RANGE_7};
 
 pub const MAX_LIGHTS: usize = 8;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+// ENSURE THAT THE SIZE OF THE UNIFORM IS OF A MULTIPLE OF 16. USE `size_of::<LightUniform>()`
 pub struct LightUniform {
     pub position: [f32; 4],
     pub direction: [f32; 4],
     pub colour: [f32; 4], // last value is the light type
     // pub light_type: u32,
+    pub constant: f32,
+    pub linear: f32,
+    pub quadratic: f32,
+    pub _padding: f32,
 }
 
 fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
@@ -29,6 +36,10 @@ impl Default for LightUniform {
             direction: [0.0, 0.0, -1.0, 1.0],
             colour: [1.0, 1.0, 1.0, 1.0],
             // light_type: 0,
+            constant: 0.0,
+            linear: 0.0,
+            quadratic: 0.0,
+            _padding: 0.1,
         }
     }
 }
@@ -38,7 +49,8 @@ impl Default for LightUniform {
 pub struct LightArrayUniform {
     pub lights: [LightUniform; MAX_LIGHTS],
     pub light_count: u32,
-    pub _padding: [u32; 3],
+    pub ambient_strength: f32,
+    pub _padding: [u32; 2],
 }
 
 impl Default for LightArrayUniform {
@@ -46,12 +58,13 @@ impl Default for LightArrayUniform {
         Self {
             lights: [LightUniform::default(); MAX_LIGHTS],
             light_count: 0,
-            _padding: [0; 3],
+            ambient_strength: 0.1,
+            _padding: [0; 2],
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 pub enum LightType {
     // Example: Sunlight
     Directional = 0,
@@ -59,6 +72,16 @@ pub enum LightType {
     Point = 1,
     // Example: Flashlight
     Spot = 2,
+}
+
+impl Display for LightType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LightType::Directional => write!(f, "Directional"),
+            LightType::Point => write!(f, "Point"),
+            LightType::Spot => write!(f, "Spot"),
+        }
+    }
 }
 
 impl Into<u32> for LightType {
@@ -78,6 +101,7 @@ pub struct LightComponent {
     pub colour: DVec3,
     pub light_type: LightType,
     pub intensity: f32,
+    pub attenuation: Attenuation,
     pub enabled: bool,
 }
 
@@ -89,33 +113,35 @@ impl Default for LightComponent {
             colour: DVec3::ONE,
             light_type: LightType::Directional,
             intensity: 1.0,
+            attenuation: RANGE_7,
             enabled: true,
         }
     }
 }
 
 impl LightComponent {
-    pub fn new(colour: DVec3, light_type: LightType, intensity: f32) -> Self {
+    pub fn new(colour: DVec3, light_type: LightType, intensity: f32, attenuation: Option<Attenuation>) -> Self {
         Self {
             position: Default::default(),
             direction: Default::default(),
             colour,
             light_type,
             intensity,
+            attenuation: attenuation.unwrap_or(RANGE_7),
             enabled: true,
         }
     }
 
     pub fn directional(colour: DVec3, intensity: f32) -> Self {
-        Self::new(colour, LightType::Directional, intensity)
+        Self::new(colour, LightType::Directional, intensity, None)
     }
 
-    pub fn point(colour: DVec3, intensity: f32) -> Self {
-        Self::new(colour, LightType::Point, intensity)
+    pub fn point(colour: DVec3, intensity: f32, attenuation: Attenuation) -> Self {
+        Self::new(colour, LightType::Point, intensity, Some(attenuation))
     }
 
     pub fn spot(colour: DVec3, intensity: f32) -> Self {
-        Self::new(colour, LightType::Spot, intensity)
+        Self::new(colour, LightType::Spot, intensity, None)
     }
 }
 

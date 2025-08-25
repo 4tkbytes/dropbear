@@ -33,7 +33,7 @@ use crate::{
 
 pub struct Editor {
     scene_command: SceneCommand,
-    world: hecs::World,
+    world: World,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -525,6 +525,15 @@ impl Editor {
                     }
                 });
                 // todo: add more stuff and give it purpose this is too bland :(
+                #[cfg(debug_assertions)]
+                {
+                    ui.menu_button("Debug", |ui_debug| {
+                        if ui_debug.button("Panic").clicked() {
+                            log::warn!("Panic caused on purpose from Menu Button Click");
+                            panic!("Testing out panicking with new panic module, this is a test")
+                        }
+                    });
+                }
             });
         });
 

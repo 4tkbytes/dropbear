@@ -786,9 +786,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
                     }
                     
-                    if let Ok((light, transform, _props)) = self.world.query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity) {
+                    if let Ok((light, transform, props)) = self.world.query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity) {
                             light.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
                             transform.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut light.label);
+                            props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut light.label);
                             if let Some(t) = cfg.label_last_edit {
                                 if t.elapsed() >= Duration::from_millis(500) {
                                     if let Some(ent) = cfg.old_label_entity.take() {
