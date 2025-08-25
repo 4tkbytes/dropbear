@@ -1,4 +1,4 @@
-// Shader for rendering the white cube (or diff depending on colour)
+// Shader for rendering the white cube for lighting (or diff depending on colour)
 
 struct Camera {
     view_pos: vec4<f32>,
@@ -8,9 +8,10 @@ struct Camera {
 var<uniform> camera: Camera;
 
 struct Light {
-    position: vec3<f32>,
-    color: vec3<f32>,
-    light_type: u32,
+    position: vec4<f32>,
+    direction: vec4<f32>,
+    color: vec4<f32>,
+//    light_type: u32,
 }
 
 @group(1) @binding(0)
@@ -43,11 +44,9 @@ fn vs_main(
         instance.model_matrix_2,
         instance.model_matrix_3,
     );
-    let scale = 0.25;
     var out: VertexOutput;
-//    out.clip_position = camera.view_proj * vec4<f32>(model.position * scale + light.position, 1.0);
     out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
-    out.color = light.color;
+    out.color = light.color.xyz;
     return out;
 }
 

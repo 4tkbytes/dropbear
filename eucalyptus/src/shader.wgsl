@@ -1,3 +1,4 @@
+// Main shader for standard objects.
 const MAX_LIGHTS: u32 = 8;
 
 struct CameraUniform {
@@ -8,9 +9,10 @@ struct CameraUniform {
 var<uniform> camera: CameraUniform;
 
 struct Light {
-    position: vec3<f32>,
-    color: vec3<f32>,
-    light_type: u32,
+    position: vec4<f32>,
+    direction: vec4<f32>,
+    color: vec4<f32>,
+//    light_type: u32,
 }
 
 struct LightArray {
@@ -76,16 +78,16 @@ var t_diffuse: texture_2d<f32>;
 var s_diffuse: sampler;
 
 fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>) -> vec3<f32> {
-    let light_dir = normalize(light.position - world_pos);
+    let light_dir = normalize(light.position.xyz - world_pos);
     
     // dihfuse
     let diffuse_strength = max(dot(world_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
+    let diffuse_color = light.color.xyz * diffuse_strength;
     
     // specular
     let half_dir = normalize(view_dir + light_dir);
     let specular_strength = pow(max(dot(world_normal, half_dir), 0.0), 32.0);
-    let specular_color = specular_strength * light.color;
+    let specular_color = specular_strength * light.color.xyz;
     
     return diffuse_color + specular_color;
 }
@@ -107,7 +109,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     for (var i: u32 = 0u; i < light_array.light_count; i = i + 1u) {
         let light = light_array.lights[i];
         
-        total_ambient += light.color * ambient_strength;
+        total_ambient += light.color.xyz * ambient_strength;
         
         final_color += calculate_light(light, in.world_position, world_normal, view_dir);
     }

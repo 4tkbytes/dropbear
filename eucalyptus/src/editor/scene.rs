@@ -548,7 +548,7 @@ impl Scene for Editor {
             entity.update(&graphics, transform);
         }
 
-        let light_query = self.world.query_mut::<(&LightComponent, &Transform, &mut Light)>();
+        let light_query = self.world.query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
         for (_, (light_component, transform, light)) in light_query {
             light.update(light_component, transform);
         }

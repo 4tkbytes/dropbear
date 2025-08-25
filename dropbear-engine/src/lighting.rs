@@ -1,4 +1,4 @@
-use glam::{DMat4, DQuat, DVec3};
+use glam::{DMat4, DQuat, DVec3, DVec4};
 use wgpu::{BindGroup, BindGroupLayout, Buffer, CompareFunction, util::DeviceExt, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, BufferAddress};
 
 use crate::{camera::Camera, entity::Transform, graphics::{Graphics, Shader}, model::{self, Model, Vertex}};
@@ -8,19 +8,27 @@ pub const MAX_LIGHTS: usize = 8;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LightUniform {
-    pub position: [f32; 3],
-    _padding: u32,
-    pub colour: [f32; 3],
-    pub light_type: u32
+    pub position: [f32; 4],
+    pub direction: [f32; 4],
+    pub colour: [f32; 4], // last value is the light type
+    // pub light_type: u32,
+}
+
+fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
+    [vec.x as f32, vec.y as f32, vec.z as f32, 1.0]
+}
+
+fn dvec3_colour_to_uniform_array(vec: DVec3, light_type: LightType) -> [f32; 4] {
+    [vec.x as f32, vec.y as f32, vec.z as f32, light_type as u32 as f32]
 }
 
 impl Default for LightUniform {
     fn default() -> Self {
         Self {
-            position: [0.0, 0.0, 0.0],
-            _padding: 0,
-            colour: [1.0, 1.0, 1.0],
-            light_type: 0,
+            position: [0.0, 0.0, 0.0, 1.0],
+            direction: [0.0, 0.0, -1.0, 1.0],
+            colour: [1.0, 1.0, 1.0, 1.0],
+            // light_type: 0,
         }
     }
 }
@@ -65,6 +73,8 @@ impl Into<u32> for LightType {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LightComponent {
+    pub position: DVec3,
+    pub direction: DVec3,
     pub colour: DVec3,
     pub light_type: LightType,
     pub intensity: f32,
@@ -74,6 +84,8 @@ pub struct LightComponent {
 impl Default for LightComponent {
     fn default() -> Self {
         Self {
+            position: DVec3::ZERO,
+            direction: DVec3::new(0.0, 0.0, -1.0),
             colour: DVec3::ONE,
             light_type: LightType::Directional,
             intensity: 1.0,
@@ -85,6 +97,8 @@ impl Default for LightComponent {
 impl LightComponent {
     pub fn new(colour: DVec3, light_type: LightType, intensity: f32) -> Self {
         Self {
+            position: Default::default(),
+            direction: Default::default(),
             colour,
             light_type,
             intensity,
@@ -118,21 +132,22 @@ pub struct Light {
 impl Light {
     pub fn new(graphics: &Graphics, light: &LightComponent, transform: &Transform, label: Option<&str>) -> Self {
         let uniform = LightUniform {
-            position: transform.position.as_vec3().to_array(),
-            _padding: 0,
-            colour: (light.colour * light.intensity as f64).as_vec3().to_array(),
-            light_type: light.light_type.into(),
+            position: dvec3_to_uniform_array(transform.position),
+            // direction: transform.rotation.normalize().xyz().as_vec3().to_array(),
+            colour: dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type),
+            // light_type: light.light_type.into(),
+            ..Default::default()
         };
 
         let cube_model = Model::load_from_memory(
             graphics, 
             include_bytes!("../../resources/cube.obj"), 
-            label
+            label.clone()
         ).unwrap();
 
-        let label_str = label.unwrap_or("Light").to_string();
+        let label_str = label.clone().unwrap_or("Light").to_string();
 
-        let buffer = graphics.create_uniform(uniform, label);
+        let buffer = graphics.create_uniform(uniform, label.clone());
 
         let layout = graphics.state.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -145,7 +160,7 @@ impl Light {
                 },
                 count: None,
             }],
-            label,
+            label: label.clone(),
         });
 
         let bind_group = graphics.state.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -154,7 +169,7 @@ impl Light {
                 binding: 0,
                 resource: buffer.as_entire_binding(),
             }],
-            label,
+            label: label.clone(),
         });
 
         let instance = Instance::new(transform.position, transform.rotation, DVec3::new(0.25, 0.25, 0.25));
@@ -185,10 +200,10 @@ impl Light {
         }
     }
 
-    pub fn update(&mut self, light: &LightComponent, transform: &Transform) {
-        self.uniform.position = transform.position.as_vec3().to_array();
-        self.uniform.colour = (light.colour * light.intensity as f64).as_vec3().to_array();
-        self.uniform.light_type = light.light_type.into();
+    pub fn update(&mut self, light: &mut LightComponent, transform: &Transform) {
+        self.uniform.position = dvec3_to_uniform_array(transform.position);
+        self.uniform.direction = dvec3_to_uniform_array(DVec3::from(transform.rotation.normalize().xyz().as_vec3()));
+        self.uniform.colour = dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type);
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -274,6 +289,7 @@ impl LightManager {
             .iter()
         {
             // if it fails to update, the cause it probably the ModelVertex or smth like that
+            // note: its not...
             let instance = Instance::from_matrix(transform.matrix());
 
             if let Some(instance_buffer) = &light.instance_buffer {
@@ -296,6 +312,8 @@ impl LightManager {
         if let Some(buffer) = &self.light_array_buffer {
             graphics.state.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[light_array]));
         }
+
+        log_once::debug_once!("LightUniform size = {}", size_of::<LightUniform>())
     }
 
     pub fn layout(&self) -> &BindGroupLayout {
@@ -309,13 +327,13 @@ impl LightManager {
     pub fn create_render_pipeline(&mut self, graphics: &mut Graphics, shader_contents: &str, camera: &Camera, label: Option<&str>) {
         use crate::graphics::Shader;
         
-        let shader = Shader::new(graphics, shader_contents, label);
+        let shader = Shader::new(graphics, shader_contents, label.clone());
         
         let pipeline = Self::create_render_pipeline_for_lighting(
             graphics, 
             &shader, 
             vec![camera.layout(), self.light_array_layout.as_ref().unwrap()], 
-            label
+            label.clone()
         );
         
         self.pipeline = Some(pipeline);
