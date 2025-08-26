@@ -230,6 +230,9 @@ impl Light {
         self.uniform.position = dvec3_to_uniform_array(transform.position);
         self.uniform.direction = dvec3_to_uniform_array(DVec3::from(transform.rotation.normalize().xyz().as_vec3()));
         self.uniform.colour = dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type);
+        self.uniform.constant = light.attenuation.constant;
+        self.uniform.linear = light.attenuation.linear;
+        self.uniform.quadratic = light.attenuation.quadratic;
     }
 
     pub fn uniform(&self) -> &LightUniform {

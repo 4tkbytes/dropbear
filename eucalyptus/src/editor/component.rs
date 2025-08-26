@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 use egui::{CollapsingHeader, ComboBox, Ui};
+use glam::Vec3;
 use hecs::Entity;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
@@ -568,6 +569,13 @@ impl Component for LightComponent {
                         ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
                     });
             });
+            ui.separator();
+            let mut colour = self.colour.clone().as_vec3().to_array();
+            ui.horizontal(|ui| {
+                ui.label("Colour");
+                egui::color_picker::color_edit_button_rgb(ui, &mut colour)
+            });
+            self.colour = Vec3::from_array(colour).as_dvec3();
         });
     }
 }
