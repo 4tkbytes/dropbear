@@ -4,6 +4,7 @@ use std::time::Instant;
 use egui::{CollapsingHeader, ComboBox, Ui};
 use glam::Vec3;
 use hecs::Entity;
+use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
@@ -576,6 +577,16 @@ impl Component for LightComponent {
                 egui::color_picker::color_edit_button_rgb(ui, &mut colour)
             });
             self.colour = Vec3::from_array(colour).as_dvec3();
+            ui.horizontal(|ui| {
+                ComboBox::new("Range", "Range")
+                    // .width(ui.available_width())
+                    .selected_text(format!("Range {}", self.attenuation.range.to_string()))
+                    .show_ui(ui, |ui| {
+                        for (preset, label) in ATTENUATION_PRESETS {
+                            ui.selectable_value(&mut self.attenuation, preset.clone(), *label);
+                        }
+                    });
+            });
         });
     }
 }

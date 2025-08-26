@@ -9,7 +9,7 @@ pub mod input;
 pub mod model;
 pub mod resources;
 pub mod scene;
-mod attenuation;
+pub mod attenuation;
 pub mod panic;
 
 use chrono::Local;
