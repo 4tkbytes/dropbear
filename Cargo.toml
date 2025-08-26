@@ -58,6 +58,9 @@ features = ["png"]
 [patch.crates-io]
 dropbear-engine = { path = "dropbear-engine" }
 eucalyptus = { path = "eucalyptus" }
+# fixing android compilation
+russimp-sys-ng = { git = "https://github.com/Kek5chen/russimp-sys-ng", branch = "fix-android-compilation" }
+
 
 [profile.dev]
 opt-level = 0

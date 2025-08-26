@@ -294,25 +294,25 @@ pub fn build(
     // ProjectConfig::read_from(&project_path)?.load_config_to_memory()?;
     
     let mut project_config = ProjectConfig::read_from(&project_path)?;
-    println!(" > Reading from project config");
+    log::info!(" > Reading from project config");
     project_config.load_config_to_memory()?;
-    println!(" > Loading config to memory");
+    log::info!(" > Loading config to memory");
 
     let source_config = {
         let source_guard = SOURCE.read().map_err(|_| anyhow::anyhow!("Unable to lock SOURCE"))?;
         source_guard.clone()
     };
-    println!(" > Copied source config");
+    log::info!(" > Copied source config");
 
     let scene_data = {
         let scenes_guard = SCENES.read().map_err(|_| anyhow::anyhow!("Unable to lock SCENES"))?;
         scenes_guard.clone()
     };
-    println!(" > Copied scene data");
+    log::info!(" > Copied scene data");
 
     let build_dir = project_path.parent().unwrap().join("build").join("output");
-    std::fs::create_dir_all(&build_dir)?;
-    println!(" > Created build dir");
+    fs::create_dir_all(&build_dir)?;
+    log::info!(" > Created build dir");
 
     let project_name = project_config.project_name.clone();
 
@@ -339,12 +339,12 @@ pub fn build(
         scene_data,
         scripts
     };
-    println!(" > Created runtime data structures");
+    log::info!(" > Created runtime data structures");
 
     let runtime_file = build_dir.join(format!("{}.eupak", project_name));
     let serialized = bincode::serde::encode_to_vec(runtime_data, bincode::config::standard())?;
     std::fs::write(&runtime_file, serialized)?;
-    println!(" > Written the file to build location");
+    log::info!(" > Written the file to build location");
 
     println!("Build completed successfully. Output at {:?}", runtime_file.display());
     Ok(runtime_file)
