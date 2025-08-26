@@ -10,7 +10,6 @@ readme.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-arboard.workspace = true
 app_dirs2.workspace = true
 bytemuck.workspace = true
 chrono.workspace = true
@@ -34,10 +33,10 @@ hecs.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
+arboard.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
-
 
 [dependencies.image]
 version = "0.25"
