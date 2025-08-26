@@ -12,6 +12,10 @@ use eucalyptus::APP_INFO;
 #[tokio::main]
 #[cfg(feature = "editor")]
 async fn main() -> anyhow::Result<()> {
+    #[cfg(target_os = "android")]
+    compile_error!("The `editor` feature is not supported on Android. If you are attempting\
+ to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
+ to use with dependencies or create your own game on Desktop. Sorry :(");
     let matches = Command::new("eucalyptus")
         .about("A visual game editor")
         .version("1.0.0")

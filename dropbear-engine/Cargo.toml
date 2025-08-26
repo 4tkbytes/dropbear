@@ -23,7 +23,7 @@ gilrs.workspace = true
 glam.workspace = true
 log.workspace = true
 log-once.workspace = true
-rfd.workspace = true
+#rfd.workspace = true
 russimp-ng.workspace = true
 pollster.workspace = true
 serde.workspace = true
@@ -31,6 +31,12 @@ spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 hecs.workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"
 
 
 [dependencies.image]

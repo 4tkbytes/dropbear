@@ -31,7 +31,6 @@ model_to_image = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 open = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
-rfd = { workspace = true, optional = true }
 rhai = { workspace = true, optional = true }
 ron = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -42,6 +41,9 @@ winit = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd = { workspace = true, optional = true }
 
 [features]
 editor = [

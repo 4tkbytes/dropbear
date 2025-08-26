@@ -1,11 +1,11 @@
-//! This module describes what happens when a panic occurs by setting up
-//! a custom hook.
-
 use std::panic;
+
+#[cfg(not(target_os = "android"))]
 use arboard::Clipboard;
+#[cfg(not(target_os = "android"))]
 use rfd::{MessageDialog, MessageLevel};
 
-/// Creates a new panic hook for crash detection. Pretty nice for debugging.
+/// Creates a new panic hook for crash detection.
 pub fn set_hook() {
     panic::set_hook(Box::new(|info| {
         let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
@@ -22,27 +22,24 @@ pub fn set_hook() {
             .unwrap_or_else(|| "unknown location".to_string());
 
         let full_text = format!(
-            "The application has encountered a fatal error and must close. Sorry :(\n\n\
-             Location: {}\nError: {}\n\nPlease report this error to the developers \
-             and attach the log please :)\n\nFor your convenience, the error message has been \
-             copied to your clipboard to put straight to Google lol\n",
+            "The application has encountered a fatal error and must close.\n\n\
+             Location: {}\nError: {}\n\nPlease report this error to the developers.",
             location, msg
         );
 
-        log::error!("PANIC AT THE REACTOR! SHUTDOWN SHUTDOWN SHUT THIS SHIT DOWN!!!\n\n\
-=========================================================================
-{}
-=========================================================================\n\n\
-        ", full_text.clone());
+        log::error!("PANIC DETECTED\n============================\n{}\n============================", full_text);
 
-        if let Ok(mut clipboard) = Clipboard::new() {
-            let _ = clipboard.set_text(full_text.clone());
+        #[cfg(not(target_os = "android"))]
+        {
+            if let Ok(mut clipboard) = Clipboard::new() {
+                let _ = clipboard.set_text(full_text.clone());
+            }
+
+            let _ = MessageDialog::new()
+                .set_title("Panic!")
+                .set_description(&full_text)
+                .set_level(MessageLevel::Error)
+                .show();
         }
-
-        let _ = MessageDialog::new()
-            .set_title("Panic!")
-            .set_description(&full_text)
-            .set_level(MessageLevel::Error)
-            .show();
     }));
 }
