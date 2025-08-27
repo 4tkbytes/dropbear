@@ -68,8 +68,6 @@ pub struct Editor {
     play_mode_backup: Option<PlayModeBackup>,
 
     input_state: InputState,
-
-    show_add_component_window: bool,
 }
 
 #[derive(Clone)]
@@ -227,7 +225,6 @@ impl Editor {
             play_mode_backup: None,
             input_state: InputState::new(),
             light_manager: LightManager::new(),
-            show_add_component_window: false,
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
@@ -672,7 +669,7 @@ pub enum EntityType {
 impl UndoableAction {
     pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
         undo_stack.push(action);
-        log::debug!("Undo Stack contents: {:#?}", undo_stack);
+        // log::debug!("Undo Stack contents: {:#?}", undo_stack);
     }
 
     pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
@@ -753,7 +750,8 @@ pub enum Signal {
     Play,
     StopPlaying,
     AddComponent(hecs::Entity, EntityType),
-    RemoveComponent(hecs::Entity, ComponentType)
+    RemoveComponent(hecs::Entity, ComponentType),
+    CreateEntity,
 }
 
 impl Default for Editor {

@@ -804,6 +804,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     cfg.label_last_edit = None;
                                 }
                             }
+                    } else {
+                        log_once::debug_once!("Unable to query light inside resource inspector");
                     }
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
@@ -900,6 +902,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTabMenuAction::AddEntity => {
                             log::debug!("Add Entity clicked");
+                            *self.signal = Signal::CreateEntity;
                             cfg.show_context_menu = false;
                             cfg.context_menu_tab = None;
                             return;
@@ -921,7 +924,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                 if let Ok(..) = self.world.query_one_mut::<&Light>(*entity) {
                                     log::debug!("Queried selected entity, it is a light");
-                                    *self.signal = Signal::AddComponent(*entity, EntityType::Entity);
+                                    *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
                             } else {
                                 crate::warn!("What are you adding a component to? Theres no entity selected...");

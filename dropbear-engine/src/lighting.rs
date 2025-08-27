@@ -3,7 +3,7 @@ use glam::{DMat4, DQuat, DVec3};
 use wgpu::{BindGroup, BindGroupLayout, Buffer, CompareFunction, util::DeviceExt, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, BufferAddress};
 
 use crate::{camera::Camera, entity::Transform, graphics::{Graphics, Shader}, model::{self, Model, Vertex}};
-use crate::attenuation::{Attenuation, RANGE_7};
+use crate::attenuation::{Attenuation, RANGE_50};
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -111,9 +111,9 @@ impl Default for LightComponent {
             position: DVec3::ZERO,
             direction: DVec3::new(0.0, 0.0, -1.0),
             colour: DVec3::ONE,
-            light_type: LightType::Directional,
+            light_type: LightType::Point,
             intensity: 1.0,
-            attenuation: RANGE_7,
+            attenuation: RANGE_50,
             enabled: true,
         }
     }
@@ -127,7 +127,7 @@ impl LightComponent {
             colour,
             light_type,
             intensity,
-            attenuation: attenuation.unwrap_or(RANGE_7),
+            attenuation: attenuation.unwrap_or(RANGE_50),
             enabled: true,
         }
     }

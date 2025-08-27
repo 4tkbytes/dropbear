@@ -466,18 +466,18 @@ impl Scene for Editor {
                         }
                     },
             Signal::AddComponent(entity, e_type) => {
-                // show add component window
                 match e_type {
                     EntityType::Entity => {
                         if let Ok(e) = self.world.query_one_mut::<&AdoptedEntity>(*entity) {
                             let mut local_signal: Option<Signal> = None;
                             let label = e.label().clone();
-                            self.show_add_component_window = true;
-                            egui::Window::new(format!("Add Component for {}", label))
+                            let mut show = true;
+                            egui::Window::new(format!("Add component for {}", label))
+                                .title_bar(true)
+                                .open(&mut show)
                                 .scroll([false, true])
                                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                .fixed_size([180.0, 180.0])
-                                .enabled(self.show_add_component_window)
+                                .enabled(true)
                                 .show(&graphics.get_egui_context(), |ui| {
                                 if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
                                     log::debug!("Adding scripting component to entity [{}]", label);
@@ -486,31 +486,46 @@ impl Scene for Editor {
                                     } else {
                                         crate::success!("Added the scripting component");
                                     }
-                                    self.show_add_component_window = false;
                                     local_signal = Some(Signal::None);
                                 }
                                 if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
                                     log::debug!("Adding camera component to entity [{}]", label);
                                     log::debug!("Not implemented yet :(");
-                                    self.show_add_component_window = false;
                                     local_signal = Some(Signal::None);
                                 }
                             });
+                            if !show {
+                                self.signal = Signal::None;
+                            }
                             if let Some(signal) = local_signal {
                                 self.signal = signal
                             }
+                        } else {
+                            log_once::warn_once!("Failed to add component to entity: no entity component found");
                         }
                     }
                     EntityType::Light => {
                         if let Ok(light) = self.world.query_one_mut::<&Light>(*entity) {
-                            self.show_add_component_window = true;
-                            egui::Window::new(format!("Add Component for {}", light.label)).scroll([false, true]).enabled(self.show_add_component_window).show(&graphics.get_egui_context(), |ui| {
-                                if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
-                                    log::debug!("Adding scripting component to entity [{}]", light.label());
-                                    self.show_add_component_window = false;
-                                    self.signal = Signal::None;
-                                }
-                            });
+                            let mut show = true;
+                            egui::Window::new(format!("Add component for {}", light.label))
+                                .scroll([false, true])
+                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                .enabled(true)
+                                .open(&mut show)
+                                .title_bar(true)
+                                .show(&graphics.get_egui_context(), |ui| {
+                                    if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                        log::debug!("Adding scripting component to light [{}]", light.label);
+
+                                        crate::success!("Added the scripting component to light [{}]", light.label);
+                                        self.signal = Signal::None;
+                                    }
+                                });
+                            if !show {
+                                self.signal = Signal::None;
+                            }
+                        } else {
+                            log_once::warn_once!("Failed to add component to light: no light component found");
                         }
                     }
                 }
@@ -528,6 +543,39 @@ impl Scene for Editor {
                             }
                         }
                     },
+                }
+            }
+            Signal::CreateEntity => {
+                // self.show_add_entity_window = true;
+                let mut show = true;
+                egui::Window::new("Add Entity")
+                    .scroll([false, true])
+                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                    .enabled(true)
+                    .open(&mut show)
+                    .title_bar(true)
+                    .show(&graphics.get_egui_context(), |ui| {
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Model")).clicked() {
+                            log::debug!("Creating new model");
+                            crate::warn!("Instead of using the `Add Entity` window, double click on the imported model in the asset \n\
+                            viewer to import a new model, then tweak the settings to how you wish after!");
+                            self.signal = Signal::None;
+                        }
+
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Light")).clicked() {
+                            log::debug!("Creating new lighting");
+                            let transform = Transform::new();
+                            let component = LightComponent::default();
+                            let light = Light::new(graphics, &component, &transform, Some("Light"));
+                            self.world.spawn((light, component, transform));
+                            crate::success!("Created new light");
+
+                            // always ensure the signal is reset after action is dun
+                            self.signal = Signal::None;
+                        }
+                    });
+                if !show {
+                    self.signal = Signal::None;
                 }
             }
         }

@@ -587,6 +587,10 @@ impl Component for LightComponent {
                         }
                     });
             });
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.enabled, "Enabled");
+            });
         });
     }
 }
