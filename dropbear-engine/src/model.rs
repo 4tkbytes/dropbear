@@ -7,7 +7,10 @@ use russimp_ng::{
 };
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-use crate::graphics::{Graphics, NO_MODEL, NO_TEXTURE, Texture};
+use crate::graphics::{Graphics, NO_MODEL, Texture};
+use crate::utils::ResourceReference;
+
+pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
 
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
@@ -50,7 +53,7 @@ impl Vertex for ModelVertex {
 #[derive(Clone)]
 pub struct Model {
     pub label: String,
-    pub path: PathBuf,
+    pub path: ResourceReference,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
 }
@@ -74,13 +77,14 @@ pub struct Mesh {
 impl Model {
     pub fn load_from_memory(
         graphics: &Graphics<'_>,
-        buffer: &[u8],
+        buffer: Vec<u8>,
         label: Option<&str>,
     ) -> anyhow::Result<Model> {
         log::debug!("Loading from memory");
+        let res_ref = ResourceReference::from_bytes(buffer.clone());
 
         let scene = match Scene::from_buffer(
-            buffer,
+            buffer.as_slice(),
             vec![
                 PostProcess::Triangulate,
                 PostProcess::FlipUVs,
@@ -129,7 +133,7 @@ impl Model {
                 } else {
                     log::warn!("Error loading material, using default missing texture");
                 }
-                Texture::new(graphics, NO_TEXTURE)
+                Texture::new(graphics, GREY_TEXTURE_BYTES)
             };
 
             let bind_group = diffuse_texture.bind_group().to_owned();
@@ -206,9 +210,9 @@ impl Model {
             label: if let Some(l) = label {
                 l.to_string()
             } else {
-                String::from("Model")
+                String::from("No named model")
             },
-            path: PathBuf::new(),
+            path: res_ref,
         })
     }
 
@@ -217,8 +221,8 @@ impl Model {
         path: &PathBuf,
         label: Option<&str>,
     ) -> anyhow::Result<Model> {
-        let file_name = path.file_name().unwrap().to_str().unwrap();
-        log::debug!("Loading model [{}]", file_name);
+        let file_name = path.file_name();
+        log::debug!("Loading model [{:?}]", file_name);
 
         let scene = match Scene::from_file(
             path.to_str().unwrap(),
@@ -269,7 +273,7 @@ impl Model {
                 } else {
                     log::warn!("Error loading material, using default missing texture");
                 }
-                Texture::new(graphics, NO_TEXTURE)
+                Texture::new(graphics, GREY_TEXTURE_BYTES)
             };
 
             let bind_group = diffuse_texture.bind_group().to_owned();
@@ -339,16 +343,16 @@ impl Model {
                 material: mesh.material_index as usize,
             });
         }
-        log::debug!("Successfully loaded model [{}]", file_name);
+        log::debug!("Successfully loaded model [{:?}]", file_name);
         Ok(Model {
             meshes,
             materials,
             label: if let Some(l) = label {
                 l.to_string()
             } else {
-                String::from(file_name.split(".").into_iter().next().unwrap())
+                String::from(file_name.unwrap().to_str().unwrap().split(".").into_iter().next().unwrap())
             },
-            path: path.clone(),
+            path: ResourceReference::from_path(path).unwrap(),
         })
     }
 }

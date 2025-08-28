@@ -348,6 +348,8 @@ impl Editor {
     pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<()> {
         let config = PROJECT.read().unwrap();
 
+        self.project_path = Some(config.project_path.clone());
+
         if let Some(layout) = &config.dock_layout {
             self.dock_state = layout.clone();
         }

@@ -4,14 +4,7 @@ use egui::Context;
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
-    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass,
-    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState,
-    SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor, VertexBufferLayout,
-    util::{BufferInitDescriptor, DeviceExt},
-};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout, util::{BufferInitDescriptor, DeviceExt}};
 
 use crate::{
     State,
@@ -92,7 +85,8 @@ impl<'a> Graphics<'a> {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None, // todo: change for improved performance
+                        // cull_mode: Some(wgpu::Face::Back), // todo: change for improved performance
+                        cull_mode: None,
                         polygon_mode: wgpu::PolygonMode::Fill,
                         unclipped_depth: false,
                         conservative: false,

@@ -11,6 +11,8 @@ pub mod resources;
 pub mod scene;
 pub mod attenuation;
 pub mod panic;
+pub mod starter;
+pub mod utils;
 
 use chrono::Local;
 use egui::TextureId;
@@ -27,6 +29,7 @@ use std::{
 use std::fs::OpenOptions;
 use std::sync::Mutex;
 use app_dirs2::{AppDataType, AppInfo};
+use colored::Colorize;
 use env_logger::Builder;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat
@@ -429,7 +432,31 @@ impl App {
             Builder::new()
                 .format(move |buf, record| {
                     let ts = Local::now().format("%Y-%m-%dT%H:%M:%S");
-                    let line = format!(
+
+                    let colored_level = match record.level() {
+                        log::Level::Error => record.level().to_string().red().bold(),
+                        log::Level::Warn => record.level().to_string().yellow().bold(),
+                        log::Level::Info => record.level().to_string().green().bold(),
+                        log::Level::Debug => record.level().to_string().blue().bold(),
+                        log::Level::Trace => record.level().to_string().cyan().bold(),
+                    };
+
+                    let colored_timestamp = ts.to_string().bright_black();
+
+                    let file_info = format!("{}:{}",
+                                            record.file().unwrap_or("unknown"),
+                                            record.line().unwrap_or(0)
+                    ).bright_black();
+
+                    let console_line = format!(
+                        "{} {} [{}] - {}\n",
+                        file_info,
+                        colored_timestamp,
+                        colored_level,
+                        record.args()
+                    );
+
+                    let file_line = format!(
                         "{}:{} {} [{}] - {}\n",
                         record.file().unwrap_or("unknown"),
                         record.line().unwrap_or(0),
@@ -438,10 +465,10 @@ impl App {
                         record.args()
                     );
 
-                    write!(buf, "{}", line)?;
+                    write!(buf, "{}", console_line)?;
 
                     if let Ok(mut fh) = file.lock() {
-                        let _ = fh.write_all(line.as_bytes());
+                        let _ = fh.write_all(file_line.as_bytes());
                     }
                     Ok(())
                 })

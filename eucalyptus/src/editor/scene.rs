@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use egui::Align2;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::{DrawLight, DrawModel}, scene::{Scene, SceneCommand}
@@ -7,10 +6,8 @@ use log;
 use parking_lot::Mutex;
 use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-
 use super::*;
 use crate::{
-    states::{Node, RESOURCES},
     utils::PendingSpawn,
 };
 
@@ -26,44 +23,6 @@ impl Scene for Editor {
             include_str!("../shader.wgsl"),
             Some("viewport_shader"),
         );
-        if self.world.len() == 0 {
-            let cube_path = {
-                #[allow(unused_assignments)]
-                let mut path = PathBuf::new();
-                let resources = RESOURCES.read().unwrap();
-                let mut matches = Vec::new();
-                crate::utils::search_nodes_recursively(
-                    &resources.nodes,
-                    &|node| match node {
-                        Node::File(file) => file.name.contains("cube"),
-                        Node::Folder(folder) => folder.name.contains("cube"),
-                    },
-                    &mut matches,
-                );
-                match matches.get(0) {
-                    Some(thing) => match thing {
-                        Node::File(file) => path = file.path.clone(),
-                        Node::Folder(folder) => path = folder.path.clone(),
-                    },
-                    None => path = PathBuf::new(),
-                }
-                path
-            };
-
-            if cube_path != PathBuf::new() {
-                let cube = AdoptedEntity::new(graphics, &cube_path, Some("default_cube")).unwrap();
-                self.world
-                    .spawn((cube, Transform::default(), ModelProperties::default()));
-                log::info!("Added default cube since no entities were loaded from scene");
-            } else {
-                log::warn!("cube path is empty :(")
-            }
-        } else {
-            log::info!(
-                "Scene loaded with {} entities, skipping default cube",
-                self.world.len()
-            );
-        }
 
         self.light_manager.create_light_array_resources(graphics);
 
@@ -177,7 +136,7 @@ impl Scene for Editor {
             Signal::Paste(scene_entity) => {
                         match AdoptedEntity::new(
                             graphics,
-                            &scene_entity.model_path,
+                            &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()),
                             Some(&scene_entity.label),
                         ) {
                             Ok(adopted) => {
@@ -573,6 +532,19 @@ impl Scene for Editor {
                             // always ensure the signal is reset after action is dun
                             self.signal = Signal::None;
                         }
+
+                        // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
+                        //     log::debug!("Creating new plane");
+                        //     let plane = PlaneBuilder::new()
+                        //         .with_size(5000.0, 2000.0)
+                        //         .with_texture_size(1024, 1024)
+                        //         .build(graphics, include_bytes!("../../../resources/proto.png"), Some("Plane")).unwrap();
+                        //     let transform = Transform::new();
+                        //     self.world.spawn((plane, transform));
+                        //     crate::success!("Created new plane");
+                        //
+                        //     self.signal = Signal::None;
+                        // }
                     });
                 if !show {
                     self.signal = Signal::None;

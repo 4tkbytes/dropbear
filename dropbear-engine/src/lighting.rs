@@ -201,7 +201,7 @@ impl Light {
 
         let cube_model = Model::load_from_memory(
             graphics, 
-            include_bytes!("../../resources/cube.obj"), 
+            include_bytes!("../../resources/cube.obj").to_vec(), 
             label.clone()
         ).unwrap();
 

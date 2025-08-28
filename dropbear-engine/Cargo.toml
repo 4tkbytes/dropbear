@@ -13,6 +13,7 @@ anyhow.workspace = true
 app_dirs2.workspace = true
 bytemuck.workspace = true
 chrono.workspace = true
+colored.workspace = true
 egui_wgpu_backend.workspace = true
 egui_winit_platform.workspace = true
 egui.workspace = true
@@ -30,6 +31,8 @@ spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 hecs.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

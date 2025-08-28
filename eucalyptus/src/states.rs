@@ -28,7 +28,7 @@ use log;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-
+use dropbear_engine::utils::ResourceReference;
 use crate::camera::CameraType;
 #[cfg(feature = "editor")]
 use crate::editor::EditorTab;
@@ -559,18 +559,6 @@ impl EntityNode {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct SceneConfig {
-    pub scene_name: String,
-    pub entities: Vec<SceneEntity>,
-    pub camera: HashMap<CameraType, SceneCameraConfig>, // TODO: Change to component
-    pub lights: Vec<LightConfig>,
-    // todo later
-    // pub settings: SceneSettings,
-    #[serde(skip)]
-    pub path: PathBuf,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SceneCameraConfig {
     pub position: [f64; 3],
@@ -603,13 +591,13 @@ impl Default for SceneCameraConfig {
 
 impl SceneCameraConfig {
     pub fn camera(&self, graphics: &mut Graphics) -> Camera {
-        Camera::new(graphics, self.position.into(), self.target.into(), self.up.into(), self.aspect.into(), self.fov.into(), self.near.into(), self.far.into(), 5.0, 0.0125)
+        Camera::new(graphics, self.position.into(), self.target.into(), self.up.into(), self.aspect.into(), self.fov.into(), self.near.into(), self.far.into(), 10.0, 0.0125)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct SceneEntity {
-    pub model_path: PathBuf,
+    pub model_path: ResourceReference,
     pub label: String,
     pub transform: Transform,
     pub properties: ModelProperties,
@@ -654,6 +642,18 @@ impl Default for ModelProperties {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+pub struct SceneConfig {
+    pub scene_name: String,
+    pub entities: Vec<SceneEntity>,
+    pub camera: HashMap<CameraType, SceneCameraConfig>, // TODO: Change to component
+    pub lights: Vec<LightConfig>,
+    // todo later
+    // pub settings: SceneSettings,
+    #[serde(skip)]
+    pub path: PathBuf,
 }
 
 impl SceneConfig {
@@ -733,14 +733,29 @@ impl SceneConfig {
         );
         world.clear();
 
+        let project_config = if cfg!(feature = "data-only") {
+            if let Ok(cfg) = PROJECT.read() {
+                cfg.project_path.clone()
+            } else {
+                PathBuf::new()
+            }
+        } else {
+            PathBuf::new()
+        };
+
         log::info!("World cleared, now has {} entities", world.len());
 
         for entity_config in &self.entities {
             log::debug!("Loading entity: {}", entity_config.label);
+            let model_path = if !cfg!(feature = "data-only") {
+                entity_config.model_path.to_project_path(project_config.clone())
+            } else {
+                entity_config.model_path.to_executable_path()?
+            };
 
             let adopted = AdoptedEntity::new(
                 graphics,
-                &entity_config.model_path,
+                &model_path,
                 Some(&entity_config.label),
             )?;
 
@@ -803,7 +818,7 @@ impl SceneConfig {
                 debug_config.fov as f64,
                 debug_config.near as f64,
                 debug_config.far as f64,
-                0.125,
+                5.0,
                 0.002,
             );
             let debug_controller = Box::new(DebugCameraController::new());
@@ -820,7 +835,7 @@ impl SceneConfig {
                 player_config.fov as f64,
                 player_config.near as f64,
                 player_config.far as f64,
-                0.1,
+                5.0,
                 0.001,
             );
             let player_controller = Box::new(PlayerCameraController::new());
@@ -835,7 +850,7 @@ impl SceneConfig {
                         "World entity {:?} -> label='{}' path='{}'",
                         entity_id,
                         adopted_entity.label(),
-                        adopted_entity.model().path.display()
+                        adopted_entity.model().path
                     );
                 }
 
@@ -846,13 +861,22 @@ impl SceneConfig {
                         if adopted_entity.label() == target_label {
                             Some(entity_id)
                         } else {
-                            let stem_match = adopted_entity
-                                .model()
-                                .path
-                                .file_stem()
+                            let stem_match = if cfg!(feature = "data-only") {
+                                  adopted_entity.model().path.to_executable_path().unwrap()
+                            } else {
+                                let project_path = if let Ok(cfg) = PROJECT.read() {
+                                    cfg.project_path.clone()
+                                } else {
+                                    panic!("Unable to get project path to use with camera manager");
+                                };
+                                adopted_entity.model().path.to_project_path(project_path)
+                            };
+
+                            let stem_match = stem_match.file_stem()
                                 .and_then(|s| s.to_str())
                                 .map(|s| s == target_label)
                                 .unwrap_or(false);
+
                             if stem_match {
                                 Some(entity_id)
                             } else {

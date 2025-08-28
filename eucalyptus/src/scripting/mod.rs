@@ -248,7 +248,7 @@ impl ScriptManager {
                     script_name,
                     entity_id,
                     adopted.label(),
-                    adopted.model().path.display()
+                    adopted.model().path
                 );
             }
         } else {
