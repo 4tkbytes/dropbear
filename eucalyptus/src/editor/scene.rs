@@ -629,11 +629,11 @@ impl Scene for Editor {
                     if let Some(light_pipeline) = &self.light_manager.pipeline {
                         render_pass.set_pipeline(light_pipeline);
                         for (_, (light, component)) in light_query.iter() {
-                            if component.enabled {
+                            if component.visible {
                                 render_pass.set_vertex_buffer(1, light.instance_buffer.as_ref().unwrap().slice(..));
                                 render_pass.draw_light_model(
                                     light.model(),
-                                    camera.bind_group(), 
+                                    camera.bind_group(),
                                     light.bind_group(),
                                 );
                             }

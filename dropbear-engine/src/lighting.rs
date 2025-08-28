@@ -12,13 +12,13 @@ pub const MAX_LIGHTS: usize = 8;
 // ENSURE THAT THE SIZE OF THE UNIFORM IS OF A MULTIPLE OF 16. USE `size_of::<LightUniform>()`
 pub struct LightUniform {
     pub position: [f32; 4],
-    pub direction: [f32; 4],
+    pub direction: [f32; 4], // outer cutoff is .w value
     pub colour: [f32; 4], // last value is the light type
     // pub light_type: u32,
     pub constant: f32,
     pub linear: f32,
     pub quadratic: f32,
-    pub _padding: f32,
+    pub cutoff: f32,
 }
 
 fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
@@ -27,6 +27,10 @@ fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
 
 fn dvec3_colour_to_uniform_array(vec: DVec3, light_type: LightType) -> [f32; 4] {
     [vec.x as f32, vec.y as f32, vec.z as f32, light_type as u32 as f32]
+}
+
+fn dvec3_direction_to_uniform_array(vec: DVec3, outer_cutoff_angle: f32) -> [f32; 4] {
+    [vec.x as f32, vec.y as f32, vec.z as f32, f32::cos(outer_cutoff_angle.to_radians())]
 }
 
 impl Default for LightUniform {
@@ -39,7 +43,7 @@ impl Default for LightUniform {
             constant: 0.0,
             linear: 0.0,
             quadratic: 0.0,
-            _padding: 0.1,
+            cutoff: f32::cos(12.5_f32.to_radians()),
         }
     }
 }
@@ -96,13 +100,16 @@ impl Into<u32> for LightType {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LightComponent {
-    pub position: DVec3,
-    pub direction: DVec3,
-    pub colour: DVec3,
-    pub light_type: LightType,
-    pub intensity: f32,
-    pub attenuation: Attenuation,
-    pub enabled: bool,
+    pub position: DVec3, // point, spot
+    pub direction: DVec3, // directional, spot
+    pub colour: DVec3, // all
+    pub light_type: LightType, // all
+    pub intensity: f32, // all
+    pub attenuation: Attenuation, // point, spot
+    pub enabled: bool, // all - light
+    pub visible: bool, // all - cube
+    pub cutoff_angle: f32, // spot
+    pub outer_cutoff_angle: f32, // spot
 }
 
 impl Default for LightComponent {
@@ -115,6 +122,9 @@ impl Default for LightComponent {
             intensity: 1.0,
             attenuation: RANGE_50,
             enabled: true,
+            cutoff_angle: 12.5,
+            outer_cutoff_angle: 17.5,
+            visible: true,
         }
     }
 }
@@ -129,6 +139,9 @@ impl LightComponent {
             intensity,
             attenuation: attenuation.unwrap_or(RANGE_50),
             enabled: true,
+            cutoff_angle: 12.5,
+            outer_cutoff_angle: 17.5,
+            visible: true,
         }
     }
 
@@ -142,6 +155,22 @@ impl LightComponent {
 
     pub fn spot(colour: DVec3, intensity: f32) -> Self {
         Self::new(colour, LightType::Spot, intensity, None)
+    }
+
+    pub fn hide_cube(&mut self) {
+        self.visible = false;
+    }
+
+    pub fn show_cube(&mut self) {
+        self.visible = true;
+    }
+
+    pub fn disable_light(&mut self) {
+        self.enabled = false;
+    }
+
+    pub fn enable_light(&mut self) {
+        self.enabled = true;
     }
 }
 
@@ -157,12 +186,17 @@ pub struct Light {
 
 impl Light {
     pub fn new(graphics: &Graphics, light: &LightComponent, transform: &Transform, label: Option<&str>) -> Self {
+        let forward = DVec3::new(0.0, 0.0, -1.0);
+        let direction = transform.rotation * forward;
+
         let uniform = LightUniform {
             position: dvec3_to_uniform_array(transform.position),
-            // direction: transform.rotation.normalize().xyz().as_vec3().to_array(),
+            direction: dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle),
             colour: dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type),
-            // light_type: light.light_type.into(),
-            ..Default::default()
+            constant: light.attenuation.constant,
+            linear: light.attenuation.linear,
+            quadratic: light.attenuation.quadratic,
+            cutoff: f32::cos(light.cutoff_angle.to_radians()),
         };
 
         let cube_model = Model::load_from_memory(
@@ -228,11 +262,17 @@ impl Light {
 
     pub fn update(&mut self, light: &mut LightComponent, transform: &Transform) {
         self.uniform.position = dvec3_to_uniform_array(transform.position);
-        self.uniform.direction = dvec3_to_uniform_array(DVec3::from(transform.rotation.normalize().xyz().as_vec3()));
+
+        let forward = DVec3::new(0.0, 0.0, -1.0);
+        let direction = transform.rotation * forward;
+        self.uniform.direction = dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle);
+
         self.uniform.colour = dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type);
         self.uniform.constant = light.attenuation.constant;
         self.uniform.linear = light.attenuation.linear;
         self.uniform.quadratic = light.attenuation.quadratic;
+
+        self.uniform.cutoff = f32::cos(light.cutoff_angle.to_radians());
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -318,7 +358,7 @@ impl LightManager {
             .iter()
         {
             // if it fails to update, the cause it probably the ModelVertex or smth like that
-            // note: its not...
+            // note: its not.
             let instance = Instance::from_matrix(transform.matrix());
 
             if let Some(instance_buffer) = &light.instance_buffer {

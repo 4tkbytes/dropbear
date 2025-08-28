@@ -15,7 +15,7 @@ struct Light {
     constant: f32,
     lin: f32, // linear
     quadratic: f32,
-//    ambient_strength: f32,
+    cutoff: f32,
 }
 
 struct LightArray {
@@ -118,6 +118,7 @@ fn directional_light(
 
 // https://learnopengl.com/code_viewer_gh.php?code=src/2.lighting/5.2.light_casters_point/5.2.light_casters.fs
 // deal with later. current issue: it is showing only yellow and white in point light (weird...)
+// note: fixed, forgot to push attenuation values to gpu lol
 fn point_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>, tex_color: vec3<f32>) -> vec3<f32> {
     let norm = normalize(world_normal);
     let light_dir = normalize(light.position.xyz - world_pos);
@@ -133,6 +134,37 @@ fn point_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
     return (diffuse + specular) * attenuation;
+}
+
+fn spot_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>, tex_color: vec3<f32>) -> vec3<f32> {
+    let outer_cutoff = light.direction.w;
+    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+
+    let norm = normalize(world_normal);
+    let light_dir = normalize(light.position.xyz - world_pos);
+    let diff = max(dot(norm, light_dir), 0.0);
+    var diffuse = light.color.xyz * diff * tex_color;
+
+    let shininess = 32.0;
+    let reflect_dir = reflect(-light_dir, norm);
+    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
+    var specular = light.color.xyz * spec * tex_color;
+
+    let theta = dot(light_dir, normalize(-light.direction.xyz));
+    let epsilon = light.cutoff - outer_cutoff;
+    let intensity = clamp((theta - outer_cutoff) / epsilon, 0.0, 1.0);
+
+    diffuse *= intensity;
+    specular *= intensity;
+
+    let distance = length(light.position.xyz - world_pos);
+    let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
+
+    let ambient_attenuated = ambient * attenuation;
+    let diffuse_attenuated = diffuse * attenuation;
+    let specular_attenuated = specular * attenuation;
+
+    return ambient_attenuated + diffuse_attenuated + specular_attenuated;
 }
 
 @fragment
@@ -163,8 +195,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             // point
             final_color += point_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
         } else if light.color.w == 2.0 {
-            // spot
-            // final_color += spot_light(light, world_normal, view_dir);
+            final_color += spot_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
         }
     }
 

@@ -570,6 +570,12 @@ impl Component for LightComponent {
                         ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
                     });
             });
+
+            // let is_dir = matches!(self.light_type, LightType::Directional);
+            let is_point = matches!(self.light_type, LightType::Point);
+            let is_spot = matches!(self.light_type, LightType::Spot);
+
+            // colour
             ui.separator();
             let mut colour = self.colour.clone().as_vec3().to_array();
             ui.horizontal(|ui| {
@@ -577,20 +583,63 @@ impl Component for LightComponent {
                 egui::color_picker::color_edit_button_rgb(ui, &mut colour)
             });
             self.colour = Vec3::from_array(colour).as_dvec3();
+
+            // intensity
+            ui.separator();
             ui.horizontal(|ui| {
-                ComboBox::new("Range", "Range")
-                    // .width(ui.available_width())
-                    .selected_text(format!("Range {}", self.attenuation.range.to_string()))
-                    .show_ui(ui, |ui| {
-                        for (preset, label) in ATTENUATION_PRESETS {
-                            ui.selectable_value(&mut self.attenuation, preset.clone(), *label);
-                        }
-                    });
+                ui.label("Intensity");
+                ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0));
             });
+
+            // enabled and visible
             ui.separator();
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.enabled, "Enabled");
+                ui.checkbox(&mut self.visible, "Visible");
             });
+
+            if is_spot || is_point {
+                // attenuation
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ComboBox::new("Range", "Range")
+                        // .width(ui.available_width())
+                        .selected_text(format!("Range {}", self.attenuation.range.to_string()))
+                        .show_ui(ui, |ui| {
+                            for (preset, label) in ATTENUATION_PRESETS {
+                                ui.selectable_value(&mut self.attenuation, preset.clone(), *label);
+                            }
+                        });
+                });
+            }
+
+            if is_spot {
+                // cutoff angles
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
+                            .text("Inner")
+                            .suffix("°")
+                            .step_by(0.1)
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
+                            .text("Outer")
+                            .suffix("°")
+                            .step_by(0.1)
+                    );
+                });
+
+                if self.outer_cutoff_angle <= self.cutoff_angle {
+                    self.outer_cutoff_angle = self.cutoff_angle + 1.0;
+                }
+
+                let cone_softness = self.outer_cutoff_angle - self.cutoff_angle;
+                ui.label(format!("Soft edge: {:.1}°", cone_softness));
+            }
         });
     }
 }
