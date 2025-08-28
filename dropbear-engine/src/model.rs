@@ -1,53 +1,21 @@
 use std::{mem, ops::Range, path::PathBuf};
-
+use std::collections::HashMap;
 use russimp_ng::{
     Vector3D,
     material::{DataContent, TextureType},
     scene::{PostProcess, Scene},
 };
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
-
+use lazy_static::lazy_static;
+use parking_lot::Mutex;
 use crate::graphics::{Graphics, NO_MODEL, Texture};
 use crate::utils::ResourceReference;
 
 pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
 
-pub trait Vertex {
-    fn desc() -> VertexBufferLayout<'static>;
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ModelVertex {
-    pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
-}
-
-impl Vertex for ModelVertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        VertexBufferLayout {
-            array_stride: mem::size_of::<ModelVertex>() as BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
-        }
-    }
+lazy_static! {
+    static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
+    static ref MEMORY_MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
 }
 
 #[derive(Clone)]
@@ -80,6 +48,14 @@ impl Model {
         buffer: Vec<u8>,
         label: Option<&str>,
     ) -> anyhow::Result<Model> {
+        let cache_key = label.unwrap_or("default").to_string();
+
+        // Check memory cache first
+        if let Some(cached_model) = MEMORY_MODEL_CACHE.lock().get(&cache_key) {
+            log::debug!("Model loaded from memory cache: {:?}", cache_key);
+            return Ok(cached_model.clone());
+        }
+
         log::debug!("Loading from memory");
         let res_ref = ResourceReference::from_bytes(buffer.clone());
 
@@ -93,15 +69,18 @@ impl Model {
             "obj",
         ) {
             Ok(v) => v,
-            Err(_) => Scene::from_buffer(
-                NO_MODEL,
-                vec![
-                    PostProcess::Triangulate,
-                    PostProcess::FlipUVs,
-                    PostProcess::GenerateNormals,
-                ],
-                "glb",
-            )?,
+            Err(_) => {
+                log::error!("Unable to load {:?} from memory", label);
+                Scene::from_buffer(
+                    NO_MODEL,
+                    vec![
+                        PostProcess::Triangulate,
+                        PostProcess::FlipUVs,
+                        PostProcess::GenerateNormals,
+                    ],
+                    "glb",
+                )?
+            },
         };
 
         let mut materials = Vec::new();
@@ -204,7 +183,7 @@ impl Model {
             });
         }
         log::debug!("Successfully loaded model [{:?}]", label);
-        Ok(Model {
+        let model = Model {
             meshes,
             materials,
             label: if let Some(l) = label {
@@ -213,7 +192,11 @@ impl Model {
                 String::from("No named model")
             },
             path: res_ref,
-        })
+        };
+
+        MEMORY_MODEL_CACHE.lock().insert(cache_key, model.clone());
+        log::debug!("Model cached from memory: {:?}", label);
+        Ok(model)
     }
 
     pub fn load(
@@ -224,6 +207,13 @@ impl Model {
         let file_name = path.file_name();
         log::debug!("Loading model [{:?}]", file_name);
 
+        let path_str = path.to_string_lossy().to_string();
+
+        if let Some(cached_model) = MODEL_CACHE.lock().get(&path_str) {
+            log::debug!("Model loaded from cache: {:?}", path_str);
+            return Ok(cached_model.clone());
+        }
+
         let scene = match Scene::from_file(
             path.to_str().unwrap(),
             vec![
@@ -233,15 +223,18 @@ impl Model {
             ],
         ) {
             Ok(v) => v,
-            Err(_) => Scene::from_buffer(
-                NO_MODEL,
-                vec![
-                    PostProcess::Triangulate,
-                    PostProcess::FlipUVs,
-                    PostProcess::GenerateNormals,
-                ],
-                "glb",
-            )?,
+            Err(_) => {
+                log::error!("Unable to locate model [{}]", path.display());
+                Scene::from_buffer(
+                    NO_MODEL,
+                    vec![
+                        PostProcess::Triangulate,
+                        PostProcess::FlipUVs,
+                        PostProcess::GenerateNormals,
+                    ],
+                    "glb",
+                )?
+            },
         };
 
         let mut materials = Vec::new();
@@ -344,7 +337,7 @@ impl Model {
             });
         }
         log::debug!("Successfully loaded model [{:?}]", file_name);
-        Ok(Model {
+        let model = Model {
             meshes,
             materials,
             label: if let Some(l) = label {
@@ -353,7 +346,11 @@ impl Model {
                 String::from(file_name.unwrap().to_str().unwrap().split(".").into_iter().next().unwrap())
             },
             path: ResourceReference::from_path(path).unwrap(),
-        })
+        };
+
+        MODEL_CACHE.lock().insert(path_str, model.clone());
+        log::debug!("Model cached and loaded: {:?}", file_name);
+        Ok(model)
     }
 }
 
@@ -501,6 +498,44 @@ where
     ) {
         for mesh in &model.meshes {
             self.draw_light_mesh_instanced(mesh, instances.clone(), camera_bind_group, light_bind_group);
+        }
+    }
+}
+
+pub trait Vertex {
+    fn desc() -> VertexBufferLayout<'static>;
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ModelVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub normal: [f32; 3],
+}
+
+impl Vertex for ModelVertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: mem::size_of::<ModelVertex>() as BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
         }
     }
 }

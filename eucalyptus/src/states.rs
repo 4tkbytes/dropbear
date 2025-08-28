@@ -733,13 +733,15 @@ impl SceneConfig {
         );
         world.clear();
 
-        let project_config = if cfg!(feature = "data-only") {
+        let project_config = if !cfg!(feature = "data-only") {
             if let Ok(cfg) = PROJECT.read() {
                 cfg.project_path.clone()
             } else {
+                log::warn!("Unable to retrieve a lock from the PROJECT config");
                 PathBuf::new()
             }
         } else {
+            log::warn!("Feature is data only, no need for project config");
             PathBuf::new()
         };
 
@@ -748,9 +750,14 @@ impl SceneConfig {
         for entity_config in &self.entities {
             log::debug!("Loading entity: {}", entity_config.label);
             let model_path = if !cfg!(feature = "data-only") {
-                entity_config.model_path.to_project_path(project_config.clone())
+                log::debug!("Project Config location: {:?}", project_config.display());
+                let path = entity_config.model_path.to_project_path(project_config.clone());
+                log::debug!("Loading from project: {}", path.display());
+                path
             } else {
-                entity_config.model_path.to_executable_path()?
+                let path = entity_config.model_path.to_executable_path()?;
+                log::debug!("Loading from executable ref: {}", path.display());
+                path
             };
 
             let adopted = AdoptedEntity::new(

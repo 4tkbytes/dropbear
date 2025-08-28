@@ -33,6 +33,7 @@ winit.workspace = true
 hecs.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
+lazy_static.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

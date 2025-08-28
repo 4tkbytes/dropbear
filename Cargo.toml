@@ -31,6 +31,7 @@ gilrs = "0.11"
 git2 = "0.20"
 glam = { version = "0.30", features = ["serde"] }
 hecs = { version = "0.10", features = ["serde"] }
+lazy_static = "1.5"
 log = "0.4"
 log-once = "0.4"
 model_to_image = "0.1.1"

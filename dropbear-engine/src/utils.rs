@@ -103,10 +103,8 @@ impl ResourceReference {
     /// Otherwise, it uses project_path + resource_path directly.
     pub fn to_project_path(&self, project_path: impl AsRef<Path>) -> PathBuf {
         let path = project_path.as_ref();
-        match path.parent() {
-            Some(parent) => parent.join("resources").join(self.resource_ref_path.as_str()),
-            None => path.join("resources").join(self.resource_ref_path.as_str()),
-        }
+        log::debug!("Parent path: {}", path.display());
+        path.join("resources").join(self.resource_ref_path.as_str())
     }
 
     /// Creates a PathBuf that points to the resource relative to the executable directory.

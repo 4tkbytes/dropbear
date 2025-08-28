@@ -1,15 +1,11 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
-use once_cell::sync::Lazy;
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use wgpu::{util::DeviceExt, BindGroup, Buffer};
 
 use crate::{
     graphics::{Graphics, Instance}, model::Model
 };
-use crate::model::Mesh;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 pub struct Transform {
@@ -61,10 +57,7 @@ impl Transform {
 #[derive(Default)]
 pub struct AdoptedEntity {
     pub model: Option<Model>,
-    pub uniform: ModelUniform,
-    pub uniform_buffer: Option<Buffer>,
-    pub uniform_bind_group: Option<BindGroup>,
-    #[allow(unused)]
+    pub previous_matrix: DMat4,
     pub instance: Instance,
     pub instance_buffer: Option<Buffer>,
 }
@@ -88,67 +81,35 @@ impl AdoptedEntity {
     }
 
     pub fn adopt(graphics: &Graphics, model: Model, label: Option<&str>) -> Self {
-        let uniform = ModelUniform::new();
-        let uniform_buffer = graphics.create_uniform(uniform, Some("Entity Model Uniform"));
+        let instance = Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE);
+        let initial_matrix = DMat4::IDENTITY; // Default; update in new() if transform provided
+        let instance_raw = instance.to_raw();
+        let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: match label {
+                Some(l) => Some(l),
+                None => Some("instance buffer"),
+            },
+            contents: bytemuck::cast_slice(&[instance_raw]),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
 
-        let model_layout = graphics.create_model_uniform_bind_group_layout();
-        let uniform_bind_group =
-            graphics
-                .state
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("model_uniform_bind_group"),
-                    layout: &model_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    }],
-                });
-
-        let instance = Instance::new(DVec3::ONE, DQuat::IDENTITY, DVec3::ONE);
-
-        let instance_buffer =
-            graphics
-                .state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: match label {
-                        Some(_) => label,
-                        None => Some("instance buffer"),
-                    },
-                    contents: bytemuck::cast_slice(&[instance.to_raw()]),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
-        log::debug!("Successfully adopted Model");
         Self {
             model: Some(model),
-            uniform,
-            uniform_buffer: Some(uniform_buffer),
-            uniform_bind_group: Some(uniform_bind_group),
             instance,
             instance_buffer: Some(instance_buffer),
+            previous_matrix: initial_matrix,
         }
     }
 
     pub fn update(&mut self, graphics: &Graphics, transform: &Transform) {
-        self.uniform.model = transform.matrix().as_mat4().to_cols_array_2d();
-
-        if let Some(buffer) = &self.uniform_buffer {
-            graphics
-                .state
-                .queue
-                .write_buffer(buffer, 0, bytemuck::cast_slice(&[self.uniform]));
-        }
-
-        self.instance = Instance::from_matrix(transform.matrix());
-
-        if let Some(instance_buffer) = &self.instance_buffer {
+        let current_matrix = transform.matrix();
+        if self.previous_matrix != current_matrix {
+            self.instance = Instance::from_matrix(current_matrix);
             let instance_raw = self.instance.to_raw();
-            graphics.state.queue.write_buffer(
-                instance_buffer,
-                0,
-                bytemuck::cast_slice(&[instance_raw]),
-            );
+            if let Some(buffer) = &self.instance_buffer {
+                graphics.state.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
+            }
+            self.previous_matrix = current_matrix;
         }
     }
 

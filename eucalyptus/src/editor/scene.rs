@@ -5,7 +5,10 @@ use dropbear_engine::{
 use log;
 use parking_lot::Mutex;
 use wgpu::Color;
+use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use dropbear_engine::graphics::InstanceRaw;
+use dropbear_engine::model::Model;
 use super::*;
 use crate::{
     utils::PendingSpawn,
@@ -598,10 +601,11 @@ impl Scene for Editor {
                 let mut entity_query = self.world.query::<(&AdoptedEntity, &Transform)>();
                 {
                     let mut render_pass = graphics.clear_colour(color);
+
                     if let Some(light_pipeline) = &self.light_manager.pipeline {
                         render_pass.set_pipeline(light_pipeline);
                         for (_, (light, component)) in light_query.iter() {
-                            if component.visible {
+                            if component.enabled {
                                 render_pass.set_vertex_buffer(1, light.instance_buffer.as_ref().unwrap().slice(..));
                                 render_pass.draw_light_model(
                                     light.model(),
@@ -612,12 +616,33 @@ impl Scene for Editor {
                         }
                     }
 
-                    render_pass.set_pipeline(pipeline);
+                    let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> = HashMap::new();
 
                     for (_, (entity, _)) in entity_query.iter() {
-                        render_pass.set_vertex_buffer(1, entity.instance_buffer.as_ref().unwrap().slice(..));
-                        // render_pass.set_bind_group(2, entity.uniform_bind_group.as_ref().unwrap(), &[]);
-                        render_pass.draw_model(entity.model(), camera.bind_group(), self.light_manager.bind_group());
+                        let model_ptr = entity.model() as *const Model;
+                        let instance_raw = entity.instance.to_raw();  // Use instance directly
+                        model_batches.entry(model_ptr).or_insert(Vec::new()).push(instance_raw);
+                    }
+
+                    render_pass.set_pipeline(pipeline);
+
+                    for (model_ptr, instances) in model_batches {
+                        let model = unsafe { &*model_ptr };
+
+                        // Create a temporary instance buffer for this batch
+                        let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Batched Instance Buffer"),
+                            contents: bytemuck::cast_slice(&instances),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+
+                        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                        render_pass.draw_model_instanced(
+                            model,
+                            0..instances.len() as u32,
+                            camera.bind_group(),
+                            self.light_manager.bind_group(),
+                        );
                     }
                 }
             }
