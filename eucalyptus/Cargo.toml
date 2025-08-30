@@ -14,6 +14,7 @@ readme.workspace = true
 anyhow = { workspace = true, optional = true }
 app_dirs2 = { workspace = true, optional = true }
 bincode = { workspace = true, optional = true }
+bytemuck = "1.23"
 chrono = { workspace = true, optional = true }
 dropbear-engine = { workspace = true, optional = true }
 egui-toast-fork = { workspace = true, optional = true }
@@ -41,7 +42,8 @@ winit = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
-bytemuck = "1.23.2"
+
+gleek_proc_macro.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = { workspace = true, optional = true }
@@ -108,3 +110,4 @@ anyhow = "1.0"
 app_dirs2 = "2.5"
 reqwest = { version = "0.12", features = ["blocking"] }
 zip = "4.3"
+gleek.workspace = true

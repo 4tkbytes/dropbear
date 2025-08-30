@@ -1,6 +1,8 @@
 use std::fs::{self, File};
 use std::io::Cursor;
 
+use gleek::build::{GleamBindingsConfig, generate_gleam_bindings};
+
 fn main() -> anyhow::Result<()> {
     let repo_zip_url = "https://github.com/4tkbytes/dropbear/archive/refs/heads/main.zip";
     let response = reqwest::blocking::get(repo_zip_url)
@@ -52,6 +54,13 @@ fn main() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!(
             "No resources folder found in the github repository [4tkbytes/dropbear] :("
         ));
+    }
+
+    let config = GleamBindingsConfig::default().module_name("eucalypus");
+    
+    if let Err(e) = generate_gleam_bindings(config) {
+        eprintln!("Failed to generate Gleam bindings: {}", e);
+        std::process::exit(1);
     }
 
     println!("cargo:rerun-if-changed=build.rs");

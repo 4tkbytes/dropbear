@@ -6,7 +6,8 @@ package.repository = "https://github.com/4tkbytes/dropbear-engine"
 package.readme = "README.md"
 
 resolver = "3"
-members = ["dropbear-engine", "eucalyptus", "gleek", "redback-runtime"]
+# might consider moving gleek into its own repository
+members = ["dropbear-engine", "eucalyptus", "redback-runtime", "gleek", "gleek_proc_macro", "gleek-tests"]
 
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -30,6 +31,8 @@ futures = "0.3"
 gilrs = "0.11"
 git2 = "0.20"
 glam = { version = "0.30", features = ["serde"] }
+gleek = { path = "gleek" }
+gleek_proc_macro = { path = "gleek_proc_macro" }
 hecs = { version = "0.10", features = ["serde"] }
 lazy_static = "1.5"
 log = "0.4"

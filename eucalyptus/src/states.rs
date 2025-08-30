@@ -31,11 +31,11 @@ use serde::{Deserialize, Serialize};
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use crate::build::build;
 use crate::camera::CameraType;
 #[cfg(feature = "editor")]
 use crate::editor::EditorTab;
 use crate::utils::PROTO_TEXTURE;
+use gleek_proc_macro::{gleek_export, gleek_impl};
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -616,6 +616,7 @@ pub struct SceneEntity {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[gleek_export]
 pub struct ModelProperties {
     pub custom_properties: HashMap<String, PropertyValue>,
 }
@@ -629,6 +630,7 @@ pub enum PropertyValue {
     Vec3([f32; 3]),
 }
 
+#[gleek_impl]
 impl ModelProperties {
     pub fn new() -> Self {
         Self {
@@ -645,6 +647,7 @@ impl ModelProperties {
     }
 }
 
+#[gleek_impl]
 impl Default for ModelProperties {
     fn default() -> Self {
         Self::new()
@@ -740,17 +743,17 @@ impl SceneConfig {
         );
         world.clear();
 
-        let project_config = if !cfg!(feature = "data-only") {
-            if let Ok(cfg) = PROJECT.read() {
-                cfg.project_path.clone()
-            } else {
-                log::warn!("Unable to retrieve a lock from the PROJECT config");
-                PathBuf::new()
-            }
-        } else {
-            log::warn!("Feature is data only, no need for project config");
-            PathBuf::new()
-        };
+        // let project_config = if !cfg!(feature = "data-only") {
+        //     if let Ok(cfg) = PROJECT.read() {
+        //         cfg.project_path.clone()
+        //     } else {
+        //         log::warn!("Unable to retrieve a lock from the PROJECT config");
+        //         PathBuf::new()
+        //     }
+        // } else {
+        //     log::warn!("Feature is data only, no need for project config");
+        //     PathBuf::new()
+        // };
 
         log::info!("World cleared, now has {} entities", world.len());
 

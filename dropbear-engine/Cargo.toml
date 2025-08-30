@@ -34,6 +34,7 @@ hecs.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
 lazy_static.workspace = true
+gleek_proc_macro.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
@@ -46,3 +47,6 @@ android_logger = "0.15"
 version = "0.25"
 default-features = false
 features = ["png", "jpeg"]
+
+[build-dependencies]
+gleek.workspace = true

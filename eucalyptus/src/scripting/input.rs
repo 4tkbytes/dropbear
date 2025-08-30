@@ -1,9 +1,11 @@
 use std::{collections::{HashMap, HashSet}, time::{Duration, Instant}};
 
+use gleek_proc_macro::{gleek_export, gleek_impl};
 use rhai::*;
 use winit::{event::MouseButton, keyboard::KeyCode};
 
 #[derive(rhai::CustomType, Clone)]
+#[gleek_export]
 pub struct InputState {
     pub last_key_press_times: HashMap<KeyCode, Instant>,
     pub double_press_threshold: Duration,
@@ -14,12 +16,14 @@ pub struct InputState {
     pub is_cursor_locked: bool,
 }
 
+#[gleek_impl]
 impl Default for InputState {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[gleek_impl]
 impl InputState {
     pub fn new() -> Self {
         Self {

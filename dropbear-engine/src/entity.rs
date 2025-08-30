@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
+use gleek_proc_macro::{gleek_export, gleek_impl};
 use serde::{Deserialize, Serialize};
 use wgpu::{util::DeviceExt, Buffer};
 
@@ -8,12 +9,14 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
+#[gleek_export]
 pub struct Transform {
     pub position: DVec3,
     pub rotation: DQuat,
     pub scale: DVec3,
 }
 
+#[gleek_impl]
 impl Default for Transform {
     fn default() -> Self {
         Self {
@@ -24,6 +27,7 @@ impl Default for Transform {
     }
 }
 
+#[gleek_impl]
 impl Transform {
     pub fn new() -> Self {
         Self::default()
