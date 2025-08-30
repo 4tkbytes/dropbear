@@ -1,9 +1,46 @@
 //! Utilities and helper functions for the dropbear renderer.
 
 use std::fmt::{Display, Formatter};
-use std::{fs, io};
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+
+/// An enum that contains the different types that a resource reference can possibly be.
+///
+/// # Example
+/// ```rust
+/// use dropbear_engine::utils::{ResourceReferenceType, ResourceReference};
+///
+/// let resource_ref = ResourceReference::from_reference(
+///     ResourceReferenceType::File("models/cube.obj".to_string()
+/// ));
+/// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ResourceReferenceType {
+    /// The default type; Specifies there being no resource reference type.
+    /// Typically creates errors, so watch out!
+    None,
+
+    /// A file type. The [`String`] is the reference from the project or the runtime executable.
+    File(String),
+
+    /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
+    /// [`include_bytes!`] macro, this type stores it.
+    Bytes(Vec<u8>),
+
+    /// A simple plane. Some of the types in [`ResourceReferenceType`] can be simple, just as a signal
+    /// to load that entity as a plane or another type.
+    ///
+    /// In specifics, the plane (as from [`crate::starter::plane::PlaneBuilder`]) is a model that
+    /// has meshes and a textured material, but is created "in house" (during runtime instead of loaded).
+    Plane,
+}
+
+impl Default for ResourceReferenceType {
+    fn default() -> Self {
+        Self::None
+    }
+}
 
 /// A struct used to "point" to the resource relative to
 /// the executable directory or the project directory.
@@ -21,29 +58,33 @@ use serde::{Deserialize, Serialize};
 /// _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResourceReference {
-    resource_ref_path: String,
-    bytes: Vec<u8>
+    pub ref_type: ResourceReferenceType
 }
 
 impl Display for ResourceReference {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.resource_ref_path)
+        write!(f, "{:?}", self.ref_type)
     }
 }
 
 impl ResourceReference {
-    /// Creates a new `ResourceReference` struct.
-    pub fn new(resource_path: impl Into<String>) -> Self {
+    /// Creates an empty `ResourceReference` struct.
+    pub fn new() -> Self {
         Self {
-            resource_ref_path: resource_path.into(),
-            bytes: Vec::new()
+            ref_type: ResourceReferenceType::None
         }
     }
     
+    /// Creates a new `ResourceReference` from bytes
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Self {
-            resource_ref_path: String::from(""),
-            bytes
+            ref_type: ResourceReferenceType::Bytes(bytes)
+        }
+    }
+
+    pub fn from_reference(ref_type: ResourceReferenceType) -> Self {
+        Self {
+            ref_type
         }
     }
 
@@ -55,7 +96,7 @@ impl ResourceReference {
     ///
     /// let path = "/home/tk/project/resources/models/cube.obj";
     /// let resource_ref = ResourceReference::from_path(path).unwrap();
-    /// assert_eq!(resource_ref.as_str(), "models/cube.obj");
+    /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
     /// ```
     ///
     /// Returns `None` if the path doesn't contain "resources" or if the path after resources is empty.
@@ -82,8 +123,7 @@ impl ResourceReference {
                         .join("/");
 
                     return Some(Self {
-                        resource_ref_path: resource_path,
-                        bytes: Vec::new()
+                        ref_type: ResourceReferenceType::File(resource_path),
                     });
                 }
             }
@@ -92,93 +132,70 @@ impl ResourceReference {
         None
     }
 
-    /// Get the raw resource reference path
-    pub fn as_str(&self) -> &str {
-        self.resource_ref_path.as_str()
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match &self.ref_type {
+            ResourceReferenceType::Bytes(bytes) => Some(bytes),
+            _ => None,
+        }
     }
 
-    /// Creates a PathBuf relative to the given project path.
+    pub fn as_path(&self) -> Option<&str> {
+        match &self.ref_type {
+            ResourceReferenceType::File(path) => Some(path.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Converts a [`ResourceReference`] to an [`Option<PathBuf>`].
     ///
-    /// If the project_path has a parent directory, it uses that parent + "resources" + resource_path.
-    /// Otherwise, it uses project_path + resource_path directly.
-    pub fn to_project_path(&self, project_path: impl AsRef<Path>) -> PathBuf {
+    /// Returns None if the Resource Reference is not a [`ResourceReferenceType::File`]
+    pub fn to_project_path(&self, project_path: impl AsRef<Path>) -> Option<PathBuf> {
         let path = project_path.as_ref();
         log::debug!("Parent path: {}", path.display());
-        path.join("resources").join(self.resource_ref_path.as_str())
+        match &self.ref_type {
+            ResourceReferenceType::File(reference) => {
+                Some(path.join("resources").join(reference.as_str()))
+            }
+            _ => None,
+        }
+
     }
 
     /// Creates a PathBuf that points to the resource relative to the executable directory.
-    ///
-    /// Returns an error if the executable path cannot be determined.
     pub fn to_executable_path(&self) -> anyhow::Result<PathBuf> {
         let exe_path = std::env::current_exe()?;
-        let exe_dir = exe_path.parent()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Could not get executable directory"))?;
-        Ok(exe_dir.join("resources").join(self.resource_ref_path.as_str()))
+        let exe_dir = exe_path.parent().ok_or(anyhow::anyhow!("Cannot resolve executable path"))?;
+        match &self.ref_type {
+            ResourceReferenceType::File(file) => {
+                Ok(exe_dir.join("resources").join(file.as_str()))
+            }
+            _ => Err(anyhow::anyhow!("Cannot resolve executable path")),
+        }
     }
 
     /// Creates a PathBuf that points to the resource, with fallback logic.
     ///
     /// First tries to resolve relative to executable, then falls back to current directory + resources.
-    pub fn resolve_path(&self) -> PathBuf {
-        if let Ok(exe_path) = self.to_executable_path() {
-            if exe_path.exists() {
-                return exe_path;
+    ///
+    /// Returns an error of the ResourceReferenceType is not of type [`ResourceReferenceType::File`]
+    pub fn resolve_path(&self) -> anyhow::Result<PathBuf> {
+        match &self.ref_type {
+            ResourceReferenceType::None => {anyhow::bail!("Cannot resolve ResourceReferenceType::None")}
+            ResourceReferenceType::Bytes(_) => {anyhow::bail!("Cannot resolve bytes")}
+            ResourceReferenceType::File(path) => {
+                if let Ok(exe_path) = self.to_executable_path() {
+                    if exe_path.exists() {
+                        return Ok(exe_path);
+                    }
+                }
+
+                Ok(std::env::current_dir()?
+                    .join("resources")
+                    .join(path.as_str()))
             }
+            _ => {anyhow::bail!("Cannot resolve ResourceReferenceType::Plane")}
         }
 
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("resources")
-            .join(self.resource_ref_path.as_str())
-    }
-
-    /// Check if the resource exists when resolved via executable path
-    pub fn exists_in_executable_dir(&self) -> bool {
-        self.to_executable_path()
-            .map(|path| path.exists())
-            .unwrap_or(false)
-    }
-
-    /// Check if the resource exists when resolved via project path
-    pub fn exists_in_project_dir(&self, project_path: impl AsRef<Path>) -> bool {
-        self.to_project_path(project_path).exists()
-    }
-
-    /// Check if the resource exists using the fallback resolution logic
-    pub fn exists(&self) -> bool {
-        self.resolve_path().exists()
-    }
-
-    /// Read the resource as a string using fallback resolution
-    pub fn read_to_string(&self) -> io::Result<String> {
-        fs::read_to_string(self.resolve_path())
-    }
-
-    /// Read the resource as bytes using fallback resolution
-    pub fn read_to_bytes(&self) -> io::Result<Vec<u8>> {
-        fs::read(self.resolve_path())
-    }
-
-    /// Read from a specific resolved path (project or executable)
-    pub fn read_to_string_from_project(&self, project_path: impl AsRef<Path>) -> io::Result<String> {
-        fs::read_to_string(self.to_project_path(project_path))
-    }
-
-    /// Read from the executable directory
-    pub fn read_to_string_from_executable(&self) -> anyhow::Result<String> {
-        let path = self.to_executable_path()?;
-        Ok(fs::read_to_string(path)?)
-    }
-
-    /// Get the file name of the resource
-    pub fn file_name(&self) -> Option<&str> {
-        Path::new(self.resource_ref_path.as_str()).file_name()?.to_str()
-    }
-
-    /// Get the file extension of the resource
-    pub fn extension(&self) -> Option<&str> {
-        Path::new(self.resource_ref_path.as_str()).extension()?.to_str()
     }
 }
 
@@ -186,6 +203,6 @@ impl ResourceReference {
 #[macro_export]
 macro_rules! resource {
     ($path:literal) => {
-        ResourceReference::new($path)
+        ResourceReference::from_reference(ResourceReferenceType::File($path))
     };
 }

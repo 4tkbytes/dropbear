@@ -25,11 +25,9 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
-use crate::{
-    build::build, camera::{
-        CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
-    }, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode
-};
+use crate::{build::build, camera::{
+    CameraAction, CameraManager, CameraType, DebugCameraController, PlayerCameraController,
+}, debug, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -260,28 +258,24 @@ impl Editor {
         scene.entities.clear();
         scene.lights.clear();
 
-        for (id, (adopted, transform, properties)) in self
+        for (id, (adopted, transform, properties, script)) in self
             .world
             .query::<(
-                &dropbear_engine::entity::AdoptedEntity,
-                &dropbear_engine::entity::Transform,
+                &AdoptedEntity,
+                Option<&Transform>,
                 &ModelProperties,
+                Option<&ScriptComponent>,
             )>()
             .iter()
         {
-            let script = self.world.get::<&ScriptComponent>(id).ok().map(|s| {
-                crate::states::ScriptComponent {
-                    name: s.name.clone(),
-                    path: s.path.clone(),
-                }
-            });
+            let transform = transform.unwrap_or(&Transform::default()).clone();
 
             let scene_entity = SceneEntity {
                 model_path: adopted.model().path.clone(),
                 label: adopted.model().label.clone(),
-                transform: *transform,
+                transform,
                 properties: properties.clone(),
-                script,
+                script: script.cloned(),
                 entity_id: Some(id),
             };
 
@@ -293,8 +287,8 @@ impl Editor {
             .world
             .query::<(
                 &dropbear_engine::lighting::LightComponent,
-                &dropbear_engine::entity::Transform,
-                &dropbear_engine::lighting::Light,
+                &Transform,
+                &Light,
             )>()
             .iter()
         {
@@ -523,15 +517,10 @@ impl Editor {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
                 });
-                // todo: add more stuff and give it purpose this is too bland :(
-                #[cfg(debug_assertions)]
-                {
-                    ui.menu_button("Debug", |ui_debug| {
-                        if ui_debug.button("Panic").clicked() {
-                            log::warn!("Panic caused on purpose from Menu Button Click");
-                            panic!("Testing out panicking with new panic module, this is a test")
-                        }
-                    });
+                if let Ok(cfg) = PROJECT.read() {
+                    if cfg.editor_settings.is_debug_menu_shown {
+                        debug::show_menu_bar(ui, &mut self.signal);
+                    }
                 }
             });
         });
@@ -754,6 +743,7 @@ pub enum Signal {
     AddComponent(hecs::Entity, EntityType),
     RemoveComponent(hecs::Entity, ComponentType),
     CreateEntity,
+    LogEntities,
 }
 
 impl Default for Editor {

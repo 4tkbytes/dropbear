@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use wgpu::{util::DeviceExt, BindGroup, Buffer};
+use wgpu::{util::DeviceExt, Buffer};
 
 use crate::{
     graphics::{Graphics, Instance}, model::Model

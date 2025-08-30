@@ -50,7 +50,7 @@ impl MainMenu {
     pub fn new() -> Self {
         Self {
             show_progress: false,
-            toast: egui_toast_fork::Toasts::new()
+            toast: Toasts::new()
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
                 .direction(egui::Direction::BottomUp),
             ..Default::default()
@@ -204,10 +204,11 @@ impl Scene for MainMenu {
                                             kind: egui_toast_fork::ToastKind::Error,
                                             text: format!("Your project version is not up to date with the current project version").into(),
                                             options: ToastOptions::default()
-                                                .duration_in_seconds(5.0)
+                                                .duration_in_seconds(10.0)
                                                 .show_progress(true),
                                             ..Default::default()
                                         });
+                                        log::error!("Failed to load project: {}", e);
                                     }
                                 };
                             } else {
@@ -327,7 +328,9 @@ impl Scene for MainMenu {
         self.toast.show(&graphics.get_egui_context());
     }
 
-    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {
+        log::info!("Exiting menu scene");
+    }
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)

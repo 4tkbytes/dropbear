@@ -28,10 +28,14 @@ use log;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use dropbear_engine::utils::ResourceReference;
+use dropbear_engine::model::Model;
+use dropbear_engine::starter::plane::PlaneBuilder;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use crate::build::build;
 use crate::camera::CameraType;
 #[cfg(feature = "editor")]
 use crate::editor::EditorTab;
+use crate::utils::PROTO_TEXTURE;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -56,6 +60,8 @@ pub struct ProjectConfig {
     pub date_last_accessed: String,
     #[serde(default)]
     pub dock_layout: Option<DockState<EditorTab>>,
+    #[serde(default)]
+    pub editor_settings: EditorSettings,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -94,6 +100,7 @@ impl ProjectConfig {
                 project_path: project_path.to_path_buf(),
                 date_created,
                 date_last_accessed,
+                editor_settings: Default::default(),
                 dock_layout: None,
             };
             let _ = result.load_config_to_memory(); // TODO: Deal with later...
@@ -749,33 +756,99 @@ impl SceneConfig {
 
         for entity_config in &self.entities {
             log::debug!("Loading entity: {}", entity_config.label);
-            let model_path = if !cfg!(feature = "data-only") {
-                log::debug!("Project Config location: {:?}", project_config.display());
-                let path = entity_config.model_path.to_project_path(project_config.clone());
-                log::debug!("Loading from project: {}", path.display());
-                path
-            } else {
-                let path = entity_config.model_path.to_executable_path()?;
-                log::debug!("Loading from executable ref: {}", path.display());
-                path
-            };
+            match &entity_config.model_path.ref_type {
+                ResourceReferenceType::File(reference) => {
+                    let path = {
+                        #[cfg(feature = "data-only")]
+                        {
+                            entity_config.model_path.to_executable_path()?
+                        }
+                        #[cfg(not(feature = "data-only"))]
+                        {
+                            entity_config.model_path.to_project_path(project_config.clone())
+                                .ok_or_else(|| anyhow::anyhow!("Unable to convert resource reference [{}] to project path", reference))?
+                        }
+                    };
+                    log::debug!("Path for entity {} is {} from reference {}", entity_config.label, path.display(), reference);
+                    let adopted = AdoptedEntity::new(
+                        graphics,
+                        &path,
+                        Some(&entity_config.label),
+                    )?;
 
-            let adopted = AdoptedEntity::new(
-                graphics,
-                &model_path,
-                Some(&entity_config.label),
-            )?;
+                    let transform = entity_config.transform;
 
-            let transform = entity_config.transform;
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
+                    } else {
+                        world.spawn((adopted, transform, entity_config.properties.clone()));
+                    }
+                    log::debug!("Loaded!");
+                }
+                ResourceReferenceType::Bytes(bytes) => {
+                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
+                    let bytes = bytes.to_owned();
 
-            if let Some(script_config) = &entity_config.script {
-                let script = ScriptComponent {
-                    name: script_config.name.clone(),
-                    path: script_config.path.clone(),
-                };
-                world.spawn((adopted, transform, script, entity_config.properties.clone()));
-            } else {
-                world.spawn((adopted, transform, entity_config.properties.clone()));
+                    let model = Model::load_from_memory(graphics, bytes, Some(&entity_config.label))?;
+                    let transform = entity_config.transform;
+
+                    let adopted = AdoptedEntity::adopt(
+                        graphics,
+                        model,
+                        Some(&entity_config.label),
+                    );
+
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
+                    } else {
+                        world.spawn((adopted, transform, entity_config.properties.clone()));
+                    }
+                    log::debug!("Loaded!");
+                }
+                ResourceReferenceType::Plane => {
+                    let width = entity_config.properties.custom_properties.get("width").ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
+                    let width = match width {
+                        PropertyValue::Float(width) => width,
+                        _ => panic!("Entity has a width property that is not a float"),
+                    };
+                    let height = entity_config.properties.custom_properties.get("height").ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
+                    let height = match height {
+                        PropertyValue::Float(height) => height,
+                        _ => panic!("Entity has a height property that is not a float"),
+                    };
+                    let tiles_x = entity_config.properties.custom_properties.get("tiles_x").ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
+                    let tiles_x = match tiles_x {
+                        PropertyValue::Int(tiles_x) => tiles_x,
+                        _ => panic!("Entity has a tiles_x property that is not an int"),
+                    };
+                    let tiles_z = entity_config.properties.custom_properties.get("tiles_z").ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
+                    let tiles_z = match tiles_z {
+                        PropertyValue::Int(tiles_z) => tiles_z,
+                        _ => panic!("Entity has a tiles_z property that is not an int"),
+                    };
+
+                    let plane = PlaneBuilder::new().with_size(*width as f32, *height as f32).with_tiles(*tiles_x as u32, *tiles_z as u32).build(graphics, PROTO_TEXTURE, Some(entity_config.label.clone().as_str()))?;
+                    let transform = entity_config.transform;
+
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        world.spawn((plane, transform, script, entity_config.properties.clone()));
+                    } else {
+                        world.spawn((plane, transform, entity_config.properties.clone()));
+                    }
+                }
+                ResourceReferenceType::None => panic!("Entity has a resource reference of None, which cannot be loaded or referenced"),
             }
         }
 
@@ -876,7 +949,7 @@ impl SceneConfig {
                                 } else {
                                     panic!("Unable to get project path to use with camera manager");
                                 };
-                                adopted_entity.model().path.to_project_path(project_path)
+                                adopted_entity.model().path.to_project_path(project_path).unwrap()
                             };
 
                             let stem_match = stem_match.file_stem()
@@ -1021,4 +1094,9 @@ impl Default for LightConfig {
             entity_id: None,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct EditorSettings {
+    pub is_debug_menu_shown: bool,
 }

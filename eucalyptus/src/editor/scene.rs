@@ -9,10 +9,13 @@ use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::model::Model;
+use dropbear_engine::starter::plane::PlaneBuilder;
 use super::*;
 use crate::{
     utils::PendingSpawn,
 };
+use crate::states::PropertyValue;
+use crate::utils::PROTO_TEXTURE;
 
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
@@ -34,17 +37,17 @@ impl Scene for Editor {
             let pipeline = graphics.create_render_pipline(
                 &shader,
                 vec![
-                    texture_bind_group, 
+                    texture_bind_group,
                     camera.layout(),
                     self.light_manager.layout()
                 ],
                 None,
             );
             self.render_pipeline = Some(pipeline);
-            
+
             self.light_manager.create_render_pipeline(
-                graphics, 
-                include_str!("../light.wgsl"), 
+                graphics,
+                include_str!("../light.wgsl"),
                 camera,
                 Some("Light Pipeline")
             );
@@ -92,7 +95,7 @@ impl Scene for Editor {
             if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
                 self.signal = Signal::StopPlaying;
             }
-            
+
             let mut script_entities = Vec::new();
             for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
                 script_entities.push((entity_id, script.name.clone()));
@@ -101,7 +104,7 @@ impl Scene for Editor {
             if script_entities.is_empty() {
                 log::warn!("Script entities is empty");
             }
-            
+
             for (entity_id, script_name) in script_entities {
                 if let Err(e) = self.script_manager.update_entity_script(entity_id, &script_name, &mut self.world, &self.input_state, dt) {
                     log::warn!("Failed to update script '{}' for entity {:?}: {}", script_name, entity_id, e);
@@ -139,7 +142,7 @@ impl Scene for Editor {
             Signal::Paste(scene_entity) => {
                         match AdoptedEntity::new(
                             graphics,
-                            &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()),
+                            &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()).unwrap(),
                             Some(&scene_entity.label),
                         ) {
                             Ok(adopted) => {
@@ -368,14 +371,14 @@ impl Scene for Editor {
                     }
 
                     self.editor_state = EditorState::Playing;
-                    
+
                     self.camera_manager.set_active(CameraType::Player);
-                    
+
                     let mut script_entities = Vec::new();
                     for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
                         script_entities.push((entity_id, script.clone()));
                     }
-                    
+
                     for (entity_id, script) in script_entities {
                         match self.script_manager.load_script(&script.path) {
                             Ok(script_name) => {
@@ -403,13 +406,13 @@ impl Scene for Editor {
                 }
 
                 self.editor_state = EditorState::Editing;
-    
+
                 self.camera_manager.set_active(CameraType::Debug);
-                
+
                 for (entity_id, _) in self.world.query::<&ScriptComponent>().iter() {
                     self.script_manager.remove_entity_script(entity_id);
                 }
-                
+
                 crate::success!("Exited play mode");
                 log::info!("Back to the editor you go...");
 
@@ -536,22 +539,69 @@ impl Scene for Editor {
                             self.signal = Signal::None;
                         }
 
-                        // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
-                        //     log::debug!("Creating new plane");
-                        //     let plane = PlaneBuilder::new()
-                        //         .with_size(5000.0, 2000.0)
-                        //         .with_texture_size(1024, 1024)
-                        //         .build(graphics, include_bytes!("../../../resources/proto.png"), Some("Plane")).unwrap();
-                        //     let transform = Transform::new();
-                        //     self.world.spawn((plane, transform));
-                        //     crate::success!("Created new plane");
-                        //
-                        //     self.signal = Signal::None;
-                        // }
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
+                            log::debug!("Creating new plane");
+                            let plane = PlaneBuilder::new()
+                                .with_size(500.0, 200.0)
+                                .build(
+                                    graphics,
+                                    PROTO_TEXTURE,
+                                    Some("Plane")
+                                ).unwrap();
+                            let transform = Transform::new();
+                            let mut props = ModelProperties::new();
+                            props.custom_properties.insert("width".to_string(), PropertyValue::Float(500.0));
+                            props.custom_properties.insert("height".to_string(), PropertyValue::Float(200.0));
+                            props.custom_properties.insert("tiles_x".to_string(), PropertyValue::Int(500));
+                            props.custom_properties.insert("tiles_z".to_string(), PropertyValue::Int(200));
+                            self.world.spawn((plane, transform, props));
+                            crate::success!("Created new plane");
+
+                            self.signal = Signal::None;
+                        }
+
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
+                            log::debug!("Creating new cube");
+                            let model = Model::load_from_memory(
+                                graphics,
+                                include_bytes!("../../../resources/cube.obj").to_vec(),
+                                Some("Cube")
+                            );
+                            match model {
+                                Ok(model) => {
+                                    let cube = AdoptedEntity::adopt(
+                                        graphics,
+                                        model,
+                                        Some("Cube")
+                                    );
+                                    self.world.spawn((cube, Transform::new(), ModelProperties::new()));
+                                }
+                                Err(e) => {
+                                    crate::fatal!("Failed to load cube model: {}", e);
+                                }
+                            }
+                            crate::success!("Created new cube");
+
+                            self.signal = Signal::None;
+                        }
                     });
                 if !show {
                     self.signal = Signal::None;
                 }
+            },
+            Signal::LogEntities => {
+                log::info!("====================");
+                for entity in self.world.iter() {
+                    if let Some(entity) = entity.get::<&AdoptedEntity>() {
+                        log::info!("Model: {:?}", entity.label());
+                    }
+
+                    if let Some(entity) = entity.get::<&Light>() {
+                        log::info!("Light: {:?}", entity.label());
+                    }
+                }
+                log::info!("====================");
+                self.signal = Signal::None;
             }
         }
 

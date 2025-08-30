@@ -22,6 +22,8 @@ use crate::states::{ModelProperties, Node};
 #[cfg(feature = "editor")]
 use crate::states::{PROJECT, ProjectConfig};
 
+pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/proto.png");
+
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
     F: Fn(&Node) -> bool,
