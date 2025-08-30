@@ -1,0 +1,9 @@
+[package]
+name = "gleek"
+edition.workspace = true
+version = "0.0.1"
+license = "MIT"
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
