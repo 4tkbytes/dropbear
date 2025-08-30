@@ -47,21 +47,33 @@ If you do not want to build it locally, you are able to download the latest acti
 
 ~~Depsite it looking like a dependency for `eucalyptus`, it can serve as a framework too. Looking through the `docs.rs` will you find related documentation onhow to use it and for rendering your own projects.~~
 
-dropbear cannot be used as a framework (yet), but is best compatible with the eucalyptus editor when making games. For scripting, eucalyptus uses `rhai`, a new language that works with rust. 
+dropbear cannot be used as a framework (yet), but is best compatible with the eucalyptus editor when making games. For 
+scripting, eucalyptus uses `rhai`, a new language that works with rust. 
 
-The rhai reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. [Here is the entrance](https://github.com/4tkbytes/dropbear/blob/main/docs/README.md)
+The rhai reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. 
+[Here is the entrance](https://github.com/4tkbytes/dropbear/blob/main/docs/README.md)
 
 ## Compability
 
 |            | Windows | macOS | Linux | Web | Android | iOS |
 |------------|---------|-------|-------|-----|---------|-----|
-| eucalyptus |    ✅    |   ✅   |   ✅   |  ❌+  |    ❌+    |  ❌+  |
-| redback    |    ✅    |   ✅   |   ✅   |  ❌*  |    ❌*    |  ❌  |
-* made some progress on implementing
-+ will never be implemented as its never supposed to be for that platform
+| eucalyptus |    ✅    |   ✅   |   ✅   |  ❌<sup>1</sup>  |    ❌<sup>1</sup>    |  ❌<sup>1</sup>  |
+| redback    |    ✅    |   ✅   |   ✅   |  ❌<sup>2</sup>  |    ❌<sup>2</sup>    |  ❌  |
+
+<sup>1</sup> Will never be implemented; not intended for that platform.
+
+<sup>2</sup>  Made some progress on implementing.
+
 
 To be fair, I do not plan on supporting web, android or iOS yet (as it isnt even completed with the basic idea). Maybe I will...?
 
 ## Contributions
 
 Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
+
+# Licensing
+In the case someone actually makes something with my engine and distributes it, it (meaning **dropbear-engine**, 
+**eucalyptus** and **redback-runtime**) must abide by the license in [LICENSE.md](LICENSE.md). 
+
+The gleek package is licensed under the [MIT License](https://mit-license.org/), which allows for anyone to use my 
+library without _much_ restrictions. 

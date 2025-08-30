@@ -6,7 +6,7 @@ exclude = ["resources"]
 
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 repository.workspace = true
 readme.workspace = true
 
@@ -94,7 +94,6 @@ data-only = [
     "winit",
     "hecs",
     "ron",
-#    "git2",
     "log-once",
     "once_cell",
     "egui",
