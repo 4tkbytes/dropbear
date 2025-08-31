@@ -19,7 +19,7 @@ With Unix systems (macOS not tested), you will have to download a couple depende
 
 ```bash
 # ubuntu, adapt to your own OS
-sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson
+sudo apt install build-essential libudev-dev pkg-config libssl-dev clang cmake meson
 
 # if on arm devices where russimp cannot compile
 sudo apt install assimp-utils
