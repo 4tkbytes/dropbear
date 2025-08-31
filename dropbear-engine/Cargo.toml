@@ -34,7 +34,7 @@ hecs.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
 lazy_static.workspace = true
-ts-rs.workspace = true
+specta.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
