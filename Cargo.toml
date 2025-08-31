@@ -47,6 +47,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 spin_sleep = "1.3"
 tokio = { version = "1", features = ["full"] }
 transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
+ts-rs = "10.1"
 wgpu = "26"
 winit = { version = "0.30", features = [] }
 zip = "4.3"

@@ -42,6 +42,7 @@ clap = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
 bytemuck = "1.23.2"
+ts-rs.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = { workspace = true, optional = true }
