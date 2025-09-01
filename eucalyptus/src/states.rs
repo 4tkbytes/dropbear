@@ -614,12 +614,12 @@ pub struct SceneEntity {
     pub entity_id: Option<hecs::Entity>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ModelProperties {
     pub custom_properties: HashMap<String, PropertyValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PropertyValue {
     String(String),
     Int(i64),
@@ -739,7 +739,7 @@ impl SceneConfig {
         );
         world.clear();
 
-        let project_config = if !cfg!(feature = "data-only") {
+        let _project_config = if !cfg!(feature = "data-only") {
             if let Ok(cfg) = PROJECT.read() {
                 cfg.project_path.clone()
             } else {
@@ -940,26 +940,64 @@ impl SceneConfig {
                         if adopted_entity.label() == target_label {
                             Some(entity_id)
                         } else {
-                            let stem_match = if cfg!(feature = "data-only") {
-                                  adopted_entity.model().path.to_executable_path().unwrap()
-                            } else {
+                            // Try to match by file stem if label doesn't match
+                            #[cfg(not(feature = "data-only"))]
+                            {
                                 let project_path = if let Ok(cfg) = PROJECT.read() {
                                     cfg.project_path.clone()
                                 } else {
                                     panic!("Unable to get project path to use with camera manager");
                                 };
-                                adopted_entity.model().path.to_project_path(project_path).unwrap()
-                            };
-
-                            let stem_match = stem_match.file_stem()
-                                .and_then(|s| s.to_str())
-                                .map(|s| s == target_label)
-                                .unwrap_or(false);
-
-                            if stem_match {
-                                Some(entity_id)
-                            } else {
-                                None
+                                
+                                match &adopted_entity.model().path.ref_type {
+                                    ResourceReferenceType::File(_reference) => {
+                                        if let Some(path) = adopted_entity.model().path.to_project_path(project_path) {
+                                            let stem_match = path.file_stem()
+                                                .and_then(|s| s.to_str())
+                                                .map(|s| s == target_label)
+                                                .unwrap_or(false);
+                                            
+                                            if stem_match {
+                                                Some(entity_id)
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    },
+                                    ResourceReferenceType::Bytes(_bytes) => {
+                                        // For bytes, we can only match by label, which already failed
+                                        None
+                                    }
+                                    _ => None
+                                }
+                            }
+                            #[cfg(feature = "data-only")]
+                            {
+                                match &adopted_entity.model().path.ref_type {
+                                    ResourceReferenceType::File(_reference) => {
+                                        if let Ok(path) = adopted_entity.model().path.to_executable_path() {
+                                            let stem_match = path.file_stem()
+                                                .and_then(|s| s.to_str())
+                                                .map(|s| s == target_label)
+                                                .unwrap_or(false);
+                                            
+                                            if stem_match {
+                                                Some(entity_id)
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    },
+                                    ResourceReferenceType::Bytes(_bytes) => {
+                                        // For bytes, we can only match by label, which already failed
+                                        None
+                                    }
+                                    _ => None
+                                }
                             }
                         }
                     });

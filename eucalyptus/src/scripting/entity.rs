@@ -2,7 +2,6 @@ use crate::states::{ModelProperties, PropertyValue};
 use rustyscript::{serde_json, Runtime};
 use serde::{Deserialize, Serialize};
 
-// Create a serializable version of ModelProperties for script communication
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SerializableModelProperties {
     pub properties: std::collections::HashMap<String, serde_json::Value>,
@@ -12,7 +11,6 @@ impl From<&ModelProperties> for SerializableModelProperties {
     fn from(props: &ModelProperties) -> Self {
         let mut properties = std::collections::HashMap::new();
         
-        // Convert each property to JSON value
         for (key, value) in props.custom_properties.iter() {
             let json_value = match value {
                 PropertyValue::String(s) => serde_json::Value::String(s.clone()),

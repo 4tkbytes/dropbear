@@ -17,11 +17,10 @@ pub struct InputState {
     pub is_cursor_locked: bool,
 }
 
-// Create a serializable version for script communication
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SerializableInputState {
     pub mouse_pos: (f64, f64),
-    pub pressed_keys: Vec<String>, // Convert KeyCode to strings
+    pub pressed_keys: Vec<String>,
     pub mouse_delta: Option<(f64, f64)>,
     pub is_cursor_locked: bool,
 }
@@ -58,14 +57,11 @@ impl InputState {
         }
     }
 
-    /// Locks the cursor. If its true, it locks the cursor, hiding the mouse and setting the value
-    /// or is_cursor_locked true, which can be used for mouse movement in the scene. 
     pub fn lock_cursor(&mut self, toggle: bool) {
         self.is_cursor_locked = toggle;
     }
 
     pub fn register_input_modules(runtime: &mut Runtime) -> anyhow::Result<()> {
-        // Register input functions that take SerializableInputState as parameter
         runtime.register_function("isKeyPressed", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
             if args.len() != 2 {
                 return Err(rustyscript::Error::Runtime("isKeyPressed requires 2 arguments (inputState, keyCode)".to_string()));
@@ -132,7 +128,7 @@ impl InputState {
                 return Err(rustyscript::Error::Runtime("lockCursor requires 1 argument (locked)".to_string()));
             }
             
-            let locked = args[0].as_bool()
+            let _locked = args[0].as_bool()
                 .ok_or_else(|| rustyscript::Error::Runtime("Locked parameter must be a boolean".to_string()))?;
             
             // This function would need to communicate back to the engine to actually lock the cursor
@@ -145,7 +141,8 @@ impl InputState {
     }
 }
 
-// Helper function to convert string to KeyCode
+/// Helper function to convert string to KeyCode
+#[allow(dead_code)]
 fn string_to_keycode(key_str: &str) -> Option<KeyCode> {
     match key_str {
         "KeyA" => Some(KeyCode::KeyA),
@@ -214,7 +211,7 @@ fn string_to_keycode(key_str: &str) -> Option<KeyCode> {
     }
 }
 
-// Helper function to convert KeyCode to string
+/// Helper function to convert KeyCode to string
 fn keycode_to_string(key_code: KeyCode) -> Option<String> {
     match key_code {
         KeyCode::KeyA => Some("KeyA".to_string()),

@@ -19,10 +19,7 @@ With Unix systems (macOS not tested), you will have to download a couple depende
 
 ```bash
 # ubuntu, adapt to your own OS
-sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson
-
-# if on arm devices where russimp cannot compile
-sudo apt install assimp-utils
+sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-utils
 ```
 
 After downloading the requirements, you are free to build it using cargo.
@@ -48,9 +45,13 @@ If you do not want to build it locally, you are able to download the latest acti
 ~~Depsite it looking like a dependency for `eucalyptus`, it can serve as a framework too. Looking through the `docs.rs` will you find related documentation onhow to use it and for rendering your own projects.~~
 
 dropbear cannot be used as a framework (yet), but is best compatible with the eucalyptus editor when making games. For 
-scripting, eucalyptus uses `rhai`, a new language that works with rust. 
+scripting, eucalyptus uses `typescript`. The main philosophy of scripting is to be able to have **type safety**, which can aid developers with their code, which is the reason as to why I didn't use `javascript` for scripting instead.
 
-The rhai reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. 
+The typescript used in the scripting is ran with the deno runtime. 
+
+TODO: Create better documentation
+
+The typescript reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. 
 [Here is the entrance](https://github.com/4tkbytes/dropbear/blob/main/docs/README.md)
 
 ## Compability
@@ -62,10 +63,7 @@ The rhai reference for the eucalyptus editor is under the /docs folder of this r
 
 <sup>1</sup> Will never be implemented; not intended for that platform.
 
-<sup>2</sup>  Made some progress on implementing.
-
-
-To be fair, I do not plan on supporting web, android or iOS yet (as it isnt even completed with the basic idea). Maybe I will...?
+<sup>2</sup>  Made some progress on implementing, but currently a WIP. 
 
 ## Contributions
 
@@ -75,5 +73,5 @@ Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and an
 In the case someone actually makes something with my engine and distributes it, it (meaning **dropbear-engine**, 
 **eucalyptus** and **redback-runtime**) must abide by the license in [LICENSE.md](LICENSE.md). 
 
-The gleek package is licensed under the [MIT License](https://mit-license.org/), which allows for anyone to use my 
-library without _much_ restrictions. 
+<!-- The gleek package is licensed under the [MIT License](https://mit-license.org/), which allows for anyone to use my 
+library without _much_ restrictions.  -->

@@ -4,7 +4,6 @@ use rustyscript::{serde_json, Runtime};
 
 pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
     
-    // Transform functions
     runtime.register_function("createTransform", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
         let transform = Transform::new();
         serde_json::to_value(transform)
@@ -19,7 +18,6 @@ pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
         let mut transform: Transform = serde_json::from_value(args[0].clone())
             .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
         
-        // Handle both array and individual values for translation
         let translation = if let Some(array) = args[1].as_array() {
             if array.len() != 3 {
                 return Err(rustyscript::Error::Runtime("Translation array must have 3 elements".to_string()));
@@ -114,6 +112,7 @@ pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
             .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
     })?;
 
+    // this shouldn't be here as there is no need for a matrix...
     runtime.register_function("transformMatrix", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
         if args.len() != 1 {
             return Err(rustyscript::Error::Runtime("transformMatrix requires 1 argument".to_string()));
@@ -122,14 +121,11 @@ pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
         let transform: Transform = serde_json::from_value(args[0].clone())
             .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
         
-        // Assuming Transform has a matrix() method that returns a 4x4 matrix
-        // You may need to adjust this based on your actual Transform implementation
         let matrix = transform.matrix();
         serde_json::to_value(matrix)
             .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize matrix: {}", e)))
     })?;
 
-    // Vec3 functions
     runtime.register_function("createVec3", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
         let x = args.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
         let y = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -140,7 +136,6 @@ pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
             .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Vec3: {}", e)))
     })?;
 
-    // Quaternion functions
     runtime.register_function("createQuatIdentity", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
         let quat = DQuat::IDENTITY;
         serde_json::to_value(quat)

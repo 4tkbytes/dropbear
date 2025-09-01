@@ -23,7 +23,7 @@ pub fn set_hook() {
 
         let full_text = format!(
             "The application has encountered a fatal error and must close.\n\n\
-             Location: {}\nError: {}\n\nPlease report this error to the developers.",
+            Location: {}\nError: {}\n\nPlease report this error to the developers.",
             location, msg
         );
 
@@ -41,5 +41,7 @@ pub fn set_hook() {
                 .set_level(MessageLevel::Error)
                 .show();
         }
+
+        std::process::abort();
     }));
 }

@@ -165,6 +165,11 @@ impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
         let mut runtime = Runtime::new(RuntimeOptions::default())?;
 
+        let dropbear_content = include_str!("../dropbear.ts");
+        let dropbear_module = Module::new("./dropbear.ts", dropbear_content);
+        runtime.load_module(&dropbear_module)?;
+        log::debug!("Loaded dropbear module");
+
         // Register modules
         math::register_math_functions(&mut runtime)?;
         input::InputState::register_input_modules(&mut runtime)?;
@@ -186,7 +191,7 @@ impl ScriptManager {
                 .as_secs_f64();
             Ok(serde_json::Value::Number(serde_json::Number::from_f64(time).unwrap()))
         })?;
-
+        log::debug!("Initialised ScriptManager");
         Ok(Self {
             runtime,
             compiled_scripts: HashMap::new(),
@@ -215,18 +220,18 @@ impl ScriptManager {
             log_once::debug_once!("init_entity_script: '{}' for entity {:?}", script_name, entity_id);
         }
 
-        if let Some(module) = self.compiled_scripts.get(script_name) {
-            // Prepare script data
+        log::debug!("Init Entity Script module name: {}", script_name);
+        if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
             let mut script_data = serde_json::Map::new();
 
-            // Add transform data
+            // transform
             if let Ok(mut transform_query) = world.query_one::<&Transform>(entity_id) {
                 if let Some(transform) = transform_query.get() {
                     script_data.insert("transform".to_string(), serde_json::to_value(transform)?);
                 }
             }
 
-            // Add entity properties
+            // entity props
             if let Ok(mut properties_query) = world.query_one::<&ModelProperties>(entity_id) {
                 if let Some(properties) = properties_query.get() {
                     script_data.insert("entity".to_string(), serde_json::to_value(properties)?);
@@ -239,18 +244,32 @@ impl ScriptManager {
                 script_data.insert("entity".to_string(), serde_json::to_value(&default_props)?);
             }
 
-            // Add input state
+            // input state
             let serializable_input = input::SerializableInputState::from(input_state);
             script_data.insert("input".to_string(), serde_json::to_value(&serializable_input)?);
 
-            // Call init function if it exists - specify return type
-            let args: Vec<serde_json::Value> = Vec::new();
-            if let Ok(_result) = self.runtime.call_function::<serde_json::Value>(Some(module), "load", &args) {
-                log::debug!("Called init for entity {:?}", entity_id);
+            // call onLoad
+            let script_data_value = serde_json::Value::Object(script_data);
+            match self.runtime.call_function::<serde_json::Value>(Some(&module), "onLoad", &vec![script_data_value.clone()]) {
+                Ok(result) => {
+                    log::debug!("Called onLoad for entity {:?}", entity_id);
+                    
+                    let updated_data = if result.is_object() {
+                        result
+                    } else {
+                        // JIC script isn't returning updated entity
+                        script_data_value
+                    };
+                    
+                    self.apply_script_data_to_world(entity_id, &updated_data, world)?;
+                    
+                    self.entity_script_data.insert(entity_id, updated_data);
+                }
+                Err(e) => {
+                    log::warn!("onLoad function not found or failed for entity {:?}: {}", entity_id, e);
+                    self.entity_script_data.insert(entity_id, script_data_value);
+                }
             }
-
-            // Store script data for this entity
-            self.entity_script_data.insert(entity_id, serde_json::Value::Object(script_data));
 
             Ok(())
         } else {
@@ -266,47 +285,111 @@ impl ScriptManager {
         input_state: &input::InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
-        if let Some(module) = self.compiled_scripts.get(script_name) {
-            // Update script data
+        log_once::debug_once!("Update entity script name: {}", script_name);
+        if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
             let mut script_data = serde_json::Map::new();
 
-            // Update transform data
+            // transform
             if let Ok(mut transform_query) = world.query_one::<&Transform>(entity_id) {
                 if let Some(transform) = transform_query.get() {
                     script_data.insert("transform".to_string(), serde_json::to_value(transform)?);
                 }
             }
 
-            // Update entity properties
+            // entity props
             if let Ok(mut properties_query) = world.query_one::<&ModelProperties>(entity_id) {
                 if let Some(properties) = properties_query.get() {
                     script_data.insert("entity".to_string(), serde_json::to_value(properties)?);
+                } else {
+                    let default_props = ModelProperties::default();
+                    script_data.insert("entity".to_string(), serde_json::to_value(&default_props)?);
                 }
+            } else {
+                let default_props = ModelProperties::default();
+                script_data.insert("entity".to_string(), serde_json::to_value(&default_props)?);
             }
 
-            // Update input state
+            // input state
             let serializable_input = input::SerializableInputState::from(input_state);
             script_data.insert("input".to_string(), serde_json::to_value(&serializable_input)?);
 
-            // Call update function if it exists - specify return type and fix parameter passing
+            let script_data_value = serde_json::Value::Object(script_data);
             let dt_value = serde_json::Value::Number(serde_json::Number::from_f64(dt as f64).unwrap());
-            match self.runtime.call_function::<serde_json::Value>(Some(module), "update", &vec![dt_value]) {
-                Ok(_result) => {
+            
+            match self.runtime.call_function::<serde_json::Value>(Some(&module), "onUpdate", &vec![script_data_value.clone(), dt_value]) {
+                Ok(result) => {
                     log::trace!("Called update for entity {:?}", entity_id);
-                    // Here you would need to extract any modified data from the script
-                    // and update the world accordingly. This depends on how rustyscript
-                    // handles data exchange between Rust and JS.
+                    
+                    if let Some(result_obj) = result.as_object() {
+                        if let Some(transform_value) = result_obj.get("transform") {
+                            if let Ok(new_transform) = serde_json::from_value::<Transform>(transform_value.clone()) {
+                                if let Ok(mut transform_query) = world.query_one::<&mut Transform>(entity_id) {
+                                    if let Some(transform) = transform_query.get() {
+                                        *transform = new_transform;
+                                        log::trace!("Updated transform for entity {:?}", entity_id);
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(entity_value) = result_obj.get("entity") {
+                            if let Ok(new_properties) = serde_json::from_value::<ModelProperties>(entity_value.clone()) {
+                                if let Ok(mut properties_query) = world.query_one::<&mut ModelProperties>(entity_id) {
+                                    if let Some(properties) = properties_query.get() {
+                                        *properties = new_properties;
+                                        log::trace!("Updated properties for entity {:?}", entity_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log_once::error_once!("Script execution error for entity {:?}: {}", entity_id, e);
                 }
             }
-
-            // Update stored script data
-            self.entity_script_data.insert(entity_id, serde_json::Value::Object(script_data));
         } else {
             log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
         }
+        Ok(())
+    }
+
+    fn apply_script_data_to_world(
+        &self,
+        entity_id: hecs::Entity,
+        script_data: &serde_json::Value,
+        world: &mut World,
+    ) -> anyhow::Result<()> {
+        if let Some(data_obj) = script_data.as_object() {
+            // Update transform if it exists in the script data
+            if let Some(transform_value) = data_obj.get("transform") {
+                if let Ok(updated_transform) = serde_json::from_value::<Transform>(transform_value.clone()) {
+                    if let Ok(mut transform_query) = world.query_one::<&mut Transform>(entity_id) {
+                        if let Some(transform) = transform_query.get() {
+                            *transform = updated_transform;
+                            log::trace!("Updated transform for entity {:?}", entity_id);
+                        }
+                    }
+                }
+            }
+
+            if let Some(entity_value) = data_obj.get("entity") {
+                if let Ok(updated_properties) = serde_json::from_value::<ModelProperties>(entity_value.clone()) {
+                    if let Ok(mut properties_query) = world.query_one::<&mut ModelProperties>(entity_id) {
+                        if let Some(properties) = properties_query.get() {
+                            *properties = updated_properties;
+                            log::trace!("Updated properties for entity {:?}", entity_id);
+                        }
+                    } else {
+                        if let Err(e) = world.insert_one(entity_id, updated_properties) {
+                            log::warn!("Failed to insert updated properties for entity {:?}: {}", entity_id, e);
+                        }
+                    }
+                }
+            }
+            // input state doesn't get updated, it is only read. 
+        }
+
         Ok(())
     }
 
@@ -327,15 +410,20 @@ impl ScriptManager {
     }
 
     pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
+        log::debug!("Reading script content");
         let script_content = fs::read_to_string(script_path)?;
+        log::debug!("Fetching script name");
         let script_name = script_path
-            .file_stem()
+            .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+        log::debug!("Script name: {}", script_name);
 
+        log::debug!("Creating module for typescript runtime");
         let module = Module::new(&script_name, &script_content);
         
+        log::debug!("Loading module");
         match self.runtime.load_module(&module) {
             Ok(module) => {
                 self.compiled_scripts.insert(script_name.clone(), module);

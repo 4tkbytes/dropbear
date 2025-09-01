@@ -441,6 +441,17 @@ impl Component for ScriptComponent {
                                 .set_file_name(format!("{}_script.ts", label))
                                 .save_file()
                             {
+                                // check if dropbear module exists
+                                // todo: change this to an %APPDATA% file instead of to memory. 
+                                let lib_path = &script_path.clone().parent().unwrap().join("dropbear.ts");
+                                if let Err(_) = std::fs::read(lib_path) {
+                                    log::warn!("dropbear.ts library does not exist in project source directory, copying...");
+                                    if let Err(e) = std::fs::write(lib_path, include_str!("../dropbear.ts")) {
+                                        log::error!("Non-fatal error: Creating library file failed: {}", e);
+                                    } else {
+                                        log::info!("Wrote dropbear.ts library file!");
+                                    }
+                                };
                                 match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
                                     Ok(_) => {
                                         let script_name = script_path
