@@ -2,7 +2,7 @@ use super::*;
 use std::{collections::HashSet, sync::LazyLock};
 
 use dropbear_engine::{entity::Transform, lighting::{Light, LightComponent}};
-use egui;
+use egui::{self, CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use log;
@@ -649,11 +649,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     if let Ok((e, transform, _props, script)) = self
                     .world
                     .query_one_mut::<(&mut AdoptedEntity, Option<&mut Transform>, Option<&ModelProperties>, Option<&mut ScriptComponent>)>(*entity) {
-                        // let label = e.label().clone();
+                        let label = e.label().clone();
 
                         e.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                        let mut trans = Transform::new();
                         if let Some(t) = transform {
                             t.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
+                            trans = t.clone();
                         }
 
                         // if let Some(props) = _props {
@@ -664,114 +666,116 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             script.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         }
 
+                        // ==============================================================
                         // todo: convert camera into component
-                        // let entity_id_copy = *entity;
-                        // let entity_label = label.clone();
-                        // let entity_position = transform.position;
-                        // let camera_manager = &self.camera_manager;
-                        // let signal = &mut *self.signal;
-                        // let get_player_camera_target =
-                        //     camera_manager.get_player_camera_target();
-                        // let get_player_camera_offset =
-                        //     camera_manager.get_player_camera_offset();
-                        // let get_active_type = camera_manager.get_active_type();
-                        // let get_active_eye = camera_manager.get_active().unwrap().eye;
-                        //
-                        // let followed_entity_label = if let Some(target_entity) =
-                        //     get_player_camera_target
-                        // {
-                        //     if target_entity != entity_id_copy {
-                        //         if let Ok((followed_entity, _, _)) = self.world
-                        //             .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
-                        //         {
-                        //             Some(followed_entity.label().to_string())
-                        //         } else {
-                        //             None
-                        //         }
-                        //     } else {
-                        //         None
-                        //     }
-                        // } else {
-                        //     None
-                        // };
+                        let entity_id_copy = *entity;
+                        let entity_label = label.clone();
+                        let entity_position = trans.position;
+                        let camera_manager = &self.camera_manager;
+                        let signal = &mut *self.signal;
+                        let get_player_camera_target =
+                            camera_manager.get_player_camera_target();
+                        let get_player_camera_offset =
+                            camera_manager.get_player_camera_offset();
+                        let get_active_type = camera_manager.get_active_type();
+                        let get_active_eye = camera_manager.get_active().unwrap().eye;
+                        
+                        let followed_entity_label = if let Some(target_entity) =
+                            get_player_camera_target
+                        {
+                            if target_entity != entity_id_copy {
+                                if let Ok((followed_entity, _, _)) = self.world
+                                    .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
+                                {
+                                    Some(followed_entity.label().to_string())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
 
-                        // ui.group(|ui| {
-                        //     CollapsingHeader::new("Camera")
-                        //     .default_open(true)
-                        //     .show(ui, |ui| {
-                        //         ui.horizontal(|ui| {
-                        //             if ui.button("Capture Camera Position relative to Entity").clicked() {
-                        //                 let current_camera_pos = get_active_eye;
-                        //                 let calculated_offset = current_camera_pos - entity_position;
-                        //                 log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}",
-                        //                     entity_position, current_camera_pos, calculated_offset);
-                        //                 *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
-                        //                     entity: entity_id_copy,
-                        //                     offset: calculated_offset,
-                        //                 });
-                        //                 crate::success_without_console!("Camera successfully attached to {}", entity_label);
-                        //             }
-                        //         });
-                        //         ui.separator();
-                        //         ui.horizontal(|ui| {
-                        //             ui.label("Status:");
-                        //             let status_text = match get_active_type {
-                        //                 crate::camera::CameraType::Debug => {
-                        //                     egui::RichText::new("Debug Camera (Free)")
-                        //                         .color(egui::Color32::LIGHT_BLUE)
-                        //                 },
-                        //                 crate::camera::CameraType::Player => {
-                        //                     if let Some(target_entity) = get_player_camera_target {
-                        //                         if target_entity == entity_id_copy {
-                        //                             egui::RichText::new("Following THIS Entity")
-                        //                                 .color(egui::Color32::LIGHT_GREEN)
-                        //                                 .strong()
-                        //                         } else {
-                        //                             if let Some(followed_label) = &followed_entity_label {
-                        //                                 egui::RichText::new(format!("Following: {}", followed_label))
-                        //                                     .color(egui::Color32::YELLOW)
-                        //                             } else {
-                        //                                 egui::RichText::new("Following: Unknown Entity")
-                        //                                     .color(egui::Color32::RED)
-                        //                             }
-                        //                         }
-                        //                     } else {
-                        //                         egui::RichText::new("Player Camera (Free)")
-                        //                             .color(egui::Color32::LIGHT_GRAY)
-                        //                     }
-                        //                 }
-                        //             };
-                        //             ui.label(status_text);
-                        //         });
-                        //
-                        //         ui.separator();
-                        //
-                        //         if let Some(target_entity) = get_player_camera_target {
-                        //             if target_entity == entity_id_copy {
-                        //                 ui.horizontal(|ui| {
-                        //                     ui.label("Camera Offset:");
-                        //                     if let Some(offset) = get_player_camera_offset {
-                        //                         ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
-                        //                     } else {
-                        //                         ui.label("Unknown");
-                        //                     }
-                        //                 });
-                        //                 ui.horizontal(|ui| {
-                        //                     ui.label("Distance:");
-                        //                     let camera_pos = get_active_eye;
-                        //                     let distance = (camera_pos - entity_position).length();
-                        //                     ui.label(format!("{:.2} units", distance));
-                        //                 });
-                        //             }
-                        //         }
-                        //
-                        //         ui.horizontal(|ui| {
-                        //             if ui.button("Clear Camera Target").clicked() {
-                        //                 *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
-                        //             }
-                        //         });
-                        //     });
-                        // });
+                        ui.group(|ui| {
+                            CollapsingHeader::new("Camera")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    if ui.button("Capture Camera Position relative to Entity").clicked() {
+                                        let current_camera_pos = get_active_eye;
+                                        let calculated_offset = current_camera_pos - entity_position;
+                                        log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}",
+                                            entity_position, current_camera_pos, calculated_offset);
+                                        *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
+                                            entity: entity_id_copy,
+                                            offset: calculated_offset,
+                                        });
+                                        crate::success_without_console!("Camera successfully attached to {}", entity_label);
+                                    }
+                                });
+                                ui.separator();
+                                ui.horizontal(|ui| {
+                                    ui.label("Status:");
+                                    let status_text = match get_active_type {
+                                        crate::camera::CameraType::Debug => {
+                                            egui::RichText::new("Debug Camera (Free)")
+                                                .color(egui::Color32::LIGHT_BLUE)
+                                        },
+                                        crate::camera::CameraType::Player => {
+                                            if let Some(target_entity) = get_player_camera_target {
+                                                if target_entity == entity_id_copy {
+                                                    egui::RichText::new("Following THIS Entity")
+                                                        .color(egui::Color32::LIGHT_GREEN)
+                                                        .strong()
+                                                } else {
+                                                    if let Some(followed_label) = &followed_entity_label {
+                                                        egui::RichText::new(format!("Following: {}", followed_label))
+                                                            .color(egui::Color32::YELLOW)
+                                                    } else {
+                                                        egui::RichText::new("Following: Unknown Entity")
+                                                            .color(egui::Color32::RED)
+                                                    }
+                                                }
+                                            } else {
+                                                egui::RichText::new("Player Camera (Free)")
+                                                    .color(egui::Color32::LIGHT_GRAY)
+                                            }
+                                        }
+                                    };
+                                    ui.label(status_text);
+                                });
+                        
+                                ui.separator();
+                        
+                                if let Some(target_entity) = get_player_camera_target {
+                                    if target_entity == entity_id_copy {
+                                        ui.horizontal(|ui| {
+                                            ui.label("Camera Offset:");
+                                            if let Some(offset) = get_player_camera_offset {
+                                                ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
+                                            } else {
+                                                ui.label("Unknown");
+                                            }
+                                        });
+                                        ui.horizontal(|ui| {
+                                            ui.label("Distance:");
+                                            let camera_pos = get_active_eye;
+                                            let distance = (camera_pos - entity_position).length();
+                                            ui.label(format!("{:.2} units", distance));
+                                        });
+                                    }
+                                }
+                        
+                                ui.horizontal(|ui| {
+                                    if ui.button("Clear Camera Target").clicked() {
+                                        *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
+                                    }
+                                });
+                            });
+                        });
+                        // ==============================================================
 
                         if let Some(t) = cfg.label_last_edit {
                             if t.elapsed() >= Duration::from_millis(500) {

@@ -97,17 +97,19 @@ impl Scene for Editor {
             }
 
             let mut script_entities = Vec::new();
-            for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+            for (entity_id, script) in self.world.query::<&mut ScriptComponent>().iter() {
+                log_once::debug_once!("Script Entity -> id: {:?}, component: {:?}", entity_id, script);
+                script.name = script.path.file_name().unwrap().to_str().unwrap().to_string();
                 script_entities.push((entity_id, script.name.clone()));
             }
 
             if script_entities.is_empty() {
-                log::warn!("Script entities is empty");
+                log_once::warn_once!("Script entities is empty");
             }
 
             for (entity_id, script_name) in script_entities {
                 if let Err(e) = self.script_manager.update_entity_script(entity_id, &script_name, &mut self.world, &self.input_state, dt) {
-                    log::warn!("Failed to update script '{}' for entity {:?}: {}", script_name, entity_id, e);
+                    log_once::warn_once!("Failed to update script '{}' for entity {:?}: {}", script_name, entity_id, e);
                 }
             }
         }
@@ -380,19 +382,24 @@ impl Scene for Editor {
                     }
 
                     for (entity_id, script) in script_entities {
+                        log::debug!("Initialising entity script [{}] from path: {}", script.name, script.path.display());
                         match self.script_manager.load_script(&script.path) {
                             Ok(script_name) => {
                                 if let Err(e) = self.script_manager.init_entity_script(entity_id, &script_name, &mut self.world, &self.input_state) {
                                     log::warn!("Failed to initialise script '{}' for entity {:?}: {}", script.name, entity_id, e);
+                                    self.signal = Signal::StopPlaying;
+                                } else {
+                                    crate::success_without_console!("You are in play mode now! Press Escape to exit");
+                                    log::info!("You are in play mode now! Press Escape to exit");
                                 }
                             }
                             Err(e) => {
-                                log::warn!("Failed to load script '{}': {}", script.name, e);
+                                // todo: proper error menu
+                                crate::fatal!("Failed to load script '{}': {}", script.name, e);
+                                self.signal = Signal::StopPlaying;
                             }
                         }
                     }
-                    crate::success_without_console!("You are in play mode now! Press Escape to exit");
-                    log::info!("You are in play mode now. Press Escape to exit");
                 } else {
                     crate::fatal!("Unable to build: Player camera not attached to an entity");
                 }

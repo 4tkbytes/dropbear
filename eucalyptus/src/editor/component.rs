@@ -420,7 +420,7 @@ impl Component for ScriptComponent {
                     ui.horizontal(|ui| {
                         if ui.button("Browse").clicked() {
                             if let Some(script_file) = rfd::FileDialog::new()
-                                .add_filter("Rhai Script", &["rhai"])
+                                .add_filter("Typescript", &["ts"])
                                 .pick_file()
                             {
                                 let script_name = script_file
@@ -437,10 +437,21 @@ impl Component for ScriptComponent {
 
                         if ui.button("New").clicked() {
                             if let Some(script_path) = rfd::FileDialog::new()
-                                .add_filter("Rhai Script", &["rhai"])
-                                .set_file_name(format!("{}_script.rhai", label))
+                                .add_filter("TypeScript", &["ts"])
+                                .set_file_name(format!("{}_script.ts", label))
                                 .save_file()
                             {
+                                // check if dropbear module exists
+                                // todo: change this to an %APPDATA% file instead of to memory. 
+                                let lib_path = &script_path.clone().parent().unwrap().join("dropbear.ts");
+                                if let Err(_) = std::fs::read(lib_path) {
+                                    log::warn!("dropbear.ts library does not exist in project source directory, copying...");
+                                    if let Err(e) = std::fs::write(lib_path, include_str!("../dropbear.ts")) {
+                                        log::error!("Non-fatal error: Creating library file failed: {}", e);
+                                    } else {
+                                        log::info!("Wrote dropbear.ts library file!");
+                                    }
+                                };
                                 match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
                                     Ok(_) => {
                                         let script_name = script_path

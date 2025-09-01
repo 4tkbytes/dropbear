@@ -1,61 +1,161 @@
-use rhai::*;
-use rhai::plugin::*;
+use dropbear_engine::entity::Transform;
+use glam::{DQuat, DVec3};
+use rustyscript::{serde_json, Runtime};
 
-#[rhai::export_module]
-pub mod math_functions {
-    // Basic math
-    pub fn abs(x: f64) -> f64 { x.abs() }
-    pub fn sqrt(x: f64) -> f64 { x.sqrt() }
-    pub fn pow(x: f64, y: f64) -> f64 { x.powf(y) }
-    pub fn min(x: f64, y: f64) -> f64 { x.min(y) }
-    pub fn max(x: f64, y: f64) -> f64 { x.max(y) }
-    pub fn clamp(x: f64, min: f64, max: f64) -> f64 { x.clamp(min, max) }
+pub fn register_math_functions(runtime: &mut Runtime) -> anyhow::Result<()> {
+    
+    runtime.register_function("createTransform", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        let transform = Transform::new();
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Trig functions
-    pub fn sin(x: f64) -> f64 { x.sin() }
-    pub fn cos(x: f64) -> f64 { x.cos() }
-    pub fn tan(x: f64) -> f64 { x.tan() }
-    pub fn asin(x: f64) -> f64 { x.asin() }
-    pub fn acos(x: f64) -> f64 { x.acos() }
-    pub fn atan(x: f64) -> f64 { x.atan() }
-    pub fn atan2(y: f64, x: f64) -> f64 { y.atan2(x) }
+    runtime.register_function("transformTranslate", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 2 {
+            return Err(rustyscript::Error::Runtime("transformTranslate requires 2 arguments".to_string()));
+        }
+        
+        let mut transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let translation = if let Some(array) = args[1].as_array() {
+            if array.len() != 3 {
+                return Err(rustyscript::Error::Runtime("Translation array must have 3 elements".to_string()));
+            }
+            DVec3::new(
+                array[0].as_f64().unwrap_or(0.0),
+                array[1].as_f64().unwrap_or(0.0),
+                array[2].as_f64().unwrap_or(0.0),
+            )
+        } else {
+            return Err(rustyscript::Error::Runtime("Translation must be an array".to_string()));
+        };
+        
+        transform.position += translation;
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Hyperbolic functions
-    pub fn sinh(x: f64) -> f64 { x.sinh() }
-    pub fn cosh(x: f64) -> f64 { x.cosh() }
-    pub fn tanh(x: f64) -> f64 { x.tanh() }
+    runtime.register_function("transformRotateX", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 2 {
+            return Err(rustyscript::Error::Runtime("transformRotateX requires 2 arguments".to_string()));
+        }
+        
+        let mut transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let angle = args[1].as_f64().unwrap_or(0.0);
+        let rotation = DQuat::from_rotation_x(angle);
+        transform.rotation = rotation * transform.rotation;
+        
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Logarithmic and exponential
-    pub fn exp(x: f64) -> f64 { x.exp() }
-    pub fn ln(x: f64) -> f64 { x.ln() }
-    pub fn log10(x: f64) -> f64 { x.log10() }
-    pub fn log2(x: f64) -> f64 { x.log2() }
+    runtime.register_function("transformRotateY", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 2 {
+            return Err(rustyscript::Error::Runtime("transformRotateY requires 2 arguments".to_string()));
+        }
+        
+        let mut transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let angle = args[1].as_f64().unwrap_or(0.0);
+        let rotation = DQuat::from_rotation_y(angle);
+        transform.rotation = rotation * transform.rotation;
+        
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Rounding functions
-    pub fn floor(x: f64) -> f64 { x.floor() }
-    pub fn ceil(x: f64) -> f64 { x.ceil() }
-    pub fn round(x: f64) -> f64 { x.round() }
-    pub fn trunc(x: f64) -> f64 { x.trunc() }
-    pub fn fract(x: f64) -> f64 { x.fract() }
+    runtime.register_function("transformRotateZ", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 2 {
+            return Err(rustyscript::Error::Runtime("transformRotateZ requires 2 arguments".to_string()));
+        }
+        
+        let mut transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let angle = args[1].as_f64().unwrap_or(0.0);
+        let rotation = DQuat::from_rotation_z(angle);
+        transform.rotation = rotation * transform.rotation;
+        
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Conversion
-    pub fn to_radians(degrees: f64) -> f64 { degrees.to_radians() }
-    pub fn to_degrees(radians: f64) -> f64 { radians.to_degrees() }
+    runtime.register_function("transformScale", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 2 {
+            return Err(rustyscript::Error::Runtime("transformScale requires 2 arguments".to_string()));
+        }
+        
+        let mut transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let scale = if let Some(num) = args[1].as_f64() {
+            DVec3::splat(num)
+        } else if let Some(array) = args[1].as_array() {
+            if array.len() != 3 {
+                return Err(rustyscript::Error::Runtime("Scale array must have 3 elements".to_string()));
+            }
+            DVec3::new(
+                array[0].as_f64().unwrap_or(1.0),
+                array[1].as_f64().unwrap_or(1.0),
+                array[2].as_f64().unwrap_or(1.0),
+            )
+        } else {
+            return Err(rustyscript::Error::Runtime("Scale must be a number or array".to_string()));
+        };
+        
+        transform.scale *= scale;
+        serde_json::to_value(transform)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Transform: {}", e)))
+    })?;
 
-    // Utility functions
-    pub fn lerp(a: f64, b: f64, t: f64) -> f64 { a + (b - a) * t }
-    pub fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
-        let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    }
+    // this shouldn't be here as there is no need for a matrix...
+    runtime.register_function("transformMatrix", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 1 {
+            return Err(rustyscript::Error::Runtime("transformMatrix requires 1 argument".to_string()));
+        }
+        
+        let transform: Transform = serde_json::from_value(args[0].clone())
+            .map_err(|e| rustyscript::Error::Runtime(format!("Invalid transform: {}", e)))?;
+        
+        let matrix = transform.matrix();
+        serde_json::to_value(matrix)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize matrix: {}", e)))
+    })?;
 
-    // Consts
-    pub const PI: f64 = std::f64::consts::PI;
-    pub const E: f64 = std::f64::consts::E;
-    pub const TAU: f64 = std::f64::consts::TAU;
-}
+    runtime.register_function("createVec3", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        let x = args.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let y = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let z = args.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        
+        let vec3 = DVec3::new(x, y, z);
+        serde_json::to_value(vec3)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Vec3: {}", e)))
+    })?;
 
-pub fn register_math_functions(engine: &mut Engine) {
-    engine.register_static_module("math", exported_module!(math_functions).into());
+    runtime.register_function("createQuatIdentity", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        let quat = DQuat::IDENTITY;
+        serde_json::to_value(quat)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Quaternion: {}", e)))
+    })?;
+
+    runtime.register_function("createQuatFromEuler", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        if args.len() != 3 {
+            return Err(rustyscript::Error::Runtime("createQuatFromEuler requires 3 arguments".to_string()));
+        }
+        
+        let x = args[0].as_f64().unwrap_or(0.0);
+        let y = args[1].as_f64().unwrap_or(0.0);
+        let z = args[2].as_f64().unwrap_or(0.0);
+        
+        let quat = DQuat::from_euler(glam::EulerRot::XYZ, x, y, z);
+        serde_json::to_value(quat)
+            .map_err(|e| rustyscript::Error::Runtime(format!("Failed to serialize Quaternion: {}", e)))
+    })?;
+
     log::info!("[Script] Initialised math module");
+    Ok(())
 }

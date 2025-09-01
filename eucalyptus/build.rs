@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::Cursor;
 
 fn main() -> anyhow::Result<()> {
+    // todo: move this into the "setup" process
     let repo_zip_url = "https://github.com/4tkbytes/dropbear/archive/refs/heads/main.zip";
     let response = reqwest::blocking::get(repo_zip_url)
         .map_err(|e| anyhow::anyhow!("Failed to download repo zip: {}", e))?
@@ -52,6 +53,12 @@ fn main() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!(
             "No resources folder found in the github repository [4tkbytes/dropbear] :("
         ));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("cargo:rustc-link-arg=/FORCE:MULTIPLE");
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
     }
 
     println!("cargo:rerun-if-changed=build.rs");
