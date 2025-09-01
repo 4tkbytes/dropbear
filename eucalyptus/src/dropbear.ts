@@ -249,7 +249,7 @@ export class Entity {
     // Input helpers
     isKeyPressed(key: KeyCode): boolean {
         if (!this.inputData) return false;
-        return this.inputData.pressed_keys.includes(key);
+        return this.inputData.pressed_keys.indexOf(key) !== -1
     }
 
     getMousePosition(): [number, number] {
