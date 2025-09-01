@@ -31,7 +31,6 @@ model_to_image = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 open = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
-rhai = { workspace = true, optional = true }
 ron = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
@@ -44,8 +43,6 @@ zip = { workspace = true, optional = true }
 bytemuck = "1.23.2"
 
 rustyscript.workspace = true
-specta.workspace = true
-specta-typescript.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = { workspace = true, optional = true }
@@ -73,7 +70,6 @@ editor = [
     "open",
     "parking_lot",
     "rfd",
-    "rhai",
     "ron",
     "serde",
     "tokio",
@@ -94,7 +90,6 @@ data-only = [
     "glam",
     "log",
     "dropbear-engine",
-    "rhai",
     "winit",
     "hecs",
     "ron",

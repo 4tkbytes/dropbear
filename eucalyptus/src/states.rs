@@ -31,7 +31,6 @@ use serde::{Deserialize, Serialize};
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use crate::build::build;
 use crate::camera::CameraType;
 #[cfg(feature = "editor")]
 use crate::editor::EditorTab;

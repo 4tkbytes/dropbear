@@ -55,6 +55,7 @@ fn main() -> anyhow::Result<()> {
         ));
     }
 
+    println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
     println!("cargo:rerun-if-changed=build.rs");
     Ok(())
 }

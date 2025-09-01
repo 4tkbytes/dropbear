@@ -420,7 +420,7 @@ impl Component for ScriptComponent {
                     ui.horizontal(|ui| {
                         if ui.button("Browse").clicked() {
                             if let Some(script_file) = rfd::FileDialog::new()
-                                .add_filter("Rhai Script", &["rhai"])
+                                .add_filter("Typescript", &["ts"])
                                 .pick_file()
                             {
                                 let script_name = script_file
@@ -437,8 +437,8 @@ impl Component for ScriptComponent {
 
                         if ui.button("New").clicked() {
                             if let Some(script_path) = rfd::FileDialog::new()
-                                .add_filter("Rhai Script", &["rhai"])
-                                .set_file_name(format!("{}_script.rhai", label))
+                                .add_filter("TypeScript", &["ts"])
+                                .set_file_name(format!("{}_script.ts", label))
                                 .save_file()
                             {
                                 match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
