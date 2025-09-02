@@ -55,6 +55,7 @@ fn main() -> anyhow::Result<()> {
         ));
     }
 
+    // fuck you windows :(
     #[cfg(target_os = "windows")]
     {
         println!("cargo:rustc-link-arg=/FORCE:MULTIPLE");
