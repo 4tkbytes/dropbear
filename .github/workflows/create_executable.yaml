@@ -11,6 +11,9 @@ jobs:
     if: contains(github.event.head_commit.message, 'jarvis, run github actions')
     name: Build for ${{ matrix.os_name }}
     runs-on: ${{ matrix.os }}
+    # Export AWS_LC_SYS_PREBUILT_NASM so aws-lc-rs build script will use its prebuilt NASM binary
+    env:
+      AWS_LC_SYS_PREBUILT_NASM: "1"
     strategy:
       matrix:
         include:
@@ -34,7 +37,7 @@ jobs:
 
       - name: Install NASM (Windows)
         if: matrix.os == 'windows-latest'
-        run: choco install nasm
+        run: choco install nasm -y
 
       - name: Install NASM (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -43,6 +46,18 @@ jobs:
       - name: Install NASM (macOS)
         if: matrix.os == 'macos-latest'
         run: brew install nasm
+
+      - name: Verify NASM (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          Write-Host "AWS_LC_SYS_PREBUILT_NASM = $env:AWS_LC_SYS_PREBUILT_NASM"
+          try {
+            where.exe nasm
+            Write-Host "System NASM found."
+          } catch {
+            Write-Host "System NASM not found (this is okay if aws-lc-rs will use prebuilt NASM)."
+          }
 
       - name: Install libudev-dev (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -62,6 +77,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build eucalyptus
+        # keep AWS_LC_SYS_PREBUILT_NASM visible to the cargo build step
+        env:
+          AWS_LC_SYS_PREBUILT_NASM: ${{ env.AWS_LC_SYS_PREBUILT_NASM }}
         run: cargo build --release --package eucalyptus --target ${{ matrix.target }}
 
       - name: Prepare artifact
