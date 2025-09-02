@@ -2,11 +2,22 @@
 // Made by 4tkbytes
 // EDIT THIS IF YOU WISH, RECOMMENDED TO NOT TOUCH IT
 
-type InputStateT = any;
-
+/**
+ * A class describing the position, scale and rotation to be able to manipulate
+ * the entity's location. 
+ */
 export class Transform {
+    /**
+     * A {@link Vector3} describing the position of the entity
+     */
     position: Vector3;
+    /**
+     * A {@link Quaternion} describing the rotation of the entity
+     */
     rotation: Quaternion;
+    /**
+     * A {@link Vector3} describing the scale of the entity
+     */
     scale: Vector3;
 
     public constructor(position?: Vector3, rotation?: Quaternion, scale?: Vector3) {
@@ -15,48 +26,162 @@ export class Transform {
         this.scale = scale || Vector3.one();
     }
 
+    /**
+     * Translates/Offsets the position of the entity by a {@link Vector3}
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * let transform = new Transform();
+     * transform.translate(new Vector3(1.0, 1.0, 1.0));
+     * ```
+     * 
+     * @param movement - A {@link Vector3} for position
+     */
     public translate(movement: Vector3) {
-        // Simple direct math - no host functions needed
         this.position.x += movement.x;
         this.position.y += movement.y;
         this.position.z += movement.z;
     }
 
+    /**
+     * Rotates the transformables rotation on the X axis
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * let transform = new Transform();
+     * transform.rotateX(dbMath.degreesToRadians(180));
+     * ```
+     * 
+     * @param angle - The angle in radians
+     */
     public rotateX(angle: number) {
-        // Create rotation quaternion and multiply
         const rotQuat = Quaternion.fromAxisAngle(new Vector3(1, 0, 0), angle);
         this.rotation = Quaternion.multiply(this.rotation, rotQuat);
+        
     }
 
+    /**
+     * Rotates the transformables rotation on the Y axis
+     * 
+     * # Example
+     * ```ts
+     * let transform = new Transform();
+     * transform.rotateY(dbMath.degreesToRadians(180))
+     * ```
+     * 
+     * @param angle - The angle in radians
+     */
     public rotateY(angle: number) {
         const rotQuat = Quaternion.fromAxisAngle(new Vector3(0, 1, 0), angle);
-        this.rotation = Quaternion.multiply(this.rotation, rotQuat);
+        this.rotation = Quaternion.multiply(this.rotation, rotQuat);        
     }
 
+    /**
+     * Rotates the transformables rotation on the Z axis
+     * 
+     * # Example
+     * ```ts
+     * let transform = new Transform();
+     * transform.rotateZ(dbMath.degreesToRadians(180))
+     * ```
+     * 
+     * @param angle - The angle in radians
+     */
     public rotateZ(angle: number) {
         const rotQuat = Quaternion.fromAxisAngle(new Vector3(0, 0, 1), angle);
         this.rotation = Quaternion.multiply(this.rotation, rotQuat);
     }
 
+    /**
+     * Uniformly scales the entity by a multiplier. 
+     * 
+     * # Example
+     * ```ts
+     * let transform = new Transform();
+     * transform.scaleUniform(2.0)
+     * ```
+     * 
+     * @param scale - A number that the scale multiplies by
+     */
     public scaleUniform(scale: number) {
         this.scale.x *= scale;
         this.scale.y *= scale;
         this.scale.z *= scale;
     }
 
-    public scaleIndividual(scale: [number, number, number]) {
-        this.scale.x *= scale[0];
-        this.scale.y *= scale[1];
-        this.scale.z *= scale[2];
+    /**
+     * Individually scales the entity by a multiplier by using a {@link Vector3}
+     * 
+     * # Example
+     * ```ts
+     * let transform = new Transform();
+     * transform.scaleIndividual(new Vector3(1.0, 2.0, 1.5))
+     * ```
+     * 
+     * @param scale - A Vector3 representing the scale.x, scale.y and scale.z values
+     */
+    public scaleIndividual(scale: Vector3) {
+        this.scale.x *= scale.x;
+        this.scale.y *= scale.y;
+        this.scale.z *= scale.z;
     }
+}
+
+/**
+ * Utilities for math functions that do not exist in the TypeScript Math module. 
+ */
+export const dbMath = {
+    /**
+     * Convert from degrees to radians
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * console.log(dbMath.degreesToRadians(180)) // expect Math.PI
+     * ```
+     * 
+     * @param deg - The angle in degrees
+     * @returns The angle in radians
+     */
+    degreesToRadians:(deg: number):number => {
+        return deg * (Math.PI / 180.0);
+    },
+
+    /**
+     * Convert from radians to degrees
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * console.log(dbMath.radiansToDegrees(Math.PI)) // expect 180
+     * ```
+     * 
+     * @param rad - The angle in radians
+     * @returns The angle in degrees
+     */
+    radiansToDegrees:(rad: number):number => {
+        return (180 * rad) / Math.PI;
+    },
 }
 
 /**
  * A Vector of 3 components: an X, Y and Z. 
  */
 export class Vector3 {
+    /**
+     * The X value
+     */
     public x: number;
+
+    /**
+     * The Y value
+     */
     public y: number;
+    /**
+     * The Z value
+     */
     public z: number;
 
     public constructor(x: number, y: number, z: number) {
@@ -65,39 +190,139 @@ export class Vector3 {
         this.z = z;
     }
 
+    /**
+     * Converts the {@link Vector3} class to a primitive number array
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * let vec = new Vector3(1.0, 1.5, 2.0);
+     * console.log(vec.as_array()) // expect [1.0, 1.5, 2.0]
+     * ```
+     * 
+     * @returns A number array representing the x, y, z values
+     */
     public as_array(): [number, number, number] {
         return [this.x, this.y, this.z];
     }
 
+    /**
+     * An alternative static constructor to create a {@link Vector3} with all values 
+     * set to 0.0
+     * 
+     * # Example
+     * ```ts
+     * let vec = Vector3.zero();
+     * console.log(vec); // expect [0.0, 0.0, 0.0]
+     * ```
+     * 
+     * @returns A new Vector3 instance with all values set to 0.0
+     */
     public static zero(): Vector3 {
         return new Vector3(0.0, 0.0, 0.0);
     }
 
+    /**
+     * An alternative static constructor to create a {@link Vector3} with all values 
+     * set to 1.0
+     * 
+     * # Example
+     * ```ts
+     * let vec = Vector3.one();
+     * console.log(vec); // expect [1.0, 1.0, 1.0]
+     * ```
+     * 
+     * @returns A new Vector3 instance with all values set to 1.0
+     */
     public static one(): Vector3 {
         return new Vector3(1.0, 1.0, 1.0);
     }
 
+    /**
+     * An alternative static constructor that creates a Vector3 from a number array.
+     * 
+     * # Example
+     * @example
+     * ```ts
+     * let arr = [1.0, 1.5, 2.0];
+     * let vec = Vector3.fromArray(arr);
+     * console.log(vec.to_array() === arr) // expect to print 'true'
+     * ```
+     *  
+     * @param arr - The number array to convert
+     * @returns - A new Vector3 instance
+     */
     public static fromArray(arr: [number, number, number]): Vector3 {
         return new Vector3(arr[0], arr[1], arr[2]);
     }
 
-    // Useful vector operations
-    public add(other: Vector3): Vector3 {
-        return new Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
+    /**
+     * Add another Vector3 to this vector and return the result as a new Vector3.
+     *
+     * @param rhs - Right-hand side vector to add.
+     * @returns A new Vector3 equal to (this + rhs).
+     *
+     * @example
+     * const a = new Vector3(1, 2, 3);
+     * const b = new Vector3(4, 5, 6);
+     * const c = a.add(b); // Vector3(5,7,9)
+     */
+    public add(rhs: Vector3): Vector3 {
+        return new Vector3(this.x + rhs.x, this.y + rhs.y, this.z + rhs.z);
     }
 
-    public subtract(other: Vector3): Vector3 {
-        return new Vector3(this.x - other.x, this.y - other.y, this.z - other.z);
+    /**
+     * Subtract another Vector3 from this vector and return the result as a new Vector3.
+     *
+     * @param rhs - Right-hand side vector to subtract.
+     * @returns A new Vector3 equal to (this - rhs).
+     *
+     * @example
+     * const a = new Vector3(5, 7, 9);
+     * const b = new Vector3(1, 2, 3);
+     * const c = a.subtract(b); // Vector3(4,5,6)
+     */
+    public subtract(rhs: Vector3): Vector3 {
+        return new Vector3(this.x - rhs.x, this.y - rhs.y, this.z - rhs.z);
     }
 
-    public multiply(scalar: number): Vector3 {
-        return new Vector3(this.x * scalar, this.y * scalar, this.z * scalar);
+    /**
+     * Multiply this vector by a scalar and return the result as a new Vector3.
+     *
+     * @param rhs - Scalar multiplier.
+     * @returns A new Vector3 scaled by rhs.
+     *
+     * @example
+     * const v = new Vector3(1, 2, 3);
+     * const s = v.multiply(2); // Vector3(2,4,6)
+     */
+    public multiply(rhs: number): Vector3 {
+        return new Vector3(this.x * rhs, this.y * rhs, this.z * rhs);
     }
 
+    /**
+     * Compute the Euclidean length (magnitude) of this vector.
+     *
+     * @returns The length sqrt(x*x + y*y + z*z).
+     *
+     * @example
+     * const v = new Vector3(1, 2, 2);
+     * console.log(v.length()); // 3
+     */
     public length(): number {
         return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
     }
 
+    /**
+     * Return a new Vector3 representing the normalized (unit) direction of this vector.
+     * If the vector has zero length, returns Vector3.zero().
+     *
+     * @returns A normalized Vector3 or Vector3.zero() when length is 0.
+     *
+     * @example
+     * const v = new Vector3(0, 3, 4);
+     * const n = v.normalize(); // Vector3(0, 0.6, 0.8)
+     */
     public normalize(): Vector3 {
         const len = this.length();
         if (len === 0) return Vector3.zero();
@@ -105,12 +330,31 @@ export class Vector3 {
     }
 }
 
+/**
+ * Quaternion representing a rotation in 3D space.
+ *
+ * Components are stored as (x, y, z, w) where w is the scalar part.
+ * Useful helpers are provided to construct quaternions from Euler angles,
+ * axis/angle, multiply them, and convert to/from arrays.
+ */
 export class Quaternion {
     public x: number;
     public y: number;
     public z: number;
     public w: number;
 
+    /**
+     * Create a new quaternion.
+     *
+     * @param x - X component (default 0)
+     * @param y - Y component (default 0)
+     * @param z - Z component (default 0)
+     * @param w - W (scalar) component (default 1)
+     *
+     * @example
+     * const q = new Quaternion(); // identity
+     * const q2 = new Quaternion(0.1, 0.2, 0.3, 0.9);
+     */
     public constructor(x: number = 0, y: number = 0, z: number = 0, w: number = 1) {
         this.x = x;
         this.y = y;
@@ -118,6 +362,20 @@ export class Quaternion {
         this.w = w;
     }
 
+    /**
+     * Construct a quaternion from Euler angles (radians).
+     *
+     * The parameters represent rotations about the X, Y and Z axes respectively.
+     * Angles must be provided in radians.
+     *
+     * @param x - rotation about the X axis in radians
+     * @param y - rotation about the Y axis in radians
+     * @param z - rotation about the Z axis in radians
+     * @returns A new Quaternion representing the composite rotation
+     *
+     * @example
+     * const q = Quaternion.fromEuler(Math.PI/2, 0, 0); // 90° around X
+     */
     public static fromEuler(x: number, y: number, z: number): Quaternion {
         // Convert euler angles to quaternion
         const cx = Math.cos(x * 0.5);
@@ -135,6 +393,18 @@ export class Quaternion {
         );
     }
 
+    /**
+     * Construct a quaternion representing a rotation around an axis.
+     *
+     * The axis will be normalized internally. Angle is in radians.
+     *
+     * @param axis - Rotation axis as a Vector3
+     * @param angle - Rotation angle in radians
+     * @returns A new Quaternion representing the axis-angle rotation
+     *
+     * @example
+     * const q = Quaternion.fromAxisAngle(new Vector3(0,1,0), Math.PI); // 180° around Y
+     */
     public static fromAxisAngle(axis: Vector3, angle: number): Quaternion {
         const halfAngle = angle * 0.5;
         const sin = Math.sin(halfAngle);
@@ -148,6 +418,19 @@ export class Quaternion {
         );
     }
 
+    /**
+     * Multiply two quaternions.
+     *
+     * The result corresponds to the composition a * b (apply b, then a) using
+     * the multiplication implemented here.
+     *
+     * @param a - Left quaternion
+     * @param b - Right quaternion
+     * @returns The product quaternion
+     *
+     * @example
+     * const r = Quaternion.multiply(q1, q2);
+     */
     public static multiply(a: Quaternion, b: Quaternion): Quaternion {
         return new Quaternion(
             a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
@@ -157,19 +440,47 @@ export class Quaternion {
         );
     }
 
+    /**
+     * Create a quaternion from a numeric array [x, y, z, w].
+     *
+     * @param arr - Array containing quaternion components in order [x, y, z, w]
+     * @returns A new Quaternion with components taken from the array
+     *
+     * @example
+     * const q = Quaternion.fromArray([0, 0, 0, 1]);
+     */
     public static fromArray(arr: [number, number, number, number]): Quaternion {
         return new Quaternion(arr[0], arr[1], arr[2], arr[3]);
     }
 
+    /**
+     * Return the identity quaternion (no rotation).
+     *
+     * @returns Quaternion equal to (0, 0, 0, 1)
+     *
+     * @example
+     * const id = Quaternion.identity();
+     */
     public static identity(): Quaternion {
         return new Quaternion(0.0, 0.0, 0.0, 1.0);
     }
 
+    /**
+     * Convert this quaternion to a numeric array [x, y, z, w].
+     *
+     * @returns An array containing the quaternion components
+     *
+     * @example
+     * const arr = q.as_array(); // [x, y, z, w]
+     */
     public as_array(): [number, number, number, number] {
         return [this.x, this.y, this.z, this.w];
     }
 }
 
+/**
+ * Values of the Key codes. 
+ */
 export const Keys = {
     KeyA: "KeyA", KeyB: "KeyB", KeyC: "KeyC", KeyD: "KeyD", KeyE: "KeyE", KeyF: "KeyF", 
     KeyG: "KeyG", KeyH: "KeyH", KeyI: "KeyI", KeyJ: "KeyJ", KeyK: "KeyK", KeyL: "KeyL", 
@@ -190,37 +501,125 @@ export const Keys = {
 
 export type KeyCode = typeof Keys[keyof typeof Keys];
 
+/**
+ * The properties of the entity. 
+ * From the eucalyptus editor, you are able to make custom 
+ * properties such as 'speed' or 'health'. This class allows 
+ * you to create and edit new value
+ * during the runtime of the script. 
+ * 
+ * Usage:
+ * ```ts
+ * props.setNumber("hp", 100);
+ * const hp = props.getNumber("hp"); // 100
+ * ```
+ */
 export class EntityProperties {
     private data: Record<string, any>;
 
+    /**
+     * Create an EntityProperties wrapper.
+     *
+     * @param data - Optional initial properties object. A shallow reference is kept.
+     */
     public constructor(data?: Record<string, any>) {
         this.data = data || {};
     }
 
+    /**
+     * Get the raw underlying properties object.
+     *
+     * Use this to serialize properties back to the host or perform bulk operations.
+     *
+     * @returns The raw Record<string, any> used to store properties.
+     *
+     * @example
+     * const raw = props.getRawProperties();
+     */
     public getRawProperties(): Record<string, any> {
         return this.data;
     }
 
+    /**
+     * Set a string property.
+     *
+     * @param key - Property key.
+     * @param value - String value to set.
+     *
+     * @example
+     * props.setString("tag", "friendly");
+     */
     public setString(key: string, value: string): void {
         this.data[key] = value;
     }
 
+    /**
+     * Set a numeric property.
+     *
+     * @param key - Property key.
+     * @param value - Number value to set.
+     *
+     * @example
+     * props.setNumber("speed", 4.2);
+     */
     public setNumber(key: string, value: number): void {
         this.data[key] = value;
     }
 
+    /**
+     * Set a boolean property.
+     *
+     * @param key - Property key.
+     * @param value - Boolean value to set.
+     *
+     * @example
+     * props.setBool("isActive", true);
+     */
     public setBool(key: string, value: boolean): void {
         this.data[key] = value;
     }
 
+    /**
+     * Get a string property.
+     *
+     * If the property is missing or falsy, an empty string ("") is returned.
+     *
+     * @param key - Property key.
+     * @returns The string value or "" when missing.
+     *
+     * @example
+     * const name = props.getString("name");
+     */
     public getString(key: string): string {
         return this.data[key] || "";
     }
 
+    /**
+     * Get a numeric property.
+     *
+     * If the property is missing or falsy, 0 is returned.
+     *
+     * @param key - Property key.
+     * @returns The number value or 0 when missing.
+     *
+     * @example
+     * const speed = props.getNumber("speed");
+     */
     public getNumber(key: string): number {
         return this.data[key] || 0;
     }
 
+    /**
+     * Get a boolean property.
+     *
+     * If the property is missing or falsy, false is returned.
+     *
+     * @param key - Property key.
+     * @returns The boolean value or false when missing.
+     *
+     * @example
+     * const active = props.getBool("isActive");
+     */
     public getBool(key: string): boolean {
         return this.data[key] || false;
     }
