@@ -739,7 +739,8 @@ impl SceneConfig {
         );
         world.clear();
 
-        let _project_config = if !cfg!(feature = "data-only") {
+        #[allow(dead_code)]
+        let project_config = if !cfg!(feature = "data-only") {
             if let Ok(cfg) = PROJECT.read() {
                 cfg.project_path.clone()
             } else {
