@@ -52,12 +52,14 @@ jobs:
         shell: powershell
         run: |
           Write-Host "AWS_LC_SYS_PREBUILT_NASM = $env:AWS_LC_SYS_PREBUILT_NASM"
-          try {
-            where.exe nasm
-            Write-Host "System NASM found."
-          } catch {
+          $nasmPath = where.exe nasm
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "System NASM found at $nasmPath"
+          } else {
             Write-Host "System NASM not found (this is okay if aws-lc-rs will use prebuilt NASM)."
           }
+          exit 0
+
 
       - name: Install libudev-dev (Linux)
         if: matrix.os == 'ubuntu-latest'
