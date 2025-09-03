@@ -49,10 +49,7 @@ scripting, eucalyptus uses `typescript`. The main philosophy of scripting is to 
 
 The typescript used in the scripting is ran with the deno runtime. 
 
-TODO: Create better documentation
-
-The typescript reference for the eucalyptus editor is under the /docs folder of this repository, so take a look there. 
-[Here is the entrance](https://github.com/4tkbytes/dropbear/blob/main/docs/README.md)
+Documentation is hosted on GitHub Pages with typedoc. The website is at this link: [4tkbytes.github.io/dropbear][https://4tkbytes.github.io/dropbear/]
 
 ## Compability
 
