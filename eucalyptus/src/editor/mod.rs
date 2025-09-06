@@ -525,7 +525,7 @@ fn show_entity_tree(
     selected: &mut Option<hecs::Entity>,
     id_source: &str,
 ) {
-    egui_dnd::Dnd::new(ui, id_source).show(nodes.iter(), |ui, item, handle, _dragging| match item
+    egui_dnd::Dnd::new(ui, id_source).show_vec(nodes, |ui, item, handle, _dragging| match item
         .clone()
     {
         EntityNode::Entity { id, name } => {
@@ -572,6 +572,27 @@ fn show_entity_tree(
                     ui.label("💡");
                 });
                 let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
+                if resp.clicked() {
+                    *selected = Some(id);
+                }
+            });
+        }
+        EntityNode::Camera { id, name, camera_type } => {
+            ui.horizontal(|ui| {
+                handle.ui(ui, |ui| {
+                    let icon = match camera_type {
+                        CameraType::Debug => "🎥", // Debug camera
+                        CameraType::Player => "📹", // Player camera
+                        CameraType::Normal => "📷", // Normal camera
+                    };
+                    ui.label(icon);
+                });
+                let display_name = format!("{} ({})", name, match camera_type {
+                    CameraType::Debug => "Debug",
+                    CameraType::Player => "Player", 
+                    CameraType::Normal => "Normal",
+                });
+                let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), display_name);
                 if resp.clicked() {
                     *selected = Some(id);
                 }

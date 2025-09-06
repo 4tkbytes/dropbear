@@ -1,3 +1,7 @@
+//! Old code for managing cameras. Currently in a deprecated state, and used for reference
+//! in the case something doesn't match up with my camera controllers
+//! or I need advice. 
+
 use std::{any::Any, collections::HashSet};
 
 use dropbear_engine::{camera::Camera, entity::Transform};

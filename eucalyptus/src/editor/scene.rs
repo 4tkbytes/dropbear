@@ -203,13 +203,20 @@ impl Scene for Editor {
                     }
             Signal::Delete => {
                         if let Some(sel_e) = &self.selected_entity {
-                            match self.world.despawn(*sel_e) {
-                                Ok(_) => {
-                                    crate::info!("Decimated entity");
-                                    self.signal = Signal::None;
-                                }
-                                Err(e) => {
-                                    crate::warn!("Failed to delete entity: {}", e);
+                            let is_viewport_cam = if let Ok(mut q) = self.world.query_one::<&CameraComponent>(*sel_e) { if let Some(c) = q.get() { if matches!(c.camera_type, CameraType::Debug) { true } else { false } } else { false } } else { false };
+                            if is_viewport_cam {
+                                crate::warn!("You can't delete the viewport camera");
+                                self.signal = Signal::None;
+                            } else {
+                                match self.world.despawn(*sel_e) {
+                                    Ok(_) => {
+                                        crate::info!("Decimated entity");
+                                        self.signal = Signal::None;
+                                    }
+                                    Err(e) => {
+                                        crate::warn!("Failed to delete entity: {}", e);
+                                        self.signal = Signal::None;
+                                    }
                                 }
                             }
                         }
@@ -723,7 +730,8 @@ impl Scene for Editor {
             }
         }
 
-        for (_entity_id, camera) in self.world.query::<&mut Camera>().iter() {
+        for (_entity_id, (camera, component)) in self.world.query::<(&mut Camera, &mut CameraComponent)>().iter() {
+            component.update(camera);
             camera.update(graphics);
         }
 

@@ -485,6 +485,11 @@ pub enum EntityNode {
         id: hecs::Entity,
         name: String,
     },
+    Camera {
+        id: hecs::Entity,
+        name: String,
+        camera_type: CameraType,
+    },
     Group {
         name: String,
         children: Vec<EntityNode>,
@@ -560,6 +565,19 @@ impl EntityNode {
                 name: light.label().to_string(),
             });
             handled.insert(id);
+        }
+
+        for (entity, (camera, component)) in world
+            .query::<(&Camera, &CameraComponent)>()
+            .iter()
+        {
+            if world.get::<&AdoptedEntity>(entity).is_err() {
+                nodes.push(EntityNode::Camera {
+                    id: entity,
+                    name: camera.label.clone(),
+                    camera_type: component.camera_type,
+                });
+            }
         }
 
         nodes
@@ -880,6 +898,7 @@ impl SceneConfig {
             let component = CameraComponent {
                 speed: camera_config.speed.into(),
                 sensitivity: camera_config.speed.into(),
+                fov_y: camera_config.fov.into(),
                 camera_type: camera_config.camera_type,
             };
 

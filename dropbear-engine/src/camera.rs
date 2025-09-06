@@ -142,7 +142,7 @@ impl Camera {
 
     fn build_vp(&mut self) -> DMat4 {
         let view = DMat4::look_at_lh(self.eye, self.target, self.up);
-        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y, self.aspect, self.znear);
+        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y.to_radians(), self.aspect, self.znear);
 
         self.view_mat = view.clone();
         self.proj_mat = proj.clone();
