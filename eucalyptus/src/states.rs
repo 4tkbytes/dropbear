@@ -23,6 +23,7 @@ use dropbear_engine::{
 #[cfg(feature = "editor")]
 use egui_dock_fork::DockState;
 
+use glam::DVec3;
 use hecs;
 use log;
 use once_cell::sync::Lazy;
@@ -31,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use crate::camera::CameraType;
+use crate::camera::{CameraComponent, CameraFollowTarget, CameraType, DebugCamera};
 #[cfg(feature = "editor")]
 use crate::editor::EditorTab;
 use crate::utils::PROTO_TEXTURE;
@@ -566,7 +567,10 @@ impl EntityNode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SceneCameraConfig {
+pub struct CameraConfig {
+    pub label: String,
+    pub camera_type: CameraType,
+
     pub position: [f64; 3],
     pub target: [f64; 3],
     pub up: [f64; 3],
@@ -575,12 +579,16 @@ pub struct SceneCameraConfig {
     pub near: f32,
     pub far: f32,
 
+    pub speed: f32,
+    pub sensitivity: f32,
+
     pub follow_target_entity_label: Option<String>,
     pub follow_offset: Option<[f64; 3]>,
 }
 
-impl Default for SceneCameraConfig {
+impl Default for CameraConfig {
     fn default() -> Self {
+        let default = CameraComponent::new();
         Self {
             position: [0.0, 1.0, 2.0],
             target: [0.0, 0.0, 0.0],
@@ -591,13 +599,31 @@ impl Default for SceneCameraConfig {
             far: 100.0,
             follow_target_entity_label: None,
             follow_offset: None,
+            label: String::new(),
+            camera_type: CameraType::Normal,
+            speed: default.speed as f32,
+            sensitivity: default.sensitivity as f32,
         }
     }
 }
 
-impl SceneCameraConfig {
-    pub fn camera(&self, graphics: &mut Graphics) -> Camera {
-        Camera::new(graphics, self.position.into(), self.target.into(), self.up.into(), self.aspect.into(), self.fov.into(), self.near.into(), self.far.into(), 10.0, 0.0125)
+impl CameraConfig {
+    pub fn from_ecs_camera(camera: &Camera, component: &CameraComponent, follow_target: Option<&CameraFollowTarget>) -> Self {
+        Self {
+            position: camera.position().to_array(),
+            target: camera.target.to_array(),
+            label: camera.label.clone(),
+            camera_type: component.camera_type,
+            up: camera.up.to_array(),
+            aspect: camera.aspect,
+            fov: camera.fov_y as f32,
+            near: camera.znear as f32,
+            far: camera.zfar as f32,
+            speed: component.speed as f32,
+            sensitivity: component.sensitivity as f32,
+            follow_target_entity_label: if let Some(target) = follow_target { Some(target.follow_target.clone()) } else { None },
+            follow_offset: if let Some(target) = follow_target { Some(target.offset.to_array()) } else { None },
+        }
     }
 }
 
@@ -654,7 +680,7 @@ impl Default for ModelProperties {
 pub struct SceneConfig {
     pub scene_name: String,
     pub entities: Vec<SceneEntity>,
-    pub camera: HashMap<CameraType, SceneCameraConfig>, // TODO: Change to component
+    pub cameras: Vec<CameraConfig>,
     pub lights: Vec<LightConfig>,
     // todo later
     // pub settings: SceneSettings,
@@ -665,41 +691,11 @@ pub struct SceneConfig {
 impl SceneConfig {
     /// Creates a new instance of the scene config
     pub fn new(scene_name: String, path: PathBuf) -> Self {
-        let mut camera_configs = HashMap::new();
-
-        camera_configs.insert(
-            CameraType::Debug,
-            SceneCameraConfig {
-                position: [0.0, 5.0, 10.0],
-                target: [0.0, 0.0, 0.0],
-                up: [0.0, 1.0, 0.0],
-                aspect: 16.0 / 9.0,
-                fov: 45.0,
-                near: 0.1,
-                far: 100.0,
-                ..Default::default()
-            },
-        );
-
-        camera_configs.insert(
-            CameraType::Player,
-            SceneCameraConfig {
-                position: [0.0, 2.0, 5.0],
-                target: [0.0, 0.0, 0.0],
-                up: [0.0, 1.0, 0.0],
-                aspect: 16.0 / 9.0,
-                fov: 45.0,
-                near: 0.1,
-                far: 100.0,
-                ..Default::default()
-            },
-        );
-
         Self {
             scene_name,
             path,
             entities: Vec::new(),
-            camera: camera_configs,
+            cameras: Vec::new(),
             lights: Vec::new(),
         }
     }
@@ -731,7 +727,7 @@ impl SceneConfig {
         &self,
         world: &mut hecs::World,
         graphics: &Graphics,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<hecs::Entity> {
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
@@ -739,8 +735,8 @@ impl SceneConfig {
         );
         world.clear();
 
-        #[allow(dead_code)]
-        let project_config = if !cfg!(feature = "data-only") {
+        #[allow(unused_variables)]
+        let project_config = if cfg!(feature = "data-only") {
             if let Ok(cfg) = PROJECT.read() {
                 cfg.project_path.clone()
             } else {
@@ -865,6 +861,45 @@ impl SceneConfig {
             world.spawn((light_config.light_component.clone(), light_config.transform, light, ModelProperties::default()));
         }
 
+        for camera_config in &self.cameras {
+            log::debug!("Loading camera {} of type {:?}", camera_config.label, camera_config.camera_type);
+
+            let camera = Camera::new(graphics, 
+                DVec3::from_array(camera_config.position), 
+                DVec3::from_array(camera_config.target), 
+                DVec3::from_array(camera_config.up), 
+                camera_config.aspect.into(), 
+                camera_config.fov.into(), 
+                camera_config.near.into(), 
+                camera_config.far.into(), 
+                camera_config.speed.into(), 
+                camera_config.sensitivity.into(),
+                Some(camera_config.label.as_str())
+            );
+
+            let component = CameraComponent {
+                speed: camera_config.speed.into(),
+                sensitivity: camera_config.speed.into(),
+                camera_type: camera_config.camera_type,
+            };
+
+            if let Some(target) = &camera_config.follow_target_entity_label {
+                let mut entity: Option<hecs::Entity> = None;
+                let _ = world.query::<&AdoptedEntity>().iter().map(|(e, ae)| {
+                    if ae.label().as_str() == target.as_str() {
+                        entity = Some(e)
+                    }
+                });
+                if let Some(e) = entity {
+                    world.insert(e, (camera, component))?;
+                } else {
+                    world.spawn((camera, component));
+                }
+            } else {
+                world.spawn((camera, component));
+            }
+        }
+
         if world.query::<(&LightComponent, &Light)>().iter().next().is_none() {
             log::info!("No lights in scene, spawning default light");
             let default_transform = Transform {
@@ -876,225 +911,53 @@ impl SceneConfig {
             world.spawn((default_component, default_transform, default_light, ModelProperties::default()));
         }
 
-        log::info!("Loaded {} entities and {} lights", self.entities.len(), self.lights.len());
-        Ok(())
-    }
+        log::info!("Loaded {} entities, {} lights and {} cameras", self.entities.len(), self.lights.len(), self.cameras.len());
+        #[cfg(feature = "editor")]
+        {
+            // Editor mode - look for debug camera, create one if none exists
+            let debug_camera = world
+                .query::<(&Camera, &CameraComponent)>()
+                .iter()
+                .find_map(|(entity, (_, component))| {
+                    if matches!(component.camera_type, CameraType::Debug) {
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                });
 
-    pub fn load_cameras_into_manager(
-        &self,
-        camera_manager: &mut crate::camera::CameraManager,
-        graphics: &Graphics,
-        world: &hecs::World,
-    ) -> anyhow::Result<()> {
-        use crate::camera::{DebugCameraController, PlayerCameraController};
-
-        if let Some(debug_config) = self.camera.get(&CameraType::Debug) {
-            let debug_camera = Camera::new(
-                graphics,
-                glam::DVec3::from_array(debug_config.position),
-                glam::DVec3::from_array(debug_config.target),
-                glam::DVec3::from_array(debug_config.up),
-                debug_config.aspect,
-                debug_config.fov as f64,
-                debug_config.near as f64,
-                debug_config.far as f64,
-                5.0,
-                0.002,
-            );
-            let debug_controller = Box::new(DebugCameraController::new());
-            camera_manager.add_camera(CameraType::Debug, debug_camera, debug_controller);
-        }
-
-        if let Some(player_config) = self.camera.get(&CameraType::Player) {
-            let player_camera = Camera::new(
-                graphics,
-                glam::DVec3::from_array(player_config.position),
-                glam::DVec3::from_array(player_config.target),
-                glam::DVec3::from_array(player_config.up),
-                player_config.aspect,
-                player_config.fov as f64,
-                player_config.near as f64,
-                player_config.far as f64,
-                5.0,
-                0.001,
-            );
-            let player_controller = Box::new(PlayerCameraController::new());
-            camera_manager.add_camera(CameraType::Player, player_camera, player_controller);
-
-            if let (Some(target_label), Some(offset_array)) = (
-                &player_config.follow_target_entity_label,
-                &player_config.follow_offset,
-            ) {
-                for (entity_id, adopted_entity) in world.query::<&AdoptedEntity>().iter() {
-                    log::debug!(
-                        "World entity {:?} -> label='{}' path='{}'",
-                        entity_id,
-                        adopted_entity.label(),
-                        adopted_entity.model().path
-                    );
-                }
-
-                let target_entity = world
-                    .query::<&AdoptedEntity>()
-                    .iter()
-                    .find_map(|(entity_id, adopted_entity)| {
-                        if adopted_entity.label() == target_label {
-                            Some(entity_id)
-                        } else {
-                            // Try to match by file stem if label doesn't match
-                            #[cfg(not(feature = "data-only"))]
-                            {
-                                let project_path = if let Ok(cfg) = PROJECT.read() {
-                                    cfg.project_path.clone()
-                                } else {
-                                    panic!("Unable to get project path to use with camera manager");
-                                };
-                                
-                                match &adopted_entity.model().path.ref_type {
-                                    ResourceReferenceType::File(_reference) => {
-                                        if let Some(path) = adopted_entity.model().path.to_project_path(project_path) {
-                                            let stem_match = path.file_stem()
-                                                .and_then(|s| s.to_str())
-                                                .map(|s| s == target_label)
-                                                .unwrap_or(false);
-                                            
-                                            if stem_match {
-                                                Some(entity_id)
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
-                                    },
-                                    ResourceReferenceType::Bytes(_bytes) => {
-                                        // For bytes, we can only match by label, which already failed
-                                        None
-                                    }
-                                    _ => None
-                                }
-                            }
-                            #[cfg(feature = "data-only")]
-                            {
-                                match &adopted_entity.model().path.ref_type {
-                                    ResourceReferenceType::File(_reference) => {
-                                        if let Ok(path) = adopted_entity.model().path.to_executable_path() {
-                                            let stem_match = path.file_stem()
-                                                .and_then(|s| s.to_str())
-                                                .map(|s| s == target_label)
-                                                .unwrap_or(false);
-                                            
-                                            if stem_match {
-                                                Some(entity_id)
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
-                                    },
-                                    ResourceReferenceType::Bytes(_bytes) => {
-                                        // For bytes, we can only match by label, which already failed
-                                        None
-                                    }
-                                    _ => None
-                                }
-                            }
-                        }
-                    });
-
-                if let Some(entity_id) = target_entity {
-                    let offset = glam::DVec3::from_array(*offset_array);
-                    camera_manager.set_player_camera_target(entity_id, offset);
-                    log::info!(
-                        "Restored player camera follow target: {} with offset {:?}",
-                        target_label,
-                        offset
-                    );
-                } else {
-                    log::warn!(
-                        "Could not find entity '{}' to restore camera follow target",
-                        target_label
-                    );
-                }
+            if let Some(camera_entity) = debug_camera {
+                log::info!("Using existing debug camera for editor");
+                Ok(camera_entity)
+            } else {
+                log::info!("No debug camera found, creating viewport camera for editor");
+                let camera = Camera::predetermined(graphics, Some("Viewport Camera"));
+                let component = DebugCamera::new();
+                let camera_entity = world.spawn((camera, component));
+                Ok(camera_entity)
             }
         }
 
-        Ok(())
-    }
+        #[cfg(not(feature = "editor"))]
+        {
+            // Runtime mode - look for player camera, panic if none exists
+            let player_camera = world
+                .query::<(&Camera, &CameraComponent)>()
+                .iter()
+                .find_map(|(entity, (_, component))| {
+                    if matches!(component.camera_type, CameraType::Player) {
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                });
 
-    /// Save cameras from camera manager to scene config
-    pub fn save_cameras_from_manager(
-        &mut self,
-        camera_manager: &crate::camera::CameraManager,
-        world: &hecs::World,
-    ) {
-        self.camera.clear();
-
-        if let Some(debug_camera) = camera_manager.get_camera(&CameraType::Debug) {
-            self.camera.insert(
-                CameraType::Debug,
-                SceneCameraConfig {
-                    position: [debug_camera.eye.x, debug_camera.eye.y, debug_camera.eye.z],
-                    target: [
-                        debug_camera.target.x,
-                        debug_camera.target.y,
-                        debug_camera.target.z,
-                    ],
-                    up: [debug_camera.up.x, debug_camera.up.y, debug_camera.up.z],
-                    aspect: debug_camera.aspect,
-                    fov: debug_camera.fov_y as f32,
-                    near: debug_camera.znear as f32,
-                    far: debug_camera.zfar as f32,
-                    follow_target_entity_label: None,
-                    follow_offset: None,
-                },
-            );
-        }
-
-        if let Some(player_camera) = camera_manager.get_camera(&CameraType::Player) {
-            let (follow_entity_label, follow_offset) =
-                if let Some(target_entity) = camera_manager.get_player_camera_target() {
-                    let entity_label = world
-                        .query_one::<&AdoptedEntity>(target_entity)
-                        .ok()
-                        .and_then(|mut entity_ref| {
-                            entity_ref
-                                .get()
-                                .map(|adopted_entity| adopted_entity.label().clone())
-                        });
-
-                    let offset = camera_manager
-                        .get_player_camera_offset()
-                        .map(|offset| [offset.x, offset.y, offset.z]);
-
-                    (entity_label, offset)
-                } else {
-                    (None, None)
-                };
-
-            self.camera.insert(
-                CameraType::Player,
-                SceneCameraConfig {
-                    position: [
-                        player_camera.eye.x,
-                        player_camera.eye.y,
-                        player_camera.eye.z,
-                    ],
-                    target: [
-                        player_camera.target.x,
-                        player_camera.target.y,
-                        player_camera.target.z,
-                    ],
-                    up: [player_camera.up.x, player_camera.up.y, player_camera.up.z],
-                    aspect: player_camera.aspect,
-                    fov: player_camera.fov_y as f32,
-                    near: player_camera.znear as f32,
-                    far: player_camera.zfar as f32,
-                    follow_target_entity_label: follow_entity_label,
-                    follow_offset: follow_offset,
-                },
-            );
+            if let Some(camera_entity) = player_camera {
+                log::info!("Using player camera for runtime");
+                Ok(camera_entity)
+            } else {
+                panic!("Runtime mode requires a player camera, but none was found in the scene!");
+            }
         }
     }
 }

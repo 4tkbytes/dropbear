@@ -12,7 +12,7 @@ use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use super::*;
 use crate::{
-    utils::PendingSpawn,
+    camera::PlayerCamera, utils::PendingSpawn
 };
 use crate::states::PropertyValue;
 use crate::utils::PROTO_TEXTURE;
@@ -22,7 +22,9 @@ pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut Graphics) {
-        self.load_project_config(graphics).unwrap();
+        if self.active_camera.is_none() {
+            self.load_project_config(graphics).unwrap();
+        }
 
         let shader = Shader::new(
             graphics,
@@ -33,24 +35,34 @@ impl Scene for Editor {
         self.light_manager.create_light_array_resources(graphics);
 
         let texture_bind_group = &graphics.texture_bind_group().clone();
-        if let Some(camera) = self.camera_manager.get_active() {
-            let pipeline = graphics.create_render_pipline(
-                &shader,
-                vec![
-                    texture_bind_group,
-                    camera.layout(),
-                    self.light_manager.layout()
-                ],
-                None,
-            );
-            self.render_pipeline = Some(pipeline);
+        if let Some(active_camera) = self.active_camera {
+            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                if let Some((camera, _component, _follow_target)) = q.get() {
+                    let pipeline = graphics.create_render_pipline(
+                        &shader,
+                        vec![
+                            texture_bind_group,
+                            camera.layout(),
+                            self.light_manager.layout()
+                        ],
+                        None,
+                    );
+                    self.render_pipeline = Some(pipeline);
 
-            self.light_manager.create_render_pipeline(
-                graphics,
-                include_str!("../light.wgsl"),
-                camera,
-                Some("Light Pipeline")
-            );
+                    self.light_manager.create_render_pipeline(
+                        graphics,
+                        include_str!("../light.wgsl"),
+                        camera,
+                        Some("Light Pipeline")
+                    );
+                } else {
+                    log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                }
+            } else {
+                log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+            }
+        } else {
+            log_once::warn_once!("No active camera found");
         }
 
         self.window = Some(graphics.state.window.clone());
@@ -136,8 +148,29 @@ impl Scene for Editor {
                 .copied()
                 .collect();
 
-            self.camera_manager
-                .handle_input(&movement_keys, self.input_state.mouse_delta);
+            // Handle camera input through ECS
+            if let Some(active_camera) = self.active_camera {
+                if let Ok(mut query) = self.world.query_one::<(&mut Camera, &CameraComponent)>(active_camera) {
+                    if let Some((camera, component)) = query.get() {
+                        // Handle keyboard input based on camera type
+                        match component.camera_type {
+                            CameraType::Debug => {
+                                DebugCamera::handle_keyboard_input(camera, &movement_keys);
+                                DebugCamera::handle_mouse_input(camera, component, self.input_state.mouse_delta);
+                            }
+                            CameraType::Player => {
+                                PlayerCamera::handle_keyboard_input(camera, &movement_keys);
+                                PlayerCamera::handle_mouse_input(camera, component, self.input_state.mouse_delta);
+                            }
+                            CameraType::Normal => {
+                                // Handle normal camera input if needed
+                                DebugCamera::handle_keyboard_input(camera, &movement_keys);
+                                DebugCamera::handle_mouse_input(camera, component, self.input_state.mouse_delta);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         match &self.signal {
@@ -364,8 +397,13 @@ impl Scene for Editor {
                         }
             },
             Signal::Play => {
-                // verify that a player camera is attached to an entity
-                if let Some(_) = self.camera_manager.get_player_camera_target() {
+                // Check if a player camera target exists
+                let has_player_camera_target = self.world
+                    .query::<(&Camera, &CameraComponent, &CameraFollowTarget)>()
+                    .iter()
+                    .any(|(_, (_, comp, _))| matches!(comp.camera_type, CameraType::Player));
+
+                if has_player_camera_target {
                     if let Err(e) = PlayModeBackup::create_backup(self) {
                         crate::fatal!("Failed to create play mode backup: {}", e);
                         self.signal = Signal::None;
@@ -374,7 +412,7 @@ impl Scene for Editor {
 
                     self.editor_state = EditorState::Playing;
 
-                    self.camera_manager.set_active(CameraType::Player);
+                    self.switch_to_player_camera();
 
                     let mut script_entities = Vec::new();
                     for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
@@ -414,7 +452,7 @@ impl Scene for Editor {
 
                 self.editor_state = EditorState::Editing;
 
-                self.camera_manager.set_active(CameraType::Debug);
+                self.switch_to_debug_camera();
 
                 for (entity_id, _) in self.world.query::<&ScriptComponent>().iter() {
                     self.script_manager.remove_entity_script(entity_id);
@@ -426,17 +464,57 @@ impl Scene for Editor {
                 self.signal = Signal::None;
             },
             Signal::CameraAction(action) => match action {
-                        CameraAction::SetPlayerTarget { entity, offset } => {
-                            self.camera_manager
-                                .set_player_camera_target(*entity, *offset);
-                            self.signal = Signal::None;
+                CameraAction::SetPlayerTarget { entity, offset } => {
+                    // Find player camera and add/update CameraFollowTarget component
+                    let player_camera = self.world
+                        .query::<(&Camera, &CameraComponent)>()
+                        .iter()
+                        .find_map(|(e, (_, comp))| {
+                            if matches!(comp.camera_type, CameraType::Player) {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(camera_entity) = player_camera {
+                        let mut follow_target = (false, CameraFollowTarget::default());
+                        // Find the target entity label
+                        if let Ok(mut query) = self.world.query_one::<&AdoptedEntity>(*entity) {
+                            if let Some(adopted) = query.get() {
+                                follow_target = (true, CameraFollowTarget {
+                                    follow_target: adopted.label().to_string(),
+                                    offset: *offset,
+                                });
+                            }
                         }
-                        CameraAction::ClearPlayerTarget => {
-                            self.camera_manager.clear_player_camera_target();
-                            crate::info!("Cleared player camera target");
-                            self.signal = Signal::None;
+
+                        if follow_target.0 {
+                            let _ = self.world.insert_one(camera_entity, follow_target);
+                            crate::info!("Set player camera target to entity {:?}", entity);
                         }
-                    },
+                    }
+                    self.signal = Signal::None;
+                }
+                CameraAction::ClearPlayerTarget => {
+                    let player_camera = self.world
+                        .query::<(&Camera, &CameraComponent)>()
+                        .iter()
+                        .find_map(|(e, (_, comp))| {
+                            if matches!(comp.camera_type, CameraType::Player) {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(camera_entity) = player_camera {
+                        let _ = self.world.remove_one::<CameraFollowTarget>(camera_entity);
+                    }
+                    crate::info!("Cleared player camera target");
+                    self.signal = Signal::None;
+                }
+            },
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
@@ -616,12 +694,38 @@ impl Scene for Editor {
         self.size = current_size;
         
         let new_aspect = current_size.width as f64 / current_size.height as f64;
-        if let Some(camera) = self.camera_manager.get_active_mut() {
-            camera.aspect = new_aspect;
+        if let Some(active_camera) = self.active_camera {
+            if let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera) {
+                if let Some(camera) = query.get() {
+                    camera.aspect = new_aspect;
+                }
+            }
         }
 
-        self.camera_manager.update_camera_following(&self.world, dt);
-        self.camera_manager.update_all(dt, graphics);
+        for (_entity_id, (camera, _component, follow_target)) in self
+            .world
+            .query::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
+            .iter()
+        {
+            if let Some(target) = follow_target {
+                for (_target_entity_id, (adopted, transform)) in self
+                    .world
+                    .query::<(&AdoptedEntity, &Transform)>()
+                    .iter()
+                {
+                    if adopted.label() == &target.follow_target {
+                        let target_pos = transform.position;
+                        camera.eye = target_pos + target.offset;
+                        camera.target = target_pos;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (_entity_id, camera) in self.world.query::<&mut Camera>().iter() {
+            camera.update(graphics);
+        }
 
         let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
@@ -653,53 +757,56 @@ impl Scene for Editor {
         self.window = Some(graphics.state.window.clone());
         crate::logging::render(&graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
-            if let Some(camera) = self.camera_manager.get_active() {
-                let mut light_query = self.world.query::<(&Light, &LightComponent)>();
-                let mut entity_query = self.world.query::<(&AdoptedEntity, &Transform)>();
-                {
-                    let mut render_pass = graphics.clear_colour(color);
+            if let Some(active_camera) = self.active_camera {
+                if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
+                    if let Some(camera) = query.get() {
+                        let mut light_query = self.world.query::<(&Light, &LightComponent)>();
+                        let mut entity_query = self.world.query::<(&AdoptedEntity, &Transform)>();
+                        {
+                            let mut render_pass = graphics.clear_colour(color);
 
-                    if let Some(light_pipeline) = &self.light_manager.pipeline {
-                        render_pass.set_pipeline(light_pipeline);
-                        for (_, (light, component)) in light_query.iter() {
-                            if component.enabled {
-                                render_pass.set_vertex_buffer(1, light.instance_buffer.as_ref().unwrap().slice(..));
-                                render_pass.draw_light_model(
-                                    light.model(),
+                            if let Some(light_pipeline) = &self.light_manager.pipeline {
+                                render_pass.set_pipeline(light_pipeline);
+                                for (_, (light, component)) in light_query.iter() {
+                                    if component.enabled {
+                                        render_pass.set_vertex_buffer(1, light.instance_buffer.as_ref().unwrap().slice(..));
+                                        render_pass.draw_light_model(
+                                            light.model(),
+                                            camera.bind_group(),
+                                            light.bind_group(),
+                                        );
+                                    }
+                                }
+                            }
+
+                            let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> = HashMap::new();
+
+                            for (_, (entity, _)) in entity_query.iter() {
+                                let model_ptr = entity.model() as *const Model;
+                                let instance_raw = entity.instance.to_raw();
+                                model_batches.entry(model_ptr).or_insert(Vec::new()).push(instance_raw);
+                            }
+
+                            render_pass.set_pipeline(pipeline);
+
+                            for (model_ptr, instances) in model_batches {
+                                let model = unsafe { &*model_ptr };
+
+                                let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("Batched Instance Buffer"),
+                                    contents: bytemuck::cast_slice(&instances),
+                                    usage: wgpu::BufferUsages::VERTEX,
+                                });
+
+                                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                render_pass.draw_model_instanced(
+                                    model,
+                                    0..instances.len() as u32,
                                     camera.bind_group(),
-                                    light.bind_group(),
+                                    self.light_manager.bind_group(),
                                 );
                             }
                         }
-                    }
-
-                    let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> = HashMap::new();
-
-                    for (_, (entity, _)) in entity_query.iter() {
-                        let model_ptr = entity.model() as *const Model;
-                        let instance_raw = entity.instance.to_raw();  // Use instance directly
-                        model_batches.entry(model_ptr).or_insert(Vec::new()).push(instance_raw);
-                    }
-
-                    render_pass.set_pipeline(pipeline);
-
-                    for (model_ptr, instances) in model_batches {
-                        let model = unsafe { &*model_ptr };
-
-                        // Create a temporary instance buffer for this batch
-                        let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Batched Instance Buffer"),
-                            contents: bytemuck::cast_slice(&instances),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-
-                        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                        render_pass.draw_model_instanced(
-                            model,
-                            0..instances.len() as u32,
-                            camera.bind_group(),
-                            self.light_manager.bind_group(),
-                        );
                     }
                 }
             }

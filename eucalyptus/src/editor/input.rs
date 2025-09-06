@@ -239,8 +239,19 @@ impl Mouse for Editor {
 
                 let dx = position.x - center.x;
                 let dy = position.y - center.y;
-                let camera = self.camera_manager.get_active_mut().unwrap();
-                camera.track_mouse_delta(dx, dy);
+                if let Some(active_camera) = self.active_camera {
+                    if let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                        if let Some((camera, _, _)) = q.get() {
+                            camera.track_mouse_delta(dx, dy);
+                        } else {
+                            log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                        }
+                    } else {
+                        log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+                    }
+                } else {
+                    log_once::warn_once!("No active camera found");
+                }
 
                 let _ = window.set_cursor_position(center);
                 window.set_cursor_visible(false);
