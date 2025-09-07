@@ -174,17 +174,7 @@ impl Component for Camera {
                 ui.horizontal(|ui| {
                     ui.label("Target:");
                     ui.label(format!("{:.2}, {:.2}, {:.2}", self.target.x, self.target.y, self.target.z));
-                });                
-
-                // ui.horizontal(|ui| {
-                //     ui.label("Speed:");
-                //     ui.add(egui::DragValue::new(&mut self.speed).speed(0.1).range(0.1..=20.0));
-                // });
-
-                // ui.horizontal(|ui| {
-                //     ui.label("Sensitivity:");
-                //     ui.add(egui::DragValue::new(&mut self.sensitivity).speed(0.0001).range(0.0001..=0.01));
-                // });
+                });
             });
         });
     }

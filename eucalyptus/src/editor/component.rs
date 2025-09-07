@@ -428,6 +428,15 @@ impl Component for ScriptComponent {
                                     .unwrap_or_default()
                                     .to_string_lossy()
                                     .to_string();
+                                let lib_path = &script_file.clone().parent().unwrap().join("dropbear.ts");
+                                if let Err(_) = std::fs::read(lib_path) {
+                                    log::warn!("dropbear.ts library does not exist in project source directory, copying...");
+                                    if let Err(e) = std::fs::write(lib_path, include_str!("../dropbear.ts")) {
+                                        log::error!("Non-fatal error: Creating library file failed: {}", e);
+                                    } else {
+                                        log::info!("Wrote dropbear.ts library file!");
+                                    }
+                                };
                                 *signal = Signal::ScriptAction(ScriptAction::AttachScript {
                                     script_path: script_file,
                                     script_name,
