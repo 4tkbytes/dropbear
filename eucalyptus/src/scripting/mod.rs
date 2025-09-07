@@ -1,12 +1,18 @@
+pub mod camera;
 pub mod entity;
 pub mod math;
 pub mod input;
+pub mod lighting;
 
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::World;
 use rustyscript::{serde_json, Module, ModuleHandle, Runtime, RuntimeOptions};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
+
+pub trait ScriptableModule {
+    fn register(runtime: &mut Runtime) -> anyhow::Result<()>;
+}
 
 use crate::states::{EntityNode, ModelProperties, ScriptComponent, PROJECT, SOURCE};
 
@@ -164,19 +170,26 @@ pub struct ScriptManager {
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
         let mut runtime = Runtime::new(RuntimeOptions::default())?;
-
         let dropbear_content = include_str!("../dropbear.ts");
         let dropbear_module = Module::new("./dropbear.ts", dropbear_content);
         runtime.load_module(&dropbear_module)?;
         log::debug!("Loaded dropbear module");
 
-        // Register modules
-        math::register_math_functions(&mut runtime)?;
-        input::InputState::register_input_modules(&mut runtime)?;
-        entity::register_model_props_module(&mut runtime)?;
+        let mut result = Self {
+            runtime,
+            compiled_scripts: HashMap::new(),
+            entity_script_data: HashMap::new(),
+        };
+
+        result = result
+            .register_module::<input::InputState>()?
+            .register_module::<math::Math>()?
+            .register_module::<ModelProperties>()?
+            .register_module::<camera::Camera>()?
+            .register_module::<lighting::Lighting>()?;
 
         // Register utility functions
-        runtime.register_function("log", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        result.runtime.register_function("log", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
             let msg = args.get(0)
                 .and_then(|v| v.as_str())
                 .unwrap_or("undefined");
@@ -184,7 +197,7 @@ impl ScriptManager {
             Ok(serde_json::Value::Null)
         })?;
 
-        runtime.register_function("time", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
+        result.runtime.register_function("time", |_args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
             let time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -192,11 +205,25 @@ impl ScriptManager {
             Ok(serde_json::Value::Number(serde_json::Number::from_f64(time).unwrap()))
         })?;
         log::debug!("Initialised ScriptManager");
-        Ok(Self {
-            runtime,
-            compiled_scripts: HashMap::new(),
-            entity_script_data: HashMap::new(),
-        })
+        Ok(result)
+    }
+
+    /// Allows for the registering of other modules to use with the dropbear typescript
+    /// API
+    /// 
+    /// # Parameters
+    /// * A turbofish to a struct that uses the ScriptableModule trait
+    /// 
+    /// # Examples
+    /// ```rust
+    /// let script_manager = ScriptManager::new()?
+    ///     .register_module::<input::InputState>()?
+    ///     .register_module::<camera::Camera>()?
+    ///     .register_module::<lighting::LightingModule>()?;
+    /// ```
+    pub fn register_module<T: ScriptableModule>(mut self) -> anyhow::Result<Self> {
+        T::register(&mut self.runtime)?;
+        Ok(self)
     }
 
     pub fn init_entity_script(

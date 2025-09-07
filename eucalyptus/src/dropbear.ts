@@ -624,6 +624,23 @@ export class EntityProperties {
         return this.data[key] || false;
     }
 
+    /**
+     * Checks if the entity has a specific property as per a key. 
+     * 
+     * If the property exists, it will return true. If not, it will return false
+     * @param key - Property key.
+     * @returns - True is the value exists, false if not
+     * 
+     * @example
+     * ```ts
+     * if props.hasProperty("speed") {
+     *      let speed = props.getNumber("speed");
+     *      speed = speed+10;
+     * } else {
+     *      console.log("No value as speed exists");
+     * }
+     * ```
+     */
     public hasProperty(key: string): boolean {
         return key in this.data;
     }
@@ -634,6 +651,10 @@ export class Entity {
     public properties: EntityProperties;
     private inputData: InputData | null = null;
 
+    /**
+     * Creates a new instance of entity
+     * @param entityData - The entty data, typically parsed as an argument in the load or update functions
+     */
     constructor(entityData?: ScriptEntityData) {
         if (entityData) {
             this.transform = createTransformFromData(entityData.transform);
@@ -645,37 +666,94 @@ export class Entity {
         }
     }
 
-    // Input helpers
+    /**
+     * Checks if a key is pressed
+     * @param key - The specific keycode
+     * @returns - True is pressed, false if not
+     * 
+     * @example
+     * if entity.isKeyPressed(KeyCode::)
+     */
     isKeyPressed(key: KeyCode): boolean {
         if (!this.inputData) return false;
         return this.inputData.pressed_keys.indexOf(key) !== -1
     }
 
+    /**
+     * Fetches the mouse position
+     * @returns - The x,y position of the mouse
+     */
     getMousePosition(): [number, number] {
         return this.inputData?.mouse_pos || [0, 0];
     }
 
+    /**
+     * Fetches the change in the mouse position from the center (as it gets reset each frame)
+     * @returns - The dx,dy position of the mouse
+     */
     getMouseDelta(): [number, number] | null {
         return this.inputData?.mouse_delta || null;
     }
 
-    // Movement helpers
+    /**
+     * Moves the player forward on the Z axis
+     * @param distance - The distance (as a number) it moves forward by
+     */
     moveForward(distance: number): void {
         const movement = new Vector3(0, 0, -distance);
         this.transform.translate(movement);
     }
 
+    /**
+     * Moves the player back on the Z axis
+     * @param distance - The distance (as a number) it moves back by
+     */
+    moveBack(distance: number): void {
+        const movement = new Vector3(0, 0, distance);
+        this.transform.translate(movement);
+    }
+
+    /**
+     * Moves the player left on the X axis
+     * @param distance - The distance (as a number) it moves left by
+     */
+    moveLeft(distance: number): void {
+        const movement = new Vector3(-distance, 0, 0);
+        this.transform.translate(movement);
+    }
+
+    /**
+     * Moves the player right on the X axis
+     * @param distance - The distance (as a number) it moves right by
+     */
     moveRight(distance: number): void {
         const movement = new Vector3(distance, 0, 0);
         this.transform.translate(movement);
     }
 
+    /**
+     * Moves the player up on the Y axis
+     * @param distance - The distance (as a number) it moves up by
+     */
     moveUp(distance: number): void {
         const movement = new Vector3(0, distance, 0);
         this.transform.translate(movement);
     }
 
-    // Convert back to data format for Rust
+    /**
+     * Moves the player down on the Y axis
+     * @param distance - The distance (as a number) it moves down by
+     */
+    moveDown(distance: number): void {
+        const movement = new Vector3(0, -distance, 0);
+        this.transform.translate(movement);
+    }
+
+    /**
+     * Converts the data back to a serializable format for
+     * the engine to parse through and apply to the world
+     * @returns - The Script Entity Data
+     */
     toEntityData(): Partial<ScriptEntityData> {
         return {
             transform: {
@@ -690,17 +768,27 @@ export class Entity {
     }
 }
 
-// Type definitions
+/**
+ * A raw format for storing the transform data, typically used as a
+ * FFI by the engine
+ */
 export interface TransformData {
     position: [number, number, number];
     rotation: [number, number, number, number]; // quaternion [x, y, z, w]
     scale: [number, number, number];
 }
 
+/**
+ * A raw format for storing the custom entity properties from the engines
+ * raw FFI
+ */
 export interface EntityData {
     custom_properties: Record<string, any>;
 }
 
+/**
+ * A raw format for storing the input data
+ */
 export interface InputData {
     mouse_pos: [number, number];
     pressed_keys: string[];
@@ -708,12 +796,21 @@ export interface InputData {
     is_cursor_locked: boolean;
 }
 
+/**
+ * A raw format for storing the ScriptEntity
+ */
 export interface ScriptEntityData {
     transform: TransformData;
     entity: EntityData;
     input: InputData;
 }
 
+/**
+ * Helper function that creates a new {@link Transform} from 
+ * a {@link TransformData}
+ * @param data - The raw transformable ({@link TransformData})data
+ * @returns - An instance of a {@link Transform}
+ */
 export function createTransformFromData(data: TransformData): Transform {
     const position = Vector3.fromArray(data.position);
     const rotation = Quaternion.fromArray(data.rotation);
@@ -721,7 +818,7 @@ export function createTransformFromData(data: TransformData): Transform {
     return new Transform(position, rotation, scale);
 }
 
-// Global exports
+// global exports
 globalThis.Transform = Transform;
 globalThis.Vector3 = Vector3;
 globalThis.Quaternion = Quaternion;

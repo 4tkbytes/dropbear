@@ -1,5 +1,5 @@
 // dropbear-engine script template for eucalyptus
-import * as dropbear from "./dropbear.ts";
+import * as dropbear from "./dropbear";
 
 export function onLoad(e) {
     const entity = new dropbear.Entity(e);

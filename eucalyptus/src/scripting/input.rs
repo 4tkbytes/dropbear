@@ -4,6 +4,8 @@ use rustyscript::{serde_json, Runtime};
 use serde::{Deserialize, Serialize};
 use winit::{event::MouseButton, keyboard::KeyCode};
 
+use crate::scripting::ScriptableModule;
+
 #[derive(Clone)]
 pub struct InputState {
     #[allow(dead_code)]
@@ -44,24 +46,8 @@ impl Default for InputState {
     }
 }
 
-impl InputState {
-    pub fn new() -> Self {
-        Self {
-            mouse_pos: Default::default(),
-            mouse_button: Default::default(),
-            pressed_keys: HashSet::new(),
-            last_key_press_times: HashMap::new(),
-            double_press_threshold: Duration::from_millis(300),
-            mouse_delta: None,
-            is_cursor_locked: false,
-        }
-    }
-
-    pub fn lock_cursor(&mut self, toggle: bool) {
-        self.is_cursor_locked = toggle;
-    }
-
-    pub fn register_input_modules(runtime: &mut Runtime) -> anyhow::Result<()> {
+impl ScriptableModule for InputState {
+    fn register(runtime: &mut Runtime) -> anyhow::Result<()> {
         runtime.register_function("isKeyPressed", |args: &[serde_json::Value]| -> Result<serde_json::Value, rustyscript::Error> {
             if args.len() != 2 {
                 return Err(rustyscript::Error::Runtime("isKeyPressed requires 2 arguments (inputState, keyCode)".to_string()));
@@ -138,6 +124,24 @@ impl InputState {
 
         log::info!("[Script] Initialised input module");
         Ok(())
+    }
+}
+
+impl InputState {
+    pub fn new() -> Self {
+        Self {
+            mouse_pos: Default::default(),
+            mouse_button: Default::default(),
+            pressed_keys: HashSet::new(),
+            last_key_press_times: HashMap::new(),
+            double_press_threshold: Duration::from_millis(300),
+            mouse_delta: None,
+            is_cursor_locked: false,
+        }
+    }
+
+    pub fn lock_cursor(&mut self, toggle: bool) {
+        self.is_cursor_locked = toggle;
     }
 }
 
