@@ -80,7 +80,7 @@ editor = [
     "walkdir",
     "zip"
 ]
-default = ["editor"]
+# default = ["editor"]
 
 data-only = [
     "serde",

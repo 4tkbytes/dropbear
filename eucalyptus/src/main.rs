@@ -13,6 +13,12 @@ use eucalyptus::APP_INFO;
 #[cfg(feature = "editor")]
 // async 
 fn main() -> anyhow::Result<()> {
+    println!("Editor feature: {}", cfg!(feature = "editor"));
+    println!("Data-only feature: {}", cfg!(feature = "data-only"));
+    
+    if cfg!(feature = "data-only") {
+        panic!("You are using the data-only feature while compiled with the editor feature? Huh?");
+    }
     #[cfg(target_os = "android")]
     compile_error!("The `editor` feature is not supported on Android. If you are attempting\
  to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
@@ -141,6 +147,10 @@ fn main() {
     compile_error!("\n\nYou have not enabled the \"editor\" feature, therefore cannot use the eucalyptus editor. 
 Either import as a lib to use its structs and enums or enable the editor feature or enable the \"editor\" feature or just the default features\n\n");
 }
+
+#[cfg(all(feature = "editor", feature = "data-only"))]
+compile_error!("Features `editor` and `data-only` cannot be enabled at the same time");
+
 
 #[cfg(feature = "editor")]
 fn find_eucp_file() -> Result<PathBuf, String> {

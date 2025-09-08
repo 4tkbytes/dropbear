@@ -9,7 +9,7 @@ use winit::keyboard::KeyCode;
 
 use crate::editor::{component::Component, EntityType, Signal, StaticallyKept, UndoableAction};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CameraComponent {
     pub speed: f64,
     pub sensitivity: f64,
@@ -105,7 +105,7 @@ impl DebugCamera {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct CameraFollowTarget {
     pub follow_target: String,
     pub offset: DVec3,
@@ -180,6 +180,15 @@ impl Component for Camera {
     }
 }
 
+#[derive(Debug)]
+#[cfg(feature = "editor")]
+pub enum UndoableCameraAction {
+    Speed(hecs::Entity, f64),
+    Sensitivity(hecs::Entity, f64),
+    FOV(hecs::Entity, f64),
+    Type(hecs::Entity, CameraType),
+}
+
 #[cfg(feature = "editor")]
 impl Component for CameraComponent {
     fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
@@ -191,7 +200,12 @@ impl Component for CameraComponent {
                         .selected_text(format!("{:?}", self.camera_type))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.camera_type, CameraType::Normal, "Normal");
-                            ui.selectable_value(&mut self.camera_type, CameraType::Debug, "Debug");
+                            if !matches!(self.camera_type, CameraType::Player) {
+                                ui.selectable_value(&mut self.camera_type, CameraType::Debug, "Debug");
+                            } else {
+                                ui.add_enabled(false, egui::Button::new("Debug"));
+                                ui.label("Debug not available for player cameras");
+                            }
                             ui.selectable_value(&mut self.camera_type, CameraType::Player, "Player");
                         });
                 });
@@ -203,7 +217,7 @@ impl Component for CameraComponent {
 
                 ui.horizontal(|ui| {
                     ui.label("Sensitivity:");
-                    ui.add(egui::DragValue::new(&mut self.sensitivity).speed(0.0001).range(0.0001..=0.01));
+                    ui.add(egui::DragValue::new(&mut self.sensitivity).speed(0.0001).range(0.0001..=1.0));
                 });
 
                 ui.horizontal(|ui| {

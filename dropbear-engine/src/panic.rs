@@ -41,7 +41,5 @@ pub fn set_hook() {
                 .set_level(MessageLevel::Error)
                 .show();
         }
-
-        std::process::abort();
     }));
 }

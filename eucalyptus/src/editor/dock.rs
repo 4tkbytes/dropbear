@@ -694,6 +694,17 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             t.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         }
 
+                        if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                            ui.separator();
+                            ui.label("Camera Components:");
+                            camera.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                            camera_component.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                            
+                            if let Some(target) = follow_target {
+                                target.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                            }
+                        }
+
                         // if let Some(props) = _props {
                         //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         // }
@@ -702,13 +713,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             script.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         }
 
-                        if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
-                            camera.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
-                            camera_component.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
-                            if let Some(target) = follow_target {
-                                target.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
-                            }
-                        }
                         if let Some(t) = cfg.label_last_edit {
                             if t.elapsed() >= Duration::from_millis(500) {
                                 if let Some(ent) = cfg.old_label_entity.take() {

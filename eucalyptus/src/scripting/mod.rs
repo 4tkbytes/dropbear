@@ -343,7 +343,6 @@ impl ScriptManager {
             Err(anyhow::anyhow!("Script '{}' not found", script_name))
         }
     }
-// ...existing code...
 
     pub fn update_entity_script(
         &mut self,
@@ -450,16 +449,11 @@ impl ScriptManager {
         script_data: &serde_json::Value,
         world: &mut World,
     ) -> anyhow::Result<()> {
-        // Accept either:
-        //  - Partial RawSceneData { entities: [...] } where each entity is { label, properties, transform }
-        //  - Or a direct object for a single entity containing "transform" and/or "properties"
         if let Some(obj) = script_data.as_object() {
-            // If there is an "entities" array, apply each entry by matching labels
             if let Some(entities_val) = obj.get("entities").and_then(|v| v.as_array()) {
                 for ent in entities_val {
                     if let Some(ent_obj) = ent.as_object() {
                         if let Some(label) = ent_obj.get("label").and_then(|l| l.as_str()) {
-                            // find entity in world by label
                             if let Some(target_entity) = world
                                 .query_mut::<(&AdoptedEntity,)>()
                                 .into_iter()
@@ -470,7 +464,6 @@ impl ScriptManager {
                                         None
                                     }
                                 }) {
-                                // apply transform if present
                                 if let Some(transform_val) = ent_obj.get("transform") {
                                     if let Ok(new_t) = serde_json::from_value::<Transform>(transform_val.clone()) {
                                         if let Ok(mut tq) = world.query_one::<&mut Transform>(target_entity) {
@@ -483,7 +476,6 @@ impl ScriptManager {
                                         log::trace!("apply: failed to deserialize transform for label '{}'", label);
                                     }
                                 }
-                                // apply properties if present
                                 if let Some(props_val) = ent_obj.get("properties") {
                                     if let Ok(new_props) = serde_json::from_value::<ModelProperties>(props_val.clone()) {
                                         if let Ok(mut pq) = world.query_one::<&mut ModelProperties>(target_entity) {

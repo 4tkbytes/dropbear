@@ -772,15 +772,17 @@ impl SceneConfig {
             log::debug!("Loading entity: {}", entity_config.label);
             match &entity_config.model_path.ref_type {
                 ResourceReferenceType::File(reference) => {
-                    let path = {
-                        #[cfg(feature = "data-only")]
-                        {
+                    let path: PathBuf = {
+                        if cfg!(feature = "data-only") {
+                            log::debug!("Using feature data-only");
                             entity_config.model_path.to_executable_path()?
-                        }
-                        #[cfg(not(feature = "data-only"))]
-                        {
+                        } else if cfg!(feature = "editor") {
+                            log::debug!("Using feature editor");
                             entity_config.model_path.to_project_path(project_config.clone())
                                 .ok_or_else(|| anyhow::anyhow!("Unable to convert resource reference [{}] to project path", reference))?
+                        } else {
+                            log::debug!("Fuck you");
+                            panic!("Not using either the data-only feature or the editor feature, which resolve the path of the ResourceReference");
                         }
                     };
                     log::debug!("Path for entity {} is {} from reference {}", entity_config.label, path.display(), reference);
@@ -882,38 +884,33 @@ impl SceneConfig {
         for camera_config in &self.cameras {
             log::debug!("Loading camera {} of type {:?}", camera_config.label, camera_config.camera_type);
 
-            let camera = Camera::new(graphics, 
-                DVec3::from_array(camera_config.position), 
-                DVec3::from_array(camera_config.target), 
-                DVec3::from_array(camera_config.up), 
-                camera_config.aspect.into(), 
-                camera_config.fov.into(), 
-                camera_config.near.into(), 
-                camera_config.far.into(), 
-                camera_config.speed.into(), 
-                camera_config.sensitivity.into(),
-                Some(camera_config.label.as_str())
+            let camera = Camera::new(
+                graphics,
+                DVec3::from_array(camera_config.position),
+                DVec3::from_array(camera_config.target),
+                DVec3::from_array(camera_config.up),
+                camera_config.aspect,
+                camera_config.fov as f64,
+                camera_config.near as f64,
+                camera_config.far as f64,
+                camera_config.speed as f64,
+                camera_config.sensitivity as f64,
+                Some(&camera_config.label),
             );
 
             let component = CameraComponent {
-                speed: camera_config.speed.into(),
-                sensitivity: camera_config.speed.into(),
-                fov_y: camera_config.fov.into(),
+                speed: camera_config.speed as f64,
+                sensitivity: camera_config.sensitivity as f64,
+                fov_y: camera_config.fov as f64,
                 camera_type: camera_config.camera_type,
             };
 
-            if let Some(target) = &camera_config.follow_target_entity_label {
-                let mut entity: Option<hecs::Entity> = None;
-                let _ = world.query::<&AdoptedEntity>().iter().map(|(e, ae)| {
-                    if ae.label().as_str() == target.as_str() {
-                        entity = Some(e)
-                    }
-                });
-                if let Some(e) = entity {
-                    world.insert(e, (camera, component))?;
-                } else {
-                    world.spawn((camera, component));
-                }
+            if let (Some(target_label), Some(offset)) = (&camera_config.follow_target_entity_label, &camera_config.follow_offset) {
+                let follow_target = CameraFollowTarget {
+                    follow_target: target_label.clone(),
+                    offset: DVec3::from_array(*offset),
+                };
+                world.spawn((camera, component, follow_target));
             } else {
                 world.spawn((camera, component));
             }

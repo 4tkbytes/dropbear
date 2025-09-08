@@ -1,6 +1,6 @@
 // Modules for the dropbear-engine scripting component
 // Made by 4tkbytes
-// EDIT THIS IF YOU WISH, RECOMMENDED TO NOT TOUCH IT
+// EDIT THIS IF YOU WISH, I RECOMMEND YOU NOT TOUCH IT
 
 /**
  * A class describing the position, scale and rotation to be able to manipulate

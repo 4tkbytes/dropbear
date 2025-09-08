@@ -25,7 +25,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 
 use crate::{build::build, camera::{
-    CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera
+    CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera, UndoableCameraAction
 }, debug, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{CameraConfig, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode};
 
 pub struct Editor {
@@ -607,12 +607,14 @@ pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
     Spawn(hecs::Entity),
     Label(hecs::Entity, String, EntityType),
-    RemoveComponent(hecs::Entity, ComponentType)
+    RemoveComponent(hecs::Entity, ComponentType),
+    CameraAction(UndoableCameraAction),
 }
 #[derive(Debug)]
 pub enum EntityType {
     Entity,
     Light,
+    Camera,
 }
 
 impl UndoableAction {
@@ -663,7 +665,7 @@ impl UndoableAction {
                         if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
                             if let Some(adopted) = q.get() {
                                 adopted.label = original_label.clone();
-                                log::debug!("Reverted label for entity {:?} to '{}'", entity, original_label);
+                                log::debug!("Reverted label for light {:?} to '{}'", entity, original_label);
                                 Ok(())
                             } else {
                                 Err(anyhow::anyhow!("Unable to query the light for label revert"))
@@ -672,14 +674,63 @@ impl UndoableAction {
                             Err(anyhow::anyhow!("Could not find a light to query for label revert"))
                         }
                     },
+                    EntityType::Camera => {
+                        if let Ok(mut q) = world.query_one::<&mut Camera>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.label = original_label.clone();
+                                log::debug!("Reverted label for camera {:?} to '{}'", entity, original_label);
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!("Unable to query the camera for label revert"))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find a camera to query for label revert"))
+                        }
+                    }
                 }
             },
             UndoableAction::RemoveComponent(entity, c_type) => {
                 match c_type {
                     ComponentType::Script(component) => {
                         world.insert_one(*entity, component.clone())?;
+                    },
+                    ComponentType::Camera(camera, component, follow) => {
+                        if let Some(f) = follow {
+                            world.insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
+                        } else {
+                            world.insert(*entity, (camera.clone(), component.clone()))?;
+                        }
                     }
                 }
+                Ok(())
+            },
+            UndoableAction::CameraAction(action) => {
+                match action {
+                    UndoableCameraAction::Speed(entity, speed) => {
+                        if let Ok((cam, comp)) = world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity) {
+                            comp.speed = *speed;
+                            comp.update(cam);
+                        }
+                    },
+                    UndoableCameraAction::Sensitivity(entity, sensitivity) => {
+                        if let Ok((cam, comp)) = world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity) {
+                            comp.sensitivity = *sensitivity;
+                            comp.update(cam);
+                        }
+                    },
+                    UndoableCameraAction::FOV(entity, fov) => {
+                        if let Ok((cam, comp)) = world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity) {
+                            comp.fov_y = *fov;
+                            comp.update(cam);
+                        }
+                    },
+                    UndoableCameraAction::Type(entity, camera_type) => {
+                        if let Ok((cam, comp)) = world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity) {
+                            comp.camera_type = *camera_type;
+                            comp.update(cam);
+                        }
+                    },
+                };
                 Ok(())
             }
         }
@@ -713,7 +764,7 @@ impl Default for Editor {
 #[derive(Debug)]
 pub enum ComponentType {
     Script(ScriptComponent),
-    // Camera,
+    Camera(Camera, CameraComponent, Option<CameraFollowTarget>),
 }
 
 #[derive(Clone)]

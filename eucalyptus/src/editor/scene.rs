@@ -1,4 +1,4 @@
-use egui::Align2;
+use egui::{Align2, Image};
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform}, graphics::{Graphics, Shader}, lighting::{Light, LightComponent}, model::{DrawLight, DrawModel}, scene::{Scene, SceneCommand}
 };
@@ -547,7 +547,21 @@ impl Scene for Editor {
                                 }
                                 if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
                                     log::debug!("Adding camera component to entity [{}]", label);
-                                    log::debug!("Not implemented yet :(");
+                                    
+                                    let has_camera = self.world.query_one::<(&Camera, &CameraComponent)>(*entity).is_ok();
+                                    
+                                    if has_camera {
+                                        crate::warn!("Entity [{}] already has a camera component", label);
+                                    } else {
+                                        let camera = Camera::predetermined(graphics, Some(&format!("{} Camera", label)));
+                                        let component = CameraComponent::new();
+                                        
+                                        if let Err(e) = self.world.insert(*entity, (camera, component)) {
+                                            crate::warn!("Failed to add camera component to entity: {}", e);
+                                        } else {
+                                            crate::success!("Added the camera component");
+                                        }
+                                    }
                                     local_signal = Some(Signal::None);
                                 }
                             });
@@ -584,6 +598,34 @@ impl Scene for Editor {
                         } else {
                             log_once::warn_once!("Failed to add component to light: no light component found");
                         }
+                    },
+                    EntityType::Camera => {
+                        if let Ok((cam, _comp)) = self.world.query_one_mut::<(&Camera, &CameraComponent)>(*entity) {
+                            let mut show = true;
+                            egui::Window::new(format!("Add component for {}", cam.label))
+                                .scroll([false, true])
+                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                .enabled(true)
+                                .open(&mut show)
+                                .title_bar(true)
+                                .show(&graphics.get_egui_context(), |ui| {
+                                    egui_extras::install_image_loaders(ui.ctx());
+                                    ui.add(Image::from_bytes("bytes://theres_nothing", include_bytes!("../../../resources/theres_nothing.jpg")));
+                                    ui.label("Theres nothing...");
+                                    // // scripting
+                                    // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                    //     log::debug!("Adding scripting component to camera [{}]", cam.label);
+
+                                    //     crate::success!("Added the scripting component to camera [{}]", cam.label);
+                                    //     self.signal = Signal::None;
+                                    // }
+                                });
+                            if !show {
+                                self.signal = Signal::None;
+                            }
+                        } else {
+                            log_once::warn_once!("Failed to add component to light: no light component found");
+                        }
                     }
                 }
             },
@@ -598,8 +640,32 @@ impl Scene for Editor {
                             Err(e) => {
                                 crate::warn!("Failed to remove script component from entity: {}", e);
                             }
-                        }
+                        };
+                        self.signal = Signal::None;
                     },
+                    ComponentType::Camera(_, _, follow) => {
+                        if let Some(_) = follow {
+                            match self.world.remove::<(Camera, CameraComponent, CameraFollowTarget)>(*entity) {
+                                Ok(component) => {
+                                    crate::success!("Removed camera component from entity {:?}", entity);
+                                    UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Camera(component.0, component.1, Some(component.2))));
+                                }
+                                Err(e) => {
+                                    crate::warn!("Failed to remove camera component from entity: {}", e);
+                                }
+                            };
+                        } else {
+                            match self.world.remove::<(Camera, CameraComponent)>(*entity) {
+                                Ok(component) => {
+                                    crate::success!("Removed camera component from entity {:?}", entity);
+                                    UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Camera(component.0, component.1, None)));
+                                }
+                                Err(e) => {
+                                    crate::warn!("Failed to remove script component from entity: {}", e);
+                                }
+                            };
+                        }
+                    }
                 }
             }
             Signal::CreateEntity => {
@@ -673,6 +739,41 @@ impl Scene for Editor {
                                 }
                             }
                             crate::success!("Created new cube");
+
+                            self.signal = Signal::None;
+                        }
+
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
+                            log::debug!("Creating new cube");
+                            let model = Model::load_from_memory(
+                                graphics,
+                                include_bytes!("../../../resources/cube.obj").to_vec(),
+                                Some("Cube")
+                            );
+                            match model {
+                                Ok(model) => {
+                                    let cube = AdoptedEntity::adopt(
+                                        graphics,
+                                        model,
+                                        Some("Cube")
+                                    );
+                                    self.world.spawn((cube, Transform::new(), ModelProperties::new()));
+                                }
+                                Err(e) => {
+                                    crate::fatal!("Failed to load cube model: {}", e);
+                                }
+                            }
+                            crate::success!("Created new cube");
+
+                            self.signal = Signal::None;
+                        }
+
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
+                            log::debug!("Creating new cube");
+                            let camera = Camera::predetermined(graphics, None);
+                            let component = CameraComponent::new();
+                            self.world.spawn((camera, component));
+                            crate::success!("Created new camera");
 
                             self.signal = Signal::None;
                         }
