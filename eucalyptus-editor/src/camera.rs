@@ -1,136 +1,11 @@
-use std::{collections::HashSet, time::Instant};
-
-use dropbear_engine::camera::Camera;
+use std::time::Instant;
 use egui::{CollapsingHeader, Ui};
-use glam::DVec3;
 use hecs::Entity;
-use serde::{Deserialize, Serialize};
-use winit::keyboard::KeyCode;
+use dropbear_engine::camera::Camera;
+use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType};
+use crate::editor::component::Component;
+use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 
-use crate::editor::{component::Component, EntityType, Signal, StaticallyKept, UndoableAction};
-
-#[derive(Debug, Clone)]
-pub struct CameraComponent {
-    pub speed: f64,
-    pub sensitivity: f64,
-    pub fov_y: f64,
-    pub camera_type: CameraType
-}
-
-impl CameraComponent {
-    pub fn new() -> Self {
-        Self {
-            speed: 5.0,
-            sensitivity: 0.002,
-            fov_y: 60.0,
-            camera_type: CameraType::Normal,
-        }
-    }
-
-    pub fn update(&mut self, camera: &mut Camera) {
-        camera.speed = self.speed;
-        camera.sensitivity = self.sensitivity;
-        camera.fov_y = self.fov_y;
-    }
-
-    // setting camera offset is just adding the CameraFollowTarget struct
-    // to the ecs system
-}
-
-pub struct PlayerCamera;
-
-impl PlayerCamera {
-    pub fn new() -> CameraComponent {
-        CameraComponent {
-            camera_type: CameraType::Player,
-            ..CameraComponent::new()
-        }
-    }
-
-    pub fn handle_keyboard_input(
-        camera: &mut Camera,
-        pressed_keys: &HashSet<KeyCode>
-    ) {
-        for key in pressed_keys {
-            match key {
-                KeyCode::KeyW => camera.move_forwards(),
-                KeyCode::KeyA => camera.move_left(),
-                KeyCode::KeyD => camera.move_right(),
-                KeyCode::KeyS => camera.move_back(),
-                KeyCode::ShiftLeft => camera.move_down(),
-                KeyCode::Space => camera.move_up(),
-                _ => {}
-            }
-        }
-    }
-
-    pub fn handle_mouse_input(camera: &mut Camera, component: &CameraComponent, mouse_delta: Option<(f64, f64)>) {
-        if let Some((dx, dy)) = mouse_delta {
-            camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
-        }
-    }
-}
-
-pub struct DebugCamera;
-
-impl DebugCamera {
-    pub fn new() -> CameraComponent {
-        CameraComponent {
-            camera_type: CameraType::Debug,
-            ..CameraComponent::new()
-        }
-    }
-
-    pub fn handle_keyboard_input(
-        camera: &mut Camera,
-        pressed_keys: &HashSet<KeyCode>
-    ) {
-        for key in pressed_keys {
-            match key {
-                KeyCode::KeyW => camera.move_forwards(),
-                KeyCode::KeyA => camera.move_left(),
-                KeyCode::KeyD => camera.move_right(),
-                KeyCode::KeyS => camera.move_back(),
-                KeyCode::ShiftLeft => camera.move_down(),
-                KeyCode::Space => camera.move_up(),
-                _ => {}
-            }
-        }
-    }
-
-    pub fn handle_mouse_input(camera: &mut Camera, component: &CameraComponent, mouse_delta: Option<(f64, f64)>) {
-        if let Some((dx, dy)) = mouse_delta {
-            camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct CameraFollowTarget {
-    pub follow_target: String,
-    pub offset: DVec3,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CameraType {
-    Normal,
-    Debug,
-    Player,
-}
-
-impl Default for CameraType {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum CameraAction {
-    SetPlayerTarget { entity: hecs::Entity, offset: DVec3 },
-    ClearPlayerTarget,
-}
-
-#[cfg(feature = "editor")]
 impl Component for Camera {
     fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
         let _ = _signal;
@@ -181,15 +56,13 @@ impl Component for Camera {
 }
 
 #[derive(Debug)]
-#[cfg(feature = "editor")]
 pub enum UndoableCameraAction {
-    Speed(hecs::Entity, f64),
-    Sensitivity(hecs::Entity, f64),
-    FOV(hecs::Entity, f64),
-    Type(hecs::Entity, CameraType),
+    Speed(Entity, f64),
+    Sensitivity(Entity, f64),
+    FOV(Entity, f64),
+    Type(Entity, CameraType),
 }
 
-#[cfg(feature = "editor")]
 impl Component for CameraComponent {
     fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
         ui.group(|ui| {
@@ -238,7 +111,6 @@ impl Component for CameraComponent {
     }
 }
 
-#[cfg(feature = "editor")]
 impl Component for CameraFollowTarget {
     fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, signal: &mut Signal, _label: &mut String) {
         ui.group(|ui| {

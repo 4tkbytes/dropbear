@@ -17,7 +17,7 @@ use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
 
-use crate::states::{PROJECT, ProjectConfig};
+use eucalyptus_core::states::{PROJECT, ProjectConfig};
 
 #[derive(Default)]
 pub struct MainMenu {
@@ -112,7 +112,7 @@ impl MainMenu {
                         if let Some(path) = &project_path {
                             let mut config = ProjectConfig::new(project_name.clone(), &path);
                             let _ = config.write_to_all();
-                            let mut global = PROJECT.write().unwrap();
+                            let mut global = PROJECT.write();
                             *global = config;
                             Ok(())
                         } else {
@@ -193,7 +193,7 @@ impl Scene for MainMenu {
                                 match ProjectConfig::read_from(&path) {
                                     Ok(config) => {
                                         log::info!("Loaded project!");
-                                        let mut global = PROJECT.write().unwrap();
+                                        let mut global = PROJECT.write();
                                         *global = config;
                                         // println!("Loaded config info: {:#?}", global);
                                         self.scene_command =

@@ -23,10 +23,15 @@ use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
-
-use crate::{build::build, camera::{
-    CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera, UndoableCameraAction
-}, debug, scripting::{input::InputState, ScriptAction, ScriptManager}, states::{CameraConfig, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES}, utils::ViewportMode};
+use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera};
+use eucalyptus_core::{fatal, info, states, success, warn};
+use eucalyptus_core::scripting::input::InputState;
+use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
+use eucalyptus_core::states::{CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES};
+use eucalyptus_core::utils::ViewportMode;
+use crate::build::build;
+use crate::camera::UndoableCameraAction;
+use crate::debug;
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -150,7 +155,7 @@ impl Editor {
 
     /// Save the current world state to the active scene
     pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
-        let mut scenes = SCENES.write().unwrap();
+        let mut scenes = SCENES.write();
 
         let scene_index = if scenes.is_empty() {
             return Err(anyhow::anyhow!("No scenes loaded to save"));
@@ -233,20 +238,20 @@ impl Editor {
         self.save_current_scene()?;
 
         {
-            let mut config = PROJECT.write().unwrap();
+            let mut config = PROJECT.write();
             config.dock_layout = Some(self.dock_state.clone());
         }
 
         {
             let (scene_clone, project_path) = {
-                let scenes = SCENES.read().unwrap();
-                let project = PROJECT.read().unwrap();
+                let scenes = SCENES.read();
+                let project = PROJECT.read();
                 (scenes[0].clone(), project.project_path.clone())
             };
 
             scene_clone.write_to(&project_path)?;
 
-            let mut config = PROJECT.write().unwrap();
+            let mut config = PROJECT.write();
             config.write_to_all()?;
         }
 
@@ -254,7 +259,7 @@ impl Editor {
     }
 
     pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<()> {
-        let config = PROJECT.read().unwrap();
+        let config = PROJECT.read();
 
         self.project_path = Some(config.project_path.clone());
 
@@ -263,7 +268,7 @@ impl Editor {
         }
 
         {
-            let scenes = SCENES.read().unwrap();
+            let scenes = SCENES.read();
             if let Some(first_scene) = scenes.first() {
                 self.active_camera = Some(first_scene.load_into_world(&mut self.world, graphics)?);
 
@@ -317,10 +322,10 @@ impl Editor {
                         match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
-                                crate::fatal!("Error saving project: {}", e);
+                                fatal!("Error saving project: {}", e);
                             }
                         }
-                        crate::success!("Successfully saved project");
+                        success!("Successfully saved project");
                     }
                     if ui.button("Project Settings").clicked() {};
                     if matches!(self.editor_state, EditorState::Playing) {
@@ -336,13 +341,12 @@ impl Editor {
                         // todo: create a window for better build menu
                         if ui.button("Build").clicked() {
                             {
-                                if let Ok(proj) = PROJECT.read() {
-                                    match build(proj.project_path.join(format!("{}.eucp", proj.project_name.clone())).clone()) {
-                                        Ok(thingy) => crate::success!("Project output at {}", thingy.display()),
-                                        Err(e) => {
-                                            crate::fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);
-                                        },
-                                    }
+                                let proj = PROJECT.read();
+                                match build(proj.project_path.join(format!("{}.eucp", proj.project_name.clone())).clone()) {
+                                    Ok(thingy) => success!("Project output at {}", thingy.display()),
+                                    Err(e) => {
+                                        fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);
+                                    },
                                 }
                             }
                         }
@@ -353,10 +357,10 @@ impl Editor {
                         match self.save_project_config() {
                             Ok(_) => {}
                             Err(e) => {
-                                crate::fatal!("Error saving project: {}", e);
+                                fatal!("Error saving project: {}", e);
                             }
                         }
-                        crate::success!("Successfully saved project");
+                        success!("Successfully saved project");
                     }
                 });
                 ui.menu_button("Edit", |ui| {
@@ -365,7 +369,7 @@ impl Editor {
                             let query = self.world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
-                                    let s_entity = crate::states::SceneEntity {
+                                    let s_entity = states::SceneEntity {
                                         model_path: e.model().path.clone(),
                                         label: e.model().label.clone(),
                                         transform: *t,
@@ -375,15 +379,15 @@ impl Editor {
                                     };
                                     self.signal = Signal::Copy(s_entity);
 
-                                    crate::info!("Copied selected entity!");
+                                    info!("Copied selected entity!");
                                 } else {
-                                    crate::warn!("Unable to copy entity: Unable to fetch world entity properties");
+                                    warn!("Unable to copy entity: Unable to fetch world entity properties");
                                 }
                             } else {
-                                crate::warn!("Unable to copy entity: Unable to obtain lock");
+                                warn!("Unable to copy entity: Unable to obtain lock");
                             }
                         } else {
-                            crate::warn!("Unable to copy entity: None selected");
+                            warn!("Unable to copy entity: None selected");
                         }
                     }
 
@@ -393,7 +397,7 @@ impl Editor {
                                 self.signal = Signal::Paste(entity.clone());
                             }
                             _ => {
-                                crate::warn!("Unable to paste: You haven't selected anything!");
+                                warn!("Unable to paste: You haven't selected anything!");
                             }
                         }
                     }
@@ -420,7 +424,8 @@ impl Editor {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
                 });
-                if let Ok(cfg) = PROJECT.read() {
+                {
+                    let cfg = PROJECT.read();
                     if cfg.editor_settings.is_debug_menu_shown {
                         debug::show_menu_bar(ui, &mut self.signal);
                     }
@@ -480,9 +485,9 @@ impl Editor {
 
         if let Some(camera_entity) = debug_camera {
             self.active_camera = Some(camera_entity);
-            crate::info!("Switched to debug camera");
+            info!("Switched to debug camera");
         } else {
-            crate::warn!("No debug camera found in the world");
+            warn!("No debug camera found in the world");
         }
     }
 
@@ -499,9 +504,9 @@ impl Editor {
 
         if let Some(camera_entity) = player_camera {
             self.active_camera = Some(camera_entity);
-            crate::info!("Switched to player camera");
+            info!("Switched to player camera");
         } else {
-            crate::warn!("No player camera found in the world");
+            warn!("No player camera found in the world");
         }
     }
 
@@ -608,6 +613,7 @@ pub enum UndoableAction {
     Spawn(hecs::Entity),
     Label(hecs::Entity, String, EntityType),
     RemoveComponent(hecs::Entity, ComponentType),
+    #[allow(dead_code)]
     CameraAction(UndoableCameraAction),
 }
 #[derive(Debug)]

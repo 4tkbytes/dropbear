@@ -7,3 +7,34 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+app_dirs2.workspace = true
+bincode.workspace = true
+chrono.workspace = true
+dropbear-engine.workspace = true
+egui-toast-fork.workspace = true
+egui.workspace = true
+egui_dock-fork.workspace = true
+glam.workspace = true
+hecs.workspace = true
+log.workspace = true
+log-once.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
+ron.workspace = true
+serde.workspace = true
+winit.workspace = true
+zip.workspace = true
+rustyscript.workspace = true
+
+[features]
+editor = []
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd.workspace = true
+
+[build-dependencies]
+anyhow = "1.0"
+app_dirs2 = "2.5"
+reqwest = { version = "0.12", features = ["blocking"] }
+zip = "4.3"

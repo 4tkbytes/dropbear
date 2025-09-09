@@ -1,3 +1,4 @@
+use crate::editor::ViewportMode;
 use super::*;
 use std::{collections::HashSet, sync::LazyLock};
 
@@ -7,33 +8,21 @@ use egui_dock_fork::TabViewer;
 use egui_extras;
 use log;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
     math::{DMat4, DVec3}, EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode
 };
-
-use crate::{
-    APP_INFO,
-    editor::scene::PENDING_SPAWNS,
-    states::{EntityNode, Node, RESOURCES, ResourceType},
-    utils::PendingSpawn,
-};
+use eucalyptus_core::states::{Node, ResourceType, RESOURCES};
+use eucalyptus_core::utils::PendingSpawn;
+use crate::APP_INFO;
 use crate::editor::component::Component;
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum EditorTab {
-    AssetViewer,       // bottom side,
-    ResourceInspector, // left side,
-    ModelEntityList,   // right side,
-    Viewport,          // middle,
-}
+use crate::editor::scene::PENDING_SPAWNS;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub world: &'a mut hecs::World,
+    pub world: &'a mut World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
@@ -47,7 +36,7 @@ impl<'a> EditorTabViewer<'a> {
     fn spawn_entity_at_pos(
         &mut self,
         asset: &DraggedAsset,
-        position: glam::DVec3,
+        position: DVec3,
         properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
         let mut transform = Transform::default();
@@ -379,7 +368,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     log_once::warn_once!("No active camera found");
                 }
 
-                if !matches!(self.viewport_mode, crate::utils::ViewportMode::None) {
+                if !matches!(self.viewport_mode, ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
                         if let Ok(transform) =
                             self.world.query_one_mut::<&mut Transform>(*entity_id)
@@ -442,7 +431,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 let mut assets: Vec<(String, String, PathBuf, ResourceType)> = Vec::new();
                 {
-                    let res = RESOURCES.read().unwrap();
+                    let res = RESOURCES.read();
                     egui_extras::install_image_loaders(ui.ctx());
 
                     fn recursive_search_nodes_and_attach_thumbnail(
@@ -463,7 +452,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     }
                                     if let Some(ref res_type) = file.resource_type {
                                         match res_type {
-                                            crate::states::ResourceType::Model => {
+                                            ResourceType::Model => {
                                                 let ad_dir = app_dirs2::get_app_root(
                                                     app_dirs2::AppDataType::UserData,
                                                     &APP_INFO,
@@ -642,7 +631,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                                 asset.name, spawn_position
                                                             );
 
-                                                            crate::success!("Spawned {} at camera", asset.name);
+                                                            success!("Spawned {} at camera", asset.name);
                                                         }
                                                         Err(e) => {
                                                             log::error!(
@@ -650,7 +639,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             asset.name,
                                                             e);
 
-                                                            crate::fatal!("Failed to spawn {}: {}",
+                                                            fatal!("Failed to spawn {}: {}",
                                                                         asset.name, e);
                                                         }
                                                     }
@@ -840,10 +829,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             match import_object() {
                                 Ok(_) => {
-                                    crate::success!("Resource(s) imported successfully!");
+                                    success!("Resource(s) imported successfully!");
                                 }
                                 Err(e) => {
-                                    crate::warn!("Failed to import resource(s): {e}");
+                                    warn!("Failed to import resource(s): {e}");
                                 }
                             }
                             cfg.show_context_menu = false;
@@ -852,14 +841,15 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTabMenuAction::RefreshAssets => {
                             log::debug!("Refresh assets clicked");
-                            if let Ok(mut res) = RESOURCES.write() {
+                            {
+                                let mut res = RESOURCES.write();
                                 match res.update_mem() {
                                     Ok(res_cfg) => {
                                         *res = res_cfg;
-                                        crate::success!("Assets refreshed successfully!");
+                                        success!("Assets refreshed successfully!");
                                     }
                                     Err(e) => {
-                                        crate::fatal!("Failed to refresh assets: {}", e);
+                                        fatal!("Failed to refresh assets: {}", e);
                                     }
                                 }
                             }
@@ -894,7 +884,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
                             } else {
-                                crate::warn!("What are you adding a component to? Theres no entity selected...");
+                                warn!("What are you adding a component to? Theres no entity selected...");
                             }
 
                             cfg.show_context_menu = false;
@@ -914,7 +904,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     log::debug!("Queried selected entity, it has a script component");
                                     *self.signal = Signal::RemoveComponent(*entity, ComponentType::Script(script.clone()));
                                 } else {
-                                    crate::warn!("Selected entity does not have a script component to remove");
+                                    warn!("Selected entity does not have a script component to remove");
                                 }
                             } else {
                                 panic!("Paradoxical error: Cannot remove a component when its not selected...");
@@ -964,7 +954,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             for mde in model_ext.iter() {
                 if ext.contains(mde) {
                     // copy over to models folder
-                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                    {
+                        let project = PROJECT.read();
                         let models_dir = PathBuf::from(project.project_path.clone())
                             .join("resources")
                             .join("models");
@@ -981,7 +972,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             for tex in texture_ext.iter() {
                 if ext.contains(tex) {
                     // copy over to textures folder
-                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                    {
+                        let project = PROJECT.read();
                         let textures_dir = PathBuf::from(project.project_path.clone())
                             .join("resources")
                             .join("textures");
@@ -997,7 +989,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             }
 
             if !copied {
-                if let Some(project) = crate::states::PROJECT.read().ok() {
+                {
+                    let project = PROJECT.read();
                     // everything else copies over to resources root dir
                     let resources_dir =
                         PathBuf::from(project.project_path.clone()).join("resources");
@@ -1011,7 +1004,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             }
         }
         // save it all to ensure the eucc recognises it
-        let mut proj = PROJECT.write().unwrap();
+        let mut proj = PROJECT.write();
         proj.write_to_all()?;
         Ok(())
     } else {

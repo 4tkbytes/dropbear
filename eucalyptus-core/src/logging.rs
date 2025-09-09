@@ -29,7 +29,7 @@ pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
 ///
 /// Useful when paired with a function that contains [`crate`]
 #[cfg(feature = "editor")]
-pub(crate) fn render(context: &Context) {
+pub fn render(context: &Context) {
     let mut toasts = GLOBAL_TOASTS.lock();
     toasts.show(context);
 }
@@ -49,7 +49,7 @@ macro_rules! fatal {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
@@ -78,7 +78,7 @@ macro_rules! success {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                     text: _msg.into(),
@@ -108,7 +108,7 @@ macro_rules! warn {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                     text: _msg.into(),
@@ -137,7 +137,7 @@ macro_rules! info {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
@@ -167,7 +167,7 @@ macro_rules! info_without_console {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
@@ -197,7 +197,7 @@ macro_rules! success_without_console {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
@@ -227,7 +227,7 @@ macro_rules! warn_without_console {
         #[cfg(feature = "editor")]
         {
             use egui_toast_fork::{Toast, ToastKind};
-            use crate::logging::GLOBAL_TOASTS;
+            use eucalyptus_core::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),

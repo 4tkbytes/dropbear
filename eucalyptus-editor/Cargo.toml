@@ -7,3 +7,42 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
+eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
+anyhow.workspace = true
+app_dirs2.workspace = true
+bincode.workspace = true
+bytemuck.workspace = true
+dropbear-engine.workspace = true
+egui-toast-fork.workspace = true
+egui.workspace = true
+egui_dnd.workspace = true
+egui_dock-fork.workspace = true
+egui_extras.workspace = true
+gilrs.workspace = true
+git2 = { workspace = true, features = ["vendored-openssl"]}
+glam.workspace = true
+hecs.workspace = true
+log.workspace = true
+log-once.workspace = true
+model_to_image.workspace = true
+open.workspace = true
+parking_lot.workspace = true
+transform-gizmo-egui.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+clap.workspace = true
+walkdir.workspace = true
+zip.workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd.workspace = true
+
+[features]
+default = ["editor"]
+editor = ["eucalyptus-core/editor"]
+
+[build-dependencies]
+anyhow = "1.0"
+app_dirs2 = "2.5"
+reqwest = { version = "0.12", features = ["blocking"] }
+zip = "4.3"
