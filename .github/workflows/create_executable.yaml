@@ -11,7 +11,6 @@ jobs:
     if: contains(github.event.head_commit.message, 'jarvis, run github actions')
     name: Build for ${{ matrix.os_name }}
     runs-on: ${{ matrix.os }}
-    # Export AWS_LC_SYS_PREBUILT_NASM so aws-lc-rs build script will use its prebuilt NASM binary
     env:
       AWS_LC_SYS_PREBUILT_NASM: "1"
     strategy:
@@ -35,15 +34,15 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install NASM (Windows)
+      - name: Install Dependencies (Windows)
         if: matrix.os == 'windows-latest'
         run: choco install nasm -y
-
-      - name: Install NASM (Linux)
+        
+      - name: Install Dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y nasm
 
-      - name: Install NASM (macOS)
+      - name: Install Dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: brew install nasm
 
@@ -79,15 +78,17 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build eucalyptus
-        # keep AWS_LC_SYS_PREBUILT_NASM visible to the cargo build step
         env:
           AWS_LC_SYS_PREBUILT_NASM: ${{ env.AWS_LC_SYS_PREBUILT_NASM }}
-        run: cargo build --release --package eucalyptus --target ${{ matrix.target }}
-
+        run: cargo build --release --package eucalyptus-editor --target ${{ matrix.target }}
+      
+      # - name: Build redback-runtime
+      #   run: cargo build --release --package redback-runtime --target ${{ matrix.target }}
+      
       - name: Prepare artifact
         run: |
           mkdir dist
-          cp target/${{ matrix.target }}/release/eucalyptus${{ matrix.ext }} dist/
+          cp target/${{ matrix.target }}/release/eucalyptus-editor${{ matrix.ext }} dist/
           
           # Copy any library files from target/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
