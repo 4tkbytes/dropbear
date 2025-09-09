@@ -1,8 +1,8 @@
 // dropbear-engine script template for eucalyptus
-import * as dropbear from "./dropbear.ts";
+import * as dropbear from "./dropbear";
 
-export function onLoad(e) {
-    const entity = new dropbear.Entity(e);
+export function onLoad(s) {
+    dropbear.start(s);
     // ------- Your own code here -------
     console.log("I have been awoken");
 
@@ -10,16 +10,16 @@ export function onLoad(e) {
     // ----------------------------------
     // Do not remove anything outside unless
     // you know what you are doing.
-    return entity.toEntityData();
+    return dropbear.end();
 }
 
-export function onUpdate(e, dt: number) {
-    const entity = new dropbear.Entity(e);
+export function onUpdate(s, dt: number) {
+    dropbear.start(s);
     // ------- Your own code here -------
     console.log("I'm being updated!");
-
+    
 
     // ----------------------------------
     // Same thing over here!
-    return entity.toEntityData();
+    return dropbear.end();
 }

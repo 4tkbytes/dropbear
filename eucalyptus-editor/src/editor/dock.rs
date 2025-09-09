@@ -1,53 +1,42 @@
+use crate::editor::ViewportMode;
 use super::*;
 use std::{collections::HashSet, sync::LazyLock};
 
 use dropbear_engine::{entity::Transform, lighting::{Light, LightComponent}};
-use egui::{self, CollapsingHeader};
+use egui;
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use log;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use transform_gizmo_egui::{
     math::{DMat4, DVec3}, EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode
 };
-
-use crate::{
-    APP_INFO,
-    editor::scene::PENDING_SPAWNS,
-    states::{EntityNode, Node, RESOURCES, ResourceType},
-    utils::PendingSpawn,
-};
+use eucalyptus_core::states::{Node, ResourceType, RESOURCES};
+use eucalyptus_core::utils::PendingSpawn;
+use crate::APP_INFO;
 use crate::editor::component::Component;
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum EditorTab {
-    AssetViewer,       // bottom side,
-    ResourceInspector, // left side,
-    ModelEntityList,   // right side,
-    Viewport,          // middle,
-}
+use crate::editor::scene::PENDING_SPAWNS;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub world: &'a mut hecs::World,
+    pub world: &'a mut World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
-    pub camera_manager: &'a mut CameraManager,
     pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
     pub editor_mode: &'a mut EditorState,
+    pub active_camera: &'a mut Option<hecs::Entity>,
 }
 
 impl<'a> EditorTabViewer<'a> {
     fn spawn_entity_at_pos(
         &mut self,
         asset: &DraggedAsset,
-        position: glam::DVec3,
+        position: DVec3,
         properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
         let mut transform = Transform::default();
@@ -71,21 +60,6 @@ impl<'a> EditorTabViewer<'a> {
             }
             Ok(())
         }
-    }
-
-    #[allow(dead_code)]
-    // purely for debug, nothing else...
-    fn debug_camera_state(&self) {
-        let camera = self.camera_manager.get_active().unwrap();
-        log::debug!("Camera state:");
-        log::debug!("  Eye: {:?}", camera.eye);
-        log::debug!("  Target: {:?}", camera.target);
-        log::debug!("  Up: {:?}", camera.up);
-        log::debug!("  FOV Y: {}", camera.fov_y);
-        log::debug!("  Aspect: {}", camera.aspect);
-        log::debug!("  Z Near: {}", camera.znear);
-        log::debug!("  Proj Mat finite: {}", camera.proj_mat.is_finite());
-        log::debug!("  View Mat finite: {}", camera.view_mat.is_finite());
     }
 }
 
@@ -154,7 +128,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
         match tab {
             EditorTab::Viewport => {
-                let camera = self.camera_manager.get_active().unwrap();
+                // ------------------- Template for querying active camera -----------------
+                // if let Some(active_camera) = self.active_camera {
+                //     if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                //         if let Some((camera, component, follow_target)) = q.get() {
+
+                //         } else {
+                //             log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                //         }
+                //     } else {
+                //         log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+                //     }
+                // } else {
+                //     log_once::warn_once!("No active camera found");
+                // }
+                // -------------------------------------------------------------------------
 
                 let available_rect = ui.available_rect_before_wrap();
                 let available_size = available_rect.size();
@@ -201,123 +189,136 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let image_response = ui.interact(image_rect, ui.id().with("viewport_image"), egui::Sense::click_and_drag());
 
                 if image_response.clicked() {
-                    if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                        let viewport_rect = image_response.rect;
-                        let local_pos = click_pos - viewport_rect.min;
+                    if let Some(active_camera) = self.active_camera {
+                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                            if let Some((camera, _, _)) = q.get() {
+                                if let Some(click_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                                let viewport_rect = image_response.rect;
+                                let local_pos = click_pos - viewport_rect.min;
 
-                        let ndc_x = (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
-                        let ndc_y = 1.0 - (2.0 * local_pos.y / viewport_rect.height());
+                                let ndc_x = (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
+                                let ndc_y = 1.0 - (2.0 * local_pos.y / viewport_rect.height());
 
-                        let view_matrix =
-                            glam::DMat4::look_at_lh(camera.eye, camera.target, camera.up);
+                                let view_matrix =
+                                    glam::DMat4::look_at_lh(camera.eye, camera.target, camera.up);
 
-                        let proj_matrix = glam::DMat4::perspective_lh(
-                            camera.fov_y.to_radians(),
-                            camera.aspect,
-                            camera.znear,
-                            camera.zfar,
-                        );
+                                let proj_matrix = glam::DMat4::perspective_lh(
+                                    camera.fov_y.to_radians(),
+                                    camera.aspect,
+                                    camera.znear,
+                                    camera.zfar,
+                                );
 
-                        if !view_matrix.is_finite() {
-                            log::error!("Invalid view matrix");
-                            return;
-                        }
-                        if !proj_matrix.is_finite() {
-                            log::error!("Invalid projection matrix");
-                            return;
-                        }
+                                if !view_matrix.is_finite() {
+                                    log::error!("Invalid view matrix");
+                                    return;
+                                }
+                                if !proj_matrix.is_finite() {
+                                    log::error!("Invalid projection matrix");
+                                    return;
+                                }
 
-                        let view_proj = proj_matrix * view_matrix;
-                        let inv_view_proj = view_proj.inverse();
+                                let view_proj = proj_matrix * view_matrix;
+                                let inv_view_proj = view_proj.inverse();
 
-                        if !inv_view_proj.is_finite() {
-                            log::error!("Cannot invert view-projection matrix");
-                            return;
-                        }
+                                if !inv_view_proj.is_finite() {
+                                    log::error!("Cannot invert view-projection matrix");
+                                    return;
+                                }
 
-                        let ray_start_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 0.0, 1.0);
-                        let ray_end_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 1.0, 1.0);
+                                let ray_start_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 0.0, 1.0);
+                                let ray_end_ndc = glam::DVec4::new(ndc_x as f64, ndc_y as f64, 1.0, 1.0);
 
-                        let ray_start_world = inv_view_proj * ray_start_ndc;
-                        let ray_end_world = inv_view_proj * ray_end_ndc;
+                                let ray_start_world = inv_view_proj * ray_start_ndc;
+                                let ray_end_world = inv_view_proj * ray_end_ndc;
 
-                        if ray_start_world.w == 0.0 || ray_end_world.w == 0.0 {
-                            log::error!("Invalid homogeneous coordinates");
-                            return;
-                        }
+                                if ray_start_world.w == 0.0 || ray_end_world.w == 0.0 {
+                                    log::error!("Invalid homogeneous coordinates");
+                                    return;
+                                }
 
-                        let ray_start = ray_start_world.truncate() / ray_start_world.w;
-                        let ray_end = ray_end_world.truncate() / ray_end_world.w;
+                                let ray_start = ray_start_world.truncate() / ray_start_world.w;
+                                let ray_end = ray_end_world.truncate() / ray_end_world.w;
 
-                        if !ray_start.is_finite() || !ray_end.is_finite() {
-                            log::error!(
-                                "Invalid ray points - start: {:?}, end: {:?}",
-                                ray_start,
-                                ray_end
-                            );
-                            return;
-                        }
+                                if !ray_start.is_finite() || !ray_end.is_finite() {
+                                    log::error!(
+                                        "Invalid ray points - start: {:?}, end: {:?}",
+                                        ray_start,
+                                        ray_end
+                                    );
+                                    return;
+                                }
 
-                        let ray_direction = (ray_end - ray_start).normalize();
+                                let ray_direction = (ray_end - ray_start).normalize();
 
-                        if !ray_direction.is_finite() {
-                            log::error!("Invalid ray direction: {:?}", ray_direction);
-                            return;
-                        }
+                                if !ray_direction.is_finite() {
+                                    log::error!("Invalid ray direction: {:?}", ray_direction);
+                                    return;
+                                }
 
-                        let mut closest_distance = f64::INFINITY;
-                        let mut selected_entity_id: Option<hecs::Entity> = None;
-                        let mut entity_count = 0;
+                                let mut closest_distance = f64::INFINITY;
+                                let mut selected_entity_id: Option<hecs::Entity> = None;
+                                let mut entity_count = 0;
 
-                        for (entity_id, (transform, _)) in
-                            self.world.query::<(&Transform, &AdoptedEntity)>().iter()
-                        {
-                            entity_count += 1;
-                            let entity_pos = transform.position;
-                            let sphere_radius = transform.scale.max_element() * 1.5;
+                                for (entity_id, (transform, _)) in
+                                    self.world.query::<(&Transform, &AdoptedEntity)>().iter()
+                                {
+                                    entity_count += 1;
+                                    let entity_pos = transform.position;
+                                    let sphere_radius = transform.scale.max_element() * 1.5;
 
-                            let to_sphere = entity_pos - ray_start;
-                            let projection = to_sphere.dot(ray_direction);
+                                    let to_sphere = entity_pos - ray_start;
+                                    let projection = to_sphere.dot(ray_direction);
 
-                            if projection > 0.0 {
-                                let closest_point = ray_start + ray_direction * projection;
-                                let distance_to_sphere = (closest_point - entity_pos).length();
+                                    if projection > 0.0 {
+                                        let closest_point = ray_start + ray_direction * projection;
+                                        let distance_to_sphere = (closest_point - entity_pos).length();
 
-                                if distance_to_sphere <= sphere_radius {
-                                    let discriminant = sphere_radius * sphere_radius
-                                        - distance_to_sphere * distance_to_sphere;
-                                    if discriminant >= 0.0 {
-                                        let intersection_distance =
-                                            projection - discriminant.sqrt();
+                                        if distance_to_sphere <= sphere_radius {
+                                            let discriminant = sphere_radius * sphere_radius
+                                                - distance_to_sphere * distance_to_sphere;
+                                            if discriminant >= 0.0 {
+                                                let intersection_distance =
+                                                    projection - discriminant.sqrt();
 
-                                        if intersection_distance < closest_distance {
-                                            closest_distance = intersection_distance;
-                                            selected_entity_id = Some(entity_id);
+                                                if intersection_distance < closest_distance {
+                                                    closest_distance = intersection_distance;
+                                                    selected_entity_id = Some(entity_id);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                log::debug!("Total entities checked: {}", entity_count);
+
+                                if !matches!(self.editor_mode, EditorState::Playing) {
+                                    if let Some(entity_id) = selected_entity_id {
+                                        *self.selected_entity = Some(entity_id);
+                                        log::debug!("Selected entity: {:?}", entity_id);
+                                    } else {
+                                        // *self.selected_entity = None;
+                                        if entity_count == 0 {
+                                            log::debug!("No entities in world to select");
+                                        } else {
+                                            log::debug!(
+                                                "No entity hit by ray (checked {} entities)",
+                                                entity_count
+                                            );
                                         }
                                     }
                                 }
                             }
-                        }
-
-                        log::debug!("Total entities checked: {}", entity_count);
-
-                        if !matches!(self.editor_mode, EditorState::Playing) {
-                            if let Some(entity_id) = selected_entity_id {
-                                *self.selected_entity = Some(entity_id);
-                                log::debug!("Selected entity: {:?}", entity_id);
                             } else {
-                                // *self.selected_entity = None;
-                                if entity_count == 0 {
-                                    log::debug!("No entities in world to select");
-                                } else {
-                                    log::debug!(
-                                        "No entity hit by ray (checked {} entities)",
-                                        entity_count
-                                    );
-                                }
+                                log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
                             }
+                        } else {
+                            log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
                         }
+                    } else {
+                        log_once::warn_once!("No active camera found");
                     }
+                    
                 }
 
                 let snapping = ui.input(|input| input.modifiers.shift);
@@ -325,35 +326,49 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 // Note to self: fuck you >:(
                 // Note to self: ok wow thats pretty rude im trying my best ＞﹏＜
                 // Note to self: finally holy shit i got it working
-                self.gizmo.update_config(GizmoConfig {
-                    view_matrix: DMat4::look_at_lh(
-                        DVec3::new(
-                            camera.eye.x as f64,
-                            camera.eye.y as f64,
-                            camera.eye.z as f64,
-                        ),
-                        DVec3::new(
-                            camera.target.x as f64,
-                            camera.target.y as f64,
-                            camera.target.z as f64,
-                        ),
-                        DVec3::new(camera.up.x as f64, camera.up.y as f64, camera.up.z as f64),
-                    )
-                    .into(),
-                    projection_matrix: DMat4::perspective_infinite_reverse_lh(
-                        camera.fov_y as f64,
-                        display_width as f64 / display_height as f64,
-                        camera.znear as f64,
-                    )
-                    .into(),
-                    viewport: image_rect,
-                    modes: *self.gizmo_mode,
-                    orientation: transform_gizmo_egui::GizmoOrientation::Global,
-                    snapping,
-                    ..Default::default()
-                });
 
-                if !matches!(self.viewport_mode, crate::utils::ViewportMode::None) {
+                if let Some(active_camera) = self.active_camera {
+                    if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                        if let Some((camera, _, _)) = q.get() {
+                            self.gizmo.update_config(GizmoConfig {
+                            view_matrix: DMat4::look_at_lh(
+                                DVec3::new(
+                                    camera.eye.x as f64,
+                                    camera.eye.y as f64,
+                                    camera.eye.z as f64,
+                                ),
+                                DVec3::new(
+                                    camera.target.x as f64,
+                                    camera.target.y as f64,
+                                    camera.target.z as f64,
+                                ),
+                                DVec3::new(camera.up.x as f64, camera.up.y as f64, camera.up.z as f64),
+                            )
+                            .into(),
+                            projection_matrix: DMat4::perspective_infinite_reverse_lh(
+                                camera.fov_y as f64,
+                                display_width as f64 / display_height as f64,
+                                camera.znear as f64,
+                            )
+                            .into(),
+                            viewport: image_rect,
+                            modes: *self.gizmo_mode,
+                            orientation: transform_gizmo_egui::GizmoOrientation::Global,
+                            snapping,
+                            snap_distance: 1.0,
+                            ..Default::default()
+                        });
+                        } else {
+                            log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                        }
+                    } else {
+                        log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+                    }
+                } else {
+                    log_once::warn_once!("No active camera found");
+                }
+
+                if !matches!(self.viewport_mode, ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
                         if let Ok(transform) =
                             self.world.query_one_mut::<&mut Transform>(*entity_id)
@@ -416,7 +431,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 let mut assets: Vec<(String, String, PathBuf, ResourceType)> = Vec::new();
                 {
-                    let res = RESOURCES.read().unwrap();
+                    let res = RESOURCES.read();
                     egui_extras::install_image_loaders(ui.ctx());
 
                     fn recursive_search_nodes_and_attach_thumbnail(
@@ -437,7 +452,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     }
                                     if let Some(ref res_type) = file.resource_type {
                                         match res_type {
-                                            crate::states::ResourceType::Model => {
+                                            ResourceType::Model => {
                                                 let ad_dir = app_dirs2::get_app_root(
                                                     app_dirs2::AppDataType::UserData,
                                                     &APP_INFO,
@@ -589,7 +604,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                             if is_d_clicked {
                                                 if matches!(asset_type, ResourceType::Model) {
-                                                    let spawn_position = self.camera_manager.get_active().unwrap().eye;
+                                                    let mut spawn_position = DVec3::default();
+                                                    if let Some(active_camera) = self.active_camera {
+                                                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                                                            if let Some((camera, _, _)) = q.get() {
+                                                                spawn_position = camera.eye;
+                                                            } else {
+                                                                log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                                                            }
+                                                        } else {
+                                                            log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+                                                        }
+                                                    } else {
+                                                        log_once::warn_once!("No active camera found");
+                                                    }
+
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
                                                         path: asset_path.clone(),
@@ -602,7 +631,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                                 asset.name, spawn_position
                                                             );
 
-                                                            crate::success!("Spawned {} at camera", asset.name);
+                                                            success!("Spawned {} at camera", asset.name);
                                                         }
                                                         Err(e) => {
                                                             log::error!(
@@ -610,7 +639,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             asset.name,
                                                             e);
 
-                                                            crate::fatal!("Failed to spawn {}: {}",
+                                                            fatal!("Failed to spawn {}: {}",
                                                                         asset.name, e);
                                                         }
                                                     }
@@ -646,16 +675,23 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
-                    if let Ok((e, transform, _props, script)) = self
+                    if let Ok((e, transform, _props, script, camera, camera_component, follow_target)) = self
                     .world
-                    .query_one_mut::<(&mut AdoptedEntity, Option<&mut Transform>, Option<&ModelProperties>, Option<&mut ScriptComponent>)>(*entity) {
-                        let label = e.label().clone();
-
+                    .query_one_mut::<(&mut AdoptedEntity, Option<&mut Transform>, Option<&ModelProperties>, Option<&mut ScriptComponent>, Option<&mut Camera>, Option<&mut CameraComponent>, Option<&mut CameraFollowTarget>)>(*entity) {
                         e.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
-                        let mut trans = Transform::new();
                         if let Some(t) = transform {
                             t.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
-                            trans = t.clone();
+                        }
+
+                        if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                            ui.separator();
+                            ui.label("Camera Components:");
+                            camera.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                            camera_component.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                            
+                            if let Some(target) = follow_target {
+                                target.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                            }
                         }
 
                         // if let Some(props) = _props {
@@ -665,117 +701,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         if let Some(script) = script {
                             script.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
                         }
-
-                        // ==============================================================
-                        // todo: convert camera into component
-                        let entity_id_copy = *entity;
-                        let entity_label = label.clone();
-                        let entity_position = trans.position;
-                        let camera_manager = &self.camera_manager;
-                        let signal = &mut *self.signal;
-                        let get_player_camera_target =
-                            camera_manager.get_player_camera_target();
-                        let get_player_camera_offset =
-                            camera_manager.get_player_camera_offset();
-                        let get_active_type = camera_manager.get_active_type();
-                        let get_active_eye = camera_manager.get_active().unwrap().eye;
-                        
-                        let followed_entity_label = if let Some(target_entity) =
-                            get_player_camera_target
-                        {
-                            if target_entity != entity_id_copy {
-                                if let Ok((followed_entity, _, _)) = self.world
-                                    .query_one_mut::<(&AdoptedEntity, &Transform, &ModelProperties)>(target_entity)
-                                {
-                                    Some(followed_entity.label().to_string())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-
-                        ui.group(|ui| {
-                            CollapsingHeader::new("Camera")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    if ui.button("Capture Camera Position relative to Entity").clicked() {
-                                        let current_camera_pos = get_active_eye;
-                                        let calculated_offset = current_camera_pos - entity_position;
-                                        log::debug!("Capturing camera offset: entity at {:?}, camera at {:?}, offset: {:?}",
-                                            entity_position, current_camera_pos, calculated_offset);
-                                        *signal = Signal::CameraAction(CameraAction::SetPlayerTarget {
-                                            entity: entity_id_copy,
-                                            offset: calculated_offset,
-                                        });
-                                        crate::success_without_console!("Camera successfully attached to {}", entity_label);
-                                    }
-                                });
-                                ui.separator();
-                                ui.horizontal(|ui| {
-                                    ui.label("Status:");
-                                    let status_text = match get_active_type {
-                                        crate::camera::CameraType::Debug => {
-                                            egui::RichText::new("Debug Camera (Free)")
-                                                .color(egui::Color32::LIGHT_BLUE)
-                                        },
-                                        crate::camera::CameraType::Player => {
-                                            if let Some(target_entity) = get_player_camera_target {
-                                                if target_entity == entity_id_copy {
-                                                    egui::RichText::new("Following THIS Entity")
-                                                        .color(egui::Color32::LIGHT_GREEN)
-                                                        .strong()
-                                                } else {
-                                                    if let Some(followed_label) = &followed_entity_label {
-                                                        egui::RichText::new(format!("Following: {}", followed_label))
-                                                            .color(egui::Color32::YELLOW)
-                                                    } else {
-                                                        egui::RichText::new("Following: Unknown Entity")
-                                                            .color(egui::Color32::RED)
-                                                    }
-                                                }
-                                            } else {
-                                                egui::RichText::new("Player Camera (Free)")
-                                                    .color(egui::Color32::LIGHT_GRAY)
-                                            }
-                                        }
-                                    };
-                                    ui.label(status_text);
-                                });
-                        
-                                ui.separator();
-                        
-                                if let Some(target_entity) = get_player_camera_target {
-                                    if target_entity == entity_id_copy {
-                                        ui.horizontal(|ui| {
-                                            ui.label("Camera Offset:");
-                                            if let Some(offset) = get_player_camera_offset {
-                                                ui.label(format!("({:.2}, {:.2}, {:.2})", offset.x, offset.y, offset.z));
-                                            } else {
-                                                ui.label("Unknown");
-                                            }
-                                        });
-                                        ui.horizontal(|ui| {
-                                            ui.label("Distance:");
-                                            let camera_pos = get_active_eye;
-                                            let distance = (camera_pos - entity_position).length();
-                                            ui.label(format!("{:.2} units", distance));
-                                        });
-                                    }
-                                }
-                        
-                                ui.horizontal(|ui| {
-                                    if ui.button("Clear Camera Target").clicked() {
-                                        *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
-                                    }
-                                });
-                            });
-                        });
-                        // ==============================================================
 
                         if let Some(t) = cfg.label_last_edit {
                             if t.elapsed() >= Duration::from_millis(500) {
@@ -815,6 +740,28 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
                     } else {
                         log_once::debug_once!("Unable to query light inside resource inspector");
+                    }
+
+                    if let Ok((camera, camera_component, follow_target)) = self.world.query_one_mut::<(&mut Camera, &mut CameraComponent, Option<&mut CameraFollowTarget>)>(*entity) {
+                        camera.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut String::new());
+                        camera_component.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                        if let Some(target) = follow_target {
+                            target.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut camera.label.clone());
+                        }
+
+                        ui.separator();
+                        ui.label("Camera Controls:");
+                        if ui.button("Set as Active Camera").clicked() {
+                            *self.active_camera = Some(*entity);
+                            log::info!("Set camera '{}' as active", camera.label);
+                        }
+                        
+                        if matches!(self.editor_mode, EditorState::Editing) {
+                            if ui.button("Switch to This Camera").clicked() {
+                                *self.active_camera = Some(*entity);
+                                log::info!("Switched to camera '{}'", camera.label);
+                            }
+                        }
                     }
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
@@ -882,10 +829,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             match import_object() {
                                 Ok(_) => {
-                                    crate::success!("Resource(s) imported successfully!");
+                                    success!("Resource(s) imported successfully!");
                                 }
                                 Err(e) => {
-                                    crate::warn!("Failed to import resource(s): {e}");
+                                    warn!("Failed to import resource(s): {e}");
                                 }
                             }
                             cfg.show_context_menu = false;
@@ -894,14 +841,15 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                         EditorTabMenuAction::RefreshAssets => {
                             log::debug!("Refresh assets clicked");
-                            if let Ok(mut res) = RESOURCES.write() {
+                            {
+                                let mut res = RESOURCES.write();
                                 match res.update_mem() {
                                     Ok(res_cfg) => {
                                         *res = res_cfg;
-                                        crate::success!("Assets refreshed successfully!");
+                                        success!("Assets refreshed successfully!");
                                     }
                                     Err(e) => {
-                                        crate::fatal!("Failed to refresh assets: {}", e);
+                                        fatal!("Failed to refresh assets: {}", e);
                                     }
                                 }
                             }
@@ -936,7 +884,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
                             } else {
-                                crate::warn!("What are you adding a component to? Theres no entity selected...");
+                                warn!("What are you adding a component to? Theres no entity selected...");
                             }
 
                             cfg.show_context_menu = false;
@@ -956,7 +904,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     log::debug!("Queried selected entity, it has a script component");
                                     *self.signal = Signal::RemoveComponent(*entity, ComponentType::Script(script.clone()));
                                 } else {
-                                    crate::warn!("Selected entity does not have a script component to remove");
+                                    warn!("Selected entity does not have a script component to remove");
                                 }
                             } else {
                                 panic!("Paradoxical error: Cannot remove a component when its not selected...");
@@ -1006,7 +954,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             for mde in model_ext.iter() {
                 if ext.contains(mde) {
                     // copy over to models folder
-                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                    {
+                        let project = PROJECT.read();
                         let models_dir = PathBuf::from(project.project_path.clone())
                             .join("resources")
                             .join("models");
@@ -1023,7 +972,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             for tex in texture_ext.iter() {
                 if ext.contains(tex) {
                     // copy over to textures folder
-                    if let Some(project) = crate::states::PROJECT.read().ok() {
+                    {
+                        let project = PROJECT.read();
                         let textures_dir = PathBuf::from(project.project_path.clone())
                             .join("resources")
                             .join("textures");
@@ -1039,7 +989,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             }
 
             if !copied {
-                if let Some(project) = crate::states::PROJECT.read().ok() {
+                {
+                    let project = PROJECT.read();
                     // everything else copies over to resources root dir
                     let resources_dir =
                         PathBuf::from(project.project_path.clone()).join("resources");
@@ -1053,7 +1004,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
             }
         }
         // save it all to ensure the eucc recognises it
-        let mut proj = PROJECT.write().unwrap();
+        let mut proj = PROJECT.write();
         proj.write_to_all()?;
         Ok(())
     } else {

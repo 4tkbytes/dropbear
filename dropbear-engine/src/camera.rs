@@ -14,8 +14,10 @@ pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.5, 1.0],
 ];
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Camera {
+    pub label: String,
+
     pub eye: DVec3,
     pub target: DVec3,
     pub up: DVec3,
@@ -40,6 +42,7 @@ pub struct Camera {
 }
 
 impl Camera {
+    /// Creates a new camera
     pub fn new(
         graphics: &Graphics,
         eye: DVec3,
@@ -51,6 +54,7 @@ impl Camera {
         zfar: f64,
         speed: f64,
         sensitivity: f64,
+        label: Option<&str>,
     ) -> Self {
         let uniform = CameraUniform::new();
         let mut camera = Self {
@@ -69,6 +73,7 @@ impl Camera {
             yaw: 0.0,
             pitch: 0.0,
             sensitivity,
+            label: if let Some(l) = label { l.to_string() } else {String::from("Camera")},
             ..Default::default()
         };
         camera.update_view_proj();
@@ -79,7 +84,8 @@ impl Camera {
         camera
     }
 
-    pub fn predetermined(graphics: &Graphics) -> Self {
+    /// Creates a default camera
+    pub fn predetermined(graphics: &Graphics, label: Option<&str>) -> Self {
         Self::new(
             graphics,
             DVec3::new(0.0, 1.0, 2.0),
@@ -91,6 +97,7 @@ impl Camera {
             100.0,
             1.0,
             0.002,
+            label,
         )
     }
 
@@ -120,9 +127,22 @@ impl Camera {
         self.eye
     }
 
+    pub fn debug_camera_state(&self) {
+        let camera = self;
+        log::debug!("Camera state:");
+        log::debug!("  Eye: {:?}", camera.eye);
+        log::debug!("  Target: {:?}", camera.target);
+        log::debug!("  Up: {:?}", camera.up);
+        log::debug!("  FOV Y: {}", camera.fov_y);
+        log::debug!("  Aspect: {}", camera.aspect);
+        log::debug!("  Z Near: {}", camera.znear);
+        log::debug!("  Proj Mat finite: {}", camera.proj_mat.is_finite());
+        log::debug!("  View Mat finite: {}", camera.view_mat.is_finite());
+    }
+
     fn build_vp(&mut self) -> DMat4 {
         let view = DMat4::look_at_lh(self.eye, self.target, self.up);
-        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y, self.aspect, self.znear);
+        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y.to_radians(), self.aspect, self.znear);
 
         self.view_mat = view.clone();
         self.proj_mat = proj.clone();

@@ -1,6 +1,6 @@
 // Modules for the dropbear-engine scripting component
 // Made by 4tkbytes
-// EDIT THIS IF YOU WISH, RECOMMENDED TO NOT TOUCH IT
+// EDIT THIS IF YOU WISH, I RECOMMEND YOU NOT TOUCH IT
 
 /**
  * A class describing the position, scale and rotation to be able to manipulate
@@ -164,6 +164,26 @@ export const dbMath = {
     radiansToDegrees:(rad: number):number => {
         return (180 * rad) / Math.PI;
     },
+
+    /**
+     * Constrains a number to lie within a specified range. If value is less than min, returns min. 
+     * If value is greater than max, returns max. Otherwise, returns value.
+     * 
+     * @example
+     * ```ts
+     * dropbear.dbMath.clamp(5, 0, 10)     // → 5
+     * dropbear.dbMath.clamp(-3, 0, 10)    // → 0
+     * dropbear.dbMath.clamp(15, 0, 10)    // → 10
+     * ```
+     * 
+     * @param value - The input value to clamp
+     * @param min - The lower bound of the range
+     * @param max - The upper bound of the range
+     * @returns - The clamped value
+     */
+    clamp: (value: number, min: number, max: number): number => {
+        return Math.min(Math.max(value, min), max);
+    }
 }
 
 /**
@@ -624,83 +644,206 @@ export class EntityProperties {
         return this.data[key] || false;
     }
 
+    /**
+     * Checks if the entity has a specific property as per a key. 
+     * 
+     * If the property exists, it will return true. If not, it will return false
+     * @param key - Property key.
+     * @returns - True is the value exists, false if not
+     * 
+     * @example
+     * ```ts
+     * if props.hasProperty("speed") {
+     *      let speed = props.getNumber("speed");
+     *      speed = speed+10;
+     * } else {
+     *      console.log("No value as speed exists");
+     * }
+     * ```
+     */
     public hasProperty(key: string): boolean {
         return key in this.data;
     }
 }
 
 export class Entity {
+    public label: string;
     public transform: Transform;
     public properties: EntityProperties;
-    private inputData: InputData | null = null;
 
-    constructor(entityData?: ScriptEntityData) {
-        if (entityData) {
-            this.transform = createTransformFromData(entityData.transform);
-            this.properties = new EntityProperties(entityData.entity.custom_properties);
-            this.inputData = entityData.input;
-        } else {
-            this.transform = new Transform();
-            this.properties = new EntityProperties({});
-        }
+    /**
+     * Creates a new instance of entity
+     * @param entityData - The entty data, typically parsed as an argument in the load or update functions
+     */
+    constructor(label: string, properties: EntityData, transform: TransformData) {
+        this.label = label;
+        this.transform = createTransformFromData(transform);
+        this.properties = new EntityProperties(properties);
     }
 
-    // Input helpers
-    isKeyPressed(key: KeyCode): boolean {
-        if (!this.inputData) return false;
-        return this.inputData.pressed_keys.indexOf(key) !== -1
-    }
-
-    getMousePosition(): [number, number] {
-        return this.inputData?.mouse_pos || [0, 0];
-    }
-
-    getMouseDelta(): [number, number] | null {
-        return this.inputData?.mouse_delta || null;
-    }
-
-    // Movement helpers
+    /**
+     * Moves the player forward on the Z axis
+     * @param distance - The distance (as a number) it moves forward by
+     */
     moveForward(distance: number): void {
         const movement = new Vector3(0, 0, -distance);
         this.transform.translate(movement);
     }
 
+    /**
+     * Moves the player back on the Z axis
+     * @param distance - The distance (as a number) it moves back by
+     */
+    moveBack(distance: number): void {
+        const movement = new Vector3(0, 0, distance);
+        this.transform.translate(movement);
+    }
+
+    /**
+     * Moves the player left on the X axis
+     * @param distance - The distance (as a number) it moves left by
+     */
+    moveLeft(distance: number): void {
+        const movement = new Vector3(-distance, 0, 0);
+        this.transform.translate(movement);
+    }
+
+    /**
+     * Moves the player right on the X axis
+     * @param distance - The distance (as a number) it moves right by
+     */
     moveRight(distance: number): void {
         const movement = new Vector3(distance, 0, 0);
         this.transform.translate(movement);
     }
 
+    /**
+     * Moves the player up on the Y axis
+     * @param distance - The distance (as a number) it moves up by
+     */
     moveUp(distance: number): void {
         const movement = new Vector3(0, distance, 0);
         this.transform.translate(movement);
     }
 
-    // Convert back to data format for Rust
-    toEntityData(): Partial<ScriptEntityData> {
-        return {
-            transform: {
-                position: this.transform.position.as_array(),
-                rotation: this.transform.rotation.as_array(),
-                scale: this.transform.scale.as_array()
-            },
-            entity: {
-                custom_properties: this.properties.getRawProperties()
-            }
-        };
+    /**
+     * Moves the player down on the Y axis
+     * @param distance - The distance (as a number) it moves down by
+     */
+    moveDown(distance: number): void {
+        const movement = new Vector3(0, -distance, 0);
+        this.transform.translate(movement);
     }
 }
 
-// Type definitions
+
+/**
+ * Helper function that creates a new {@link Transform} from 
+ * a {@link TransformData}
+ * @param data - The raw transformable ({@link TransformData})data
+ * @returns - An instance of a {@link Transform}
+ */
+function createTransformFromData(data: TransformData): Transform {
+    const position = Vector3.fromArray(data.position);
+    const rotation = Quaternion.fromArray(data.rotation);
+    const scale = Vector3.fromArray(data.scale);
+    return new Transform(position, rotation, scale);
+}
+
+/**
+ * Camera class for controlling and manipulating cameras in the scene.
+ * Provides functionality for camera movement, switching, and property manipulation.
+ */
+export class Camera {
+    public label: string;
+
+    public eye: Vector3;
+    public target: Vector3;
+    public up: Vector3;
+    public aspect: number;
+    public fov: number;
+    public near: number;
+    public far: number;
+    public yaw: number;
+    public pitch: number;
+    public speed: number;
+    public sensitivity: number;
+    public camera_type: string;
+
+
+    /**
+     * Create a new Camera instance.
+     * 
+     * @param data - Optional camera data to initialize from
+     */
+    constructor(label: string, data: CameraData) {
+        this.eye = Vector3.fromArray(data.eye);
+        this.target = Vector3.fromArray(data.target);
+        this.up = Vector3.fromArray(data.up);
+        this.aspect = data.aspect;
+        this.fov = data.fov;
+        this.near = data.near;
+        this.far = data.far;
+        this.yaw = data.yaw;
+        this.pitch = data.pitch;
+        this.speed = data.speed;
+        this.sensitivity = data.sensitivity;
+        this.camera_type = data.camera_type;
+        this.label = label;
+    }
+
+    /**
+     * Track mouse movement for camera look controls.
+     * 
+     * @param delta - Mouse delta X and Y
+     * 
+     * @example
+     * ```ts
+     * let delta = entity.getMouseDelta();
+     * camera.track
+     * ```
+     */
+    trackMouseDelta(delta: [number, number]): void {
+        this.yaw += delta[0] * this.sensitivity;
+        this.pitch += delta[1] * this.sensitivity;
+        
+        this.pitch = dbMath.clamp(this.pitch, dbMath.degreesToRadians(-89.0), dbMath.degreesToRadians(89.0));
+
+        
+        let direction = new Vector3(
+            Math.cos(this.yaw) * Math.cos(this.pitch),
+            Math.sin(this.pitch),
+            Math.sin(this.yaw) * Math.cos(this.pitch),
+        );
+        this.target = this.eye.add(direction);
+    }
+}
+
+export class Light {
+
+}
+
+/**
+ * A raw format for storing the transform data, typically used as a
+ * FFI by the engine
+ */
 export interface TransformData {
     position: [number, number, number];
     rotation: [number, number, number, number]; // quaternion [x, y, z, w]
     scale: [number, number, number];
 }
 
+/**
+ * A raw format for storing the custom entity properties from the engines
+ * raw FFI
+ */
 export interface EntityData {
     custom_properties: Record<string, any>;
 }
 
+/**
+ * A raw format for storing the input data
+ */
 export interface InputData {
     mouse_pos: [number, number];
     pressed_keys: string[];
@@ -708,23 +851,265 @@ export interface InputData {
     is_cursor_locked: boolean;
 }
 
-export interface ScriptEntityData {
-    transform: TransformData;
-    entity: EntityData;
+/**
+ * A raw format for storing the camera data
+ */
+export interface CameraData {
+    eye: [number, number, number];
+    target: [number, number, number];
+    up: [number, number, number];
+    aspect: number;
+    fov: number;
+    near: number;
+    far: number;
+    yaw: number;
+    pitch: number;
+    speed: number;
+    sensitivity: number;
+    camera_type: string;
+}
+
+/**
+ * A raw format for storing the light data
+ */
+export interface LightData {
+
+}
+
+/**
+ * A raw format for storing the scene data
+ */
+export interface RawSceneData {
+    entities: [{
+        label: string,
+        properties: EntityData, 
+        transform: TransformData
+    }];
+    cameras: [{
+        label: string,
+        data: CameraData
+    }];
+    lights: [{
+        label: string,
+        data: LightData
+    }];
     input: InputData;
 }
 
-export function createTransformFromData(data: TransformData): Transform {
-    const position = Vector3.fromArray(data.position);
-    const rotation = Quaternion.fromArray(data.rotation);
-    const scale = Vector3.fromArray(data.scale);
-    return new Transform(position, rotation, scale);
+/**
+ * A wrapper class aimed to aid with input data
+ */
+export class Input {
+    public inputData?: InputData
+
+    // constructor(data: InputData) {
+    //     this.inputData = data;
+    // }
+
+    // empty because global variable
+    constructor() {
+
+    }
+
+    /**
+     * Checks if a key is pressed
+     * @param key - The specific keycode
+     * @returns - True is pressed, false if not
+     * 
+     * @example
+     * ```ts
+     * if entity.isKeyPressed(Keys::KeyW) {
+     *      console.log("The W key is pressed");
+     * }
+     * ```
+     */
+    isKeyPressed(key: KeyCode): boolean {
+        if (!this.inputData) return false;
+        return this.inputData.pressed_keys.indexOf(key) !== -1
+    }
+
+    /**
+     * Fetches the mouse position
+     * @returns - The x,y position of the mouse
+     */
+    getMousePosition(): [number, number] {
+        return this.inputData?.mouse_pos || [0, 0];
+    }
+
+    /**
+     * Fetches the change in the mouse position from the center (as it gets reset each frame)
+     * @returns - The dx,dy position of the mouse
+     */
+    getMouseDelta(): [number, number] {
+        return this.inputData?.mouse_delta || [0.0, 0.0];
+    }
 }
 
-// Global exports
-globalThis.Transform = Transform;
-globalThis.Vector3 = Vector3;
-globalThis.Quaternion = Quaternion;
-globalThis.Keys = Keys;
-globalThis.EntityProperties = EntityProperties;
-globalThis.Entity = Entity;
+/**
+ * The class containing all the different entities in this scene. 
+ */
+export class Scene {
+    // ensure none of these are public
+    current_entity?: string;
+    entities?: Entity[];
+    cameras?: Camera[];
+    lights?: Light[];
+
+    // Sets everything to default
+    constructor() {
+        this.cameras = [];
+        this.entities = [];
+        this.lights = [];
+    }
+
+    /**
+     * Returns a **reference** to the camera in the scene
+     * @param label - The label of the camera as set by you from the editor
+     */
+    public getCamera(label: string): Camera | undefined {
+        return this.cameras?.find(c => c.label === label);
+    }
+
+    /**
+     * Returns a **reference** to the light in the scene
+     * @param label - The label of the light as set by you from the editor
+     */
+    public getLight(label: string): Light | undefined {
+        return this.lights?.find(l => (l as any).label === label);
+    }
+
+    /**
+     * Fetches an entity as per its label. Returns the actual Entity instance (mutable reference).
+     * @param label - The label of the entity
+     */
+    public getEntity(label: string): Entity | undefined {
+        return this.entities?.find(e => e.label === label);
+    }
+
+    /**
+     * Fetches the current entity this script is attached to (returns mutable reference).
+     */
+    public getCurrentEntity(): Entity | undefined {
+        if (!this.current_entity) {
+            console.error("Unable to get entity: Have you added dropbear.start(s) yet?");
+            return undefined;
+        }
+        const ent = this.getEntity(this.current_entity);
+        if (!ent) {
+            console.error(`Unable to get entity: no entity with label "${this.current_entity}" found`);
+        }
+        return ent;
+    }
+}
+
+/**
+ * Starts the specific function by filling the scene data. 
+ * @param data 
+ */
+export function start(data: RawSceneData) {
+    data.cameras.forEach(camera => {
+        scene.cameras?.push(new Camera(camera.label, camera.data))
+    });
+    data.entities.forEach(entity => {
+        scene.entities?.push(new Entity(entity.label, entity.properties, entity.transform))
+    });
+    data.lights.forEach(light => {
+        scene.lights?.push(light)
+    });
+    input.inputData = data.input;
+}
+
+/**
+ * Ends the scripting function by returning a Partial RawSceneData for the
+ * rust client to take. 
+ */
+export function end(): Partial<RawSceneData> {
+    const out: Partial<RawSceneData> = {};
+
+    if (scene.entities && scene.entities.length) {
+        out.entities = scene.entities.map(e => {
+            return {
+                label: e.label,
+                properties: {
+                    custom_properties: e.properties.getRawProperties()
+                } as EntityData,
+                transform: {
+                    position: e.transform.position.as_array(),
+                    rotation: e.transform.rotation.as_array(),
+                    scale: e.transform.scale.as_array()
+                } as TransformData
+            };
+        }) as any;
+    }
+
+    if (scene.cameras && scene.cameras.length) {
+        out.cameras = scene.cameras.map(c => {
+            return {
+                label: c.label,
+                data: {
+                    eye: c.eye.as_array(),
+                    target: c.target.as_array(),
+                    up: c.up.as_array(),
+                    aspect: c.aspect,
+                    fov: c.fov,
+                    near: c.near,
+                    far: c.far,
+                    yaw: c.yaw,
+                    pitch: c.pitch,
+                    speed: c.speed,
+                    sensitivity: c.sensitivity,
+                    camera_type: c.camera_type
+                } as CameraData
+            };
+        }) as any;
+    }
+
+    if (scene.lights && scene.lights.length) {
+        out.lights = scene.lights.map(l => {
+            return {
+                label: (l as any).label || "",
+                data: {} as LightData
+            };
+        }) as any;
+    }
+
+    if (input.inputData) {
+        out.input = input.inputData;
+    }
+
+    return out;
+}
+
+// global variables
+/**
+ * A global variable that contains all the information about the scene. 
+ * 
+ * To use the variable, you need to run {@link start()} at the start of 
+ * the function and return {@link end()} at the end to send to the engine.  
+ * 
+ * @example
+ * ```ts
+ * export function onUpdate(s, dt: number) {
+ *    dropbear.start(s);
+ *    console.log("I'm being updated!");
+ *    return dropbear.end();
+ * }
+ * ```
+ */
+export const scene = new Scene();
+/**
+ * A global variable that contains all the information about the inputs
+ * such as the keyboard and the mouse.
+ * 
+ * To use the variable, you need to run {@link start()} at the start of 
+ * the function and return {@link end()} at the end to send to the engine.  
+ * 
+ * @example
+ * ```ts
+ * export function onUpdate(s, dt: number) {
+ *    dropbear.start(s);
+ *    console.log("I'm being updated!");
+ *    return dropbear.end();
+ * }
+ */
+export const input = new Input();

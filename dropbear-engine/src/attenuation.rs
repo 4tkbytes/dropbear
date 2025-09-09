@@ -7,6 +7,12 @@ pub struct Attenuation {
     pub quadratic: f32,
 }
 
+impl Default for Attenuation {
+    fn default() -> Self {
+        RANGE_50
+    }
+}
+
 pub const ATTENUATION_PRESETS: &[(Attenuation, &str)] = &[
     (RANGE_7, "Range 7"),
     (RANGE_13, "Range 13"),
