@@ -1,7 +1,7 @@
 // dropbear-engine script template for eucalyptus
 import * as dropbear from "./dropbear";
 
-export function onLoad(s) {
+export function onLoad(s: dropbear.RawSceneData) {
     dropbear.start(s);
     // ------- Your own code here -------
     console.log("I have been awoken");
@@ -13,7 +13,7 @@ export function onLoad(s) {
     return dropbear.end();
 }
 
-export function onUpdate(s, dt: number) {
+export function onUpdate(s: dropbear.RawSceneData, dt: number) {
     dropbear.start(s);
     // ------- Your own code here -------
     console.log("I'm being updated!");
