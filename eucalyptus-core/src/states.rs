@@ -1,41 +1,24 @@
-//! In this module, it will describe all the different types for
-//! storing configuration files (.eucp for project and .eucc for config files for subdirectories).
-//!
-//! There is a singleton that is used for other crates to access,
-//! as well as public structs related to that config and docs (hopefully).
-
-use std::{
-    collections::HashMap,
-    fmt::{self, Display, Formatter},
-    fs,
-    path::PathBuf,
-    sync::RwLock,
-};
-
-use bincode::{Encode, Decode};
-use chrono::Utc;
-use dropbear_engine::{
-    camera::Camera,
-    entity::{AdoptedEntity, Transform},
-    graphics::Graphics, lighting::{Light, LightComponent},
-};
-
-#[cfg(feature = "editor")]
-use egui_dock_fork::DockState;
-
+use crate::camera::DebugCamera;
+use crate::utils::PROTO_TEXTURE;
+use dropbear_engine::starter::plane::PlaneBuilder;
 use glam::DVec3;
-use hecs;
-use log;
+use std::fmt::{Display, Formatter};
+use std::{fmt, fs};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use chrono::Utc;
+use egui_dock_fork::DockState;
+use parking_lot::RwLock;
 use once_cell::sync::Lazy;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::graphics::Graphics;
+use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
-use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use crate::camera::{CameraComponent, CameraFollowTarget, CameraType, DebugCamera};
-#[cfg(feature = "editor")]
-use crate::editor::EditorTab;
-use crate::utils::PROTO_TEXTURE;
+use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -52,7 +35,6 @@ pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = Lazy::new(|| RwLock::new(Vec
 /// # Location
 /// This file is {project_name}.eucp and is located at {project_dir}/
 #[derive(Debug, Deserialize, Serialize, Default)]
-#[cfg(feature = "editor")]
 pub struct ProjectConfig {
     pub project_name: String,
     pub project_path: PathBuf,
@@ -64,48 +46,34 @@ pub struct ProjectConfig {
     pub editor_settings: EditorSettings,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
-#[cfg(not(feature = "editor"))]
-pub struct ProjectConfig {
-    pub project_name: String,
-    pub project_path: PathBuf,
-    pub date_created: String,
-    pub date_last_accessed: String,
-    // #[serde(default)]
-    // pub dock_layout: Option<DockState<EditorTab>>,
-}
-
 impl ProjectConfig {
     /// Creates a new instance of the ProjectConfig. This function is typically used when creating
     /// a new project, with it creating new defaults for everything.
     pub fn new(project_name: String, project_path: &PathBuf) -> Self {
         let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         let date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        #[cfg(not(feature = "editor"))]
-        {
-            let mut result = Self {
-                project_name,
-                project_path: project_path.to_path_buf(),
-                date_created,
-                date_last_accessed,
-            };
-            let _ = result.load_config_to_memory(); // TODO: Deal with later...
-            result
-        }
+        // #[cfg(not(feature = "editor"))]
+        // {
+        //     let mut result = Self {
+        //         project_name,
+        //         project_path: project_path.to_path_buf(),
+        //         date_created,
+        //         date_last_accessed,
+        //     };
+        //     let _ = result.load_config_to_memory(); // TODO: Deal with later...
+        //     result
+        // }
 
-        #[cfg(feature = "editor")]
-        {
-            let mut result = Self {
-                project_name,
-                project_path: project_path.to_path_buf(),
-                date_created,
-                date_last_accessed,
-                editor_settings: Default::default(),
-                dock_layout: None,
-            };
-            let _ = result.load_config_to_memory(); // TODO: Deal with later...
-            result
-        }
+        let mut result = Self {
+            project_name,
+            project_path: project_path.to_path_buf(),
+            date_created,
+            date_last_accessed,
+            editor_settings: Default::default(),
+            dock_layout: None,
+        };
+        let _ = result.load_config_to_memory();
+        result
     }
 
     /// This function writes the [`ProjectConfig`] struct (and other PathBufs) to a file of the choice
@@ -153,7 +121,7 @@ impl ProjectConfig {
         // resource config
         match ResourceConfig::read_from(&project_root) {
             Ok(resources) => {
-                let mut cfg = RESOURCES.write().unwrap();
+                let mut cfg = RESOURCES.write();
                 *cfg = resources;
             }
             Err(e) => {
@@ -166,7 +134,7 @@ impl ProjectConfig {
                         };
                         default.write_to(&project_root)?;
                         {
-                            let mut cfg = RESOURCES.write().unwrap();
+                            let mut cfg = RESOURCES.write();
                             *cfg = default;
                         }
                     } else {
@@ -179,7 +147,7 @@ impl ProjectConfig {
         }
 
         // src config
-        let mut source_config = SOURCE.write().unwrap();
+        let mut source_config = SOURCE.write();
         match SourceConfig::read_from(&project_root) {
             Ok(source) => *source_config = source,
             Err(e) => {
@@ -202,7 +170,7 @@ impl ProjectConfig {
         }
 
         // scenes
-        let mut scene_configs = SCENES.write().unwrap();
+        let mut scene_configs = SCENES.write();
         scene_configs.clear();
 
         // iterate through each scene file in the folder
@@ -254,17 +222,17 @@ impl ProjectConfig {
         let path = PathBuf::from(self.project_path.clone());
 
         {
-            let resources_config = RESOURCES.read().unwrap();
+            let resources_config = RESOURCES.read();
             resources_config.write_to(&path)?;
         }
 
         {
-            let source_config = SOURCE.read().unwrap();
+            let source_config = SOURCE.read();
             source_config.write_to(&path)?;
         }
 
         {
-            let scene_configs = SCENES.read().unwrap();
+            let scene_configs = SCENES.read();
             for scene in scene_configs.iter() {
                 scene.write_to(&path)?;
             }
@@ -273,11 +241,6 @@ impl ProjectConfig {
         self.write_to(&path)?;
         Ok(())
     }
-}
-
-#[allow(dead_code)]
-pub(crate) fn path_contains_folder(path: &PathBuf, folder: &str) -> bool {
-    path.components().any(|comp| comp.as_os_str() == folder)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -323,7 +286,7 @@ impl Display for ResourceType {
     }
 }
 
-/// This is the resource config.
+/// The resource config.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ResourceConfig {
     /// The path to the resource folder.
@@ -518,7 +481,7 @@ impl EntityNode {
         {
             let name = adopted.model().label.clone();
 
-            // grouped entity (entity + script)
+            // grouped entity (entity and script)
             nodes.push(EntityNode::Group {
                 name: name.clone(),
                 children: vec![
@@ -754,15 +717,13 @@ impl SceneConfig {
         world.clear();
 
         #[allow(unused_variables)]
-        let project_config = if cfg!(feature = "data-only") {
-            if let Ok(cfg) = PROJECT.read() {
+        let project_config = if cfg!(feature = "editor") {
+            let cfg = PROJECT.read();
+            {
                 cfg.project_path.clone()
-            } else {
-                log::warn!("Unable to retrieve a lock from the PROJECT config");
-                PathBuf::new()
             }
         } else {
-            log::warn!("Feature is data only, no need for project config");
+            log::debug!("Not using the editor feature, returning empty pathbuffer");
             PathBuf::new()
         };
 
@@ -773,16 +734,13 @@ impl SceneConfig {
             match &entity_config.model_path.ref_type {
                 ResourceReferenceType::File(reference) => {
                     let path: PathBuf = {
-                        if cfg!(feature = "data-only") {
-                            log::debug!("Using feature data-only");
-                            entity_config.model_path.to_executable_path()?
-                        } else if cfg!(feature = "editor") {
+                        if cfg!(feature = "editor") {
                             log::debug!("Using feature editor");
                             entity_config.model_path.to_project_path(project_config.clone())
                                 .ok_or_else(|| anyhow::anyhow!("Unable to convert resource reference [{}] to project path", reference))?
                         } else {
-                            log::debug!("Fuck you");
-                            panic!("Not using either the data-only feature or the editor feature, which resolve the path of the ResourceReference");
+                            log::debug!("Using feature data-only");
+                            entity_config.model_path.to_executable_path()?
                         }
                     };
                     log::debug!("Path for entity {} is {} from reference {}", entity_config.label, path.display(), reference);
@@ -978,7 +936,7 @@ impl SceneConfig {
     }
 }
 
-#[derive(Decode, Encode, serde::Serialize, serde::Deserialize, Debug)]
+#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Debug)]
 pub struct RuntimeData {
     #[bincode(with_serde)]
     pub project_config: ProjectConfig,
@@ -1016,4 +974,12 @@ impl Default for LightConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct EditorSettings {
     pub is_debug_menu_shown: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum EditorTab {
+    AssetViewer,       // bottom side,
+    ResourceInspector, // left side,
+    ModelEntityList,   // right side,
+    Viewport,          // middle,
 }

@@ -8,8 +8,9 @@ use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
-use crate::scripting::{ScriptAction, TEMPLATE_SCRIPT};
-use crate::states::ScriptComponent;
+use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
+use eucalyptus_core::states::ScriptComponent;
+use eucalyptus_core::warn;
 
 pub trait Component {
     fn inspect(&mut self, entity: &mut hecs::Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, signal: &mut Signal, label: &mut String);
@@ -431,7 +432,7 @@ impl Component for ScriptComponent {
                                 let lib_path = &script_file.clone().parent().unwrap().join("dropbear.ts");
                                 if let Err(_) = std::fs::read(lib_path) {
                                     log::warn!("dropbear.ts library does not exist in project source directory, copying...");
-                                    if let Err(e) = std::fs::write(lib_path, include_str!("../dropbear.ts")) {
+                                    if let Err(e) = std::fs::write(lib_path, include_str!("../../../resources/dropbear.ts")) {
                                         log::error!("Non-fatal error: Creating library file failed: {}", e);
                                     } else {
                                         log::info!("Wrote dropbear.ts library file!");
@@ -455,7 +456,7 @@ impl Component for ScriptComponent {
                                 let lib_path = &script_path.clone().parent().unwrap().join("dropbear.ts");
                                 if let Err(_) = std::fs::read(lib_path) {
                                     log::warn!("dropbear.ts library does not exist in project source directory, copying...");
-                                    if let Err(e) = std::fs::write(lib_path, include_str!("../dropbear.ts")) {
+                                    if let Err(e) = std::fs::write(lib_path, include_str!("../../../resources/dropbear.ts")) {
                                         log::error!("Non-fatal error: Creating library file failed: {}", e);
                                     } else {
                                         log::info!("Wrote dropbear.ts library file!");
@@ -474,7 +475,7 @@ impl Component for ScriptComponent {
                                         });
                                     },
                                     Err(e) => {
-                                        crate::warn!("Failed to create script file: {}", e);
+                                        warn!("Failed to create script file: {}", e);
                                     },
                                 }
                             }

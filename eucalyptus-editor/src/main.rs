@@ -1,31 +1,29 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod utils;
+mod camera;
+mod editor;
+mod build;
+mod menu;
+mod debug;
 
-#[cfg(feature = "editor")]
 use std::{cell::RefCell, rc::Rc, fs, path::PathBuf};
-#[cfg(feature = "editor")]
 use clap::{Arg, Command};
 
-#[cfg(feature = "editor")]
 use dropbear_engine::{WindowConfiguration, scene};
-use eucalyptus::APP_INFO;
 
-// #[tokio::main]
-#[cfg(feature = "editor")]
-// async 
+pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
+    name: "Eucalyptus",
+    author: "4tkbytes",
+};
+
 fn main() -> anyhow::Result<()> {
-    println!("Editor feature: {}", cfg!(feature = "editor"));
-    println!("Data-only feature: {}", cfg!(feature = "data-only"));
-    
-    if cfg!(feature = "data-only") {
-        panic!("You are using the data-only feature while compiled with the editor feature? Huh?");
-    }
     #[cfg(target_os = "android")]
     compile_error!("The `editor` feature is not supported on Android. If you are attempting\
  to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
  to use with dependencies or create your own game on Desktop. Sorry :(");
-    let matches = Command::new("eucalyptus")
+    let matches = Command::new("eucalyptus-editor")
         .about("A visual game editor")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .subcommand_required(false)
         .arg_required_else_help(false)
         .subcommand(
@@ -73,7 +71,7 @@ fn main() -> anyhow::Result<()> {
                 },
             };
 
-            eucalyptus::build::build(project_path)?;
+            crate::build::build(project_path)?;
         }
         Some(("package", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {
@@ -87,10 +85,10 @@ fn main() -> anyhow::Result<()> {
                 },
             };
 
-            eucalyptus::build::package(project_path, sub_matches)?;
+            crate::build::package(project_path, sub_matches)?;
         }
         Some(("health", _)) => {
-            eucalyptus::build::health()?;
+            crate::build::health()?;
         }
         Some(("read", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("eupak_file") {
@@ -104,7 +102,7 @@ fn main() -> anyhow::Result<()> {
                 },
             };
 
-            eucalyptus::build::read_from_eupak(project_path)?;
+            crate::build::read_from_eupak(project_path)?;
         }
         None => {
             let config = WindowConfiguration {
@@ -115,8 +113,8 @@ fn main() -> anyhow::Result<()> {
             };
 
             let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
-                let main_menu = Rc::new(RefCell::new(eucalyptus::menu::MainMenu::new()));
-                let editor = Rc::new(RefCell::new(eucalyptus::editor::Editor::new()));
+                let main_menu = Rc::new(RefCell::new(crate::menu::MainMenu::new()));
+                let editor = Rc::new(RefCell::new(crate::editor::Editor::new()));
 
                 scene::add_scene_with_input(
                     &mut scene_manager,
@@ -142,17 +140,6 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "editor"))]
-fn main() {
-    compile_error!("\n\nYou have not enabled the \"editor\" feature, therefore cannot use the eucalyptus editor. 
-Either import as a lib to use its structs and enums or enable the editor feature or enable the \"editor\" feature or just the default features\n\n");
-}
-
-#[cfg(all(feature = "editor", feature = "data-only"))]
-compile_error!("Features `editor` and `data-only` cannot be enabled at the same time");
-
-
-#[cfg(feature = "editor")]
 fn find_eucp_file() -> Result<PathBuf, String> {
     let current_dir = std::env::current_dir().map_err(|_| "Failed to get current directory")?;
 

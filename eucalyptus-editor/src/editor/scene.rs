@@ -10,12 +10,11 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
+use eucalyptus_core::camera::PlayerCamera;
+use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
+use eucalyptus_core::states::PropertyValue;
+use eucalyptus_core::utils::{PendingSpawn, PROTO_TEXTURE};
 use super::*;
-use crate::{
-    camera::PlayerCamera, utils::PendingSpawn
-};
-use crate::states::PropertyValue;
-use crate::utils::PROTO_TEXTURE;
 
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
@@ -28,7 +27,7 @@ impl Scene for Editor {
 
         let shader = Shader::new(
             graphics,
-            include_str!("../shader.wgsl"),
+            include_str!("../../../resources/shaders/shader.wgsl"),
             Some("viewport_shader"),
         );
 
@@ -51,7 +50,7 @@ impl Scene for Editor {
 
                     self.light_manager.create_render_pipeline(
                         graphics,
-                        include_str!("../light.wgsl"),
+                        include_str!("../../../resources/shaders/light.wgsl"),
                         camera,
                         Some("Light Pipeline")
                     );
@@ -127,7 +126,7 @@ impl Scene for Editor {
         }
 
         if self.is_viewport_focused
-            && matches!(self.viewport_mode, crate::utils::ViewportMode::CameraMove)
+            && matches!(self.viewport_mode, ViewportMode::CameraMove)
         // && self.is_using_debug_camera()
         {
             let movement_keys: std::collections::HashSet<KeyCode> = self
@@ -193,11 +192,11 @@ impl Scene for Editor {
                                     entity_id
                                 );
 
-                                crate::success_without_console!("Paste!");
+                                success_without_console!("Paste!");
                                 self.signal = Signal::Copy(scene_entity.clone());
                             }
                             Err(e) => {
-                                crate::warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                                warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
                             }
                         }
                     }
@@ -205,16 +204,16 @@ impl Scene for Editor {
                         if let Some(sel_e) = &self.selected_entity {
                             let is_viewport_cam = if let Ok(mut q) = self.world.query_one::<&CameraComponent>(*sel_e) { if let Some(c) = q.get() { if matches!(c.camera_type, CameraType::Debug) { true } else { false } } else { false } } else { false };
                             if is_viewport_cam {
-                                crate::warn!("You can't delete the viewport camera");
+                                warn!("You can't delete the viewport camera");
                                 self.signal = Signal::None;
                             } else {
                                 match self.world.despawn(*sel_e) {
                                     Ok(_) => {
-                                        crate::info!("Decimated entity");
+                                        info!("Decimated entity");
                                         self.signal = Signal::None;
                                     }
                                     Err(e) => {
-                                        crate::warn!("Failed to delete entity: {}", e);
+                                        warn!("Failed to delete entity: {}", e);
                                         self.signal = Signal::None;
                                     }
                                 }
@@ -225,14 +224,14 @@ impl Scene for Editor {
                         if let Some(action) = self.undo_stack.pop() {
                             match action.undo(&mut self.world) {
                                 Ok(_) => {
-                                    crate::info!("Undid action");
+                                    info!("Undid action");
                                 }
                                 Err(e) => {
-                                    crate::warn!("Failed to undo action: {}", e);
+                                    warn!("Failed to undo action: {}", e);
                                 }
                             }
                         } else {
-                            crate::warn_without_console!("Nothing to undo");
+                            warn_without_console!("Nothing to undo");
                             log::debug!("No undoable actions in stack");
                         }
                         self.signal = Signal::None;
@@ -245,7 +244,7 @@ impl Scene for Editor {
                             script_name,
                         } => {
                             if let Some(selected_entity) = self.selected_entity {
-                                match crate::scripting::move_script_to_src(script_path) {
+                                match scripting::move_script_to_src(script_path) {
                                     Ok(moved_path) => {
                                         let new_script = ScriptComponent {
                                             name: script_name.clone(),
@@ -259,14 +258,14 @@ impl Scene for Editor {
                                             sc.path = new_script.path.clone();
                                             true
                                         } else {
-                                            match crate::scripting::attach_script_to_entity(
+                                            match scripting::attach_script_to_entity(
                                                 &mut self.world,
                                                 selected_entity,
                                                 new_script.clone(),
                                             ) {
                                                 Ok(_) => false,
                                                 Err(e) => {
-                                                    crate::fatal!(
+                                                    fatal!(
                                                         "Failed to attach script to entity {:?}: {}",
                                                         selected_entity,
                                                         e
@@ -277,14 +276,14 @@ impl Scene for Editor {
                                             }
                                         };
 
-                                        if let Err(e) = crate::scripting::convert_entity_to_group(
+                                        if let Err(e) = scripting::convert_entity_to_group(
                                             &self.world,
                                             selected_entity,
                                         ) {
                                             log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                                         }
 
-                                        crate::success!(
+                                        success!(
                                             "{} script '{}' at {} to entity {:?}",
                                             if replaced { "Reattached" } else { "Attached" },
                                             script_name,
@@ -293,11 +292,11 @@ impl Scene for Editor {
                                         );
                                     }
                                     Err(e) => {
-                                        crate::fatal!("Move failed: {}", e);
+                                        fatal!("Move failed: {}", e);
                                     }
                                 }
                             } else {
-                                crate::fatal!("AttachScript requested but no entity is selected");
+                                fatal!("AttachScript requested but no entity is selected");
                             }
 
                             self.signal = Signal::None;
@@ -319,14 +318,14 @@ impl Scene for Editor {
                                     sc.path = new_script.path.clone();
                                     true
                                 } else {
-                                    match crate::scripting::attach_script_to_entity(
+                                    match scripting::attach_script_to_entity(
                                         &mut self.world,
                                         selected_entity,
                                         new_script.clone(),
                                     ) {
                                         Ok(_) => false,
                                         Err(e) => {
-                                            crate::fatal!("Failed to attach new script: {}", e);
+                                            fatal!("Failed to attach new script: {}", e);
                                             self.signal = Signal::None;
                                             return;
                                         }
@@ -334,12 +333,12 @@ impl Scene for Editor {
                                 };
 
                                 if let Err(e) =
-                                    crate::scripting::convert_entity_to_group(&self.world, selected_entity)
+                                    scripting::convert_entity_to_group(&self.world, selected_entity)
                                 {
                                     log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                                 }
 
-                                crate::success!(
+                                success!(
                                     "{} new script '{}' at {} to entity {:?}",
                                     if replaced { "Replaced" } else { "Attached" },
                                     script_name,
@@ -347,7 +346,7 @@ impl Scene for Editor {
                                     selected_entity
                                 );
                             } else {
-                                crate::warn_without_console!("No selected entity to attach new script");
+                                warn_without_console!("No selected entity to attach new script");
                                 log::warn!("CreateAndAttachScript requested but no entity is selected");
                             }
                             self.signal = Signal::None;
@@ -355,9 +354,9 @@ impl Scene for Editor {
                         ScriptAction::RemoveScript => {
                             if let Some(selected_entity) = self.selected_entity {
                                 if let Ok(script) = self.world.remove_one::<ScriptComponent>(selected_entity) {
-                                    crate::success!("Removed script from entity {:?}", selected_entity);
+                                    success!("Removed script from entity {:?}", selected_entity);
 
-                                    if let Err(e) = crate::scripting::convert_entity_to_group(
+                                    if let Err(e) = scripting::convert_entity_to_group(
                                         &self.world,
                                         selected_entity,
                                     ) {
@@ -366,13 +365,13 @@ impl Scene for Editor {
                                     log::debug!("Pushing remove component to undo stack");
                                     UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(selected_entity, ComponentType::Script(script)));
                                 } else {
-                                    crate::warn!(
+                                    warn!(
                                         "No script component found on entity {:?}",
                                         selected_entity
                                     );
                                 }
                             } else {
-                                crate::warn!("No entity selected to remove script from");
+                                warn!("No entity selected to remove script from");
                             }
 
                             self.signal = Signal::None;
@@ -384,21 +383,21 @@ impl Scene for Editor {
                                     if let Some(script) = q.get() {
                                         match open::that(script.path.clone()) {
                                             Ok(()) => {
-                                                crate::success!("Opened {}", script.name)
+                                                success!("Opened {}", script.name)
                                             }
                                             Err(e) => {
-                                                crate::warn!("Error while opening {}: {}", script.name, e);
+                                                warn!("Error while opening {}: {}", script.name, e);
                                             }
                                         }
                                     }
                                 } else {
-                                    crate::warn!(
+                                    warn!(
                                         "No script component found on entity {:?}",
                                         selected_entity
                                     );
                                 }
                             } else {
-                                crate::warn!("No entity selected to edit script");
+                                warn!("No entity selected to edit script");
                             }
                             self.signal = Signal::None;
                         }
@@ -412,7 +411,7 @@ impl Scene for Editor {
 
                 if has_player_camera_target {
                     if let Err(e) = PlayModeBackup::create_backup(self) {
-                        crate::fatal!("Failed to create play mode backup: {}", e);
+                        fatal!("Failed to create play mode backup: {}", e);
                         self.signal = Signal::None;
                         return;
                     }
@@ -434,26 +433,26 @@ impl Scene for Editor {
                                     log::warn!("Failed to initialise script '{}' for entity {:?}: {}", script.name, entity_id, e);
                                     self.signal = Signal::StopPlaying;
                                 } else {
-                                    crate::success_without_console!("You are in play mode now! Press Escape to exit");
+                                    success_without_console!("You are in play mode now! Press Escape to exit");
                                     log::info!("You are in play mode now! Press Escape to exit");
                                 }
                             }
                             Err(e) => {
                                 // todo: proper error menu
-                                crate::fatal!("Failed to load script '{}': {}", script.name, e);
+                                fatal!("Failed to load script '{}': {}", script.name, e);
                                 self.signal = Signal::StopPlaying;
                             }
                         }
                     }
                 } else {
-                    crate::fatal!("Unable to build: Player camera not attached to an entity");
+                    fatal!("Unable to build: Player camera not attached to an entity");
                 }
 
                 self.signal = Signal::None;
             }
             Signal::StopPlaying => {
                 if let Err(e) = PlayModeBackup::restore(self) {
-                    crate::warn!("Failed to restore from play mode backup: {}", e);
+                    warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);
                 }
 
@@ -465,7 +464,7 @@ impl Scene for Editor {
                     self.script_manager.remove_entity_script(entity_id);
                 }
 
-                crate::success!("Exited play mode");
+                success!("Exited play mode");
                 log::info!("Back to the editor you go...");
 
                 self.signal = Signal::None;
@@ -498,7 +497,7 @@ impl Scene for Editor {
 
                         if follow_target.0 {
                             let _ = self.world.insert_one(camera_entity, follow_target);
-                            crate::info!("Set player camera target to entity {:?}", entity);
+                            info!("Set player camera target to entity {:?}", entity);
                         }
                     }
                     self.signal = Signal::None;
@@ -518,7 +517,7 @@ impl Scene for Editor {
                     if let Some(camera_entity) = player_camera {
                         let _ = self.world.remove_one::<CameraFollowTarget>(camera_entity);
                     }
-                    crate::info!("Cleared player camera target");
+                    info!("Cleared player camera target");
                     self.signal = Signal::None;
                 }
             },
@@ -539,9 +538,9 @@ impl Scene for Editor {
                                 if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
                                     log::debug!("Adding scripting component to entity [{}]", label);
                                     if let Err(e) = self.world.insert_one(*entity, ScriptComponent::default()) {
-                                        crate::warn!("Failed to add scripting component to entity: {}", e);
+                                        warn!("Failed to add scripting component to entity: {}", e);
                                     } else {
-                                        crate::success!("Added the scripting component");
+                                        success!("Added the scripting component");
                                     }
                                     local_signal = Some(Signal::None);
                                 }
@@ -551,15 +550,15 @@ impl Scene for Editor {
                                     let has_camera = self.world.query_one::<(&Camera, &CameraComponent)>(*entity).is_ok();
                                     
                                     if has_camera {
-                                        crate::warn!("Entity [{}] already has a camera component", label);
+                                        warn!("Entity [{}] already has a camera component", label);
                                     } else {
                                         let camera = Camera::predetermined(graphics, Some(&format!("{} Camera", label)));
                                         let component = CameraComponent::new();
                                         
                                         if let Err(e) = self.world.insert(*entity, (camera, component)) {
-                                            crate::warn!("Failed to add camera component to entity: {}", e);
+                                            warn!("Failed to add camera component to entity: {}", e);
                                         } else {
-                                            crate::success!("Added the camera component");
+                                            success!("Added the camera component");
                                         }
                                     }
                                     local_signal = Some(Signal::None);
@@ -588,7 +587,7 @@ impl Scene for Editor {
                                     if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
                                         log::debug!("Adding scripting component to light [{}]", light.label);
 
-                                        crate::success!("Added the scripting component to light [{}]", light.label);
+                                        success!("Added the scripting component to light [{}]", light.label);
                                         self.signal = Signal::None;
                                     }
                                 });
@@ -616,7 +615,7 @@ impl Scene for Editor {
                                     // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
                                     //     log::debug!("Adding scripting component to camera [{}]", cam.label);
 
-                                    //     crate::success!("Added the scripting component to camera [{}]", cam.label);
+                                    //     success!("Added the scripting component to camera [{}]", cam.label);
                                     //     self.signal = Signal::None;
                                     // }
                                 });
@@ -634,11 +633,11 @@ impl Scene for Editor {
                     ComponentType::Script(_) => {
                         match self.world.remove_one::<ScriptComponent>(*entity) {
                             Ok(component) => {
-                                crate::success!("Removed script component from entity {:?}", entity);
+                                success!("Removed script component from entity {:?}", entity);
                                 UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Script(component)));
                             }
                             Err(e) => {
-                                crate::warn!("Failed to remove script component from entity: {}", e);
+                                warn!("Failed to remove script component from entity: {}", e);
                             }
                         };
                         self.signal = Signal::None;
@@ -647,21 +646,21 @@ impl Scene for Editor {
                         if let Some(_) = follow {
                             match self.world.remove::<(Camera, CameraComponent, CameraFollowTarget)>(*entity) {
                                 Ok(component) => {
-                                    crate::success!("Removed camera component from entity {:?}", entity);
+                                    success!("Removed camera component from entity {:?}", entity);
                                     UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Camera(component.0, component.1, Some(component.2))));
                                 }
                                 Err(e) => {
-                                    crate::warn!("Failed to remove camera component from entity: {}", e);
+                                    warn!("Failed to remove camera component from entity: {}", e);
                                 }
                             };
                         } else {
                             match self.world.remove::<(Camera, CameraComponent)>(*entity) {
                                 Ok(component) => {
-                                    crate::success!("Removed camera component from entity {:?}", entity);
+                                    success!("Removed camera component from entity {:?}", entity);
                                     UndoableAction::push_to_undo(&mut self.undo_stack, UndoableAction::RemoveComponent(*entity, ComponentType::Camera(component.0, component.1, None)));
                                 }
                                 Err(e) => {
-                                    crate::warn!("Failed to remove script component from entity: {}", e);
+                                    warn!("Failed to remove script component from entity: {}", e);
                                 }
                             };
                         }
@@ -680,7 +679,7 @@ impl Scene for Editor {
                     .show(&graphics.get_egui_context(), |ui| {
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Model")).clicked() {
                             log::debug!("Creating new model");
-                            crate::warn!("Instead of using the `Add Entity` window, double click on the imported model in the asset \n\
+                            warn!("Instead of using the `Add Entity` window, double click on the imported model in the asset \n\
                             viewer to import a new model, then tweak the settings to how you wish after!");
                             self.signal = Signal::None;
                         }
@@ -691,7 +690,7 @@ impl Scene for Editor {
                             let component = LightComponent::default();
                             let light = Light::new(graphics, &component, &transform, Some("Light"));
                             self.world.spawn((light, component, transform));
-                            crate::success!("Created new light");
+                            success!("Created new light");
 
                             // always ensure the signal is reset after action is dun
                             self.signal = Signal::None;
@@ -713,7 +712,7 @@ impl Scene for Editor {
                             props.custom_properties.insert("tiles_x".to_string(), PropertyValue::Int(500));
                             props.custom_properties.insert("tiles_z".to_string(), PropertyValue::Int(200));
                             self.world.spawn((plane, transform, props));
-                            crate::success!("Created new plane");
+                            success!("Created new plane");
 
                             self.signal = Signal::None;
                         }
@@ -735,10 +734,10 @@ impl Scene for Editor {
                                     self.world.spawn((cube, Transform::new(), ModelProperties::new()));
                                 }
                                 Err(e) => {
-                                    crate::fatal!("Failed to load cube model: {}", e);
+                                    fatal!("Failed to load cube model: {}", e);
                                 }
                             }
-                            crate::success!("Created new cube");
+                            success!("Created new cube");
 
                             self.signal = Signal::None;
                         }
@@ -760,10 +759,10 @@ impl Scene for Editor {
                                     self.world.spawn((cube, Transform::new(), ModelProperties::new()));
                                 }
                                 Err(e) => {
-                                    crate::fatal!("Failed to load cube model: {}", e);
+                                    fatal!("Failed to load cube model: {}", e);
                                 }
                             }
-                            crate::success!("Created new cube");
+                            success!("Created new cube");
 
                             self.signal = Signal::None;
                         }
@@ -773,7 +772,7 @@ impl Scene for Editor {
                             let camera = Camera::predetermined(graphics, None);
                             let component = CameraComponent::new();
                             self.world.spawn((camera, component));
-                            crate::success!("Created new camera");
+                            success!("Created new camera");
 
                             self.signal = Signal::None;
                         }
@@ -864,7 +863,7 @@ impl Scene for Editor {
         self.show_ui(&graphics.get_egui_context());
 
         self.window = Some(graphics.state.window.clone());
-        crate::logging::render(&graphics.get_egui_context());
+        logging::render(&graphics.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(active_camera) = self.active_camera {
                 if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {

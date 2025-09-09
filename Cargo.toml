@@ -6,7 +6,7 @@ package.repository = "https://github.com/4tkbytes/dropbear-engine"
 package.readme = "README.md"
 
 resolver = "3"
-members = ["dropbear-engine", "eucalyptus", "redback-runtime"]
+members = ["dropbear-engine", "eucalyptus-core", "eucalyptus-editor", "redback-runtime"]
 
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -28,7 +28,7 @@ egui_extras = { version = "0.32", features = ["all_loaders"] }
 env_logger = "0.11"
 futures = "0.3"
 gilrs = "0.11"
-git2 = "0.20"
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 glam = { version = "0.30", features = ["serde"] }
 hecs = { version = "0.10", features = ["serde"] }
 lazy_static = "1.5"
@@ -41,11 +41,10 @@ parking_lot = {version = "0.12", features = ["deadlock_detection"] }
 pollster = "0.4"
 rfd = "0.15.4"
 ron = "0.11"
-russimp-ng = { version = "3.2" }
+russimp-ng = { version = "3.2", features = ["static-link"] }
 rustyscript = { version = "0.12" }
 serde = { version = "1.0.219", features = ["derive"] }
 spin_sleep = "1.3"
-tokio = { version = "1", features = ["full"] }
 transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
 wgpu = "26"
 winit = { version = "0.30", features = [] }

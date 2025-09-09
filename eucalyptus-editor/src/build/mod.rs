@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 use clap::ArgMatches;
 use zip::write::SimpleFileOptions;
 
-use crate::states::{ProjectConfig, RuntimeData, SCENES, SOURCE};
+use eucalyptus_core::states::{ProjectConfig, RuntimeData, SCENES, SOURCE};
 
 pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Result<()> {
     if !project_path.exists() {
@@ -252,7 +252,7 @@ fn copy_system_libraries(output_dir: &PathBuf) -> anyhow::Result<()> {
 }
 
 fn create_zip_package(source_dir: &PathBuf, zip_path: &PathBuf) -> anyhow::Result<()> {
-    let file = std::fs::File::create(zip_path)?;
+    let file = fs::File::create(zip_path)?;
     let mut zip = zip::ZipWriter::new(file);
 
     let walkdir = walkdir::WalkDir::new(source_dir);
@@ -299,13 +299,13 @@ pub fn build(
     log::info!(" > Loading config to memory");
 
     let source_config = {
-        let source_guard = SOURCE.read().map_err(|_| anyhow::anyhow!("Unable to lock SOURCE"))?;
+        let source_guard = SOURCE.read();
         source_guard.clone()
     };
     log::info!(" > Copied source config");
 
     let scene_data = {
-        let scenes_guard = SCENES.read().map_err(|_| anyhow::anyhow!("Unable to lock SCENES"))?;
+        let scenes_guard = SCENES.read();
         scenes_guard.clone()
     };
     log::info!(" > Copied scene data");

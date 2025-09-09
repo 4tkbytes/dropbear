@@ -12,6 +12,8 @@ use hecs::World;
 use rustyscript::{serde_json, Module, ModuleHandle, Runtime, RuntimeOptions};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
+use crate::camera::CameraComponent;
+use crate::states::{EntityNode, ModelProperties, ScriptComponent, PROJECT, SOURCE};
 
 /// A trait that describes a module that can be registered. 
 pub trait ScriptableModule {
@@ -24,10 +26,7 @@ pub trait ScriptableModule {
     // fn release(world: &mut World, entity_id: hecs::Entity, data: &serde_json::Value) -> anyhow::Result<()>;
 }
 
-use crate::camera::CameraComponent;
-use crate::states::{EntityNode, ModelProperties, ScriptComponent, PROJECT, SOURCE};
-
-pub const TEMPLATE_SCRIPT: &'static str = include_str!("../template.ts");
+pub const TEMPLATE_SCRIPT: &'static str = include_str!("../../../resources/template.ts");
 
 pub enum ScriptAction {
     AttachScript {
@@ -44,12 +43,12 @@ pub enum ScriptAction {
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
     let project_path = {
-        let project = PROJECT.read().unwrap();
+        let project = PROJECT.read();
         project.project_path.clone()
     };
 
     let src_path = {
-        let source_config = SOURCE.read().unwrap();
+        let source_config = SOURCE.read();
         source_config.path.clone()
     };
 
@@ -112,7 +111,7 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
     }
 
     {
-        let source_config = SOURCE.read().unwrap();
+        let source_config = SOURCE.read();
         source_config.write_to(&project_path)?;
     }
 
@@ -181,7 +180,7 @@ pub struct ScriptManager {
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
         let mut runtime = Runtime::new(RuntimeOptions::default())?;
-        let dropbear_content = include_str!("../dropbear.ts");
+        let dropbear_content = include_str!("../../../resources/dropbear.ts");
         let dropbear_module = Module::new("./dropbear.ts", dropbear_content);
         runtime.load_module(&dropbear_module)?;
         log::debug!("Loaded dropbear module");
@@ -227,10 +226,11 @@ impl ScriptManager {
     /// 
     /// # Examples
     /// ```rust
+    /// use eucalyptus_core::scripting::{camera, input, lighting, ScriptManager};
     /// let script_manager = ScriptManager::new()?
     ///     .register_module::<input::InputState>()?
-    ///     .register_module::<camera::Camera>()?
-    ///     .register_module::<lighting::LightingModule>()?;
+    ///     .register_module::<camera::SerializableCamera>()?
+    ///     .register_module::<lighting::Lighting>()?;
     /// ```
     pub fn register_module<T: ScriptableModule>(mut self) -> anyhow::Result<Self> {
         T::register(&mut self.runtime)?;
