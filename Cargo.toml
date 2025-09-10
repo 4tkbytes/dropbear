@@ -38,7 +38,6 @@ model_to_image = "0.1.1"
 once_cell = "1.21"
 open = "5"
 parking_lot = {version = "0.12", features = ["deadlock_detection"] }
-pollster = "0.4"
 rfd = "0.15.4"
 ron = "0.11"
 russimp-ng = { version = "3.2", features = ["static-link"] }
@@ -46,10 +45,12 @@ rustyscript = { version = "0.12" }
 serde = { version = "1.0.219", features = ["derive"] }
 spin_sleep = "1.3"
 transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
+tokio = { version = "1", features = ["full"] }
 wgpu = "26"
 winit = { version = "0.30", features = [] }
 zip = "4.6"
 walkdir = "2.3"
+wasmtime = "36.0"
 
 [workspace.dependencies.image]
 version = "0.25"

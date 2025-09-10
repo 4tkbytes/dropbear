@@ -16,7 +16,8 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     author: "4tkbytes",
 };
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]
     compile_error!("The `editor` feature is not supported on Android. If you are attempting\
  to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
@@ -112,9 +113,11 @@ fn main() -> anyhow::Result<()> {
                 app_info: APP_INFO,
             };
 
+            let main_menu = Rc::new(RefCell::new(crate::menu::MainMenu::new()));
+            let editor = Rc::new(RefCell::new(crate::editor::Editor::new().await));
+
             let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
-                let main_menu = Rc::new(RefCell::new(crate::menu::MainMenu::new()));
-                let editor = Rc::new(RefCell::new(crate::editor::Editor::new()));
+                
 
                 scene::add_scene_with_input(
                     &mut scene_manager,
@@ -133,6 +136,7 @@ fn main() -> anyhow::Result<()> {
 
                 (scene_manager, input_manager)
             })
+            .await
             .unwrap();
         }
         _ => unreachable!(),

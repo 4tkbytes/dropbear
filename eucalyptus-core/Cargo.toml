@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 
 [dependencies]
 anyhow.workspace = true
@@ -26,6 +26,9 @@ serde.workspace = true
 winit.workspace = true
 zip.workspace = true
 rustyscript.workspace = true
+tokio.workspace = true
+
+wasmtime.workspace = true
 
 [features]
 editor = []

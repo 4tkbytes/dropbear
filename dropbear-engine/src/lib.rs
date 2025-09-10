@@ -1,4 +1,3 @@
-use std::io::Write;
 pub mod lighting;
 pub mod buffer;
 pub mod camera;
@@ -14,12 +13,13 @@ pub mod panic;
 pub mod starter;
 pub mod utils;
 
+use std::io::Write;
 use chrono::Local;
 use egui::TextureId;
 use egui_wgpu_backend::ScreenDescriptor;
-use futures::FutureExt;
 use gilrs::{Gilrs, GilrsBuilder};
 use spin_sleep::SpinSleeper;
+use tokio::task::LocalSet;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -350,14 +350,15 @@ pub struct App {
     target_fps: u32,
     /// The library used for polling controllers, specifically the instance of that.
     gilrs: Gilrs,
+    // /// A task pool used for background async work
+    // runtime: Runtime,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
     fn new(config: WindowConfiguration) -> Self {
-        log::debug!("Created new instance of app");
-        Self {
+        let result = Self {
             state: None,
             config: config.clone(),
             scene_manager: scene::Manager::new(),
@@ -367,10 +368,12 @@ impl App {
             target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
-        }
+            // runtime,
+        };
+        log::debug!("Created new instance of app");
+        result
     }
 
-    #[allow(dead_code)]
     /// A constant that lets you not have any fps count.
     /// It is just the max value of an unsigned 32 bit number lol.
     pub const NO_FPS_CAP: u32 = u32::MAX;
@@ -379,6 +382,14 @@ impl App {
     pub fn set_target_fps(&mut self, fps: u32) {
         self.target_fps = fps.max(1);
     }
+
+    // /// Spawns a new task
+    // pub fn spawn_task<F>(&self, fut: F)
+    // where
+    //     F: std::future::Future<Output = ()> + Send + 'static,
+    // {
+    //     let _ = self.runtime.spawn(fut);
+    // }
 
     /// The run function. This function runs the app into gear.
     ///
@@ -393,7 +404,7 @@ impl App {
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
@@ -531,7 +542,7 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
-        self.state = Some(pollster::block_on(State::new(window)).unwrap());
+        self.state = Some(tokio::runtime::Handle::current().block_on(State::new(window)).unwrap());
 
         if let Some(state) = &mut self.state {
             let size = state.window.inner_size();
@@ -555,7 +566,10 @@ impl ApplicationHandler for App {
         state.egui_renderer.handle_input(&event);
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                log::info!("Exiting app");
+                event_loop.exit();
+            },
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 let frame_start = Instant::now();
@@ -564,14 +578,14 @@ impl ApplicationHandler for App {
                 self.input_manager.set_active_handlers(active_handlers);
 
                 self.input_manager.update(&mut self.gilrs);
-                if let Some(result) = state
-                    .render(&mut self.scene_manager, self.delta_time, event_loop)
-                    .now_or_never()
-                {
-                    match result {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    }
+                
+                let ls = LocalSet::new();
+                let render_result = tokio::runtime::Handle::current().block_on(ls.run_until(async {
+                    state.render(&mut self.scene_manager, self.delta_time, event_loop).await
+                }));
+
+                if let Err(e) = render_result {
+                    log::error!("Render failed: {:?}", e);
                 }
 
                 let frame_elapsed = frame_start.elapsed();

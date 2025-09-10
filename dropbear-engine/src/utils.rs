@@ -100,7 +100,7 @@ impl ResourceReference {
     /// ```
     ///
     /// Returns `None` if the path doesn't contain "resources" or if the path after resources is empty.
-    pub fn from_path(full_path: impl AsRef<Path>) -> Option<Self> {
+    pub fn from_path(full_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = full_path.as_ref();
 
         let components: Vec<_> = path.components().collect();
@@ -110,7 +110,7 @@ impl ResourceReference {
                 if *name == "resources" {
                     let remaining_components = &components[i + 1..];
                     if remaining_components.is_empty() {
-                        return None;
+                        anyhow::bail!("Unable to locate any remaining components");
                     }
 
                     let resource_path = remaining_components
@@ -122,14 +122,14 @@ impl ResourceReference {
                         .collect::<Vec<_>>()
                         .join("/");
 
-                    return Some(Self {
+                    return Ok(Self {
                         ref_type: ResourceReferenceType::File(resource_path),
                     });
                 }
             }
         }
 
-        None
+        anyhow::bail!("Nothing here")
     }
 
     pub fn as_bytes(&self) -> Option<&[u8]> {

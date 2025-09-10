@@ -24,7 +24,6 @@ glam.workspace = true
 log.workspace = true
 log-once.workspace = true
 russimp-ng.workspace = true
-pollster.workspace = true
 serde.workspace = true
 spin_sleep.workspace = true
 wgpu.workspace = true
@@ -33,6 +32,7 @@ hecs.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
 lazy_static.workspace = true
+tokio.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

@@ -73,7 +73,7 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let tabs = vec![EditorTab::Viewport];
         let mut dock_state = DockState::new(tabs);
 
@@ -125,7 +125,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new().unwrap(),
+            script_manager: ScriptManager::new().await.unwrap(),
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,
@@ -759,12 +759,6 @@ pub enum Signal {
     RemoveComponent(hecs::Entity, ComponentType),
     CreateEntity,
     LogEntities,
-}
-
-impl Default for Editor {
-    fn default() -> Self {
-        Editor::new()
-    }
 }
 
 #[derive(Debug)]

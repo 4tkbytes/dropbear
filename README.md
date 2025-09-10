@@ -6,8 +6,9 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Related projects
 
-- [eucalyptus](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus) is the visual editor used to create games visually, taking inspiration from Unity, Roblox Studio and other engines.
-- [redback](https://github.com/4tkbytes/redback-runtime) is the runtime used to load .eupak files and run the games loaded on them.
+- [eucalyptus-editor](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Roblox Studio and other engines.
+- [eucalyptus-core](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other. 
+- [redback-runtime](https://github.com/4tkbytes/redback-runtime) is the runtime used to load .eupak files and run the games loaded on them.
 
 ## Build
 
@@ -16,11 +17,20 @@ To build, ensure build requirements, clone the repository, then build it. It wil
 With Unix systems (macOS not tested), you will have to download a couple dependencies if building locally:
 
 <!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
+---
+
+### Ubuntu
 
 ```bash
-# ubuntu, adapt to your own OS
 sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-utils
 ```
+
+### Arch
+
+```bash
+sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp
+```
+---
 
 After downloading the requirements, you are free to build it using cargo.
 
