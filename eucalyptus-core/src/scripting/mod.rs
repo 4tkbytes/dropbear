@@ -26,6 +26,7 @@ pub trait ScriptableModule {
     // fn release(world: &mut World, entity_id: hecs::Entity, data: &serde_json::Value) -> anyhow::Result<()>;
 }
 
+
 pub const TEMPLATE_SCRIPT: &'static str = include_str!("../../../resources/template.ts");
 
 pub enum ScriptAction {
