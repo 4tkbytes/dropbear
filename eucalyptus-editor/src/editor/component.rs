@@ -2,13 +2,13 @@
 
 use std::time::Instant;
 use egui::{CollapsingHeader, ComboBox, Ui};
+use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use glam::Vec3;
 use hecs::Entity;
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
-use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use eucalyptus_core::states::ScriptComponent;
 use eucalyptus_core::warn;
 

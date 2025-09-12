@@ -25,7 +25,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera};
 use eucalyptus_core::{fatal, info, states, success, warn};
-use eucalyptus_core::scripting::input::InputState;
+use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
 use eucalyptus_core::states::{CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent, PROJECT, SCENES};
 use eucalyptus_core::utils::ViewportMode;
@@ -73,7 +73,7 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         let tabs = vec![EditorTab::Viewport];
         let mut dock_state = DockState::new(tabs);
 
@@ -125,7 +125,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new().await.unwrap(),
+            script_manager: ScriptManager::new().unwrap(),
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,

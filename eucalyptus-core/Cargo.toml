@@ -26,9 +26,7 @@ serde.workspace = true
 winit.workspace = true
 zip.workspace = true
 rustyscript.workspace = true
-tokio.workspace = true
-
-wasmtime.workspace = true
+wasmer.workspace = true
 
 [features]
 editor = []

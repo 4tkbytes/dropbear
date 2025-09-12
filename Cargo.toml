@@ -50,7 +50,7 @@ wgpu = "26"
 winit = { version = "0.30", features = [] }
 zip = "4.6"
 walkdir = "2.3"
-wasmtime = "36.0"
+wasmer = { version = "6.0" }
 
 [workspace.dependencies.image]
 version = "0.25"

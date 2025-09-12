@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
+default-run = "eucalyptus-editor"
 readme = "README.md"
 
 [dependencies]
@@ -33,7 +34,6 @@ winit.workspace = true
 clap.workspace = true
 walkdir.workspace = true
 zip.workspace = true
-tokio.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

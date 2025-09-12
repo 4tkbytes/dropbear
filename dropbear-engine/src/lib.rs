@@ -17,9 +17,9 @@ use std::io::Write;
 use chrono::Local;
 use egui::TextureId;
 use egui_wgpu_backend::ScreenDescriptor;
+use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use spin_sleep::SpinSleeper;
-use tokio::task::LocalSet;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -404,20 +404,10 @@ impl App {
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
-        // if cfg!(debug_assertions) {
-        //     log::info!("Running in dev mode");
-        //     let app_target = app_name.replace('-', "_");
-        //     let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
-        //     unsafe { std::env::set_var("RUST_LOG", log_config) };
-        // }
-        //
-        // #[cfg(not(target_os = "android"))]
-        // let _ = env_logger::try_init();
-
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
@@ -542,7 +532,7 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
-        self.state = Some(tokio::runtime::Handle::current().block_on(State::new(window)).unwrap());
+        self.state = Some(block_on(State::new(window)).unwrap());
 
         if let Some(state) = &mut self.state {
             let size = state.window.inner_size();
@@ -579,10 +569,7 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update(&mut self.gilrs);
                 
-                let ls = LocalSet::new();
-                let render_result = tokio::runtime::Handle::current().block_on(ls.run_until(async {
-                    state.render(&mut self.scene_manager, self.delta_time, event_loop).await
-                }));
+                let render_result = block_on(state.render(&mut self.scene_manager, self.delta_time, event_loop));
 
                 if let Err(e) = render_result {
                     log::error!("Render failed: {:?}", e);
