@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use dropbear_engine::camera::Camera;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
-use dropbear_engine::camera::Camera;
+use std::collections::HashSet;
 use winit::keyboard::KeyCode;
 
 #[derive(Debug, Clone)]
@@ -9,7 +9,7 @@ pub struct CameraComponent {
     pub speed: f64,
     pub sensitivity: f64,
     pub fov_y: f64,
-    pub camera_type: CameraType
+    pub camera_type: CameraType,
 }
 
 impl CameraComponent {
@@ -42,10 +42,7 @@ impl PlayerCamera {
         }
     }
 
-    pub fn handle_keyboard_input(
-        camera: &mut Camera,
-        pressed_keys: &HashSet<KeyCode>
-    ) {
+    pub fn handle_keyboard_input(camera: &mut Camera, pressed_keys: &HashSet<KeyCode>) {
         for key in pressed_keys {
             match key {
                 KeyCode::KeyW => camera.move_forwards(),
@@ -59,7 +56,11 @@ impl PlayerCamera {
         }
     }
 
-    pub fn handle_mouse_input(camera: &mut Camera, component: &CameraComponent, mouse_delta: Option<(f64, f64)>) {
+    pub fn handle_mouse_input(
+        camera: &mut Camera,
+        component: &CameraComponent,
+        mouse_delta: Option<(f64, f64)>,
+    ) {
         if let Some((dx, dy)) = mouse_delta {
             camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
         }
@@ -76,10 +77,7 @@ impl DebugCamera {
         }
     }
 
-    pub fn handle_keyboard_input(
-        camera: &mut Camera,
-        pressed_keys: &HashSet<KeyCode>
-    ) {
+    pub fn handle_keyboard_input(camera: &mut Camera, pressed_keys: &HashSet<KeyCode>) {
         for key in pressed_keys {
             match key {
                 KeyCode::KeyW => camera.move_forwards(),
@@ -93,7 +91,11 @@ impl DebugCamera {
         }
     }
 
-    pub fn handle_mouse_input(camera: &mut Camera, component: &CameraComponent, mouse_delta: Option<(f64, f64)>) {
+    pub fn handle_mouse_input(
+        camera: &mut Camera,
+        component: &CameraComponent,
+        mouse_delta: Option<(f64, f64)>,
+    ) {
         if let Some((dx, dy)) = mouse_delta {
             camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
         }

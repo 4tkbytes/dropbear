@@ -10,7 +10,10 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
         return Err(anyhow::anyhow!("Unable to locate project config file"));
     }
 
-    let build_dir = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("build");
+    let build_dir = project_path
+        .parent()
+        .ok_or(anyhow::anyhow!("Unable to get parent"))?
+        .join("build");
 
     // check health
     println!("Checking health (checking if commands exist)");
@@ -18,7 +21,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     println!("Health check completed!");
 
     let clone_dir = build_dir.join("redback-runtime");
-    
+
     if clone_dir.exists() {
         println!("Repository directory exists, checking for updates...");
         if should_update_repository(&clone_dir)? {
@@ -39,15 +42,17 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     // cd into redback-runtime folder and compile redback-runtime using cargo
     let runtime_dir = build_dir.join("redback-runtime");
     if !runtime_dir.exists() {
-        return Err(anyhow::anyhow!("redback-runtime directory not found after cloning"));
+        return Err(anyhow::anyhow!(
+            "redback-runtime directory not found after cloning"
+        ));
     }
 
     let cargo_toml_path = runtime_dir.join("Cargo.toml");
     if cargo_toml_path.exists() {
         let cargo_toml_content = std::fs::read_to_string(&cargo_toml_path)?;
         let modified_content = cargo_toml_content.replace(
-            r#"name = "redback-runtime""#, 
-            &format!(r#"name = "{}""#, project_name)
+            r#"name = "redback-runtime""#,
+            &format!(r#"name = "{}""#, project_name),
         );
         std::fs::write(&cargo_toml_path, modified_content)?;
         println!("Updated Cargo.toml with project name: {}", project_name);
@@ -74,34 +79,52 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     } else {
         project_name.clone()
     };
-    
+
     let built_exe = target_dir.join(&exe_name);
     if !built_exe.exists() {
-        return Err(anyhow::anyhow!("Built executable not found at: {}", built_exe.display()));
+        return Err(anyhow::anyhow!(
+            "Built executable not found at: {}",
+            built_exe.display()
+        ));
     }
 
     println!("Building project data (.eupak file)");
     build(project_path.clone())?;
 
-    let output_dir = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("build").join("package");
+    let output_dir = project_path
+        .parent()
+        .ok_or(anyhow::anyhow!("Unable to get parent"))?
+        .join("build")
+        .join("package");
     std::fs::create_dir_all(&output_dir)?;
 
     let output_exe = output_dir.join(&exe_name);
-    
+
     println!("Copying executable to: {}", output_exe.display());
     std::fs::copy(&built_exe, &output_exe)?;
 
-    let eupak_source = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("build").join("output").join(format!("{}.eupak", project_name));
+    let eupak_source = project_path
+        .parent()
+        .ok_or(anyhow::anyhow!("Unable to get parent"))?
+        .join("build")
+        .join("output")
+        .join(format!("{}.eupak", project_name));
     let eupak_dest = output_dir.join(format!("{}.eupak", project_name));
-    
+
     if !eupak_source.exists() {
-        return Err(anyhow::anyhow!("Expected .eupak file not found at: {}", eupak_source.display()));
+        return Err(anyhow::anyhow!(
+            "Expected .eupak file not found at: {}",
+            eupak_source.display()
+        ));
     }
-    
+
     println!("Copying .eupak file to: {}", eupak_dest.display());
     std::fs::copy(&eupak_source, &eupak_dest)?;
 
-    let project_resources = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("resources");
+    let project_resources = project_path
+        .parent()
+        .ok_or(anyhow::anyhow!("Unable to get parent"))?
+        .join("resources");
     if project_resources.exists() {
         println!("Copying resources folder...");
         let output_resources = output_dir.join("resources");
@@ -119,7 +142,11 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     copy_system_libraries(&output_dir)?;
 
     println!("Creating zip package...");
-    let zip_path = project_path.parent().ok_or(anyhow::anyhow!("Unable to get parent"))?.join("build").join(format!("{}.zip", project_name));
+    let zip_path = project_path
+        .parent()
+        .ok_or(anyhow::anyhow!("Unable to get parent"))?
+        .join("build")
+        .join(format!("{}.zip", project_name));
     create_zip_package(&output_dir, &zip_path)?;
 
     println!("Cleaning up temporary files");
@@ -140,8 +167,10 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
 }
 
 fn clone_repository(build_dir: &PathBuf) -> anyhow::Result<()> {
-    git2::build::RepoBuilder::new()
-        .clone("https://github.com/4tkbytes/redback-runtime", &build_dir.join("redback-runtime"))?;
+    git2::build::RepoBuilder::new().clone(
+        "https://github.com/4tkbytes/redback-runtime",
+        &build_dir.join("redback-runtime"),
+    )?;
     println!("Repository cloned successfully!");
     Ok(())
 }
@@ -163,8 +192,11 @@ fn should_update_repository(repo_dir: &PathBuf) -> anyhow::Result<bool> {
     let mut remote = repo.find_remote("origin")?;
     remote.fetch(&["refs/heads/*:refs/remotes/origin/*"], None, None)?;
 
-    let head = repo.head()?.target().ok_or(anyhow::anyhow!("No HEAD commit"))?;
-    
+    let head = repo
+        .head()?
+        .target()
+        .ok_or(anyhow::anyhow!("No HEAD commit"))?;
+
     let remote_ref = if let Ok(remote_main) = repo.find_reference("refs/remotes/origin/main") {
         remote_main
     } else if let Ok(remote_master) = repo.find_reference("refs/remotes/origin/master") {
@@ -173,7 +205,9 @@ fn should_update_repository(repo_dir: &PathBuf) -> anyhow::Result<bool> {
         return Ok(true);
     };
 
-    let remote_commit = remote_ref.target().ok_or(anyhow::anyhow!("No remote commit"))?;
+    let remote_commit = remote_ref
+        .target()
+        .ok_or(anyhow::anyhow!("No remote commit"))?;
 
     Ok(head != remote_commit)
 }
@@ -259,11 +293,11 @@ fn create_zip_package(source_dir: &PathBuf, zip_path: &PathBuf) -> anyhow::Resul
     for entry in walkdir {
         let entry = entry?;
         let path = entry.path();
-        
+
         if path.is_file() {
             let relative_path = path.strip_prefix(source_dir)?;
             let name = relative_path.to_string_lossy();
-            
+
             let options: SimpleFileOptions = Default::default();
             zip.start_file(name, options.into())?;
             let mut file = std::fs::File::open(path)?;
@@ -278,21 +312,25 @@ fn create_zip_package(source_dir: &PathBuf, zip_path: &PathBuf) -> anyhow::Resul
 
 pub fn read_from_eupak(eupak_path: PathBuf) -> anyhow::Result<()> {
     let bytes = std::fs::read(&eupak_path)?;
-    let (content, _): (RuntimeData, usize) = bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+    let (content, _): (RuntimeData, usize) =
+        bincode::decode_from_slice(&bytes, bincode::config::standard())?;
     println!("{} contents: {:#?}", eupak_path.display(), content);
     Ok(())
 }
 
 pub fn build(
-        project_path: PathBuf,
-        // _sub_matches: &ArgMatches
-    ) -> anyhow::Result<PathBuf> {
+    project_path: PathBuf,
+    // _sub_matches: &ArgMatches
+) -> anyhow::Result<PathBuf> {
     println!(" > Starting build");
     if !project_path.exists() {
-        return Err(anyhow::anyhow!(format!("Unable to locate project config file: [{}]", project_path.display())));
+        return Err(anyhow::anyhow!(format!(
+            "Unable to locate project config file: [{}]",
+            project_path.display()
+        )));
     }
     // ProjectConfig::read_from(&project_path)?.load_config_to_memory()?;
-    
+
     let mut project_config = ProjectConfig::read_from(&project_path)?;
     log::info!(" > Reading from project config");
     project_config.load_config_to_memory()?;
@@ -337,7 +375,7 @@ pub fn build(
         project_config,
         source_config,
         scene_data,
-        scripts
+        scripts,
     };
     log::info!(" > Created runtime data structures");
 
@@ -346,23 +384,28 @@ pub fn build(
     std::fs::write(&runtime_file, serialized)?;
     log::info!(" > Written the file to build location");
 
-    println!("Build completed successfully. Output at {:?}", runtime_file.display());
+    println!(
+        "Build completed successfully. Output at {:?}",
+        runtime_file.display()
+    );
     Ok(runtime_file)
 }
 
 pub fn health() -> anyhow::Result<()> {
     let mut all_healthy = true;
-    
+
     match Command::new("cargo").arg("--version").output() {
         Ok(output) => {
             if output.status.success() {
                 let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 println!("Does cargo exist? ✓ YES - {}", version);
-                
+
                 match Command::new("rustc").arg("--version").output() {
                     Ok(rustc_output) => {
                         if rustc_output.status.success() {
-                            let rustc_version = String::from_utf8_lossy(&rustc_output.stdout).trim().to_string();
+                            let rustc_version = String::from_utf8_lossy(&rustc_output.stdout)
+                                .trim()
+                                .to_string();
                             println!("Does rustc compiler exist? ✓ YES - {}", rustc_version);
                         } else {
                             println!("Does rustc compiler exist? ✗ NO - rustc command failed");
@@ -386,21 +429,25 @@ pub fn health() -> anyhow::Result<()> {
             all_healthy = false;
         }
     }
-    
+
     let assimp_found = check_assimp_availability();
     if assimp_found {
         println!("Does assimp lib exist? ✓ YES - Found assimp library");
     } else {
-        println!("Does assimp lib exist? ⚠ MAYBE - Could not definitively locate assimp, but it may be available through system package manager or vcpkg");
+        println!(
+            "Does assimp lib exist? ⚠ MAYBE - Could not definitively locate assimp, but it may be available through system package manager or vcpkg"
+        );
     }
-    
+
     if all_healthy {
         println!("\n✓ All core tools are available!");
     } else {
         println!("\n✗ Some required tools are missing. Please install Rust and Cargo.");
-        return Err(anyhow::anyhow!("Health check failed - missing required tools"));
+        return Err(anyhow::anyhow!(
+            "Health check failed - missing required tools"
+        ));
     }
-    
+
     Ok(())
 }
 
@@ -415,20 +462,20 @@ fn check_assimp_availability() -> bool {
             "C:\\Program Files\\Assimp\\lib\\assimp.lib",
             "C:\\Program Files (x86)\\Assimp\\lib\\assimp.lib",
         ];
-        
+
         for path in common_paths {
             if std::path::Path::new(path).exists() {
                 return true;
             }
         }
-        
+
         if let Ok(output) = Command::new("where").arg("assimp.dll").output() {
             if output.status.success() {
                 return true;
             }
         }
     }
-    
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let common_paths = vec![
@@ -439,19 +486,22 @@ fn check_assimp_availability() -> bool {
             "/opt/homebrew/lib/libassimp.dylib",
             "/usr/local/lib/libassimp.dylib",
         ];
-        
+
         for path in common_paths {
             if std::path::Path::new(path).exists() {
                 return true;
             }
         }
-        
-        if let Ok(output) = Command::new("pkg-config").args(&["--exists", "assimp"]).output() {
+
+        if let Ok(output) = Command::new("pkg-config")
+            .args(&["--exists", "assimp"])
+            .output()
+        {
             if output.status.success() {
                 return true;
             }
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             if let Ok(output) = Command::new("ldconfig").args(&["-p"]).output() {
@@ -464,6 +514,6 @@ fn check_assimp_availability() -> bool {
             }
         }
     }
-    
+
     false
 }

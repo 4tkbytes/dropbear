@@ -4,7 +4,14 @@ use egui::Context;
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout, util::{BufferInitDescriptor, DeviceExt}};
+use wgpu::{
+    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
+    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass,
+    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState,
+    SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor, VertexBufferLayout,
+    util::{BufferInitDescriptor, DeviceExt},
+};
 
 use crate::{
     State,
@@ -386,7 +393,11 @@ impl Texture {
         }
     }
 
-    pub fn new_with_sampler(graphics: &Graphics, diffuse_bytes: &[u8], address_mode: wgpu::AddressMode) -> Self {
+    pub fn new_with_sampler(
+        graphics: &Graphics,
+        diffuse_bytes: &[u8],
+        address_mode: wgpu::AddressMode,
+    ) -> Self {
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
         let diffuse_rgba = diffuse_image.to_rgba8();
 
@@ -553,7 +564,6 @@ impl InstanceRaw {
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-
                 // normal
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,

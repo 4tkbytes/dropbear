@@ -1,8 +1,8 @@
 //! Utilities and helper functions for the dropbear renderer.
 
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 /// An enum that contains the different types that a resource reference can possibly be.
 ///
@@ -58,7 +58,7 @@ impl Default for ResourceReferenceType {
 /// _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResourceReference {
-    pub ref_type: ResourceReferenceType
+    pub ref_type: ResourceReferenceType,
 }
 
 impl Display for ResourceReference {
@@ -71,21 +71,19 @@ impl ResourceReference {
     /// Creates an empty `ResourceReference` struct.
     pub fn new() -> Self {
         Self {
-            ref_type: ResourceReferenceType::None
+            ref_type: ResourceReferenceType::None,
         }
     }
-    
+
     /// Creates a new `ResourceReference` from bytes
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Self {
-            ref_type: ResourceReferenceType::Bytes(bytes)
+            ref_type: ResourceReferenceType::Bytes(bytes),
         }
     }
 
     pub fn from_reference(ref_type: ResourceReferenceType) -> Self {
-        Self {
-            ref_type
-        }
+        Self { ref_type }
     }
 
     /// Creates a `ResourceReference` from a full path by extracting the part after "resources/".
@@ -158,17 +156,16 @@ impl ResourceReference {
             }
             _ => None,
         }
-
     }
 
     /// Creates a PathBuf that points to the resource relative to the executable directory.
     pub fn to_executable_path(&self) -> anyhow::Result<PathBuf> {
         let exe_path = std::env::current_exe()?;
-        let exe_dir = exe_path.parent().ok_or(anyhow::anyhow!("Cannot resolve executable path"))?;
+        let exe_dir = exe_path
+            .parent()
+            .ok_or(anyhow::anyhow!("Cannot resolve executable path"))?;
         match &self.ref_type {
-            ResourceReferenceType::File(file) => {
-                Ok(exe_dir.join("resources").join(file.as_str()))
-            }
+            ResourceReferenceType::File(file) => Ok(exe_dir.join("resources").join(file.as_str())),
             _ => Err(anyhow::anyhow!("Cannot resolve executable path")),
         }
     }
@@ -180,8 +177,12 @@ impl ResourceReference {
     /// Returns an error of the ResourceReferenceType is not of type [`ResourceReferenceType::File`]
     pub fn resolve_path(&self) -> anyhow::Result<PathBuf> {
         match &self.ref_type {
-            ResourceReferenceType::None => {anyhow::bail!("Cannot resolve ResourceReferenceType::None")}
-            ResourceReferenceType::Bytes(_) => {anyhow::bail!("Cannot resolve bytes")}
+            ResourceReferenceType::None => {
+                anyhow::bail!("Cannot resolve ResourceReferenceType::None")
+            }
+            ResourceReferenceType::Bytes(_) => {
+                anyhow::bail!("Cannot resolve bytes")
+            }
             ResourceReferenceType::File(path) => {
                 if let Ok(exe_path) = self.to_executable_path() {
                     if exe_path.exists() {
@@ -193,9 +194,10 @@ impl ResourceReference {
                     .join("resources")
                     .join(path.as_str()))
             }
-            _ => {anyhow::bail!("Cannot resolve ResourceReferenceType::Plane")}
+            _ => {
+                anyhow::bail!("Cannot resolve ResourceReferenceType::Plane")
+            }
         }
-
     }
 }
 

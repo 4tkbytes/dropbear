@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Attenuation {
     pub range: f32,
@@ -70,14 +69,12 @@ pub const RANGE_65: Attenuation = Attenuation {
     quadratic: 0.017,
 };
 
-
 pub const RANGE_100: Attenuation = Attenuation {
     range: 100.0,
     constant: 1.0,
     linear: 0.045,
     quadratic: 0.0075,
 };
-
 
 pub const RANGE_160: Attenuation = Attenuation {
     range: 160.0,
@@ -86,14 +83,12 @@ pub const RANGE_160: Attenuation = Attenuation {
     quadratic: 0.0028,
 };
 
-
 pub const RANGE_200: Attenuation = Attenuation {
     range: 200.0,
     constant: 1.0,
     linear: 0.022,
     quadratic: 0.0019,
 };
-
 
 pub const RANGE_325: Attenuation = Attenuation {
     range: 325.0,
@@ -102,14 +97,12 @@ pub const RANGE_325: Attenuation = Attenuation {
     quadratic: 0.0007,
 };
 
-
 pub const RANGE_600: Attenuation = Attenuation {
     range: 600.0,
     constant: 1.0,
     linear: 0.007,
     quadratic: 0.0002,
 };
-
 
 pub const RANGE_3250: Attenuation = Attenuation {
     range: 3250.0,

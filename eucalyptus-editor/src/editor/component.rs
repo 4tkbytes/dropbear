@@ -1,27 +1,43 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
-use std::time::Instant;
-use egui::{CollapsingHeader, ComboBox, Ui};
-use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
-use glam::Vec3;
-use hecs::Entity;
+use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
-use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
+use egui::{CollapsingHeader, ComboBox, Ui};
+use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use eucalyptus_core::states::ScriptComponent;
 use eucalyptus_core::warn;
+use glam::Vec3;
+use hecs::Entity;
+use std::time::Instant;
 
 pub trait Component {
-    fn inspect(&mut self, entity: &mut hecs::Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, signal: &mut Signal, label: &mut String);
+    fn inspect(
+        &mut self,
+        entity: &mut hecs::Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        signal: &mut Signal,
+        label: &mut String,
+    );
 }
 
 impl Component for Transform {
-    fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         ui.group(|ui| {
-            CollapsingHeader::new("Transform").default_open(true).show(
-                ui,
-                |ui| {
+            CollapsingHeader::new("Transform")
+                .default_open(true)
+                .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Position:");
                     });
@@ -127,19 +143,16 @@ impl Component for Transform {
                         let response = ui.add(
                             egui::Slider::new(
                                 &mut x_rot,
-                                -std::f64::consts::PI
-                                    ..=std::f64::consts::PI,
+                                -std::f64::consts::PI..=std::f64::consts::PI,
                             )
-                                .step_by(0.01)
-                                .custom_formatter(|n, _| {
-                                    format!("{:.1}°", n.to_degrees())
-                                })
-                                .custom_parser(|s| {
-                                    s.trim_end_matches('°')
-                                        .parse::<f64>()
-                                        .ok()
-                                        .map(|v| v.to_radians())
-                                }),
+                            .step_by(0.01)
+                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                            .custom_parser(|s| {
+                                s.trim_end_matches('°')
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|v| v.to_radians())
+                            }),
                         );
 
                         if response.drag_started() {
@@ -171,19 +184,16 @@ impl Component for Transform {
                         let response = ui.add(
                             egui::Slider::new(
                                 &mut y_rot,
-                                -std::f64::consts::PI
-                                    ..=std::f64::consts::PI,
+                                -std::f64::consts::PI..=std::f64::consts::PI,
                             )
-                                .step_by(0.01)
-                                .custom_formatter(|n, _| {
-                                    format!("{:.1}°", n.to_degrees())
-                                })
-                                .custom_parser(|s| {
-                                    s.trim_end_matches('°')
-                                        .parse::<f64>()
-                                        .ok()
-                                        .map(|v| v.to_radians())
-                                }),
+                            .step_by(0.01)
+                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                            .custom_parser(|s| {
+                                s.trim_end_matches('°')
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|v| v.to_radians())
+                            }),
                         );
 
                         if response.drag_started() {
@@ -215,19 +225,16 @@ impl Component for Transform {
                         let response = ui.add(
                             egui::Slider::new(
                                 &mut z_rot,
-                                -std::f64::consts::PI
-                                    ..=std::f64::consts::PI,
+                                -std::f64::consts::PI..=std::f64::consts::PI,
                             )
-                                .step_by(0.01)
-                                .custom_formatter(|n, _| {
-                                    format!("{:.1}°", n.to_degrees())
-                                })
-                                .custom_parser(|s| {
-                                    s.trim_end_matches('°')
-                                        .parse::<f64>()
-                                        .ok()
-                                        .map(|v| v.to_radians())
-                                }),
+                            .step_by(0.01)
+                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
+                            .custom_parser(|s| {
+                                s.trim_end_matches('°')
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|v| v.to_radians())
+                            }),
                         );
 
                         if response.drag_started() {
@@ -255,12 +262,8 @@ impl Component for Transform {
                     });
 
                     if rotation_changed {
-                        self.rotation = glam::DQuat::from_euler(
-                            glam::EulerRot::XYZ,
-                            x_rot,
-                            y_rot,
-                            z_rot,
-                        );
+                        self.rotation =
+                            glam::DQuat::from_euler(glam::EulerRot::XYZ, x_rot, y_rot, z_rot);
                     }
                     if ui.button("Reset Rotation").clicked() {
                         self.rotation = glam::DQuat::IDENTITY;
@@ -269,23 +272,16 @@ impl Component for Transform {
 
                     ui.horizontal(|ui| {
                         ui.label("Scale:");
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                let lock_icon = if cfg.scale_locked {
-                                    "🔒"
-                                } else {
-                                    "🔓"
-                                };
-                                if ui
-                                    .button(lock_icon)
-                                    .on_hover_text("Lock uniform scaling")
-                                    .clicked()
-                                {
-                                    cfg.scale_locked = !cfg.scale_locked;
-                                }
-                            },
-                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
+                            if ui
+                                .button(lock_icon)
+                                .on_hover_text("Lock uniform scaling")
+                                .clicked()
+                            {
+                                cfg.scale_locked = !cfg.scale_locked;
+                            }
+                        });
                     });
 
                     let mut scale_changed = false;
@@ -404,14 +400,21 @@ impl Component for Transform {
                     // if pos_changed || rotation_changed || scale_changed {
                     //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
                     // }
-                },
-            );
+                });
         });
     }
 }
 
 impl Component for ScriptComponent {
-    fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, signal: &mut Signal, label: &mut String) {
+    fn inspect(
+        &mut self,
+        _entity: &mut Entity,
+        _cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        _undo_stack: &mut Vec<UndoableAction>,
+        signal: &mut Signal,
+        label: &mut String,
+    ) {
         let script_loc = self.path.to_str().unwrap_or("").to_string();
 
         ui.group(|ui| {
@@ -504,7 +507,15 @@ impl Component for ScriptComponent {
 }
 
 impl Component for AdoptedEntity {
-    fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         // label
         ui.group(|ui| {
             ui.horizontal(|ui| {
@@ -542,7 +553,15 @@ impl Component for AdoptedEntity {
 }
 
 impl Component for Light {
-    fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         ui.group(|ui| {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
@@ -579,14 +598,26 @@ impl Component for Light {
 }
 
 impl Component for LightComponent {
-    fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        _entity: &mut Entity,
+        _cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        _undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         ui.group(|ui| {
             ui.horizontal(|ui| {
                 ComboBox::new("light_type", "Light Type")
                     // .width(ui.available_width())
                     .selected_text(self.light_type.to_string())
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.light_type, LightType::Directional, "Directional");
+                        ui.selectable_value(
+                            &mut self.light_type,
+                            LightType::Directional,
+                            "Directional",
+                        );
                         ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
                         ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
                     });
@@ -641,7 +672,7 @@ impl Component for LightComponent {
                         egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
                             .text("Inner")
                             .suffix("°")
-                            .step_by(0.1)
+                            .step_by(0.1),
                     );
                 });
 
@@ -650,7 +681,7 @@ impl Component for LightComponent {
                         egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
                             .text("Outer")
                             .suffix("°")
-                            .step_by(0.1)
+                            .step_by(0.1),
                     );
                 });
 

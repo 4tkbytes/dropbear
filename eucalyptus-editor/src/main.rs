@@ -1,13 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod utils;
-mod camera;
-mod editor;
 mod build;
-mod menu;
+mod camera;
 mod debug;
+mod editor;
+mod menu;
+mod utils;
 
-use std::{cell::RefCell, rc::Rc, fs, path::PathBuf};
 use clap::{Arg, Command};
+use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
 use dropbear_engine::{WindowConfiguration, scene};
 
@@ -18,9 +18,11 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
 
 fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]
-    compile_error!("The `editor` feature is not supported on Android. If you are attempting\
+    compile_error!(
+        "The `editor` feature is not supported on Android. If you are attempting\
  to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
- to use with dependencies or create your own game on Desktop. Sorry :(");
+ to use with dependencies or create your own game on Desktop. Sorry :("
+    );
     let matches = Command::new("eucalyptus-editor")
         .about("A visual game editor")
         .version(env!("CARGO_PKG_VERSION"))

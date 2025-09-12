@@ -1,10 +1,11 @@
-use std::path::PathBuf;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use wgpu::{util::DeviceExt, Buffer};
+use std::path::PathBuf;
+use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
-    graphics::{Graphics, Instance}, model::Model
+    graphics::{Graphics, Instance},
+    model::Model,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
@@ -71,9 +72,9 @@ impl AdoptedEntity {
     pub fn label(&self) -> &String {
         &self.model().label
     }
-    
+
     pub fn label_mut(&mut self) -> &mut String {
-        &mut self.model_mut().label   
+        &mut self.model_mut().label
     }
 
     pub fn set_label(&mut self, label: &str) {
@@ -84,14 +85,18 @@ impl AdoptedEntity {
         let instance = Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE);
         let initial_matrix = DMat4::IDENTITY; // Default; update in new() if transform provided
         let instance_raw = instance.to_raw();
-        let instance_buffer = graphics.state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: match label {
-                Some(l) => Some(l),
-                None => Some("instance buffer"),
-            },
-            contents: bytemuck::cast_slice(&[instance_raw]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        let instance_buffer =
+            graphics
+                .state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: match label {
+                        Some(l) => Some(l),
+                        None => Some("instance buffer"),
+                    },
+                    contents: bytemuck::cast_slice(&[instance_raw]),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
 
         Self {
             model: Some(model),
@@ -107,7 +112,10 @@ impl AdoptedEntity {
             self.instance = Instance::from_matrix(current_matrix);
             let instance_raw = self.instance.to_raw();
             if let Some(buffer) = &self.instance_buffer {
-                graphics.state.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
+                graphics
+                    .state
+                    .queue
+                    .write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
             }
             self.previous_matrix = current_matrix;
         }

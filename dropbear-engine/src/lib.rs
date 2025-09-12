@@ -1,38 +1,39 @@
-pub mod lighting;
+pub mod attenuation;
 pub mod buffer;
 pub mod camera;
 pub mod egui_renderer;
 pub mod entity;
 pub mod graphics;
 pub mod input;
+pub mod lighting;
 pub mod model;
+pub mod panic;
 pub mod resources;
 pub mod scene;
-pub mod attenuation;
-pub mod panic;
 pub mod starter;
 pub mod utils;
 
-use std::io::Write;
+use app_dirs2::{AppDataType, AppInfo};
 use chrono::Local;
+use colored::Colorize;
 use egui::TextureId;
 use egui_wgpu_backend::ScreenDescriptor;
+use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use spin_sleep::SpinSleeper;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::sync::Mutex;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     u32,
 };
-use std::fs::OpenOptions;
-use std::sync::Mutex;
-use app_dirs2::{AppDataType, AppInfo};
-use colored::Colorize;
-use env_logger::Builder;
 use wgpu::{
-    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat
+    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
+    TextureFormat,
 };
 use winit::{
     application::ApplicationHandler,
@@ -48,10 +49,10 @@ use crate::{
     graphics::{Graphics, Texture},
 };
 
-pub use winit;
-pub use wgpu;
 pub use gilrs;
 use log::LevelFilter;
+pub use wgpu;
+pub use winit;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -104,7 +105,7 @@ impl State {
 
         let info = adapter.get_info();
         log::info!(
-"\n==================== BACKEND INFO ====================
+            "\n==================== BACKEND INFO ====================
 Backend: {}
 
 Hardware:
@@ -211,11 +212,14 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        self.texture_id = self.egui_renderer.renderer().egui_texture_from_wgpu_texture(
-            &self.device,
-            &self.viewport_texture.view,
-            wgpu::FilterMode::Linear,
-        );
+        self.texture_id = self
+            .egui_renderer
+            .renderer()
+            .egui_texture_from_wgpu_texture(
+                &self.device,
+                &self.viewport_texture.view,
+                wgpu::FilterMode::Linear,
+            );
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
@@ -231,31 +235,29 @@ Hardware:
 
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
-            Err(e) => {
-                match e {
-                    SurfaceError::Lost => {
-                        log_once::warn_once!("Surface lost, reconfiguring...");
-                        self.surface.configure(&self.device, &self.config);
-                        return Ok(());
-                    }
-                    SurfaceError::Outdated => {
-                        log_once::warn_once!("Surface outdated, reconfiguring...");
-                        self.surface.configure(&self.device, &self.config);
-                        return Ok(());
-                    }
-                    SurfaceError::Timeout => {
-                        log_once::warn_once!("Surface timeout, skipping frame");
-                        return Ok(());
-                    }
-                    SurfaceError::OutOfMemory => {
-                        return Err(anyhow::anyhow!("Surface out of memory: {:?}", e));
-                    }
-                    SurfaceError::Other => {
-                        log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                        return Ok(());
-                    }
+            Err(e) => match e {
+                SurfaceError::Lost => {
+                    log_once::warn_once!("Surface lost, reconfiguring...");
+                    self.surface.configure(&self.device, &self.config);
+                    return Ok(());
                 }
-            }
+                SurfaceError::Outdated => {
+                    log_once::warn_once!("Surface outdated, reconfiguring...");
+                    self.surface.configure(&self.device, &self.config);
+                    return Ok(());
+                }
+                SurfaceError::Timeout => {
+                    log_once::warn_once!("Surface timeout, skipping frame");
+                    return Ok(());
+                }
+                SurfaceError::OutOfMemory => {
+                    return Err(anyhow::anyhow!("Surface out of memory: {:?}", e));
+                }
+                SurfaceError::Other => {
+                    log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
+                    return Ok(());
+                }
+            },
         };
 
         let size = self.window.inner_size();
@@ -296,11 +298,11 @@ Hardware:
         );
 
         let command_buffer = encoder.finish();
-        
+
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             self.queue.submit(std::iter::once(command_buffer));
         })) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(_) => {
                 log::error!("Failed to submit command buffer, device may be lost");
                 return Err(anyhow::anyhow!("Command buffer submission failed"));
@@ -310,7 +312,7 @@ Hardware:
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             output.present();
         })) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(_) => {
                 log::error!("Failed to present frame, surface may be lost");
                 return Err(anyhow::anyhow!("Frame presentation failed"));
@@ -444,10 +446,12 @@ impl App {
 
                     let colored_timestamp = ts.to_string().bright_black();
 
-                    let file_info = format!("{}:{}",
-                                            record.file().unwrap_or("unknown"),
-                                            record.line().unwrap_or(0)
-                    ).bright_black();
+                    let file_info = format!(
+                        "{}:{}",
+                        record.file().unwrap_or("unknown"),
+                        record.line().unwrap_or(0)
+                    )
+                    .bright_black();
 
                     let console_line = format!(
                         "{} {} [{}] - {}\n",
@@ -474,7 +478,10 @@ impl App {
                     Ok(())
                 })
                 .filter(Some("dropbear_engine"), LevelFilter::Trace)
-                .filter(Some(app_name.replace('-', "_").as_str()), LevelFilter::Debug)
+                .filter(
+                    Some(app_name.replace('-', "_").as_str()),
+                    LevelFilter::Debug,
+                )
                 .init();
 
             // setup panic
@@ -516,7 +523,8 @@ macro_rules! run_app {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut window_attributes = Window::default_attributes().with_title(self.config.title.clone());
+        let mut window_attributes =
+            Window::default_attributes().with_title(self.config.title.clone());
 
         if self.config.windowed_mode.is_windowed() {
             if let Some((width, height)) = self.config.windowed_mode.windowed_size() {
@@ -559,7 +567,7 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 log::info!("Exiting app");
                 event_loop.exit();
-            },
+            }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 let frame_start = Instant::now();
@@ -568,8 +576,9 @@ impl ApplicationHandler for App {
                 self.input_manager.set_active_handlers(active_handlers);
 
                 self.input_manager.update(&mut self.gilrs);
-                
-                let render_result = block_on(state.render(&mut self.scene_manager, self.delta_time, event_loop));
+
+                let render_result =
+                    block_on(state.render(&mut self.scene_manager, self.delta_time, event_loop));
 
                 if let Err(e) = render_result {
                     log::error!("Render failed: {:?}", e);

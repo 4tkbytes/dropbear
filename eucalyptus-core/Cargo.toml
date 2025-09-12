@@ -8,7 +8,7 @@ readme = "README.md"
 
 [dependencies]
 anyhow.workspace = true
-app_dirs2.workspace = true
+# app_dirs2.workspace = true
 bincode.workspace = true
 chrono.workspace = true
 dropbear-engine.workspace = true
@@ -24,12 +24,15 @@ parking_lot.workspace = true
 ron.workspace = true
 serde.workspace = true
 winit.workspace = true
-zip.workspace = true
+# zip.workspace = true
 rustyscript.workspace = true
 wasmer.workspace = true
 
 [features]
 editor = []
+
+[package.metadata.cargo-machete]
+ignored = ["wasmer"]
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

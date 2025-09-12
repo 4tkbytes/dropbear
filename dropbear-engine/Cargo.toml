@@ -29,7 +29,7 @@ spin_sleep.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 hecs.workspace = true
-once_cell.workspace = true
+# once_cell.workspace = true
 parking_lot.workspace = true
 lazy_static.workspace = true
 

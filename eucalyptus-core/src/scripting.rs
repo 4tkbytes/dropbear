@@ -1,20 +1,20 @@
+use crate::camera::CameraComponent;
+use crate::input::InputState;
+use crate::states::{EntityNode, ModelProperties, PROJECT, SOURCE, ScriptComponent};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent};
 use glam::DVec3;
 use hecs::World;
-use rustyscript::{serde_json, Module, ModuleHandle, Runtime, RuntimeOptions};
+use rustyscript::{Module, ModuleHandle, Runtime, RuntimeOptions, serde_json};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
-use crate::camera::CameraComponent;
-use crate::input::InputState;
-use crate::states::{EntityNode, ModelProperties, ScriptComponent, PROJECT, SOURCE};
 
-/// A trait that describes a module that can be registered. 
+/// A trait that describes a module that can be registered.
 pub trait ScriptableModule {
     /// Registers the functions for the dropbear typescript API
     fn register(runtime: &mut Runtime) -> anyhow::Result<()>;
-    // /// Gathers the information into a serializable format that can be sent over to the 
+    // /// Gathers the information into a serializable format that can be sent over to the
     // /// dropbear typescript API
     // fn gather(world: &World, entity_id: hecs::Entity);
     // /// Fetches the mutated information from the dropbear typescript module and applys it to the world
@@ -47,7 +47,11 @@ impl ScriptManager {
         todo!();
     }
 
-    pub fn load_script_from_source(&mut self, script_name: &String, script_content: &String) -> anyhow::Result<String> {
+    pub fn load_script_from_source(
+        &mut self,
+        script_name: &String,
+        script_content: &String,
+    ) -> anyhow::Result<String> {
         todo!();
     }
 
@@ -85,7 +89,11 @@ impl ScriptManager {
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
             todo!();
         } else {
-            log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
+            log_once::error_once!(
+                "Unable to fetch compiled scripts for entity {:?}. Script Name: {}",
+                entity_id,
+                script_name
+            );
         }
         Ok(())
     }

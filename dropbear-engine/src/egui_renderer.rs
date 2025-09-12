@@ -1,7 +1,7 @@
 use egui::{Context, FontDefinitions};
-use wgpu::{CommandEncoder, Device, Queue, TextureFormat, TextureView};
-use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
+use egui_wgpu_backend::{RenderPass, ScreenDescriptor, wgpu};
 use egui_winit_platform::{Platform, PlatformDescriptor};
+use wgpu::{CommandEncoder, Device, Queue, TextureFormat, TextureView};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -72,7 +72,10 @@ impl EguiRenderer {
         }
 
         let full_output = self.state.end_pass(Some(window));
-        let paint_jobs = self.state.context().tessellate(full_output.shapes, self.state.context().pixels_per_point());
+        let paint_jobs = self
+            .state
+            .context()
+            .tessellate(full_output.shapes, self.state.context().pixels_per_point());
         let textures_delta: egui::TexturesDelta = full_output.textures_delta;
 
         self.renderer

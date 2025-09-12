@@ -1,15 +1,15 @@
-use std::{mem, ops::Range, path::PathBuf};
-use std::collections::HashMap;
+use crate::graphics::{Graphics, NO_MODEL, Texture};
+use crate::utils::ResourceReference;
+use lazy_static::lazy_static;
+use parking_lot::Mutex;
 use russimp_ng::{
     Vector3D,
     material::{DataContent, TextureType},
     scene::{PostProcess, Scene},
 };
+use std::collections::HashMap;
+use std::{mem, ops::Range, path::PathBuf};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
-use lazy_static::lazy_static;
-use parking_lot::Mutex;
-use crate::graphics::{Graphics, NO_MODEL, Texture};
-use crate::utils::ResourceReference;
 
 pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
 
@@ -80,7 +80,7 @@ impl Model {
                     ],
                     "glb",
                 )?
-            },
+            }
         };
 
         let mut materials = Vec::new();
@@ -234,7 +234,7 @@ impl Model {
                     ],
                     "glb",
                 )?
-            },
+            }
         };
 
         let mut materials = Vec::new();
@@ -343,7 +343,16 @@ impl Model {
             label: if let Some(l) = label {
                 l.to_string()
             } else {
-                String::from(file_name.unwrap().to_str().unwrap().split(".").into_iter().next().unwrap())
+                String::from(
+                    file_name
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .split(".")
+                        .into_iter()
+                        .next()
+                        .unwrap(),
+                )
             },
             path: ResourceReference::from_path(path).unwrap(),
         };
@@ -373,7 +382,12 @@ pub trait DrawModel<'a> {
     );
 
     #[allow(unused)]
-    fn draw_model(&mut self, model: &'a Model, camera_bind_group: &'a wgpu::BindGroup, light_bind_group: &'a wgpu::BindGroup);
+    fn draw_model(
+        &mut self,
+        model: &'a Model,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    );
     fn draw_model_instanced(
         &mut self,
         model: &'a Model,
@@ -413,7 +427,12 @@ where
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 
-    fn draw_model(&mut self, model: &'b Model, camera_bind_group: &'b wgpu::BindGroup, light_bind_group: &'a wgpu::BindGroup) {
+    fn draw_model(
+        &mut self,
+        model: &'b Model,
+        camera_bind_group: &'b wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    ) {
         self.draw_model_instanced(model, 0..1, camera_bind_group, light_bind_group);
     }
 
@@ -426,7 +445,13 @@ where
     ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
-            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group, light_bind_group);
+            self.draw_mesh_instanced(
+                mesh,
+                material,
+                instances.clone(),
+                camera_bind_group,
+                light_bind_group,
+            );
         }
     }
 }
@@ -448,7 +473,12 @@ pub trait DrawLight<'a> {
     );
 
     #[allow(unused)]
-    fn draw_light_model(&mut self, model: &'a Model, camera_bind_group: &'a wgpu::BindGroup, light_bind_group: &'a wgpu::BindGroup);
+    fn draw_light_model(
+        &mut self,
+        model: &'a Model,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    );
     fn draw_light_model_instanced(
         &mut self,
         model: &'a Model,
@@ -459,7 +489,7 @@ pub trait DrawLight<'a> {
 }
 
 impl<'a, 'b> DrawLight<'b> for wgpu::RenderPass<'a>
-where 
+where
     'b: 'a,
 {
     fn draw_light_mesh(
@@ -485,7 +515,12 @@ where
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 
-    fn draw_light_model(&mut self, model: &'a Model, camera_bind_group: &'a wgpu::BindGroup, light_bind_group: &'a wgpu::BindGroup) {
+    fn draw_light_model(
+        &mut self,
+        model: &'a Model,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    ) {
         self.draw_light_model_instanced(model, 0..1, camera_bind_group, light_bind_group);
     }
 
@@ -497,7 +532,12 @@ where
         light_bind_group: &'a wgpu::BindGroup,
     ) {
         for mesh in &model.meshes {
-            self.draw_light_mesh_instanced(mesh, instances.clone(), camera_bind_group, light_bind_group);
+            self.draw_light_mesh_instanced(
+                mesh,
+                instances.clone(),
+                camera_bind_group,
+                light_bind_group,
+            );
         }
     }
 }

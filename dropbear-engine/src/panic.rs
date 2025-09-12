@@ -27,7 +27,10 @@ pub fn set_hook() {
             location, msg
         );
 
-        log::error!("PANIC! SHUTDOWN SHUTDOWN SHUT THIS SHIT DOWN\n============================\n{}\n============================", full_text);
+        log::error!(
+            "PANIC! SHUTDOWN SHUTDOWN SHUT THIS SHIT DOWN\n============================\n{}\n============================",
+            full_text
+        );
 
         #[cfg(not(target_os = "android"))]
         {

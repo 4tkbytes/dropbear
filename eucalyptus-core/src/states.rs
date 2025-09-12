@@ -1,24 +1,24 @@
 use crate::camera::DebugCamera;
+use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
 use crate::utils::PROTO_TEXTURE;
-use dropbear_engine::starter::plane::PlaneBuilder;
-use glam::DVec3;
-use std::fmt::{Display, Formatter};
-use std::{fmt, fs};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use chrono::Utc;
-use egui_dock_fork::DockState;
-use parking_lot::RwLock;
-use once_cell::sync::Lazy;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::Graphics;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
+use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
+use egui_dock_fork::DockState;
+use glam::DVec3;
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
+use std::{fmt, fs};
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -530,10 +530,7 @@ impl EntityNode {
             handled.insert(id);
         }
 
-        for (entity, (camera, component)) in world
-            .query::<(&Camera, &CameraComponent)>()
-            .iter()
-        {
+        for (entity, (camera, component)) in world.query::<(&Camera, &CameraComponent)>().iter() {
             if world.get::<&AdoptedEntity>(entity).is_err() {
                 nodes.push(EntityNode::Camera {
                     id: entity,
@@ -589,7 +586,11 @@ impl Default for CameraConfig {
 }
 
 impl CameraConfig {
-    pub fn from_ecs_camera(camera: &Camera, component: &CameraComponent, follow_target: Option<&CameraFollowTarget>) -> Self {
+    pub fn from_ecs_camera(
+        camera: &Camera,
+        component: &CameraComponent,
+        follow_target: Option<&CameraFollowTarget>,
+    ) -> Self {
         Self {
             position: camera.position().to_array(),
             target: camera.target.to_array(),
@@ -602,8 +603,16 @@ impl CameraConfig {
             far: camera.zfar as f32,
             speed: component.speed as f32,
             sensitivity: component.sensitivity as f32,
-            follow_target_entity_label: if let Some(target) = follow_target { Some(target.follow_target.clone()) } else { None },
-            follow_offset: if let Some(target) = follow_target { Some(target.offset.to_array()) } else { None },
+            follow_target_entity_label: if let Some(target) = follow_target {
+                Some(target.follow_target.clone())
+            } else {
+                None
+            },
+            follow_offset: if let Some(target) = follow_target {
+                Some(target.offset.to_array())
+            } else {
+                None
+            },
         }
     }
 }
@@ -719,9 +728,7 @@ impl SceneConfig {
         #[allow(unused_variables)]
         let project_config = if cfg!(feature = "editor") {
             let cfg = PROJECT.read();
-            {
-                cfg.project_path.clone()
-            }
+            { cfg.project_path.clone() }
         } else {
             log::debug!("Not using the editor feature, returning empty pathbuffer");
             PathBuf::new()
@@ -736,19 +743,27 @@ impl SceneConfig {
                     let path: PathBuf = {
                         if cfg!(feature = "editor") {
                             log::debug!("Using feature editor");
-                            entity_config.model_path.to_project_path(project_config.clone())
-                                .ok_or_else(|| anyhow::anyhow!("Unable to convert resource reference [{}] to project path", reference))?
+                            entity_config
+                                .model_path
+                                .to_project_path(project_config.clone())
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Unable to convert resource reference [{}] to project path",
+                                        reference
+                                    )
+                                })?
                         } else {
                             log::debug!("Using feature data-only");
                             entity_config.model_path.to_executable_path()?
                         }
                     };
-                    log::debug!("Path for entity {} is {} from reference {}", entity_config.label, path.display(), reference);
-                    let adopted = AdoptedEntity::new(
-                        graphics,
-                        &path,
-                        Some(&entity_config.label),
-                    )?;
+                    log::debug!(
+                        "Path for entity {} is {} from reference {}",
+                        entity_config.label,
+                        path.display(),
+                        reference
+                    );
+                    let adopted = AdoptedEntity::new(graphics, &path, Some(&entity_config.label))?;
 
                     let transform = entity_config.transform;
 
@@ -767,14 +782,11 @@ impl SceneConfig {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
                     let bytes = bytes.to_owned();
 
-                    let model = Model::load_from_memory(graphics, bytes, Some(&entity_config.label))?;
+                    let model =
+                        Model::load_from_memory(graphics, bytes, Some(&entity_config.label))?;
                     let transform = entity_config.transform;
 
-                    let adopted = AdoptedEntity::adopt(
-                        graphics,
-                        model,
-                        Some(&entity_config.label),
-                    );
+                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&entity_config.label));
 
                     if let Some(script_config) = &entity_config.script {
                         let script = ScriptComponent {
@@ -788,28 +800,51 @@ impl SceneConfig {
                     log::debug!("Loaded!");
                 }
                 ResourceReferenceType::Plane => {
-                    let width = entity_config.properties.custom_properties.get("width").ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
+                    let width = entity_config
+                        .properties
+                        .custom_properties
+                        .get("width")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
                     let width = match width {
                         PropertyValue::Float(width) => width,
                         _ => panic!("Entity has a width property that is not a float"),
                     };
-                    let height = entity_config.properties.custom_properties.get("height").ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
+                    let height = entity_config
+                        .properties
+                        .custom_properties
+                        .get("height")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
                     let height = match height {
                         PropertyValue::Float(height) => height,
                         _ => panic!("Entity has a height property that is not a float"),
                     };
-                    let tiles_x = entity_config.properties.custom_properties.get("tiles_x").ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
+                    let tiles_x = entity_config
+                        .properties
+                        .custom_properties
+                        .get("tiles_x")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
                     let tiles_x = match tiles_x {
                         PropertyValue::Int(tiles_x) => tiles_x,
                         _ => panic!("Entity has a tiles_x property that is not an int"),
                     };
-                    let tiles_z = entity_config.properties.custom_properties.get("tiles_z").ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
+                    let tiles_z = entity_config
+                        .properties
+                        .custom_properties
+                        .get("tiles_z")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
                     let tiles_z = match tiles_z {
                         PropertyValue::Int(tiles_z) => tiles_z,
                         _ => panic!("Entity has a tiles_z property that is not an int"),
                     };
 
-                    let plane = PlaneBuilder::new().with_size(*width as f32, *height as f32).with_tiles(*tiles_x as u32, *tiles_z as u32).build(graphics, PROTO_TEXTURE, Some(entity_config.label.clone().as_str()))?;
+                    let plane = PlaneBuilder::new()
+                        .with_size(*width as f32, *height as f32)
+                        .with_tiles(*tiles_x as u32, *tiles_z as u32)
+                        .build(
+                            graphics,
+                            PROTO_TEXTURE,
+                            Some(entity_config.label.clone().as_str()),
+                        )?;
                     let transform = entity_config.transform;
 
                     if let Some(script_config) = &entity_config.script {
@@ -822,7 +857,9 @@ impl SceneConfig {
                         world.spawn((plane, transform, entity_config.properties.clone()));
                     }
                 }
-                ResourceReferenceType::None => panic!("Entity has a resource reference of None, which cannot be loaded or referenced"),
+                ResourceReferenceType::None => panic!(
+                    "Entity has a resource reference of None, which cannot be loaded or referenced"
+                ),
             }
         }
 
@@ -836,11 +873,20 @@ impl SceneConfig {
                 Some(&light_config.label),
             );
 
-            world.spawn((light_config.light_component.clone(), light_config.transform, light, ModelProperties::default()));
+            world.spawn((
+                light_config.light_component.clone(),
+                light_config.transform,
+                light,
+                ModelProperties::default(),
+            ));
         }
 
         for camera_config in &self.cameras {
-            log::debug!("Loading camera {} of type {:?}", camera_config.label, camera_config.camera_type);
+            log::debug!(
+                "Loading camera {} of type {:?}",
+                camera_config.label,
+                camera_config.camera_type
+            );
 
             let camera = Camera::new(
                 graphics,
@@ -863,7 +909,10 @@ impl SceneConfig {
                 camera_type: camera_config.camera_type,
             };
 
-            if let (Some(target_label), Some(offset)) = (&camera_config.follow_target_entity_label, &camera_config.follow_offset) {
+            if let (Some(target_label), Some(offset)) = (
+                &camera_config.follow_target_entity_label,
+                &camera_config.follow_offset,
+            ) {
                 let follow_target = CameraFollowTarget {
                     follow_target: target_label.clone(),
                     offset: DVec3::from_array(*offset),
@@ -874,18 +923,38 @@ impl SceneConfig {
             }
         }
 
-        if world.query::<(&LightComponent, &Light)>().iter().next().is_none() {
+        if world
+            .query::<(&LightComponent, &Light)>()
+            .iter()
+            .next()
+            .is_none()
+        {
             log::info!("No lights in scene, spawning default light");
             let default_transform = Transform {
                 position: glam::DVec3::new(2.0, 4.0, 2.0),
                 ..Default::default()
             };
             let default_component = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            let default_light = Light::new(graphics, &default_component, &default_transform, Some("Default Light"));
-            world.spawn((default_component, default_transform, default_light, ModelProperties::default()));
+            let default_light = Light::new(
+                graphics,
+                &default_component,
+                &default_transform,
+                Some("Default Light"),
+            );
+            world.spawn((
+                default_component,
+                default_transform,
+                default_light,
+                ModelProperties::default(),
+            ));
         }
 
-        log::info!("Loaded {} entities, {} lights and {} cameras", self.entities.len(), self.lights.len(), self.cameras.len());
+        log::info!(
+            "Loaded {} entities, {} lights and {} cameras",
+            self.entities.len(),
+            self.lights.len(),
+            self.cameras.len()
+        );
         #[cfg(feature = "editor")]
         {
             // Editor mode - look for debug camera, create one if none exists

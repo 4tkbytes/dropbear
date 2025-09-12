@@ -1,6 +1,6 @@
 //! Used to aid with debugging any issues with the editor.
-use egui::Ui;
 use crate::editor::Signal;
+use egui::Ui;
 
 /// Show a menu bar for debug. A new "Debug" menu button will show up on the editors menu bar.
 pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {

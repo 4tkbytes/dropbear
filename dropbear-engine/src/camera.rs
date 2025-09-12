@@ -73,7 +73,11 @@ impl Camera {
             yaw: 0.0,
             pitch: 0.0,
             sensitivity,
-            label: if let Some(l) = label { l.to_string() } else {String::from("Camera")},
+            label: if let Some(l) = label {
+                l.to_string()
+            } else {
+                String::from("Camera")
+            },
             ..Default::default()
         };
         camera.update_view_proj();
@@ -142,7 +146,11 @@ impl Camera {
 
     fn build_vp(&mut self) -> DMat4 {
         let view = DMat4::look_at_lh(self.eye, self.target, self.up);
-        let proj = DMat4::perspective_infinite_reverse_lh(self.fov_y.to_radians(), self.aspect, self.znear);
+        let proj = DMat4::perspective_infinite_reverse_lh(
+            self.fov_y.to_radians(),
+            self.aspect,
+            self.znear,
+        );
 
         self.view_mat = view.clone();
         self.proj_mat = proj.clone();
@@ -270,6 +278,8 @@ impl CameraUniform {
 
     pub fn update(&mut self, camera: &mut Camera) {
         self.view_position = camera.eye.as_vec3().extend(1.0).to_array();
-        self.view_proj = (DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * camera.build_vp()).as_mat4().to_cols_array_2d();
+        self.view_proj = (DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * camera.build_vp())
+            .as_mat4()
+            .to_cols_array_2d();
     }
 }

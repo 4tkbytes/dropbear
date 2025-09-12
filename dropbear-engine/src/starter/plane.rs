@@ -2,12 +2,11 @@
 ///
 /// Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
 /// my old game engine made in C sharp, where this is the plane "algorithm".
-
 use crate::entity::AdoptedEntity;
 use crate::graphics::{Graphics, Texture};
-use crate::model::{Model, Mesh, Material, ModelVertex};
-use wgpu::{util::DeviceExt, AddressMode};
+use crate::model::{Material, Mesh, Model, ModelVertex};
 use crate::utils::{ResourceReference, ResourceReferenceType};
+use wgpu::{AddressMode, util::DeviceExt};
 
 pub struct PlaneBuilder {
     width: f32,
@@ -38,7 +37,12 @@ impl PlaneBuilder {
         self
     }
 
-    pub fn build(mut self, graphics: &Graphics, texture_bytes: &[u8], label: Option<&str>) -> anyhow::Result<AdoptedEntity> {
+    pub fn build(
+        mut self,
+        graphics: &Graphics,
+        texture_bytes: &[u8],
+        label: Option<&str>,
+    ) -> anyhow::Result<AdoptedEntity> {
         if self.tiles_x == 0 && self.tiles_z == 0 {
             self.tiles_x = self.width as u32;
             self.tiles_z = self.height as u32;
@@ -68,22 +72,24 @@ impl PlaneBuilder {
 
         indices.extend_from_slice(&[0, 2, 1, 1, 2, 3]);
 
-        let vertex_buffer = graphics
-            .state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Vertex Buffer", label)),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = graphics
-            .state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Index Buffer", label)),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let vertex_buffer =
+            graphics
+                .state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{:?} Vertex Buffer", label)),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+        let index_buffer =
+            graphics
+                .state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{:?} Index Buffer", label)),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
         let mesh = Mesh {
             name: "plane".to_string(),
@@ -93,7 +99,8 @@ impl PlaneBuilder {
             material: 0,
         };
 
-        let diffuse_texture = Texture::new_with_sampler(graphics, texture_bytes, AddressMode::Repeat);
+        let diffuse_texture =
+            Texture::new_with_sampler(graphics, texture_bytes, AddressMode::Repeat);
         let bind_group = diffuse_texture.bind_group().clone();
         let material = Material {
             name: "plane_material".to_string(),

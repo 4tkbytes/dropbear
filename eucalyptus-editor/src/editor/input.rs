@@ -3,19 +3,25 @@ use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
     input::{Controller, Keyboard, Mouse},
 };
+use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
 use transform_gizmo_egui::GizmoMode;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
-use eucalyptus_core::success_without_console;
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         #[cfg(not(target_os = "macos"))]
-        let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::ControlLeft)
-            || self.input_state.pressed_keys.contains(&KeyCode::ControlRight);
+        let ctrl_pressed = self
+            .input_state
+            .pressed_keys
+            .contains(&KeyCode::ControlLeft)
+            || self
+                .input_state
+                .pressed_keys
+                .contains(&KeyCode::ControlRight);
         #[cfg(target_os = "macos")]
         let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
             || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
@@ -100,7 +106,9 @@ impl Keyboard for Editor {
                     success_without_console!("Successfully saved project");
                     self.scene_command = SceneCommand::Quit;
                 } else if is_playing {
-                    warn!("Unable to save-quit project, please pause your playing state, then try again");
+                    warn!(
+                        "Unable to save-quit project, please pause your playing state, then try again"
+                    );
                 }
             }
             KeyCode::KeyC => {
@@ -152,8 +160,7 @@ impl Keyboard for Editor {
                             warn!("Unable to paste: You haven't selected anything!");
                         }
                     }
-                } 
-                else {
+                } else {
                     self.input_state.pressed_keys.insert(key);
                 }
             }
@@ -169,9 +176,10 @@ impl Keyboard for Editor {
                             }
                         }
                     } else {
-                        warn!("Unable to save project config, please quit your playing and try again");
+                        warn!(
+                            "Unable to save project config, please quit your playing and try again"
+                        );
                     }
-                    
                 } else {
                     self.input_state.pressed_keys.insert(key);
                 }
@@ -229,9 +237,9 @@ impl Keyboard for Editor {
 
 impl Mouse for Editor {
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if (self.is_viewport_focused
-            && matches!(self.viewport_mode, ViewportMode::CameraMove))
-            || (matches!(self.editor_state, EditorState::Playing) && !self.input_state.is_cursor_locked)
+        if (self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
+            || (matches!(self.editor_state, EditorState::Playing)
+                && !self.input_state.is_cursor_locked)
         {
             if let Some(window) = &self.window {
                 let size = window.inner_size();
@@ -241,14 +249,25 @@ impl Mouse for Editor {
                 let dx = position.x - center.x;
                 let dy = position.y - center.y;
                 if let Some(active_camera) = self.active_camera {
-                    if let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                    if let Ok(mut q) = self.world.query_one::<(
+                        &mut Camera,
+                        &CameraComponent,
+                        Option<&CameraFollowTarget>,
+                    )>(active_camera)
+                    {
                         if let Some((camera, _, _)) = q.get() {
                             camera.track_mouse_delta(dx, dy);
                         } else {
-                            log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
+                            log_once::warn_once!(
+                                "Unable to fetch the query result of camera: {:?}",
+                                active_camera
+                            )
                         }
                     } else {
-                        log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
+                        log_once::warn_once!(
+                            "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
+                            active_camera
+                        );
                     }
                 } else {
                     log_once::warn_once!("No active camera found");
@@ -263,7 +282,9 @@ impl Mouse for Editor {
 
     fn mouse_down(&mut self, button: MouseButton) {
         match button {
-            _ => { self.input_state.mouse_button.insert(button); }
+            _ => {
+                self.input_state.mouse_button.insert(button);
+            }
         }
     }
 

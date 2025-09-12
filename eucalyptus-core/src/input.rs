@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, time::{Duration, Instant}};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
 use winit::{event::MouseButton, keyboard::KeyCode};
 
@@ -9,12 +12,11 @@ pub struct InputState {
     #[allow(dead_code)]
     pub double_press_threshold: Duration,
     pub mouse_pos: (f64, f64),
-    pub mouse_button: HashSet<MouseButton>,    
+    pub mouse_button: HashSet<MouseButton>,
     pub pressed_keys: HashSet<KeyCode>,
     pub mouse_delta: Option<(f64, f64)>,
     pub is_cursor_locked: bool,
 }
-
 
 impl Default for InputState {
     fn default() -> Self {
