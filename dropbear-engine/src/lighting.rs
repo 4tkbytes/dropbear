@@ -232,7 +232,7 @@ impl Light {
 
         let cube_model = Model::load_from_memory(
             graphics,
-            include_bytes!("../../resources/cube.obj").to_vec(),
+            include_bytes!("../../resources/cube.glb").to_vec(),
             label.clone(),
         )
         .unwrap();

@@ -19,6 +19,7 @@ pub struct InputState {
     pub pressed_keys: HashSet<KeyCode>,
     pub mouse_delta: Option<(f64, f64)>,
     pub is_cursor_locked: bool,
+    pub last_mouse_pos: Option<(f64, f64)>,
 }
 
 impl Default for InputState {
@@ -37,6 +38,7 @@ impl InputState {
             double_press_threshold: Duration::from_millis(300),
             mouse_delta: None,
             is_cursor_locked: false,
+            last_mouse_pos: Default::default(),
         }
     }
 

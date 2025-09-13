@@ -270,15 +270,60 @@ impl Scene for Editor {
 
         match &self.signal {
             Signal::Paste(scene_entity) => {
-                match AdoptedEntity::new(
-                    graphics,
-                    &scene_entity
-                        .model_path
-                        .to_project_path(self.project_path.clone().unwrap())
-                        .unwrap(),
-                    Some(&scene_entity.label),
-                ) {
-                    Ok(adopted) => {
+                match &scene_entity.model_path.ref_type {
+                    dropbear_engine::utils::ResourceReferenceType::None => {
+                        warn!("Resource has a reference type of None");
+                        self.signal = Signal::None;
+                    },
+                    dropbear_engine::utils::ResourceReferenceType::File(reference) => {
+                        match &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()) {
+                            Some(v) => {
+                                match AdoptedEntity::new(
+                                    graphics,
+                                    v,
+                                    Some(&scene_entity.label),
+                                ) {
+                                    Ok(adopted) => {
+                                        let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
+                                            adopted,
+                                            scene_entity.transform,
+                                            ModelProperties::default(),
+                                        ));
+                                        self.selected_entity = Some(entity_id);
+                                        log::debug!(
+                                            "Successfully paste-spawned {} with ID {:?}",
+                                            scene_entity.label,
+                                            entity_id
+                                        );
+
+                                        success_without_console!("Paste!");
+                                        self.signal = Signal::Copy(scene_entity.clone());
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                                    }
+                                }
+                            },
+                            None => {
+                                fatal!("Unable to convert resource reference [{}] to project related path", reference);
+                                self.signal = Signal::None;
+                            },
+                        };
+                    },
+                    dropbear_engine::utils::ResourceReferenceType::Bytes(bytes) => {
+                        let model = match Model::load_from_memory(graphics, bytes, Some(&scene_entity.label)) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                fatal!("Unable to load from memory: {}", e);
+                                self.signal = Signal::None;
+                                return;
+                            },
+                        };
+                        let adopted = AdoptedEntity::adopt(
+                            graphics,
+                            model,
+                            Some(&scene_entity.label),
+                        );
                         let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
                             adopted,
                             scene_entity.transform,
@@ -293,9 +338,11 @@ impl Scene for Editor {
 
                         success_without_console!("Paste!");
                         self.signal = Signal::Copy(scene_entity.clone());
-                    }
-                    Err(e) => {
-                        warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                    },
+                    _ => {
+                        warn!("Unable to copy, not of bytes or path");
+                        self.signal = Signal::None;
+                        return;
                     }
                 }
             }
@@ -947,32 +994,7 @@ impl Scene for Editor {
                             log::debug!("Creating new cube");
                             let model = Model::load_from_memory(
                                 graphics,
-                                include_bytes!("../../../resources/cube.obj").to_vec(),
-                                Some("Cube")
-                            );
-                            match model {
-                                Ok(model) => {
-                                    let cube = AdoptedEntity::adopt(
-                                        graphics,
-                                        model,
-                                        Some("Cube")
-                                    );
-                                    Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
-                                }
-                                Err(e) => {
-                                    fatal!("Failed to load cube model: {}", e);
-                                }
-                            }
-                            success!("Created new cube");
-
-                            self.signal = Signal::None;
-                        }
-
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
-                            log::debug!("Creating new cube");
-                            let model = Model::load_from_memory(
-                                graphics,
-                                include_bytes!("../../../resources/cube.obj").to_vec(),
+                                include_bytes!("../../../resources/cube.glb"),
                                 Some("Cube")
                             );
                             match model {

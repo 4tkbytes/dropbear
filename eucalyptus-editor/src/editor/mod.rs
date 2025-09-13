@@ -363,7 +363,10 @@ impl Editor {
                     ui.separator();
                     if ui.button("Quit").clicked() {
                         match self.save_project_config() {
-                            Ok(_) => {}
+                            Ok(_) => {
+                                log::info!("Saved, quitting...");
+                                std::process::exit(0);
+                            }
                             Err(e) => {
                                 fatal!("Error saving project: {}", e);
                             }

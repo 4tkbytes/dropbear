@@ -51,6 +51,10 @@ winit = { version = "0.30", features = [] }
 zip = "5.1"
 walkdir = "2.3"
 wasmer = { version = "6.1.0-rc.3" }
+rayon = "1.11"
+
+gltf = "1"
+thiserror = "2.0"
 
 [workspace.dependencies.image]
 version = "0.25"

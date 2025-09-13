@@ -1,15 +1,18 @@
-use crate::graphics::{Graphics, NO_MODEL, Texture};
+use crate::graphics::{Graphics, Texture};
 use crate::utils::ResourceReference;
+use image::GenericImageView;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
-use russimp_ng::{
-    Vector3D,
-    material::{DataContent, TextureType},
-    scene::{PostProcess, Scene},
-};
+// use russimp_ng::{
+//     Vector3D,
+//     material::{DataContent, TextureType},
+//     scene::{PostProcess, Scene},
+// };
 use std::collections::HashMap;
+use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
+use rayon::prelude::*;
 
 pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
 
@@ -45,118 +48,132 @@ pub struct Mesh {
 impl Model {
     pub fn load_from_memory(
         graphics: &Graphics<'_>,
-        buffer: Vec<u8>,
-        label: Option<&str>,
+        buffer: impl AsRef<[u8]>,
+        label: Option<&str>
     ) -> anyhow::Result<Model> {
+        let start = Instant::now();
         let cache_key = label.unwrap_or("default").to_string();
 
-        // Check memory cache first
         if let Some(cached_model) = MEMORY_MODEL_CACHE.lock().get(&cache_key) {
             log::debug!("Model loaded from memory cache: {:?}", cache_key);
             return Ok(cached_model.clone());
         }
 
         log::debug!("Loading from memory");
-        let res_ref = ResourceReference::from_bytes(buffer.clone());
+        let res_ref = ResourceReference::from_bytes(buffer.as_ref());
 
-        let scene = match Scene::from_buffer(
-            buffer.as_slice(),
-            vec![
-                PostProcess::Triangulate,
-                PostProcess::FlipUVs,
-                PostProcess::GenerateNormals,
-            ],
-            "obj",
-        ) {
-            Ok(v) => v,
-            Err(_) => {
-                log::error!("Unable to load {:?} from memory", label);
-                Scene::from_buffer(
-                    NO_MODEL,
-                    vec![
-                        PostProcess::Triangulate,
-                        PostProcess::FlipUVs,
-                        PostProcess::GenerateNormals,
-                    ],
-                    "glb",
-                )?
-            }
-        };
+        let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
+        let mut meshes = Vec::new();
+
+        let mut texture_data = Vec::new();
+        for material in gltf.materials() {
+            log::debug!("Processing material: {:?}", material.name());
+            let material_name = material.name().unwrap_or("Unnamed Material").to_string();
+            
+            let image_data = if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture() {
+                let texture_info = pbr.texture();
+                let image = texture_info.source();
+                match image.source() {
+                    gltf::image::Source::View { view, mime_type: _ } => {
+                        let buffer_data = &buffers[view.buffer().index()];
+                        let start = view.offset();
+                        let end = start + view.length();
+                        buffer_data[start..end].to_vec()
+                    }
+                    gltf::image::Source::Uri { uri, mime_type: _ } => {
+                        log::warn!("External URI textures not supported: {}", uri);
+                        GREY_TEXTURE_BYTES.to_vec()
+                    }
+                }
+            } else {
+                GREY_TEXTURE_BYTES.to_vec()
+            };
+            
+            texture_data.push((material_name, image_data));
+        }
+
+        if texture_data.is_empty() {
+            texture_data.push(("Default".to_string(), GREY_TEXTURE_BYTES.to_vec()));
+        }
+
+        let parallel_start = Instant::now();
+        let processed_textures: Vec<_> = texture_data
+            .into_par_iter()
+            .map(|(material_name, image_data)| {
+                let material_start = Instant::now();
+                
+                let load_start = Instant::now();
+                let diffuse_image = image::load_from_memory(&image_data).unwrap();
+                println!("Loading image to memory: {:?}", load_start.elapsed());
+                
+                let rgba_start = Instant::now();
+                let diffuse_rgba = diffuse_image.to_rgba8();
+                println!("Converting diffuse image to rgba8 took {:?}", rgba_start.elapsed());
+                
+                let dimensions = diffuse_image.dimensions();
+                
+                println!("Parallel processing of material '{}' took: {:?}", material_name, material_start.elapsed());
+                
+                (material_name, diffuse_rgba.into_raw(), dimensions)
+            })
+            .collect();
+
+        println!("Total parallel image processing took: {:?}", parallel_start.elapsed());
 
         let mut materials = Vec::new();
-        for m in &scene.materials {
-            let mut name = String::new();
-            let diffuse_bytes_opt = m
-                .textures
-                .iter()
-                .find(|(t_type, _)| **t_type == TextureType::Diffuse)
-                .and_then(|(_, tex)| {
-                    name = tex.borrow().filename.clone();
-                    match &tex.borrow().data {
-                        DataContent::Bytes(b) => Some(b.clone()),
-                        DataContent::Texel(_) => {
-                            log::warn!("Skipping texel-based texture for material '{}'", &name);
-                            None
-                        }
-                    }
-                });
-
-            let diffuse_texture = if let Some(bytes) = diffuse_bytes_opt {
-                Texture::new(graphics, &bytes)
-            } else {
-                if !name.is_empty() {
-                    log::warn!(
-                        "Error loading material {}, using default missing texture",
-                        name
-                    );
-                } else {
-                    log::warn!("Error loading material, using default missing texture");
-                }
-                Texture::new(graphics, GREY_TEXTURE_BYTES)
-            };
-
+        for (material_name, rgba_data, dimensions) in processed_textures {
+            let start = Instant::now();
+            
+            let diffuse_texture = Texture::create_texture_from_rgba_data(graphics, &rgba_data, dimensions);
             let bind_group = diffuse_texture.bind_group().to_owned();
+            
             materials.push(Material {
-                name: name,
+                name: material_name,
                 diffuse_texture,
                 bind_group,
             });
+            
+            println!("Time to create GPU texture: {:?}", start.elapsed());
         }
 
-        let mut meshes = Vec::new();
-        for mesh in &scene.meshes {
-            let vertices: Vec<ModelVertex> = mesh
-                .vertices
-                .iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    let normal = mesh.normals.get(i).copied().unwrap_or(Vector3D {
-                        x: 0.0,
-                        y: 1.0,
-                        z: 0.0,
-                    });
-                    let tex_coords = mesh
-                        .texture_coords
-                        .get(0)
-                        .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
-                        .map(|tc| [tc.x, tc.y])
-                        .unwrap_or([0.0, 0.0]);
-                    ModelVertex {
-                        position: [v.x, v.y, v.z],
-                        tex_coords,
-                        normal: [normal.x, normal.y, normal.z],
-                    }
-                })
-                .collect();
+        for mesh in gltf.meshes() {
+            log::debug!("Processing mesh: {:?}", mesh.name());
+            for primitive in mesh.primitives() {
+                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+                
+                let positions: Vec<[f32; 3]> = reader
+                    .read_positions()
+                    .ok_or_else(|| anyhow::anyhow!("Mesh missing positions"))?
+                    .collect();
 
-            let indices: Vec<u32> = mesh
-                .faces
-                .iter()
-                .flat_map(|f| f.0.iter().copied())
-                .collect();
+                let normals: Vec<[f32; 3]> = reader
+                    .read_normals()
+                    .map(|iter| iter.collect())
+                    .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
 
-            let vertex_buffer =
-                graphics
+                let tex_coords: Vec<[f32; 2]> = reader
+                    .read_tex_coords(0)
+                    .map(|iter| iter.into_f32().collect())
+                    .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+
+                let vertices: Vec<ModelVertex> = positions
+                    .iter()
+                    .zip(normals.iter())
+                    .zip(tex_coords.iter())
+                    .map(|((pos, norm), tex)| ModelVertex {
+                        position: *pos,
+                        normal: *norm,
+                        tex_coords: *tex,
+                    })
+                    .collect();
+
+                let indices: Vec<u32> = reader
+                    .read_indices()
+                    .ok_or_else(|| anyhow::anyhow!("Mesh missing indices"))?
+                    .into_u32()
+                    .collect();
+
+                let vertex_buffer = graphics
                     .state
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -164,8 +181,8 @@ impl Model {
                         contents: bytemuck::cast_slice(&vertices),
                         usage: wgpu::BufferUsages::VERTEX,
                     });
-            let index_buffer =
-                graphics
+
+                let index_buffer = graphics
                     .state
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -174,28 +191,29 @@ impl Model {
                         usage: wgpu::BufferUsages::INDEX,
                     });
 
-            meshes.push(Mesh {
-                name: mesh.name.clone(),
-                vertex_buffer,
-                index_buffer,
-                num_elements: indices.len() as u32,
-                material: mesh.material_index as usize,
-            });
+                let material_index = primitive.material().index().unwrap_or(0);
+
+                meshes.push(Mesh {
+                    name: mesh.name().unwrap_or("Unnamed Mesh").to_string(),
+                    vertex_buffer,
+                    index_buffer,
+                    num_elements: indices.len() as u32,
+                    material: material_index,
+                });
+            }
         }
+
         log::debug!("Successfully loaded model [{:?}]", label);
         let model = Model {
             meshes,
             materials,
-            label: if let Some(l) = label {
-                l.to_string()
-            } else {
-                String::from("No named model")
-            },
+            label: label.unwrap_or("No named model").to_string(),
             path: res_ref,
         };
 
         MEMORY_MODEL_CACHE.lock().insert(cache_key, model.clone());
         log::debug!("Model cached from memory: {:?}", label);
+        log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);
         Ok(model)
     }
 
@@ -214,148 +232,8 @@ impl Model {
             return Ok(cached_model.clone());
         }
 
-        let scene = match Scene::from_file(
-            path.to_str().unwrap(),
-            vec![
-                PostProcess::Triangulate,
-                PostProcess::FlipUVs,
-                PostProcess::GenerateNormals,
-            ],
-        ) {
-            Ok(v) => v,
-            Err(_) => {
-                log::error!("Unable to locate model [{}]", path.display());
-                Scene::from_buffer(
-                    NO_MODEL,
-                    vec![
-                        PostProcess::Triangulate,
-                        PostProcess::FlipUVs,
-                        PostProcess::GenerateNormals,
-                    ],
-                    "glb",
-                )?
-            }
-        };
-
-        let mut materials = Vec::new();
-        for m in &scene.materials {
-            let mut name = String::new();
-            let diffuse_bytes_opt = m
-                .textures
-                .iter()
-                .find(|(t_type, _)| **t_type == TextureType::Diffuse)
-                .and_then(|(_, tex)| {
-                    name = tex.borrow().filename.clone();
-                    match &tex.borrow().data {
-                        DataContent::Bytes(b) => Some(b.clone()),
-                        DataContent::Texel(_) => {
-                            log::warn!("Skipping texel-based texture for material '{}'", &name);
-                            None
-                        }
-                    }
-                });
-
-            let diffuse_texture = if let Some(bytes) = diffuse_bytes_opt {
-                Texture::new(graphics, &bytes)
-            } else {
-                if !name.is_empty() {
-                    log::warn!(
-                        "Error loading material {}, using default missing texture",
-                        name
-                    );
-                } else {
-                    log::warn!("Error loading material, using default missing texture");
-                }
-                Texture::new(graphics, GREY_TEXTURE_BYTES)
-            };
-
-            let bind_group = diffuse_texture.bind_group().to_owned();
-            materials.push(Material {
-                name: name,
-                diffuse_texture,
-                bind_group,
-            });
-        }
-
-        let mut meshes = Vec::new();
-        for mesh in &scene.meshes {
-            let vertices: Vec<ModelVertex> = mesh
-                .vertices
-                .iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    let normal = mesh.normals.get(i).copied().unwrap_or(Vector3D {
-                        x: 0.0,
-                        y: 1.0,
-                        z: 0.0,
-                    });
-                    let tex_coords = mesh
-                        .texture_coords
-                        .get(0)
-                        .and_then(|coords| coords.as_ref().and_then(|vec| vec.get(i)))
-                        .map(|tc| [tc.x, tc.y])
-                        .unwrap_or([0.0, 0.0]);
-                    ModelVertex {
-                        position: [v.x, v.y, v.z],
-                        tex_coords,
-                        normal: [normal.x, normal.y, normal.z],
-                    }
-                })
-                .collect();
-
-            let indices: Vec<u32> = mesh
-                .faces
-                .iter()
-                .flat_map(|f| f.0.iter().copied())
-                .collect();
-
-            let vertex_buffer =
-                graphics
-                    .state
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("{:?} Vertex Buffer", file_name)),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
-            let index_buffer =
-                graphics
-                    .state
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("{:?} Index Buffer", file_name)),
-                        contents: bytemuck::cast_slice(&indices),
-                        usage: wgpu::BufferUsages::INDEX,
-                    });
-
-            meshes.push(Mesh {
-                name: mesh.name.clone(),
-                vertex_buffer,
-                index_buffer,
-                num_elements: indices.len() as u32,
-                material: mesh.material_index as usize,
-            });
-        }
-        log::debug!("Successfully loaded model [{:?}]", file_name);
-        let model = Model {
-            meshes,
-            materials,
-            label: if let Some(l) = label {
-                l.to_string()
-            } else {
-                String::from(
-                    file_name
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .split(".")
-                        .into_iter()
-                        .next()
-                        .unwrap(),
-                )
-            },
-            path: ResourceReference::from_path(path).unwrap(),
-        };
+        let buffer = std::fs::read(path)?;
+        let model = Self::load_from_memory(graphics, buffer, label)?;
 
         MODEL_CACHE.lock().insert(path_str, model.clone());
         log::debug!("Model cached and loaded: {:?}", file_name);
