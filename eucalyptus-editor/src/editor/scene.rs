@@ -11,7 +11,7 @@ use dropbear_engine::{
 };
 use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
-use eucalyptus_core::states::PropertyValue;
+use eucalyptus_core::states::Value;
 use eucalyptus_core::utils::{PROTO_TEXTURE, PendingSpawn};
 use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
 use log;
@@ -95,7 +95,7 @@ impl Scene for Editor {
                 match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
                     Ok(adopted) => {
                         let entity_id =
-                            self.world
+                            Arc::get_mut(&mut self.world).unwrap()
                                 .spawn((adopted, spawn.transform, spawn.properties));
                         self.selected_entity = Some(entity_id);
 
@@ -123,7 +123,7 @@ impl Scene for Editor {
             }
 
             let mut script_entities = Vec::new();
-            for (entity_id, script) in self.world.query::<&mut ScriptComponent>().iter() {
+            for (entity_id, script) in Arc::get_mut(&mut self.world).unwrap().query::<&mut ScriptComponent>().iter() {
                 log_once::debug_once!(
                     "Script Entity -> id: {:?}, component: {:?}",
                     entity_id,
@@ -233,7 +233,7 @@ impl Scene for Editor {
                     Some(&scene_entity.label),
                 ) {
                     Ok(adopted) => {
-                        let entity_id = self.world.spawn((
+                        let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
                             adopted,
                             scene_entity.transform,
                             ModelProperties::default(),
@@ -256,7 +256,7 @@ impl Scene for Editor {
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
                     let is_viewport_cam =
-                        if let Ok(mut q) = self.world.query_one::<&CameraComponent>(*sel_e) {
+                        if let Ok(mut q) = Arc::get_mut(&mut self.world).unwrap().query_one::<&CameraComponent>(*sel_e) {
                             if let Some(c) = q.get() {
                                 if matches!(c.camera_type, CameraType::Debug) {
                                     true
@@ -273,7 +273,7 @@ impl Scene for Editor {
                         warn!("You can't delete the viewport camera");
                         self.signal = Signal::None;
                     } else {
-                        match self.world.despawn(*sel_e) {
+                        match Arc::get_mut(&mut self.world).unwrap().despawn(*sel_e) {
                             Ok(_) => {
                                 info!("Decimated entity");
                                 self.signal = Signal::None;
@@ -288,7 +288,7 @@ impl Scene for Editor {
             }
             Signal::Undo => {
                 if let Some(action) = self.undo_stack.pop() {
-                    match action.undo(&mut self.world) {
+                    match action.undo(&mut Arc::get_mut(&mut self.world).unwrap()) {
                         Ok(_) => {
                             info!("Undid action");
                         }
@@ -318,14 +318,14 @@ impl Scene for Editor {
                                 };
 
                                 let replaced = if let Ok(mut sc) =
-                                    self.world.get::<&mut ScriptComponent>(selected_entity)
+                                    Arc::get_mut(&mut self.world).unwrap().get::<&mut ScriptComponent>(selected_entity)
                                 {
                                     sc.name = new_script.name.clone();
                                     sc.path = new_script.path.clone();
                                     true
                                 } else {
                                     match scripting::attach_script_to_entity(
-                                        &mut self.world,
+                                        &mut Arc::get_mut(&mut self.world).unwrap(),
                                         selected_entity,
                                         new_script.clone(),
                                     ) {
@@ -343,7 +343,7 @@ impl Scene for Editor {
                                 };
 
                                 if let Err(e) =
-                                    scripting::convert_entity_to_group(&self.world, selected_entity)
+                                    scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
                                 {
                                     log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                                 }
@@ -377,14 +377,14 @@ impl Scene for Editor {
                         };
 
                         let replaced = if let Ok(mut sc) =
-                            self.world.get::<&mut ScriptComponent>(selected_entity)
+                            Arc::get_mut(&mut self.world).unwrap().get::<&mut ScriptComponent>(selected_entity)
                         {
                             sc.name = new_script.name.clone();
                             sc.path = new_script.path.clone();
                             true
                         } else {
                             match scripting::attach_script_to_entity(
-                                &mut self.world,
+                                Arc::get_mut(&mut self.world).unwrap(),
                                 selected_entity,
                                 new_script.clone(),
                             ) {
@@ -398,7 +398,7 @@ impl Scene for Editor {
                         };
 
                         if let Err(e) =
-                            scripting::convert_entity_to_group(&self.world, selected_entity)
+                            scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
                         {
                             log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                         }
@@ -419,12 +419,12 @@ impl Scene for Editor {
                 ScriptAction::RemoveScript => {
                     if let Some(selected_entity) = self.selected_entity {
                         if let Ok(script) =
-                            self.world.remove_one::<ScriptComponent>(selected_entity)
+                            Arc::get_mut(&mut self.world).unwrap().remove_one::<ScriptComponent>(selected_entity)
                         {
                             success!("Removed script from entity {:?}", selected_entity);
 
                             if let Err(e) =
-                                scripting::convert_entity_to_group(&self.world, selected_entity)
+                                scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
                             {
                                 log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                             }
@@ -447,7 +447,7 @@ impl Scene for Editor {
                 }
                 ScriptAction::EditScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity)
+                        if let Ok(mut q) = Arc::get_mut(&mut self.world).unwrap().query_one::<&ScriptComponent>(selected_entity)
                         {
                             if let Some(script) = q.get() {
                                 match open::that(script.path.clone()) {
@@ -488,7 +488,7 @@ impl Scene for Editor {
                     self.switch_to_player_camera();
 
                     let mut script_entities = Vec::new();
-                    for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                    for (entity_id, script) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
                         script_entities.push((entity_id, script.clone()));
                     }
 
@@ -498,7 +498,17 @@ impl Scene for Editor {
                             script.name,
                             script.path.display()
                         );
-                        match self.script_manager.load_script(&script.path) {
+
+                        let bytes = match std::fs::read(&script.path) {
+                            Ok(val) => val,
+                            Err(e) => {
+                                fatal!("Unable to read script {} to bytes because {}", &script.path.display(), e);
+                                self.signal = Signal::None;
+                                return;
+                            },
+                        };
+                        
+                        match self.script_manager.load_script(&script.path.file_name().unwrap().to_string_lossy().to_string(), bytes) {
                             Ok(script_name) => {
                                 if let Err(e) = self.script_manager.init_entity_script(
                                     entity_id,
@@ -543,7 +553,7 @@ impl Scene for Editor {
 
                 self.switch_to_debug_camera();
 
-                for (entity_id, _) in self.world.query::<&ScriptComponent>().iter() {
+                for (entity_id, _) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
                     self.script_manager.remove_entity_script(entity_id);
                 }
 
@@ -570,7 +580,7 @@ impl Scene for Editor {
                     if let Some(camera_entity) = player_camera {
                         let mut follow_target = (false, CameraFollowTarget::default());
                         // Find the target entity label
-                        if let Ok(mut query) = self.world.query_one::<&AdoptedEntity>(*entity) {
+                        if let Ok(mut query) = Arc::get_mut(&mut self.world).unwrap().query_one::<&AdoptedEntity>(*entity) {
                             if let Some(adopted) = query.get() {
                                 follow_target = (
                                     true,
@@ -583,7 +593,7 @@ impl Scene for Editor {
                         }
 
                         if follow_target.0 {
-                            let _ = self.world.insert_one(camera_entity, follow_target);
+                            let _ = Arc::get_mut(&mut self.world).unwrap().insert_one(camera_entity, follow_target);
                             info!("Set player camera target to entity {:?}", entity);
                         }
                     }
@@ -603,7 +613,7 @@ impl Scene for Editor {
                         });
 
                     if let Some(camera_entity) = player_camera {
-                        let _ = self.world.remove_one::<CameraFollowTarget>(camera_entity);
+                        let _ = Arc::get_mut(&mut self.world).unwrap().remove_one::<CameraFollowTarget>(camera_entity);
                     }
                     info!("Cleared player camera target");
                     self.signal = Signal::None;
@@ -612,7 +622,7 @@ impl Scene for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(e) = self.world.query_one_mut::<&AdoptedEntity>(*entity) {
+                        if let Ok(e) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&AdoptedEntity>(*entity) {
                             let mut local_signal: Option<Signal> = None;
                             let label = e.label().clone();
                             let mut show = true;
@@ -634,8 +644,7 @@ impl Scene for Editor {
                                             "Adding scripting component to entity [{}]",
                                             label
                                         );
-                                        if let Err(e) = self
-                                            .world
+                                        if let Err(e) = Arc::get_mut(&mut self.world).unwrap()
                                             .insert_one(*entity, ScriptComponent::default())
                                         {
                                             warn!(
@@ -677,7 +686,7 @@ impl Scene for Editor {
                                             let component = CameraComponent::new();
 
                                             if let Err(e) =
-                                                self.world.insert(*entity, (camera, component))
+                                                Arc::get_mut(&mut self.world).unwrap().insert(*entity, (camera, component))
                                             {
                                                 warn!(
                                                     "Failed to add camera component to entity: {}",
@@ -703,7 +712,7 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Light => {
-                        if let Ok(light) = self.world.query_one_mut::<&Light>(*entity) {
+                        if let Ok(light) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&Light>(*entity) {
                             let mut show = true;
                             egui::Window::new(format!("Add component for {}", light.label))
                                 .scroll([false, true])
@@ -741,8 +750,7 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Camera => {
-                        if let Ok((cam, _comp)) = self
-                            .world
+                        if let Ok((cam, _comp)) = Arc::get_mut(&mut self.world).unwrap()
                             .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
                         {
                             let mut show = true;
@@ -780,7 +788,7 @@ impl Scene for Editor {
             }
             Signal::RemoveComponent(entity, c_type) => match c_type {
                 ComponentType::Script(_) => {
-                    match self.world.remove_one::<ScriptComponent>(*entity) {
+                    match Arc::get_mut(&mut self.world).unwrap().remove_one::<ScriptComponent>(*entity) {
                         Ok(component) => {
                             success!("Removed script component from entity {:?}", entity);
                             UndoableAction::push_to_undo(
@@ -799,8 +807,7 @@ impl Scene for Editor {
                 }
                 ComponentType::Camera(_, _, follow) => {
                     if let Some(_) = follow {
-                        match self
-                            .world
+                        match Arc::get_mut(&mut self.world).unwrap()
                             .remove::<(Camera, CameraComponent, CameraFollowTarget)>(*entity)
                         {
                             Ok(component) => {
@@ -822,7 +829,7 @@ impl Scene for Editor {
                             }
                         };
                     } else {
-                        match self.world.remove::<(Camera, CameraComponent)>(*entity) {
+                        match Arc::get_mut(&mut self.world).unwrap().remove::<(Camera, CameraComponent)>(*entity) {
                             Ok(component) => {
                                 success!("Removed camera component from entity {:?}", entity);
                                 UndoableAction::push_to_undo(
@@ -862,7 +869,7 @@ impl Scene for Editor {
                             let transform = Transform::new();
                             let component = LightComponent::default();
                             let light = Light::new(graphics, &component, &transform, Some("Light"));
-                            self.world.spawn((light, component, transform));
+                            Arc::get_mut(&mut self.world).unwrap().spawn((light, component, transform));
                             success!("Created new light");
 
                             // always ensure the signal is reset after action is dun
@@ -880,11 +887,11 @@ impl Scene for Editor {
                                 ).unwrap();
                             let transform = Transform::new();
                             let mut props = ModelProperties::new();
-                            props.custom_properties.insert("width".to_string(), PropertyValue::Float(500.0));
-                            props.custom_properties.insert("height".to_string(), PropertyValue::Float(200.0));
-                            props.custom_properties.insert("tiles_x".to_string(), PropertyValue::Int(500));
-                            props.custom_properties.insert("tiles_z".to_string(), PropertyValue::Int(200));
-                            self.world.spawn((plane, transform, props));
+                            props.custom_properties.insert("width".to_string(), Value::Float(500.0));
+                            props.custom_properties.insert("height".to_string(), Value::Float(200.0));
+                            props.custom_properties.insert("tiles_x".to_string(), Value::Int(500));
+                            props.custom_properties.insert("tiles_z".to_string(), Value::Int(200));
+                            Arc::get_mut(&mut self.world).unwrap().spawn((plane, transform, props));
                             success!("Created new plane");
 
                             self.signal = Signal::None;
@@ -904,7 +911,7 @@ impl Scene for Editor {
                                         model,
                                         Some("Cube")
                                     );
-                                    self.world.spawn((cube, Transform::new(), ModelProperties::new()));
+                                    Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
                                 }
                                 Err(e) => {
                                     fatal!("Failed to load cube model: {}", e);
@@ -929,7 +936,7 @@ impl Scene for Editor {
                                         model,
                                         Some("Cube")
                                     );
-                                    self.world.spawn((cube, Transform::new(), ModelProperties::new()));
+                                    Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
                                 }
                                 Err(e) => {
                                     fatal!("Failed to load cube model: {}", e);
@@ -944,7 +951,7 @@ impl Scene for Editor {
                             log::debug!("Creating new cube");
                             let camera = Camera::predetermined(graphics, None);
                             let component = CameraComponent::new();
-                            self.world.spawn((camera, component));
+                            Arc::get_mut(&mut self.world).unwrap().spawn((camera, component));
                             success!("Created new camera");
 
                             self.signal = Signal::None;
@@ -956,7 +963,7 @@ impl Scene for Editor {
             }
             Signal::LogEntities => {
                 log::info!("====================");
-                for entity in self.world.iter() {
+                for entity in Arc::get_mut(&mut self.world).unwrap().iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
                         log::info!("Model: {:?}", entity.label());
                     }
@@ -975,7 +982,7 @@ impl Scene for Editor {
 
         let new_aspect = current_size.width as f64 / current_size.height as f64;
         if let Some(active_camera) = self.active_camera {
-            if let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera) {
+            if let Ok(mut query) = Arc::get_mut(&mut self.world).unwrap().query_one::<&mut Camera>(active_camera) {
                 if let Some(camera) = query.get() {
                     camera.aspect = new_aspect;
                 }
@@ -1010,19 +1017,18 @@ impl Scene for Editor {
             camera.update(graphics);
         }
 
-        let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
+        let query = Arc::get_mut(&mut self.world).unwrap().query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
             entity.update(&graphics, transform);
         }
 
-        let light_query = self
-            .world
+        let light_query = Arc::get_mut(&mut self.world).unwrap()
             .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
         for (_, (light_component, transform, light)) in light_query {
             light.update(light_component, transform);
         }
 
-        self.light_manager.update(graphics, &self.world);
+        self.light_manager.update(graphics, &Arc::get_mut(&mut self.world).unwrap());
     }
 
     fn render(&mut self, graphics: &mut Graphics) {

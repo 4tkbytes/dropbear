@@ -1,24 +1,30 @@
-use crate::camera::CameraComponent;
+pub mod dropbear;
+
 use crate::input::InputState;
-use crate::states::{EntityNode, ModelProperties, PROJECT, SOURCE, ScriptComponent};
-use dropbear_engine::camera::Camera;
+use crate::scripting::dropbear::DropbearAPI;
+use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
-use dropbear_engine::lighting::{Light, LightComponent};
-use glam::DVec3;
-use hecs::World;
-use rustyscript::{Module, ModuleHandle, Runtime, RuntimeOptions, serde_json};
+use hecs::{Entity, World};
+use wasmer::{FunctionEnv, Imports, Instance, Module, Store, imports};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::{collections::HashMap, fs};
 
 /// A trait that describes a module that can be registered.
 pub trait ScriptableModule {
-    /// Registers the functions for the dropbear typescript API
-    fn register(runtime: &mut Runtime) -> anyhow::Result<()>;
-    // /// Gathers the information into a serializable format that can be sent over to the
-    // /// dropbear typescript API
-    // fn gather(world: &World, entity_id: hecs::Entity);
-    // /// Fetches the mutated information from the dropbear typescript module and applys it to the world
-    // fn release(world: &mut World, entity_id: hecs::Entity, data: &serde_json::Value) -> anyhow::Result<()>;
+    type Data;
+
+    fn register(data: &Self::Data, imports: &mut Imports, store: &mut Store) -> anyhow::Result<()>;
+
+    fn module_name() -> &'static str;
+}
+
+pub trait ScriptableModuleWithEnv {
+    type T;
+
+    fn register(env: &FunctionEnv<Self::T>, imports: &mut Imports, store: &mut Store) -> anyhow::Result<()>;
+
+    fn module_name() -> &'static str;
 }
 
 pub const TEMPLATE_SCRIPT: &'static str = include_str!("../../resources/template.ts");
@@ -36,40 +42,131 @@ pub enum ScriptAction {
     EditScript,
 }
 
+#[derive(Clone)]
+pub struct DropbearScriptingAPIContext {
+    pub current_entity: Option<Entity>,
+    current_world: Option<Arc<World>>,
+    pub current_input: Option<InputState>,
+    pub persistent_data: HashMap<String, Value>,
+    pub frame_data: HashMap<String, Value>,
+}
+
+impl DropbearScriptingAPIContext {
+    pub fn new() -> Self {
+        Self {
+            current_entity: None,
+            current_world: None,
+            current_input: None,
+            persistent_data: HashMap::new(),
+            frame_data: HashMap::new(),
+        }
+    }
+
+    pub fn set_context(&mut self, entity: Entity, world: Arc<World>, input: &InputState) {
+        self.current_entity = Some(entity);
+        self.current_world = Some(world);
+        self.current_input = Some(input.clone());
+    }
+
+    pub fn clear_context(&mut self) {
+        self.current_entity = None;
+        self.current_world = None;
+        self.current_input = None;
+        self.frame_data.clear();
+    }
+
+    pub fn get_current_entity(&self) -> Option<Entity> {
+        self.current_entity
+    }
+
+    pub fn get_input(&self) -> Option<&InputState> {
+        self.current_input.as_ref()
+    }
+
+    pub fn set_persistent_data(&mut self, key: String, value: Value) {
+        self.persistent_data.insert(key, value);
+    }
+
+    pub fn get_persistent_data(&self, key: &str) -> Option<&Value> {
+        self.persistent_data.get(key)
+    }
+
+    pub fn set_frame_data(&mut self, key: String, value: Value) {
+        self.frame_data.insert(key, value);
+    }
+
+    pub fn get_frame_data(&self, key: &str) -> Option<&Value> {
+        self.frame_data.get(key)
+    }
+
+    pub fn cleanup_entity_data(&mut self, entity: Entity) {
+        let entity_prefix = format!("entity_{:?}_", entity);
+        self.persistent_data.retain(|k, _| !k.starts_with(&entity_prefix));
+    }
+}
+
 pub struct ScriptManager {
-    pub runtime: Runtime,
-    compiled_scripts: HashMap<String, ModuleHandle>,
-    entity_script_data: HashMap<hecs::Entity, serde_json::Value>,
+    pub store: Store,
+    compiled_scripts: HashMap<String, Module>,
+    entity_script_data: HashMap<hecs::Entity, u32>,
+    script_context: DropbearScriptingAPIContext,
 }
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        todo!();
+        let store = Store::default();
+        
+        let result = Self {
+            store,
+            compiled_scripts: HashMap::new(),
+            entity_script_data: HashMap::new(),
+            script_context: DropbearScriptingAPIContext::new(),
+        };
+
+        log::debug!("Initialised ScriptManager");
+        Ok(result)
     }
 
-    pub fn load_script_from_source(
-        &mut self,
-        script_name: &String,
-        script_content: &String,
-    ) -> anyhow::Result<String> {
-        todo!();
-    }
-
-    pub fn load_script(&mut self, script_path: &PathBuf) -> anyhow::Result<String> {
-        todo!();
+    pub fn load_script(&mut self, script_name: &String, script_content: impl AsRef<[u8]>) -> anyhow::Result<String> {
+        let module = Module::new(self.store.engine(), script_content)?;
+        self.compiled_scripts.insert(script_name.clone(), module);
+        log::debug!("Loaded script [{}]", script_name);
+        Ok(script_name.clone())
     }
 
     pub fn init_entity_script(
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: &mut World,
-        input_state: &InputState,
+        world: &mut Arc<World>,
+        input_state: &InputState
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
-            todo!();
+            self.script_context.set_context(entity_id, world.clone(), input_state);
+
+            let import_obj = self.create_imports()?;
+            let instance = Instance::new(&mut self.store, &module, &import_obj)?;
+
+            if let Ok(alloc_func) = instance.exports.get_function("__alloc") {
+                let size = std::mem::size_of::<Transform>() as i32;
+                let result = alloc_func.call(&mut self.store, &[size.into()])?;
+                if let Some(wasmer::Value::I32(ptr)) = result.get(0) {
+                    self.entity_script_data.insert(entity_id, *ptr as u32);
+                }
+            }
+
+            self.sync_entity_to_memory(entity_id, world, &instance)?;
+
+            if let Ok(init_func) = instance.exports.get_function("init") {
+                init_func.call(&mut self.store, &[])?;
+            }
+
+            self.sync_memory_to_entity(entity_id, world, &instance)?;
+
+            self.script_context.clear_context();
+
             Ok(())
         } else {
             Err(anyhow::anyhow!("Script '{}' not found", script_name))
@@ -80,26 +177,88 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: &mut World,
+        world: &mut Arc<World>,
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("Update entity script name: {}", script_name);
 
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
-            todo!();
+            self.script_context.set_context(entity_id, world.clone(), input_state);
+            
+            let import_object = self.create_imports()?;
+            let instance = Instance::new(&mut self.store, &module, &import_object)?;
+            
+            self.sync_entity_to_memory(entity_id, world, &instance)?;
+            
+            if let Ok(update_func) = instance.exports.get_function("update") {
+                let dt_value = wasmer::Value::F32(dt);
+                update_func.call(&mut self.store, &[dt_value])?;
+            }
+            
+            self.sync_memory_to_entity(entity_id, world, &instance)?;
+            
+            self.script_context.clear_context();
+            
         } else {
-            log_once::error_once!(
-                "Unable to fetch compiled scripts for entity {:?}. Script Name: {}",
-                entity_id,
-                script_name
-            );
+            log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
         }
         Ok(())
     }
 
     pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
         self.entity_script_data.remove(&entity_id);
+    }
+
+    fn sync_entity_to_memory(&self, entity_id: hecs::Entity, world: &mut Arc<World>, instance: &Instance) -> anyhow::Result<()> {
+        if let Some(&memory_offset) = self.entity_script_data.get(&entity_id) {
+            let memory = instance.exports.get_memory("memory")?;
+            let memory_view = memory.view(&self.store);
+
+            if let Ok(transform) = Arc::get_mut(world).unwrap().query_one_mut::<&Transform>(entity_id) {
+                let transform_bytes = unsafe { std::slice::from_raw_parts(
+                    transform as *const Transform as *const u8, 
+                    std::mem::size_of::<Transform>()
+                )};
+                
+                for (i, &byte) in transform_bytes.iter().enumerate() {
+                    memory_view.write_u8((memory_offset + i as u32).into(), byte)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn sync_memory_to_entity(&self, entity_id: hecs::Entity, world: &mut Arc<World>, instance: &Instance) -> anyhow::Result<()> {
+        if let Some(&memory_offset) = self.entity_script_data.get(&entity_id) {
+            let memory = instance.exports.get_memory("memory")?;
+            let memory_view = memory.view(&self.store);
+
+            Self::update::<Transform>(memory_offset, &memory_view, world, &entity_id)?;
+        }
+        Ok(())
+    }
+
+    fn update<T: Send + Sync + 'static>(memory_offset: u32, memory_view: &wasmer::MemoryView<'_>, world: &mut Arc<World>, entity_id: &hecs::Entity) -> anyhow::Result<()> {
+        let mut obj_bytes = vec![0u8; std::mem::size_of::<T>()];
+        for (i, byte) in obj_bytes.iter_mut().enumerate() {
+            *byte = memory_view.read_u8((memory_offset + i as u32).into())?;
+        }
+
+        let obj = unsafe {
+            std::ptr::read(obj_bytes.as_ptr() as *const T)
+        };
+
+        Arc::get_mut(world).unwrap().insert_one(*entity_id, obj)?;
+        Ok(())
+    }
+
+    fn create_imports(&mut self) -> anyhow::Result<Imports> {
+        let mut imports = imports! {};
+
+        DropbearAPI::register(&self.script_context, &mut imports, &mut self.store)?;
+
+        Ok(imports)
     }
 }
 

@@ -44,7 +44,7 @@ use winit::{keyboard::KeyCode, window::Window};
 
 pub struct Editor {
     scene_command: SceneCommand,
-    world: World,
+    world: Arc<World>,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -123,7 +123,7 @@ impl Editor {
             is_viewport_focused: false,
             // is_cursor_locked: false,
             window: None,
-            world: World::new(),
+            world: Arc::new(World::new()),
             show_new_project: false,
             project_name: String::new(),
             project_path: None,
@@ -277,7 +277,7 @@ impl Editor {
         {
             let scenes = SCENES.read();
             if let Some(first_scene) = scenes.first() {
-                self.active_camera = Some(first_scene.load_into_world(&mut self.world, graphics)?);
+                self.active_camera = Some(first_scene.load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics)?);
 
                 log::info!(
                     "Successfully loaded scene with {} entities and {} camera configs",
@@ -306,7 +306,7 @@ impl Editor {
                     let debug_camera = Camera::predetermined(graphics, Some("Debug Camera"));
                     let component = DebugCamera::new();
 
-                    let e = self.world.spawn((debug_camera, component));
+                    let e = Arc::get_mut(&mut self.world).unwrap().spawn((debug_camera, component));
                     self.active_camera = Some(e);
                 }
             }
@@ -637,6 +637,8 @@ pub enum UndoableAction {
     CameraAction(UndoableCameraAction),
 }
 #[derive(Debug)]
+#[allow(dead_code)]
+// todo: deal with why there is no Camera
 pub enum EntityType {
     Entity,
     Light,
@@ -813,6 +815,8 @@ pub enum Signal {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
+// todo: deal with the Camera and create an implementation
 pub enum ComponentType {
     Script(ScriptComponent),
     Camera(Camera, CameraComponent, Option<CameraFollowTarget>),
@@ -902,10 +906,10 @@ impl PlayModeBackup {
                         }
                     }
                     (true, None) => {
-                        let _ = editor.world.remove_one::<ScriptComponent>(*entity_id);
+                        let _ = Arc::get_mut(&mut editor.world).unwrap().remove_one::<ScriptComponent>(*entity_id);
                     }
                     (false, Some(original)) => {
-                        let _ = editor.world.insert_one(*entity_id, original.clone());
+                        let _ = Arc::get_mut(&mut editor.world).unwrap().insert_one(*entity_id, original.clone());
                     }
                     (false, None) => {
                         // No change needed
@@ -935,10 +939,10 @@ impl PlayModeBackup {
                         }
                     }
                     (true, None) => {
-                        let _ = editor.world.remove_one::<CameraFollowTarget>(*entity_id);
+                        let _ = Arc::get_mut(&mut editor.world).unwrap().remove_one::<CameraFollowTarget>(*entity_id);
                     }
                     (false, Some(original)) => {
-                        let _ = editor.world.insert_one(*entity_id, original.clone());
+                        let _ = Arc::get_mut(&mut editor.world).unwrap().insert_one(*entity_id, original.clone());
                     }
                     (false, None) => {
                         // No change needed

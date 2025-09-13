@@ -48,9 +48,9 @@ transform-gizmo-egui = { git = "https://github.com/4tkbytes/transform-gizmo"}
 tokio = { version = "1", features = ["full"] }
 wgpu = "26"
 winit = { version = "0.30", features = [] }
-zip = "4.6"
+zip = "5.1"
 walkdir = "2.3"
-wasmer = { version = "6.0" }
+wasmer = { version = "6.1.0-rc.3" }
 
 [workspace.dependencies.image]
 version = "0.25"

@@ -72,6 +72,8 @@ impl Component for Camera {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
+// todo: provide a purpose for this
 pub enum UndoableCameraAction {
     Speed(Entity, f64),
     Sensitivity(Entity, f64),

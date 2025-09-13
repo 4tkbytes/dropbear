@@ -632,11 +632,11 @@ pub struct SceneEntity {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ModelProperties {
-    pub custom_properties: HashMap<String, PropertyValue>,
+    pub custom_properties: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum PropertyValue {
+pub enum Value {
     String(String),
     Int(i64),
     Float(f64),
@@ -651,11 +651,11 @@ impl ModelProperties {
         }
     }
 
-    pub fn set_property(&mut self, key: String, value: PropertyValue) {
+    pub fn set_property(&mut self, key: String, value: Value) {
         self.custom_properties.insert(key, value);
     }
 
-    pub fn get_property(&self, key: &str) -> Option<&PropertyValue> {
+    pub fn get_property(&self, key: &str) -> Option<&Value> {
         self.custom_properties.get(key)
     }
 }
@@ -728,7 +728,7 @@ impl SceneConfig {
         #[allow(unused_variables)]
         let project_config = if cfg!(feature = "editor") {
             let cfg = PROJECT.read();
-            { cfg.project_path.clone() }
+            cfg.project_path.clone()
         } else {
             log::debug!("Not using the editor feature, returning empty pathbuffer");
             PathBuf::new()
@@ -806,7 +806,7 @@ impl SceneConfig {
                         .get("width")
                         .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
                     let width = match width {
-                        PropertyValue::Float(width) => width,
+                        Value::Float(width) => width,
                         _ => panic!("Entity has a width property that is not a float"),
                     };
                     let height = entity_config
@@ -815,7 +815,7 @@ impl SceneConfig {
                         .get("height")
                         .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
                     let height = match height {
-                        PropertyValue::Float(height) => height,
+                        Value::Float(height) => height,
                         _ => panic!("Entity has a height property that is not a float"),
                     };
                     let tiles_x = entity_config
@@ -824,7 +824,7 @@ impl SceneConfig {
                         .get("tiles_x")
                         .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
                     let tiles_x = match tiles_x {
-                        PropertyValue::Int(tiles_x) => tiles_x,
+                        Value::Int(tiles_x) => tiles_x,
                         _ => panic!("Entity has a tiles_x property that is not an int"),
                     };
                     let tiles_z = entity_config
@@ -833,7 +833,7 @@ impl SceneConfig {
                         .get("tiles_z")
                         .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
                     let tiles_z = match tiles_z {
-                        PropertyValue::Int(tiles_z) => tiles_z,
+                        Value::Int(tiles_z) => tiles_z,
                         _ => panic!("Entity has a tiles_z property that is not an int"),
                     };
 

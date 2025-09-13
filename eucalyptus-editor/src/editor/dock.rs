@@ -26,7 +26,7 @@ pub struct EditorTabViewer<'a> {
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub world: &'a mut World,
+    pub world: &'a mut Arc<World>,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
@@ -407,7 +407,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if !matches!(self.viewport_mode, ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
                         if let Ok(transform) =
-                            self.world.query_one_mut::<&mut Transform>(*entity_id)
+                            Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&mut Transform>(*entity_id)
                         {
                             let was_focused = cfg.is_focused;
                             cfg.is_focused = self.gizmo.is_focused();
@@ -719,7 +719,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         camera,
                         camera_component,
                         follow_target,
-                    )) = self.world.query_one_mut::<(
+                    )) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<(
                         &mut AdoptedEntity,
                         Option<&mut Transform>,
                         Option<&ModelProperties>,
@@ -816,7 +816,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     }
 
                     if let Ok((light, transform, props)) =
-                        self.world
+                        Arc::get_mut(&mut self.world).unwrap()
                             .query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(
                                 *entity,
                             )
@@ -866,7 +866,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     }
 
                     if let Ok((camera, camera_component, follow_target)) =
-                        self.world.query_one_mut::<(
+                        Arc::get_mut(&mut self.world).unwrap().query_one_mut::<(
                             &mut Camera,
                             &mut CameraComponent,
                             Option<&mut CameraFollowTarget>,
@@ -1024,14 +1024,14 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::AddComponent => {
                             log::debug!("Add Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(..) = self.world.query_one_mut::<&AdoptedEntity>(*entity)
+                                if let Ok(..) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&AdoptedEntity>(*entity)
                                 {
                                     log::debug!("Queried selected entity, it is an entity");
                                     *self.signal =
                                         Signal::AddComponent(*entity, EntityType::Entity);
                                 }
 
-                                if let Ok(..) = self.world.query_one_mut::<&Light>(*entity) {
+                                if let Ok(..) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&Light>(*entity) {
                                     log::debug!("Queried selected entity, it is a light");
                                     *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
@@ -1055,7 +1055,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             log::debug!("Remove Component clicked");
                             if let Some(entity) = self.selected_entity {
                                 if let Ok(script) =
-                                    self.world.query_one_mut::<&ScriptComponent>(*entity)
+                                    Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&ScriptComponent>(*entity)
                                 {
                                     log::debug!(
                                         "Queried selected entity, it has a script component"
@@ -1177,6 +1177,8 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+// todo: provide a purpose to RemoveComponent
 pub enum EditorTabMenuAction {
     ImportResource,
     RefreshAssets,
