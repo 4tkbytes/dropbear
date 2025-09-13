@@ -45,4 +45,5 @@ pub struct PendingSpawn {
     pub asset_name: String,
     pub transform: Transform,
     pub properties: ModelProperties,
+    pub handle_id: Option<u64>,
 }

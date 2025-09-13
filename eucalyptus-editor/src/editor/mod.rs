@@ -102,7 +102,6 @@ impl Editor {
                     continue;
                 }
 
-                log::error!("{} deadlocks detected", deadlocks.len());
                 for (i, threads) in deadlocks.iter().enumerate() {
                     log::error!("Deadlock #{}", i);
                     for t in threads {
@@ -110,6 +109,7 @@ impl Editor {
                         log::error!("{:#?}", t.backtrace());
                     }
                 }
+                panic!("Fatal: {} deadlocks detected, unable to continue on normal process", deadlocks.len());
             }
         });
 

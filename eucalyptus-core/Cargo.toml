@@ -25,6 +25,8 @@ ron.workspace = true
 serde.workspace = true
 winit.workspace = true
 wasmer.workspace = true
+rayon = "1.11"
+lazy_static.workspace = true
 
 [features]
 editor = []

@@ -13,7 +13,7 @@ use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
 use eucalyptus_core::states::Value;
 use eucalyptus_core::utils::{PROTO_TEXTURE, PendingSpawn};
-use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
+use eucalyptus_core::{logging, model_ext, scripting, success_without_console, warn_without_console};
 use log;
 use parking_lot::Mutex;
 use wgpu::Color;
@@ -91,29 +91,75 @@ impl Scene for Editor {
 
         {
             let mut pending_spawns = PENDING_SPAWNS.lock();
+            let mut current_spawn: Option<PendingSpawn> = None;
             for spawn in pending_spawns.drain(..) {
-                match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
-                    Ok(adopted) => {
-                        let entity_id =
-                            Arc::get_mut(&mut self.world).unwrap()
-                                .spawn((adopted, spawn.transform, spawn.properties));
-                        self.selected_entity = Some(entity_id);
+                if let Some(handle_id) = spawn.handle_id {
+                    match model_ext::GLOBAL_MODEL_LOADER.get_status(handle_id) {
+                        Some(model_ext::ModelLoadingStatus::Loaded) => {
+                            match model_ext::GLOBAL_MODEL_LOADER.exchange_by_id(handle_id) {
+                                Ok(model) => {
+                                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&spawn.asset_name));
+                                    let entity_id = Arc::get_mut(&mut self.world).unwrap()
+                                        .spawn((adopted, spawn.transform, spawn.properties));
+                                    self.selected_entity = Some(entity_id);
 
-                        UndoableAction::push_to_undo(
-                            &mut self.undo_stack,
-                            UndoableAction::Spawn(entity_id),
-                        );
+                                    UndoableAction::push_to_undo(
+                                        &mut self.undo_stack,
+                                        UndoableAction::Spawn(entity_id),
+                                    );
 
-                        log::info!(
-                            "Successfully spawned {} with ID {:?}",
-                            spawn.asset_name,
-                            entity_id
-                        );
+                                    log::info!(
+                                        "Successfully spawned {} with ID {:?}",
+                                        spawn.asset_name,
+                                        entity_id
+                                    );
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to exchange model for {}: {}", spawn.asset_name, e);
+                                }
+                            }
+                        }
+                        Some(model_ext::ModelLoadingStatus::Failed(error)) => {
+                            log::error!("Model loading failed for {}: {}", spawn.asset_name, error);
+                        }
+                        Some(model_ext::ModelLoadingStatus::Processing) => {
+                            current_spawn = Some(spawn);
+                        }
+                        Some(model_ext::ModelLoadingStatus::NotLoaded) => {
+                            log::warn!("Model {} not processed yet", spawn.asset_name);
+                            current_spawn = Some(spawn);
+                        }
+                        None => {
+                            log::error!("No handle found for model {}", spawn.asset_name);
+                        }
                     }
-                    Err(e) => {
-                        log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
+                } else {
+                    match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
+                        Ok(adopted) => {
+                            let entity_id = Arc::get_mut(&mut self.world).unwrap()
+                                .spawn((adopted, spawn.transform, spawn.properties));
+                            self.selected_entity = Some(entity_id);
+
+                            UndoableAction::push_to_undo(
+                                &mut self.undo_stack,
+                                UndoableAction::Spawn(entity_id),
+                            );
+
+                            log::info!(
+                                "Successfully spawned {} with ID {:?}",
+                                spawn.asset_name,
+                                entity_id
+                            );
+                        }
+                        Err(e) => {
+                            log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
+                        }
                     }
                 }
+            }
+
+            if let Some(s) = current_spawn {
+                pending_spawns.push(s);
             }
         }
 

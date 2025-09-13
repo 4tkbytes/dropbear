@@ -37,33 +37,29 @@ pub struct EditorTabViewer<'a> {
 }
 
 impl<'a> EditorTabViewer<'a> {
-    fn spawn_entity_at_pos(
-        &mut self,
-        asset: &DraggedAsset,
-        position: DVec3,
-        properties: Option<ModelProperties>,
-    ) -> anyhow::Result<()> {
+    fn spawn_entity_at_pos(&mut self, asset: &DraggedAsset, position: DVec3, properties: Option<ModelProperties>) -> anyhow::Result<()> {
+        let pending_model = eucalyptus_core::model_ext::PendingModel {
+            path: Some(asset.path.clone()),
+            bytes: None,
+            label: asset.name.clone(),
+            model_type: eucalyptus_core::model_ext::ModelLoadType::File,
+        };
+        
+        let handle = eucalyptus_core::model_ext::GLOBAL_MODEL_LOADER.push(Box::new(pending_model));
+        
         let mut transform = Transform::default();
         transform.position = position;
-        {
-            let mut pending_spawns = PENDING_SPAWNS.lock();
-            if let Some(props) = properties {
-                pending_spawns.push(PendingSpawn {
-                    asset_path: asset.path.clone(),
-                    asset_name: asset.name.clone(),
-                    transform,
-                    properties: props,
-                });
-            } else {
-                pending_spawns.push(PendingSpawn {
-                    asset_path: asset.path.clone(),
-                    asset_name: asset.name.clone(),
-                    transform,
-                    properties: ModelProperties::default(),
-                });
-            }
-            Ok(())
-        }
+        
+        let mut pending_spawns = PENDING_SPAWNS.lock();
+        pending_spawns.push(PendingSpawn {
+            asset_path: asset.path.clone(),
+            asset_name: asset.name.clone(),
+            transform,
+            properties: properties.unwrap_or_default(),
+            handle_id: Some(handle.id),
+        });
+        
+        Ok(())
     }
 }
 

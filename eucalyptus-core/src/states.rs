@@ -1,12 +1,12 @@
 use crate::camera::DebugCamera;
 use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
+use crate::model_ext::PendingModel;
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::Graphics;
 use dropbear_engine::lighting::{Light, LightComponent};
-use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui_dock_fork::DockState;
@@ -736,6 +736,9 @@ impl SceneConfig {
 
         log::info!("World cleared, now has {} entities", world.len());
 
+        let mut model_handles = Vec::new();
+        let mut pending_entities = Vec::new();
+
         for entity_config in &self.entities {
             log::debug!("Loading entity: {}", entity_config.label);
             match &entity_config.model_path.ref_type {
@@ -757,49 +760,41 @@ impl SceneConfig {
                             entity_config.model_path.to_executable_path()?
                         }
                     };
+                    
                     log::debug!(
                         "Path for entity {} is {} from reference {}",
                         entity_config.label,
                         path.display(),
                         reference
                     );
-                    let adopted = AdoptedEntity::new(graphics, &path, Some(&entity_config.label))?;
 
-                    let transform = entity_config.transform;
+                    let pending_model = PendingModel {
+                        path: Some(path),
+                        bytes: None,
+                        label: entity_config.label.clone(),
+                        model_type: crate::model_ext::ModelLoadType::File,
+                    };
 
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
-                        };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
-                    } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()));
-                    }
-                    log::debug!("Loaded!");
+                    let handle = crate::model_ext::GLOBAL_MODEL_LOADER.push(Box::new(pending_model));
+                    model_handles.push((handle.id, entity_config.clone()));
+                    pending_entities.push(entity_config.clone());
                 }
                 ResourceReferenceType::Bytes(bytes) => {
-                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
-                    let bytes = bytes.to_owned();
+                    log::info!("Queuing entity from bytes [Len: {}]", bytes.len());
+                    
+                    let pending_model = PendingModel {
+                        path: None,
+                        bytes: Some(bytes.to_owned()),
+                        label: entity_config.label.clone(),
+                        model_type: crate::model_ext::ModelLoadType::Memory,
+                    };
 
-                    let model =
-                        Model::load_from_memory(graphics, bytes, Some(&entity_config.label))?;
-                    let transform = entity_config.transform;
-
-                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&entity_config.label));
-
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
-                        };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
-                    } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()));
-                    }
-                    log::debug!("Loaded!");
+                    let handle = crate::model_ext::GLOBAL_MODEL_LOADER.push(Box::new(pending_model));
+                    model_handles.push((handle.id, entity_config.clone()));
+                    pending_entities.push(entity_config.clone());
                 }
                 ResourceReferenceType::Plane => {
+                    // this can be loaded in immediately as it doesn't use IO to load
                     let width = entity_config
                         .properties
                         .custom_properties
@@ -862,6 +857,32 @@ impl SceneConfig {
                 ),
             }
         }
+
+        log::info!("Processing {} models in parallel", model_handles.len());
+        crate::model_ext::GLOBAL_MODEL_LOADER.process(graphics);
+
+        for (handle_id, entity_config) in model_handles {
+            match crate::model_ext::GLOBAL_MODEL_LOADER.get_status(handle_id) {
+                Some(crate::model_ext::ModelLoadingStatus::Loaded) => {
+                    log::debug!("Model loaded successfully: {}", entity_config.label);
+                    
+                    let model = crate::model_ext::GLOBAL_MODEL_LOADER.exchange_by_id(handle_id)?;
+                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&entity_config.label));
+                    
+                    self.spawn_entity_with_components(world, &entity_config, adopted);
+                }
+                Some(crate::model_ext::ModelLoadingStatus::Failed(error)) => {
+                    log::error!("Failed to load model {}: {}", entity_config.label, error);
+                    return Err(anyhow::anyhow!("Failed to load model {}: {}", entity_config.label, error));
+                }
+                _ => {
+                    log::error!("Model loading status unknown for: {}", entity_config.label);
+                    return Err(anyhow::anyhow!("Model loading failed for: {}", entity_config.label));
+                }
+            }
+        }
+
+        crate::model_ext::GLOBAL_MODEL_LOADER.clear_completed();
 
         for light_config in &self.lights {
             log::debug!("Loading light: {}", light_config.label);
@@ -1001,6 +1022,25 @@ impl SceneConfig {
             } else {
                 panic!("Runtime mode requires a player camera, but none was found in the scene!");
             }
+        }
+    }
+
+    fn spawn_entity_with_components(
+        &self,
+        world: &mut hecs::World,
+        entity_config: &SceneEntity,
+        adopted: AdoptedEntity,
+    ) {
+        let transform = entity_config.transform;
+
+        if let Some(script_config) = &entity_config.script {
+            let script = ScriptComponent {
+                name: script_config.name.clone(),
+                path: script_config.path.clone(),
+            };
+            world.spawn((adopted, transform, script, entity_config.properties.clone()));
+        } else {
+            world.spawn((adopted, transform, entity_config.properties.clone()));
         }
     }
 }
