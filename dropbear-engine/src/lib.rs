@@ -21,10 +21,10 @@ use egui_wgpu_backend::ScreenDescriptor;
 use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
+use parking_lot::Mutex;
 use spin_sleep::SpinSleeper;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::sync::Mutex;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -46,7 +46,7 @@ use winit::{
 
 use crate::{
     egui_renderer::EguiRenderer,
-    graphics::{Graphics, Texture},
+    graphics::Texture,
 };
 
 pub use gilrs;
@@ -57,16 +57,16 @@ pub use winit;
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
     pub surface: Surface<'static>,
-    pub device: Device,
-    pub queue: Queue,
+    pub device: Arc<Device>,
+    pub queue: Arc<Queue>,
     pub config: SurfaceConfiguration,
     pub is_surface_configured: bool,
     pub depth_texture: Texture,
     pub texture_bind_layout: BindGroupLayout,
-    pub egui_renderer: EguiRenderer,
+    pub egui_renderer: Arc<Mutex<EguiRenderer>>,
     pub instance: Instance,
     pub viewport_texture: Texture,
-    pub texture_id: TextureId,
+    pub texture_id: Arc<TextureId>,
 
     pub window: Arc<Window>,
 }
@@ -173,9 +173,9 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let mut egui_renderer = EguiRenderer::new(&device, config.format, 1, &window);
+        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(&device, config.format, 1, &window)));
 
-        let texture_id = egui_renderer.renderer().egui_texture_from_wgpu_texture(
+        let texture_id = Arc::get_mut(&mut egui_renderer).unwrap().lock().renderer().egui_texture_from_wgpu_texture(
             &device,
             &viewport_texture.view,
             wgpu::FilterMode::Linear,
@@ -183,8 +183,8 @@ Hardware:
 
         let result = Self {
             surface,
-            device,
-            queue,
+            device: Arc::new(device),
+            queue: Arc::new(queue),
             config,
             is_surface_configured: true,
             depth_texture,
@@ -193,7 +193,7 @@ Hardware:
             instance,
             egui_renderer,
             viewport_texture,
-            texture_id,
+            texture_id: Arc::new(texture_id),
         };
 
         Ok(result)
@@ -212,14 +212,15 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        self.texture_id = self
-            .egui_renderer
+        self.texture_id = Arc::get_mut(&mut self
+            .egui_renderer).unwrap().lock()
             .renderer()
             .egui_texture_from_wgpu_texture(
                 &self.device,
                 &self.viewport_texture.view,
                 wgpu::FilterMode::Linear,
-            );
+            )
+            .into();
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
@@ -279,16 +280,16 @@ Hardware:
 
         let viewport_view = { &self.viewport_texture.view.clone() };
 
-        self.egui_renderer.begin_frame();
+        self.egui_renderer.lock().begin_frame();
 
-        let mut graphics = Graphics::new(self, viewport_view, &mut encoder);
-
+        let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
+        
         scene_manager
             .update(previous_dt, &mut graphics, event_loop)
             .await;
         scene_manager.render(&mut graphics).await;
 
-        self.egui_renderer.end_frame_and_draw(
+        self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
             &self.queue,
             &mut encoder,
@@ -472,9 +473,9 @@ impl App {
 
                     write!(buf, "{}", console_line)?;
 
-                    if let Ok(mut fh) = file.lock() {
-                        let _ = fh.write_all(file_line.as_bytes());
-                    }
+                    let mut fh = file.lock();
+                    let _ = fh.write_all(file_line.as_bytes());
+
                     Ok(())
                 })
                 .filter(Some("dropbear_engine"), LevelFilter::Trace)
@@ -561,7 +562,7 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        state.egui_renderer.handle_input(&event);
+        state.egui_renderer.lock().handle_input(&event);
 
         match event {
             WindowEvent::CloseRequested => {

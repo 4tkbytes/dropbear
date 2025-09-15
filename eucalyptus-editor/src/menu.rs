@@ -5,8 +5,7 @@ use std::{
 
 use anyhow::anyhow;
 use dropbear_engine::{
-    input::{Controller, Keyboard, Mouse},
-    scene::{Scene, SceneCommand},
+    graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
@@ -147,19 +146,20 @@ impl MainMenu {
     }
 }
 
+#[async_trait::async_trait]
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn load<'a>(&mut self, _graphics: &mut RenderContext<'a>) {
         log::info!("Loaded menu scene");
     }
 
-    fn update(&mut self, _dt: f32, _graphics: &mut dropbear_engine::graphics::Graphics) {}
+    async fn update<'a>(&mut self, _dt: f32, _graphics: &mut RenderContext<'a>) {}
 
-    fn render(&mut self, graphics: &mut dropbear_engine::graphics::Graphics) {
+    async fn render<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         let screen_size: (f32, f32) = (
-            graphics.state.window.inner_size().width as f32 - 100.0,
-            graphics.state.window.inner_size().height as f32 - 100.0,
+            graphics.shared.window.inner_size().width as f32 - 100.0,
+            graphics.shared.window.inner_size().height as f32 - 100.0,
         );
-        let egui_ctx = graphics.get_egui_context();
+        let egui_ctx = graphics.shared.get_egui_context();
 
         egui::CentralPanel::default()
                 .frame(Frame::new())
@@ -325,7 +325,7 @@ impl Scene for MainMenu {
                 });
         }
 
-        self.toast.show(&graphics.get_egui_context());
+        self.toast.show(&graphics.shared.get_egui_context());
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {

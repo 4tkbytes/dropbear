@@ -34,6 +34,8 @@ parking_lot.workspace = true
 lazy_static.workspace = true
 gltf.workspace = true
 rayon.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

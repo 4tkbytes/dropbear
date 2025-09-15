@@ -1,15 +1,18 @@
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
     RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
 
 use crate::attenuation::{Attenuation, RANGE_50};
+use crate::graphics::SharedGraphicsContext;
+use crate::model::{LazyModel, LazyType};
 use crate::{
     camera::Camera,
     entity::Transform,
-    graphics::{Graphics, Shader},
+    graphics::Shader,
     model::{self, Model, Vertex},
 };
 
@@ -197,6 +200,92 @@ impl LightComponent {
     }
 }
 
+pub struct LazyLight {
+    light_component: LightComponent,
+    transform: Transform,
+    label: Option<String>,
+    cube_lazy_model: Option<LazyModel>,
+}
+
+impl LazyType for LazyLight {
+    type T = Light;
+
+    fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
+        let label_str = self.label.clone().unwrap_or_else(|| "Light".to_string());
+        
+        let forward = DVec3::new(0.0, 0.0, -1.0);
+        let direction = self.transform.rotation * forward;
+
+        let uniform = LightUniform {
+            position: dvec3_to_uniform_array(self.transform.position),
+            direction: dvec3_direction_to_uniform_array(direction, self.light_component.outer_cutoff_angle),
+            colour: dvec3_colour_to_uniform_array(
+                self.light_component.colour * self.light_component.intensity as f64,
+                self.light_component.light_type,
+            ),
+            constant: self.light_component.attenuation.constant,
+            linear: self.light_component.attenuation.linear,
+            quadratic: self.light_component.attenuation.quadratic,
+            cutoff: f32::cos(self.light_component.cutoff_angle.to_radians()),
+        };
+
+        let cube_model = if let Some(lazy_model) = self.cube_lazy_model {
+            lazy_model.poke(graphics.clone())?
+        } else {
+            anyhow::bail!("The light cube LazyModel has not been initialised yet. Use Light::new(/** params */).preload_cube_model() to preload it (which is required)");
+        };
+
+        let buffer = graphics.create_uniform(uniform, self.label.as_deref());
+
+        let layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: self.label.as_deref(),
+        });
+
+        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+            label: self.label.as_deref(),
+        });
+
+        let instance = Instance::new(
+            self.transform.position,
+            self.transform.rotation,
+            DVec3::new(0.25, 0.25, 0.25),
+        );
+
+        let instance_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: self.label.as_deref().or(Some("instance buffer")),
+            contents: bytemuck::cast_slice(&[instance.to_raw()]),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        log::debug!("Created new light [{}]", label_str);
+
+        Ok(Light {
+            uniform,
+            cube_model,
+            label: label_str,
+            buffer: Some(buffer),
+            layout: Some(layout),
+            bind_group: Some(bind_group),
+            instance_buffer: Some(instance_buffer),
+        })
+    }
+}
+
 pub struct Light {
     pub uniform: LightUniform,
     cube_model: Model,
@@ -208,8 +297,29 @@ pub struct Light {
 }
 
 impl Light {
-    pub fn new(
-        graphics: &Graphics,
+    pub async fn lazy_new(
+        light_component: LightComponent,
+        transform: Transform,
+        label: Option<&str>,
+    ) -> anyhow::Result<LazyLight> {
+        let mut result = LazyLight {
+            light_component: light_component,
+            transform: transform,
+            label: label.map(|s| s.to_string()),
+            cube_lazy_model: None,
+        };
+        if result.cube_lazy_model.is_none() {
+            let lazy_model = Model::lazy_load(
+                include_bytes!("../../resources/cube.glb").to_vec(),
+                result.label.as_deref(),
+            ).await?;
+            result.cube_lazy_model = Some(lazy_model);
+        }
+        Ok(result)
+    }
+
+    pub async fn new(
+        graphics: Arc<SharedGraphicsContext>,
         light: &LightComponent,
         transform: &Transform,
         label: Option<&str>,
@@ -231,10 +341,11 @@ impl Light {
         };
 
         let cube_model = Model::load_from_memory(
-            graphics,
+            graphics.clone(),
             include_bytes!("../../resources/cube.glb").to_vec(),
             label.clone(),
         )
+        .await
         .unwrap();
 
         let label_str = label.clone().unwrap_or("Light").to_string();
@@ -243,7 +354,6 @@ impl Light {
 
         let layout =
             graphics
-                .state
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
@@ -260,7 +370,6 @@ impl Light {
                 });
 
         let bind_group = graphics
-            .state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &layout,
@@ -279,7 +388,6 @@ impl Light {
 
         let instance_buffer =
             graphics
-                .state
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: match label {
@@ -363,10 +471,9 @@ impl LightManager {
         }
     }
 
-    pub fn create_light_array_resources(&mut self, graphics: &Graphics) {
+    pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
         let layout =
             graphics
-                .state
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
@@ -385,7 +492,6 @@ impl LightManager {
         let buffer = graphics.create_uniform(LightArrayUniform::default(), Some("Light Array"));
 
         let bind_group = graphics
-            .state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &layout,
@@ -401,7 +507,7 @@ impl LightManager {
         self.light_array_bind_group = Some(bind_group);
     }
 
-    pub fn update(&mut self, graphics: &Graphics, world: &hecs::World) {
+    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
         let mut light_array = LightArrayUniform::default();
         let mut light_index = 0;
 
@@ -415,7 +521,7 @@ impl LightManager {
 
             if let Some(instance_buffer) = &light.instance_buffer {
                 let instance_raw = instance.to_raw();
-                graphics.state.queue.write_buffer(
+                graphics.queue.write_buffer(
                     instance_buffer,
                     0,
                     bytemuck::cast_slice(&[instance_raw]),
@@ -432,7 +538,6 @@ impl LightManager {
 
         if let Some(buffer) = &self.light_array_buffer {
             graphics
-                .state
                 .queue
                 .write_buffer(buffer, 0, bytemuck::cast_slice(&[light_array]));
         }
@@ -450,14 +555,14 @@ impl LightManager {
 
     pub fn create_render_pipeline(
         &mut self,
-        graphics: &mut Graphics,
+        graphics: Arc<SharedGraphicsContext>,
         shader_contents: &str,
         camera: &Camera,
         label: Option<&str>,
     ) {
         use crate::graphics::Shader;
 
-        let shader = Shader::new(graphics, shader_contents, label.clone());
+        let shader = Shader::new(graphics.clone(), shader_contents, label.clone());
 
         let pipeline = Self::create_render_pipeline_for_lighting(
             graphics,
@@ -471,14 +576,13 @@ impl LightManager {
     }
 
     fn create_render_pipeline_for_lighting(
-        graphics: &mut Graphics,
+        graphics: Arc<SharedGraphicsContext>,
         shader: &Shader,
         bind_group_layouts: Vec<&BindGroupLayout>,
         label: Option<&str>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
             graphics
-                .state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(label.unwrap_or("Light Render Pipeline Descriptor")),
@@ -487,7 +591,6 @@ impl LightManager {
                 });
 
         graphics
-            .state
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Render Pipeline"),

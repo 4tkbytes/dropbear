@@ -1,4 +1,5 @@
 pub mod dropbear;
+pub mod build;
 
 use crate::input::InputState;
 use crate::scripting::dropbear::DropbearAPI;

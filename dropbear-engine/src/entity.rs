@@ -1,11 +1,12 @@
+use futures::executor::block_on;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
-    graphics::{Graphics, Instance},
-    model::Model,
+    graphics::{SharedGraphicsContext, Instance},
+    model::{LazyModel, LazyType, Model},
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
@@ -55,6 +56,55 @@ impl Transform {
     }
 }
 
+/// Creates a new adopted entity in a lazy method. It fetches the data first (which can be done on a separate
+/// thread). After, the [`LazyAdoptedEntity::poke()`] function can be called to convert the Lazy to a Real adopted entity.
+#[derive(Default)]
+pub struct LazyAdoptedEntity {
+    lazy_model: LazyModel,
+    #[allow(dead_code)]
+    label: String,
+}
+
+impl LazyAdoptedEntity {
+    /// Create a LazyAdoptedEntity from a file path (can be run on background thread)
+    pub async fn from_file(path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
+        let buffer = std::fs::read(path)?;
+        Self::from_memory(buffer, label).await
+    }
+
+    /// Create a LazyAdoptedEntity from memory buffer (can be run on background thread)
+    pub async fn from_memory(
+        buffer: impl AsRef<[u8]>,
+        label: Option<&str>,
+    ) -> anyhow::Result<Self> {
+        let lazy_model = Model::lazy_load(buffer, label).await?;
+        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
+        
+        Ok(Self {
+            lazy_model,
+            label: label_str,
+        })
+    }
+
+    /// Create a LazyAdoptedEntity from an existing LazyModel
+    pub fn from_lazy_model(lazy_model: LazyModel, label: Option<&str>) -> Self {
+        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
+        Self {
+            lazy_model,
+            label: label_str,
+        }
+    }
+}
+
+impl LazyType for LazyAdoptedEntity {
+    type T = AdoptedEntity;
+
+    fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
+        let model = self.lazy_model.poke(graphics.clone())?;
+        Ok(block_on(AdoptedEntity::adopt(graphics, model)))
+    }
+}
+
 #[derive(Default)]
 pub struct AdoptedEntity {
     pub model: Option<Model>,
@@ -64,9 +114,9 @@ pub struct AdoptedEntity {
 }
 
 impl AdoptedEntity {
-    pub fn new(graphics: &Graphics, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let model = Model::load(graphics, path, label.clone())?;
-        Ok(Self::adopt(graphics, model, label))
+    pub async fn new(graphics: Arc<SharedGraphicsContext>, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
+        let model = Model::load(graphics.clone(), path, label.clone()).await?;
+        Ok(Self::adopt(graphics, model).await)
     }
 
     pub fn label(&self) -> &String {
@@ -81,19 +131,16 @@ impl AdoptedEntity {
         self.model_mut().label = label.to_string();
     }
 
-    pub fn adopt(graphics: &Graphics, model: Model, label: Option<&str>) -> Self {
+    pub async fn adopt(graphics: Arc<SharedGraphicsContext>, model: Model) -> Self {
+        let label = model.label.clone();
         let instance = Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE);
         let initial_matrix = DMat4::IDENTITY; // Default; update in new() if transform provided
         let instance_raw = instance.to_raw();
         let instance_buffer =
             graphics
-                .state
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: match label {
-                        Some(l) => Some(l),
-                        None => Some("instance buffer"),
-                    },
+                    label: Some(&label),
                     contents: bytemuck::cast_slice(&[instance_raw]),
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 });
@@ -106,14 +153,13 @@ impl AdoptedEntity {
         }
     }
 
-    pub fn update(&mut self, graphics: &Graphics, transform: &Transform) {
+    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, transform: &Transform) {
         let current_matrix = transform.matrix();
         if self.previous_matrix != current_matrix {
             self.instance = Instance::from_matrix(current_matrix);
             let instance_raw = self.instance.to_raw();
             if let Some(buffer) = &self.instance_buffer {
                 graphics
-                    .state
                     .queue
                     .write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
             }
