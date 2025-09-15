@@ -9,6 +9,7 @@ fn main() -> anyhow::Result<()> {
         .bytes()
         .map_err(|e| anyhow::anyhow!("Failed to read zip bytes: {}", e))?;
 
+    
     let reader = Cursor::new(response);
     let mut zip = zip::ZipArchive::new(reader)
         .map_err(|e| anyhow::anyhow!("Failed to read zip archive: {}", e))?;
