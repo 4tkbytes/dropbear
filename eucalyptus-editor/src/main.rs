@@ -16,7 +16,8 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     author: "4tkbytes",
 };
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]
     compile_error!(
         "The `editor` feature is not supported on Android. If you are attempting\

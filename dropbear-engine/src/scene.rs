@@ -1,12 +1,13 @@
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{graphics::Graphics, input};
+use crate::input;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+#[async_trait::async_trait]
 pub trait Scene {
-    fn load(&mut self, graphics: &mut Graphics);
-    fn update(&mut self, dt: f32, graphics: &mut Graphics);
-    fn render(&mut self, graphics: &mut Graphics);
+    async fn load<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
+    async fn update<'a>(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext<'a>);
+    async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     /// By far a mess of a trait however it works.
     ///
@@ -70,10 +71,10 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub async fn update(
+    pub async fn update<'a>(
         &mut self,
         dt: f32,
-        graphics: &mut Graphics<'_>,
+        graphics: &mut crate::graphics::RenderContext<'a>,    
         event_loop: &ActiveEventLoop,
     ) {
         // transition scene
@@ -84,7 +85,7 @@ impl Manager {
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                scene.borrow_mut().load(graphics);
+                scene.borrow_mut().load(graphics).await;
             }
             self.current_scene = Some(next_scene_name);
         }
@@ -92,7 +93,7 @@ impl Manager {
         // update scene
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().update(dt, graphics);
+                scene.borrow_mut().update(dt, graphics).await;
                 let command = scene.borrow_mut().run_command();
                 match command {
                     SceneCommand::SwitchScene(target) => {
@@ -101,7 +102,7 @@ impl Manager {
                                 // reload the scene
                                 if let Some(scene) = self.scenes.get_mut(current) {
                                     scene.borrow_mut().exit(event_loop);
-                                    scene.borrow_mut().load(graphics);
+                                    scene.borrow_mut().load(graphics).await;
                                     log::debug!("Reloaded scene: {}", current);
                                 }
                             } else {
@@ -122,10 +123,10 @@ impl Manager {
         }
     }
 
-    pub async fn render(&mut self, graphics: &mut Graphics<'_>) {
+    pub async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
         if let Some(scene_name) = &self.current_scene {
             if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().render(graphics);
+                scene.borrow_mut().render(graphics).await;
             }
         }
     }

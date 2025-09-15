@@ -1,42 +1,89 @@
-use std::{fs, path::PathBuf, time::Instant};
+use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 
-use egui::Context;
+use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
+use parking_lot::Mutex;
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
-    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, RenderPass,
-    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState,
-    SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor, VertexBufferLayout,
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, VertexBufferLayout
 };
+use winit::window::Window;
 
 use crate::{
-    State,
-    model::{self, Vertex},
+    egui_renderer::EguiRenderer, model::{self, Vertex}, State
 };
-
-pub struct Graphics<'a> {
-    pub state: &'a mut State,
-    pub view: &'a TextureView,
-    pub encoder: &'a mut CommandEncoder,
-    pub screen_size: (f32, f32),
-    pub diffuse_sampler: Sampler,
-}
 
 pub const NO_TEXTURE: &'static [u8] = include_bytes!("../../resources/no-texture.png");
 pub const NO_MODEL: &'static [u8] = include_bytes!("../../resources/error.glb");
 
-impl<'a> Graphics<'a> {
-    pub fn new(
+pub struct RenderContext<'a> {
+    pub shared: Arc<SharedGraphicsContext>,
+    pub frame: FrameGraphicsContext<'a>,
+}
+
+pub struct SharedGraphicsContext {
+    pub device: Arc<Device>,
+    pub queue: Arc<Queue>,
+    pub instance: Arc<wgpu::Instance>,
+    pub texture_bind_layout: Arc<BindGroupLayout>,
+    pub window: Arc<Window>,
+    pub viewport_texture: Arc<Texture>,
+    pub egui_renderer: Arc<Mutex<EguiRenderer>>,
+    pub diffuse_sampler: Arc<Sampler>,
+    pub screen_size: (f32, f32),
+    pub texture_id: Arc<TextureId>,
+}
+
+pub struct FrameGraphicsContext<'a> {
+    pub encoder: &'a mut CommandEncoder,
+    pub view: &'a TextureView,
+    pub depth_texture: &'a Texture,
+    pub screen_size: (f32, f32),
+}
+
+impl SharedGraphicsContext {
+    pub fn get_egui_context(&self) -> Context {
+        self.egui_renderer.lock().context()
+    }
+
+    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        self.device.create_buffer_init(&BufferInitDescriptor {
+            label,
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        })
+    }
+
+    pub fn create_model_uniform_bind_group_layout(&self) -> BindGroupLayout {
+        self.device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("model_uniform_bind_group_layout"),
+            })
+    }
+}
+
+impl<'a> RenderContext<'a> {
+    pub fn from_state(
         state: &'a mut State,
         view: &'a TextureView,
         encoder: &'a mut CommandEncoder,
     ) -> Self {
         let screen_size = (state.config.width as f32, state.config.height as f32);
-        let diffuse_sampler = state
+        let diffuse_sampler = Arc::new(state
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -46,33 +93,37 @@ impl<'a> Graphics<'a> {
                 min_filter: wgpu::FilterMode::Nearest,
                 mipmap_filter: wgpu::FilterMode::Nearest,
                 ..Default::default()
-            });
+            }));
         Self {
-            state,
-            view,
-            encoder,
-            screen_size,
-            diffuse_sampler,
+            shared: Arc::new(SharedGraphicsContext {
+                device: state.device.clone(),
+                queue: state.queue.clone(),
+                instance: Arc::new(state.instance.clone()),
+                texture_bind_layout: Arc::new(state.texture_bind_layout.clone()),
+                window: state.window.clone(),
+                viewport_texture: Arc::new(state.viewport_texture.clone()),
+                egui_renderer: state.egui_renderer.clone(),
+                diffuse_sampler,
+                screen_size,
+                texture_id: state.texture_id.clone(),
+            }),
+            frame: FrameGraphicsContext {
+                encoder,
+                view,
+                depth_texture: &state.depth_texture,
+                screen_size,
+            },
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.state.resize(width, height);
-    }
-
-    pub fn texture_bind_group(&mut self) -> &wgpu::BindGroupLayout {
-        &self.state.texture_bind_layout
-    }
-
     pub fn create_render_pipline(
-        &mut self,
+        &self,
         shader: &Shader,
         bind_group_layouts: Vec<&BindGroupLayout>,
         label: Option<&str>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
-            self.state
-                .device
+            self.shared.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(label.unwrap_or("Render Pipeline Descriptor")),
                     bind_group_layouts: bind_group_layouts.as_slice(),
@@ -80,8 +131,7 @@ impl<'a> Graphics<'a> {
                 });
 
         let render_pipeline =
-            self.state
-                .device
+            self.shared.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some(label.unwrap_or("Render Pipeline")),
                     layout: Some(&render_pipeline_layout),
@@ -130,16 +180,12 @@ impl<'a> Graphics<'a> {
         render_pipeline
     }
 
-    pub fn get_egui_context(&mut self) -> Context {
-        self.state.egui_renderer.context()
-    }
-
     pub fn clear_colour(&mut self, color: Color) -> RenderPass<'static> {
-        self.encoder
+        self.frame.encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.view,
+                    view: &self.frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(color),
@@ -148,7 +194,7 @@ impl<'a> Graphics<'a> {
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.state.depth_texture.view,
+                    view: &self.frame.depth_texture.view,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
                         store: wgpu::StoreOp::Store,
@@ -160,46 +206,17 @@ impl<'a> Graphics<'a> {
             })
             .forget_lifetime()
     }
-
-    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
-    where
-        T: bytemuck::Pod + bytemuck::Zeroable,
-    {
-        self.state.device.create_buffer_init(&BufferInitDescriptor {
-            label,
-            contents: bytemuck::cast_slice(&[uniform]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        })
-    }
-
-    pub fn create_model_uniform_bind_group_layout(&self) -> BindGroupLayout {
-        self.state
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("model_uniform_bind_group_layout"),
-            })
-    }
 }
 
+// A nice little struct that stored basic information about a WGPU shader. 
 pub struct Shader {
     pub label: String,
     pub module: ShaderModule,
 }
 
 impl Shader {
-    pub fn new(graphics: &Graphics, shader_file_contents: &str, label: Option<&str>) -> Self {
+    pub fn new(graphics: Arc<SharedGraphicsContext>, shader_file_contents: &str, label: Option<&str>) -> Self {
         let module = graphics
-            .state
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label,
@@ -219,18 +236,119 @@ impl Shader {
 }
 
 #[derive(Clone)]
+/// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture. 
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub sampler: Sampler,
     pub size: Extent3d,
     pub view: TextureView,
     pub bind_group: Option<BindGroup>,
-    pub layout: Option<BindGroupLayout>,
+    pub layout: Option<Arc<BindGroupLayout>>,
 }
 
 impl Texture {
+    /// Describes the depth format for all Texture related functions in WGPU to use. Makes life easier
     pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
+    /// Creates a new Texture from the bytes of an image. This function is blocking, and takes roughly 4 seconds to 
+    /// convert from the image to RGBA, which can cause issues. There are better options, such as doing it yourself. 
+    /// 
+    /// Once async is implemented, this will be a better use. 
+    pub fn new(graphics: Arc<SharedGraphicsContext>, diffuse_bytes: &[u8]) -> Self {
+        let start = Instant::now();
+        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
+        println!("Loading image to memory: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let diffuse_rgba = diffuse_image.to_rgba8();
+        println!("Converting diffuse image to rgba8 took {:?}", start.elapsed());
+
+        let dimensions = diffuse_image.dimensions();
+        let texture_size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+
+        let start = Instant::now();
+        let diffuse_texture = graphics
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("diffuse_texture"),
+                size: texture_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+        println!("Creating new diffuse texture took {:?}", start.elapsed());
+
+        let start = Instant::now();
+        graphics.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &diffuse_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &diffuse_rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * dimensions.0),
+                rows_per_image: Some(dimensions.1),
+            },
+            texture_size,
+        );
+        println!("Writing texture to graphics queue took {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
+        let diffuse_sampler = graphics
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
+        println!("Creating sampler took {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let diffuse_bind_group =
+            graphics
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &graphics.texture_bind_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                        },
+                    ],
+                    label: Some("texture_bind_group"),
+                });
+        println!("Creating diffuse bind group took {:?}", start.elapsed());
+        println!("Done creating texture");
+        Self {
+            bind_group: Some(diffuse_bind_group),
+            layout: Some(graphics.texture_bind_layout.clone()),
+            texture: diffuse_texture,
+            sampler: diffuse_sampler,
+            size: texture_size,
+            view: diffuse_texture_view,
+        }
+    }
+
+    /// Creates a new depth texture. This is an internal function. 
     pub fn create_depth_texture(
         config: &SurfaceConfiguration,
         device: &Device,
@@ -278,6 +396,7 @@ impl Texture {
         }
     }
 
+    /// Creates a viewport texture. This is an internal function.
     pub fn create_viewport_texture(
         config: &SurfaceConfiguration,
         device: &Device,
@@ -314,16 +433,20 @@ impl Texture {
         }
     }
 
+    /// Returns a reference to the bind group layout of that texture
     pub fn layout(&self) -> &BindGroupLayout {
         self.layout.as_ref().unwrap()
     }
 
+    /// Returns a reference to the bind group of that texture
     pub fn bind_group(&self) -> &BindGroup {
         self.bind_group.as_ref().unwrap()
     }
 
-    pub(crate) fn create_texture_from_rgba_data(
-        graphics: &Graphics,
+    /// Alternative to [`Texture::new()`], which uses an existing rgba data buffer compared to new which synchronously 
+    /// converts the image to RGBA form. 
+    pub(crate) fn from_rgba_buffer(
+        graphics: Arc<SharedGraphicsContext>,
         rgba_data: &[u8],
         dimensions: (u32, u32),
     ) -> Texture {
@@ -334,7 +457,7 @@ impl Texture {
         };
 
         let create_start = Instant::now();
-        let diffuse_texture = graphics.state.device.create_texture(&wgpu::TextureDescriptor {
+        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("diffuse_texture"),
             size: texture_size,
             mip_level_count: 1,
@@ -347,7 +470,7 @@ impl Texture {
         println!("Creating new diffuse texture took {:?}", create_start.elapsed());
 
         let write_start = Instant::now();
-        graphics.state.queue.write_texture(
+        graphics.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &diffuse_texture,
                 mip_level: 0,
@@ -365,7 +488,7 @@ impl Texture {
         println!("Writing texture to graphics queue took {:?}", write_start.elapsed());
 
         let sampler_start = Instant::now();
-        let diffuse_sampler = graphics.state.device.create_sampler(&wgpu::SamplerDescriptor {
+        let diffuse_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -379,8 +502,8 @@ impl Texture {
         let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let bind_group_start = Instant::now();
-        let diffuse_bind_group = graphics.state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.state.texture_bind_layout,
+        let diffuse_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &graphics.texture_bind_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -403,51 +526,45 @@ impl Texture {
             view,
             size: texture_size,
             bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.state.texture_bind_layout.clone()),
+            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 
-    pub fn new(graphics: &Graphics, diffuse_bytes: &[u8]) -> Self {
-        let start = Instant::now();
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        println!("Loading image to memory: {:?}", start.elapsed());
-
-        let start = Instant::now();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-        println!("Converting diffuse image to rgba8 took {:?}", start.elapsed());
-
-        let dimensions = diffuse_image.dimensions();
+    /// Creates a new [`Texture`] with a specified sampler (wgpu) and already converted RGBA byte buffer. 
+    pub fn new_with_sampler_with_rgba_buffer(
+        graphics: Arc<SharedGraphicsContext>,
+        rgba_data: &[u8],
+        dimensions: (u32, u32),
+        address_mode: wgpu::AddressMode,
+    ) -> Self {
         let texture_size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
 
-        let start = Instant::now();
-        let diffuse_texture = graphics
-            .state
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("diffuse_texture"),
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-        println!("Creating new diffuse texture took {:?}", start.elapsed());
+        let create_start = Instant::now();
+        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("diffuse_texture"),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        println!("Creating new diffuse texture took {:?}", create_start.elapsed());
 
-        let start = Instant::now();
-        graphics.state.queue.write_texture(
+        let write_start = Instant::now();
+        graphics.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &diffuse_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &diffuse_rgba,
+            rgba_data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
@@ -455,57 +572,59 @@ impl Texture {
             },
             texture_size,
         );
-        println!("Writing texture to graphics queue took {:?}", start.elapsed());
+        println!("Writing texture to graphics queue took {:?}", write_start.elapsed());
 
-        let start = Instant::now();
-        let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
+        let sampler_start = Instant::now();
         let diffuse_sampler = graphics
-            .state
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                address_mode_u: address_mode,
+                address_mode_v: address_mode,
+                address_mode_w: address_mode,
                 mag_filter: wgpu::FilterMode::Linear,
                 min_filter: wgpu::FilterMode::Nearest,
                 mipmap_filter: wgpu::FilterMode::Nearest,
                 ..Default::default()
-            });
-        println!("Creating sampler took {:?}", start.elapsed());
+            });      
+        println!("Creating sampler took {:?}", sampler_start.elapsed());
 
-        let start = Instant::now();
-        let diffuse_bind_group =
-            graphics
-                .state
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &graphics.state.texture_bind_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                        },
-                    ],
-                    label: Some("texture_bind_group"),
-                });
-        println!("Creating diffuse bind group took {:?}", start.elapsed());
+        let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let bind_group_start = Instant::now();
+        let diffuse_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &graphics.texture_bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+        println!("Creating diffuse bind group took {:?}", bind_group_start.elapsed());
+
         println!("Done creating texture");
-        Self {
-            bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.state.texture_bind_layout.clone()),
+
+        Texture {
             texture: diffuse_texture,
             sampler: diffuse_sampler,
+            view,
             size: texture_size,
-            view: diffuse_texture_view,
+            bind_group: Some(diffuse_bind_group),
+            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 
+    /// Creates a new [`Texture`] with a specified sampler (wgpu).
+    /// 
+    /// This function decodes the image to RGBA, which can take a long time. This function is not 
+    /// recommended to be used until you have async working. 
     pub fn new_with_sampler(
-        graphics: &Graphics,
+        graphics: Arc<SharedGraphicsContext>,
         diffuse_bytes: &[u8],
         address_mode: wgpu::AddressMode,
     ) -> Self {
@@ -520,7 +639,6 @@ impl Texture {
         };
 
         let diffuse_texture = graphics
-            .state
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("diffuse_texture"),
@@ -533,7 +651,7 @@ impl Texture {
                 view_formats: &[],
             });
 
-        graphics.state.queue.write_texture(
+        graphics.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &diffuse_texture,
                 mip_level: 0,
@@ -551,7 +669,6 @@ impl Texture {
 
         let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
         let diffuse_sampler = graphics
-            .state
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
                 address_mode_u: address_mode,
@@ -565,10 +682,9 @@ impl Texture {
 
         let diffuse_bind_group =
             graphics
-                .state
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &graphics.state.texture_bind_layout,
+                    layout: &graphics.texture_bind_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -588,13 +704,14 @@ impl Texture {
             view: diffuse_texture_view,
             size: texture_size,
             bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.state.texture_bind_layout.clone()),
+            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 
-    pub async fn load_texture(graphics: &Graphics<'_>, path: &PathBuf) -> anyhow::Result<Texture> {
+    /// A helper function that loads the texture from a path. Still returns the same [`Texture`]. 
+    pub async fn load_texture(graphics: Arc<SharedGraphicsContext>, path: &PathBuf) -> anyhow::Result<Texture> {
         let data = fs::read(path)?;
-        Ok(Self::new(graphics, &data))
+        Ok(Self::new(graphics.clone(), &data))
     }
 }
 

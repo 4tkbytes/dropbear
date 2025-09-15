@@ -12,21 +12,21 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::build::build;
+use crate::{build::build, debug::DependencyInstaller};
 use crate::camera::UndoableCameraAction;
 use crate::debug;
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
-    graphics::Graphics,
+    graphics::SharedGraphicsContext,
     lighting::{Light, LightManager},
     scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use eucalyptus_core::camera::{
+use eucalyptus_core::{camera::{
     CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera,
-};
+}};
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
 use eucalyptus_core::states::{
@@ -78,6 +78,9 @@ pub struct Editor {
     play_mode_backup: Option<PlayModeBackup>,
 
     input_state: InputState,
+
+    // channels
+    dep_installer: DependencyInstaller,
 }
 
 impl Editor {
@@ -140,6 +143,7 @@ impl Editor {
             input_state: InputState::new(),
             light_manager: LightManager::new(),
             active_camera: None,
+            dep_installer: DependencyInstaller::default()
             // ..Default::default()
             // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
@@ -265,19 +269,26 @@ impl Editor {
         Ok(())
     }
 
-    pub fn load_project_config(&mut self, graphics: &Graphics) -> anyhow::Result<()> {
-        let config = PROJECT.read();
+    pub async fn load_project_config(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+        {
+            let config = PROJECT.read();
 
-        self.project_path = Some(config.project_path.clone());
+            self.project_path = Some(config.project_path.clone());
 
-        if let Some(layout) = &config.dock_layout {
-            self.dock_state = layout.clone();
+            if let Some(layout) = &config.dock_layout {
+                self.dock_state = layout.clone();
+            }
         }
 
-        {
+        let first_scene_opt = {
             let scenes = SCENES.read();
-            if let Some(first_scene) = scenes.first() {
-                self.active_camera = Some(first_scene.load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics)?);
+            scenes.first().cloned()
+        };
+
+        {
+            if let Some(first_scene) = first_scene_opt {
+                let cam = first_scene.load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics).await?;
+                self.active_camera = Some(cam);
 
                 log::info!(
                     "Successfully loaded scene with {} entities and {} camera configs",
@@ -438,7 +449,7 @@ impl Editor {
                 {
                     let cfg = PROJECT.read();
                     if cfg.editor_settings.is_debug_menu_shown {
-                        debug::show_menu_bar(ui, &mut self.signal);
+                        debug::show_menu_bar(ui, &mut self.signal, &mut self.dep_installer);
                     }
                 }
             });
@@ -815,6 +826,7 @@ pub enum Signal {
     RemoveComponent(hecs::Entity, ComponentType),
     CreateEntity,
     LogEntities,
+    Spawn(PendingSpawn2),
 }
 
 #[derive(Debug)]
@@ -966,4 +978,11 @@ impl PlayModeBackup {
 pub enum EditorState {
     Editing,
     Playing,
+}
+
+pub enum PendingSpawn2 {
+    CreateLight,
+    CreatePlane,
+    CreateCube,
+    CreateCamera,
 }

@@ -1,12 +1,12 @@
 use crate::camera::DebugCamera;
 use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
-use crate::model_ext::PendingModel;
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
-use dropbear_engine::graphics::Graphics;
+use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui_dock_fork::DockState;
@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::{fmt, fs};
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
@@ -713,10 +714,10 @@ impl SceneConfig {
         Ok(config)
     }
 
-    pub fn load_into_world(
+    pub async fn load_into_world(
         &self,
         world: &mut hecs::World,
-        graphics: &Graphics,
+        graphics: Arc<SharedGraphicsContext>,
     ) -> anyhow::Result<hecs::Entity> {
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
@@ -736,12 +737,10 @@ impl SceneConfig {
 
         log::info!("World cleared, now has {} entities", world.len());
 
-        let mut model_handles = Vec::new();
-        let mut pending_entities = Vec::new();
-
-        for entity_config in &self.entities {
+        for (_entity_index, entity_config) in self.entities.iter().enumerate() {
             log::debug!("Loading entity: {}", entity_config.label);
-            match &entity_config.model_path.ref_type {
+
+            let result = match &entity_config.model_path.ref_type {
                 ResourceReferenceType::File(reference) => {
                     let path: PathBuf = {
                         if cfg!(feature = "editor") {
@@ -760,7 +759,6 @@ impl SceneConfig {
                             entity_config.model_path.to_executable_path()?
                         }
                     };
-                    
                     log::debug!(
                         "Path for entity {} is {} from reference {}",
                         entity_config.label,
@@ -768,33 +766,96 @@ impl SceneConfig {
                         reference
                     );
 
-                    let pending_model = PendingModel {
-                        path: Some(path),
-                        bytes: None,
-                        label: entity_config.label.clone(),
-                        model_type: crate::model_ext::ModelLoadType::File,
-                    };
+                    let adopted = AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label)).await;
 
-                    let handle = crate::model_ext::GLOBAL_MODEL_LOADER.push(Box::new(pending_model));
-                    model_handles.push((handle.id, entity_config.clone()));
-                    pending_entities.push(entity_config.clone());
+                    // let adopted = {
+                    //     let path_clone = path.clone();
+                    //     let label_clone = entity_config.label.clone();
+                        
+                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
+                        
+                    //     tokio::task::spawn_local(async move {
+                    //         let entity = LazyAdoptedEntity::from_file(&path_clone, Some(&label_clone)).await;
+                    //         let _ = tx.send(entity);
+                    //     });
+                        
+                    //     loop {
+                    //         match rx.try_recv() {
+                    //             Ok(result) => {
+                    //                 break result?.poke(graphics)?;
+                    //             },
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                    //                 std::thread::yield_now();
+                    //                 continue;
+                    //             }
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
+                    //             }
+                    //         }
+                    //     }
+                    // };
+                    let transform = entity_config.transform;
+
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
+                    } else {
+                        world.spawn((adopted, transform, entity_config.properties.clone()));
+                    }
+                    
+                    Ok(())
                 }
                 ResourceReferenceType::Bytes(bytes) => {
-                    log::info!("Queuing entity from bytes [Len: {}]", bytes.len());
-                    
-                    let pending_model = PendingModel {
-                        path: None,
-                        bytes: Some(bytes.to_owned()),
-                        label: entity_config.label.clone(),
-                        model_type: crate::model_ext::ModelLoadType::Memory,
-                    };
+                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
+                    let bytes = bytes.to_owned();
 
-                    let handle = crate::model_ext::GLOBAL_MODEL_LOADER.push(Box::new(pending_model));
-                    model_handles.push((handle.id, entity_config.clone()));
-                    pending_entities.push(entity_config.clone());
+                    let model = Model::load_from_memory(graphics.clone(), bytes, Some(&entity_config.label)).await?;
+                    let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
+
+                    // let adopted = {
+                    //     let bytes_clone = bytes.clone();
+                    //     let label_clone = entity_config.label.clone();
+                        
+                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
+                        
+                    //     tokio::task::spawn_local(async move {
+                    //         let entity = LazyAdoptedEntity::from_memory(bytes_clone, Some(label_clone.as_str())).await;
+                    //         let _ = tx.send(entity);
+                    //     }); 
+                        
+                    //     loop {
+                    //         match rx.try_recv() {
+                    //             Ok(result) => {
+                    //                 break result?.poke(graphics)?;
+                    //             },
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                    //                 std::thread::yield_now();
+                    //                 continue;
+                    //             }
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
+                    //             }
+                    //         }
+                    //     }
+                    // };
+                    let transform = entity_config.transform;
+
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
+                    } else {
+                        world.spawn((adopted, transform, entity_config.properties.clone()));
+                    }
+                    
+                    Ok(())
                 }
                 ResourceReferenceType::Plane => {
-                    // this can be loaded in immediately as it doesn't use IO to load
                     let width = entity_config
                         .properties
                         .custom_properties
@@ -832,14 +893,47 @@ impl SceneConfig {
                         _ => panic!("Entity has a tiles_z property that is not an int"),
                     };
 
+                    let label_clone = entity_config.label.clone();
+                    let width_val = *width as f32;
+                    let height_val = *height as f32;
+                    let tiles_x_val = *tiles_x as u32;
+                    let tiles_z_val = *tiles_z as u32;
+
                     let plane = PlaneBuilder::new()
-                        .with_size(*width as f32, *height as f32)
-                        .with_tiles(*tiles_x as u32, *tiles_z as u32)
-                        .build(
-                            graphics,
-                            PROTO_TEXTURE,
-                            Some(entity_config.label.clone().as_str()),
-                        )?;
+                        .with_size(width_val, height_val)
+                        .with_tiles(tiles_x_val, tiles_z_val)
+                        .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone)).await?;
+
+                    // let plane = {
+                    //     let label_clone = entity_config.label.clone();
+                    //     let width_val = *width as f32;
+                    //     let height_val = *height as f32;
+                    //     let tiles_x_val = *tiles_x as u32;
+                    //     let tiles_z_val = *tiles_z as u32;
+                        
+                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
+                        
+                    //     tokio::task::spawn_local(async move {
+                    //         let result = PlaneBuilder::new()
+                    //             .with_size(width_val, height_val)
+                    //             .with_tiles(tiles_x_val, tiles_z_val)
+                    //             .lazy_build(PROTO_TEXTURE, Some(&label_clone)).await;
+                    //         let _ = tx.send(result);
+                    //     });
+                        
+                    //     loop {
+                    //         match rx.try_recv() {
+                    //             Ok(result) => break result?.poke(graphics)?,
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                    //                 std::thread::yield_now();
+                    //                 continue;
+                    //             }
+                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
+                    //             }
+                    //         }
+                    //     }
+                    // };
                     let transform = entity_config.transform;
 
                     if let Some(script_config) = &entity_config.script {
@@ -851,48 +945,54 @@ impl SceneConfig {
                     } else {
                         world.spawn((plane, transform, entity_config.properties.clone()));
                     }
+
+                    Ok(())
                 }
-                ResourceReferenceType::None => panic!(
-                    "Entity has a resource reference of None, which cannot be loaded or referenced"
-                ),
-            }
+                ResourceReferenceType::None => {
+                    Err(anyhow::anyhow!(
+                        "Entity has a resource reference of None, which cannot be loaded or referenced"
+                    ))
+                }
+            };
+
+            result?;
+            // processed_items += 1;
+            log::debug!("Loaded!");
         }
-
-        log::info!("Processing {} models in parallel", model_handles.len());
-        crate::model_ext::GLOBAL_MODEL_LOADER.process(graphics);
-
-        for (handle_id, entity_config) in model_handles {
-            match crate::model_ext::GLOBAL_MODEL_LOADER.get_status(handle_id) {
-                Some(crate::model_ext::ModelLoadingStatus::Loaded) => {
-                    log::debug!("Model loaded successfully: {}", entity_config.label);
-                    
-                    let model = crate::model_ext::GLOBAL_MODEL_LOADER.exchange_by_id(handle_id)?;
-                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&entity_config.label));
-                    
-                    self.spawn_entity_with_components(world, &entity_config, adopted);
-                }
-                Some(crate::model_ext::ModelLoadingStatus::Failed(error)) => {
-                    log::error!("Failed to load model {}: {}", entity_config.label, error);
-                    return Err(anyhow::anyhow!("Failed to load model {}: {}", entity_config.label, error));
-                }
-                _ => {
-                    log::error!("Model loading status unknown for: {}", entity_config.label);
-                    return Err(anyhow::anyhow!("Model loading failed for: {}", entity_config.label));
-                }
-            }
-        }
-
-        crate::model_ext::GLOBAL_MODEL_LOADER.clear_completed();
 
         for light_config in &self.lights {
             log::debug!("Loading light: {}", light_config.label);
 
-            let light = Light::new(
-                graphics,
-                &light_config.light_component,
-                &light_config.transform,
-                Some(&light_config.label),
-            );
+            let light = Light::new(graphics.clone(), &light_config.light_component, &light_config.transform, Some(&light_config.label)).await;
+
+            // let light = {
+            //     let light_comp_clone = light_config.light_component.clone();
+            //     let light_trans_clone = light_config.transform.clone();
+            //     let label_clone = light_config.label.clone();
+            //     let (tx, mut rx) = tokio::sync::oneshot::channel();
+                
+            //     tokio::task::spawn_local(async move {
+            //         let result = Light::lazy_new(
+            //             light_comp_clone,
+            //             light_trans_clone,
+            //             Some(&label_clone),
+            //         );
+            //         let _ = tx.send(result);
+            //     });
+                
+            //     loop {
+            //         match rx.try_recv() {
+            //             Ok(result) => break result.poke(graphics)?,
+            //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+            //                 std::thread::yield_now();
+            //                 continue;
+            //             }
+            //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+            //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
+            //             }
+            //         }
+            //     }
+            // };
 
             world.spawn((
                 light_config.light_component.clone(),
@@ -900,6 +1000,8 @@ impl SceneConfig {
                 light,
                 ModelProperties::default(),
             ));
+
+            // processed_items += 1;
         }
 
         for camera_config in &self.cameras {
@@ -910,7 +1012,7 @@ impl SceneConfig {
             );
 
             let camera = Camera::new(
-                graphics,
+                graphics.clone(),
                 DVec3::from_array(camera_config.position),
                 DVec3::from_array(camera_config.target),
                 DVec3::from_array(camera_config.up),
@@ -942,6 +1044,8 @@ impl SceneConfig {
             } else {
                 world.spawn((camera, component));
             }
+
+            // processed_items += 1;
         }
 
         if world
@@ -951,21 +1055,47 @@ impl SceneConfig {
             .is_none()
         {
             log::info!("No lights in scene, spawning default light");
-            let default_transform = Transform {
-                position: glam::DVec3::new(2.0, 4.0, 2.0),
-                ..Default::default()
-            };
-            let default_component = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            let default_light = Light::new(
-                graphics,
-                &default_component,
-                &default_transform,
-                Some("Default Light"),
-            );
+            let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
+            let trans = Transform {
+                    position: glam::DVec3::new(2.0, 4.0, 2.0),
+                    ..Default::default()
+                };
+            let light = Light::new(graphics.clone(), &comp, &trans, Some("Default Light")).await;
+            // let light = {
+            //     let light_comp_clone = LightComponent::directional(glam::DVec3::ONE, 1.0);
+            //     let default_transform = Transform {
+            //         position: glam::DVec3::new(2.0, 4.0, 2.0),
+            //         ..Default::default()
+            //     };
+            //     let (tx, mut rx) = tokio::sync::oneshot::channel();
+                
+            //     tokio::task::spawn_local(async move {
+            //         let result = Light::lazy_new(
+            //             light_comp_clone,
+            //             default_transform,
+            //             Some("Default Light"),
+            //         );
+            //         let _ = tx.send(result);
+            //     });
+                
+            //     loop {
+            //         match rx.try_recv() {
+            //             Ok(result) => break result.poke(graphics)?,
+            //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+            //                 std::thread::yield_now();
+            //                 continue;
+            //             }
+            //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+            //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
+            //             }
+            //         }
+            //     }
+            // };
+
             world.spawn((
-                default_component,
-                default_transform,
-                default_light,
+                comp,
+                trans,
+                light,
                 ModelProperties::default(),
             ));
         }
@@ -995,7 +1125,7 @@ impl SceneConfig {
                 Ok(camera_entity)
             } else {
                 log::info!("No debug camera found, creating viewport camera for editor");
-                let camera = Camera::predetermined(graphics, Some("Viewport Camera"));
+                let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
                 let component = DebugCamera::new();
                 let camera_entity = world.spawn((camera, component));
                 Ok(camera_entity)
@@ -1022,25 +1152,6 @@ impl SceneConfig {
             } else {
                 panic!("Runtime mode requires a player camera, but none was found in the scene!");
             }
-        }
-    }
-
-    fn spawn_entity_with_components(
-        &self,
-        world: &mut hecs::World,
-        entity_config: &SceneEntity,
-        adopted: AdoptedEntity,
-    ) {
-        let transform = entity_config.transform;
-
-        if let Some(script_config) = &entity_config.script {
-            let script = ScriptComponent {
-                name: script_config.name.clone(),
-                path: script_config.path.clone(),
-            };
-            world.spawn((adopted, transform, script, entity_config.properties.clone()));
-        } else {
-            world.spawn((adopted, transform, entity_config.properties.clone()));
         }
     }
 }

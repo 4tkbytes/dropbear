@@ -1,10 +1,10 @@
 use super::*;
-use dropbear_engine::graphics::InstanceRaw;
+use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
-    graphics::{Graphics, Shader},
+    graphics::Shader,
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
@@ -13,7 +13,7 @@ use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
 use eucalyptus_core::states::Value;
 use eucalyptus_core::utils::{PROTO_TEXTURE, PendingSpawn};
-use eucalyptus_core::{logging, model_ext, scripting, success_without_console, warn_without_console};
+use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
 use log;
 use parking_lot::Mutex;
 use wgpu::Color;
@@ -23,21 +23,21 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
+#[async_trait::async_trait]
 impl Scene for Editor {
-    fn load(&mut self, graphics: &mut Graphics) {
+    async fn load<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         if self.active_camera.is_none() {
-            self.load_project_config(graphics).unwrap();
+            self.load_project_config(graphics.shared.clone()).await.unwrap();
         }
 
         let shader = Shader::new(
-            graphics,
+            graphics.shared.clone(),
             include_str!("../../../resources/shaders/shader.wgsl"),
             Some("viewport_shader"),
         );
 
-        self.light_manager.create_light_array_resources(graphics);
+        self.light_manager.create_light_array_resources(graphics.shared.clone());
 
-        let texture_bind_group = &graphics.texture_bind_group().clone();
         if let Some(active_camera) = self.active_camera {
             if let Ok(mut q) = self
                 .world
@@ -49,7 +49,7 @@ impl Scene for Editor {
                     let pipeline = graphics.create_render_pipline(
                         &shader,
                         vec![
-                            texture_bind_group,
+                            &graphics.shared.texture_bind_layout.clone(),
                             camera.layout(),
                             self.light_manager.layout(),
                         ],
@@ -58,7 +58,7 @@ impl Scene for Editor {
                     self.render_pipeline = Some(pipeline);
 
                     self.light_manager.create_render_pipeline(
-                        graphics,
+                        graphics.shared.clone(),
                         include_str!("../../../resources/shaders/light.wgsl"),
                         camera,
                         Some("Light Pipeline"),
@@ -79,87 +79,43 @@ impl Scene for Editor {
             log_once::warn_once!("No active camera found");
         }
 
-        self.window = Some(graphics.state.window.clone());
+        self.window = Some(graphics.shared.window.clone());
     }
 
-    fn update(&mut self, dt: f32, graphics: &mut Graphics) {
+    async fn update<'a>(&mut self, dt: f32, graphics: &mut RenderContext<'a>) {
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
             self.is_viewport_focused = false;
         }
 
-        {
+        let spawns_to_process = {
             let mut pending_spawns = PENDING_SPAWNS.lock();
-            let mut current_spawn: Option<PendingSpawn> = None;
-            for spawn in pending_spawns.drain(..) {
-                if let Some(handle_id) = spawn.handle_id {
-                    match model_ext::GLOBAL_MODEL_LOADER.get_status(handle_id) {
-                        Some(model_ext::ModelLoadingStatus::Loaded) => {
-                            match model_ext::GLOBAL_MODEL_LOADER.exchange_by_id(handle_id) {
-                                Ok(model) => {
-                                    let adopted = AdoptedEntity::adopt(graphics, model, Some(&spawn.asset_name));
-                                    let entity_id = Arc::get_mut(&mut self.world).unwrap()
-                                        .spawn((adopted, spawn.transform, spawn.properties));
-                                    self.selected_entity = Some(entity_id);
+            std::mem::take(&mut *pending_spawns)
+        };
 
-                                    UndoableAction::push_to_undo(
-                                        &mut self.undo_stack,
-                                        UndoableAction::Spawn(entity_id),
-                                    );
+        for spawn in spawns_to_process {
+            match AdoptedEntity::new(graphics.shared.clone(), &spawn.asset_path, Some(&spawn.asset_name)).await {
+                Ok(adopted) => {
+                    let entity_id = Arc::get_mut(&mut self.world).unwrap()
+                        .spawn((adopted, spawn.transform, spawn.properties));
+                    
+                    self.selected_entity = Some(entity_id);
 
-                                    log::info!(
-                                        "Successfully spawned {} with ID {:?}",
-                                        spawn.asset_name,
-                                        entity_id
-                                    );
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to exchange model for {}: {}", spawn.asset_name, e);
-                                }
-                            }
-                        }
-                        Some(model_ext::ModelLoadingStatus::Failed(error)) => {
-                            log::error!("Model loading failed for {}: {}", spawn.asset_name, error);
-                        }
-                        Some(model_ext::ModelLoadingStatus::Processing) => {
-                            current_spawn = Some(spawn);
-                        }
-                        Some(model_ext::ModelLoadingStatus::NotLoaded) => {
-                            log::warn!("Model {} not processed yet", spawn.asset_name);
-                            current_spawn = Some(spawn);
-                        }
-                        None => {
-                            log::error!("No handle found for model {}", spawn.asset_name);
-                        }
-                    }
-                } else {
-                    match AdoptedEntity::new(graphics, &spawn.asset_path, Some(&spawn.asset_name)) {
-                        Ok(adopted) => {
-                            let entity_id = Arc::get_mut(&mut self.world).unwrap()
-                                .spawn((adopted, spawn.transform, spawn.properties));
-                            self.selected_entity = Some(entity_id);
+                    UndoableAction::push_to_undo(
+                        &mut self.undo_stack,
+                        UndoableAction::Spawn(entity_id),
+                    );
 
-                            UndoableAction::push_to_undo(
-                                &mut self.undo_stack,
-                                UndoableAction::Spawn(entity_id),
-                            );
-
-                            log::info!(
-                                "Successfully spawned {} with ID {:?}",
-                                spawn.asset_name,
-                                entity_id
-                            );
-                        }
-                        Err(e) => {
-                            log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
-                        }
-                    }
+                    log::info!(
+                        "Successfully spawned {} with ID {:?}",
+                        spawn.asset_name,
+                        entity_id
+                    );
                 }
-            }
-
-            if let Some(s) = current_spawn {
-                pending_spawns.push(s);
+                Err(e) => {
+                    log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
+                }
             }
         }
 
@@ -279,10 +235,10 @@ impl Scene for Editor {
                         match &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()) {
                             Some(v) => {
                                 match AdoptedEntity::new(
-                                    graphics,
+                                    graphics.shared.clone(),
                                     v,
                                     Some(&scene_entity.label),
-                                ) {
+                                ).await {
                                     Ok(adopted) => {
                                         let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
                                             adopted,
@@ -311,7 +267,7 @@ impl Scene for Editor {
                         };
                     },
                     dropbear_engine::utils::ResourceReferenceType::Bytes(bytes) => {
-                        let model = match Model::load_from_memory(graphics, bytes, Some(&scene_entity.label)) {
+                        let model = match Model::load_from_memory(graphics.shared.clone(), bytes, Some(&scene_entity.label)).await {
                             Ok(v) => v,
                             Err(e) => {
                                 fatal!("Unable to load from memory: {}", e);
@@ -320,10 +276,9 @@ impl Scene for Editor {
                             },
                         };
                         let adopted = AdoptedEntity::adopt(
-                            graphics,
+                            graphics.shared.clone(),
                             model,
-                            Some(&scene_entity.label),
-                        );
+                        ).await;
                         let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
                             adopted,
                             scene_entity.transform,
@@ -725,7 +680,7 @@ impl Scene for Editor {
                                 .scroll([false, true])
                                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                                 .enabled(true)
-                                .show(&graphics.get_egui_context(), |ui| {
+                                .show(&graphics.shared.get_egui_context(), |ui| {
                                     if ui
                                         .add_sized(
                                             [ui.available_width(), 30.0],
@@ -773,7 +728,7 @@ impl Scene for Editor {
                                             );
                                         } else {
                                             let camera = Camera::predetermined(
-                                                graphics,
+                                                graphics.shared.clone(),
                                                 Some(&format!("{} Camera", label)),
                                             );
                                             let component = CameraComponent::new();
@@ -813,7 +768,7 @@ impl Scene for Editor {
                                 .enabled(true)
                                 .open(&mut show)
                                 .title_bar(true)
-                                .show(&graphics.get_egui_context(), |ui| {
+                                .show(&graphics.shared.get_egui_context(), |ui| {
                                     if ui
                                         .add_sized(
                                             [ui.available_width(), 30.0],
@@ -853,7 +808,7 @@ impl Scene for Editor {
                                 .enabled(true)
                                 .open(&mut show)
                                 .title_bar(true)
-                                .show(&graphics.get_egui_context(), |ui| {
+                                .show(&graphics.shared.get_egui_context(), |ui| {
                                     egui_extras::install_image_loaders(ui.ctx());
                                     ui.add(Image::from_bytes(
                                         "bytes://theres_nothing",
@@ -949,7 +904,7 @@ impl Scene for Editor {
                     .enabled(true)
                     .open(&mut show)
                     .title_bar(true)
-                    .show(&graphics.get_egui_context(), |ui| {
+                    .show(&graphics.shared.get_egui_context(), |ui| {
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Model")).clicked() {
                             log::debug!("Creating new model");
                             warn!("Instead of using the `Add Entity` window, double click on the imported model in the asset \n\
@@ -959,70 +914,22 @@ impl Scene for Editor {
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Light")).clicked() {
                             log::debug!("Creating new lighting");
-                            let transform = Transform::new();
-                            let component = LightComponent::default();
-                            let light = Light::new(graphics, &component, &transform, Some("Light"));
-                            Arc::get_mut(&mut self.world).unwrap().spawn((light, component, transform));
-                            success!("Created new light");
-
-                            // always ensure the signal is reset after action is dun
-                            self.signal = Signal::None;
+                            self.signal = Signal::Spawn(PendingSpawn2::CreateLight);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
                             log::debug!("Creating new plane");
-                            let plane = PlaneBuilder::new()
-                                .with_size(500.0, 200.0)
-                                .build(
-                                    graphics,
-                                    PROTO_TEXTURE,
-                                    Some("Plane")
-                                ).unwrap();
-                            let transform = Transform::new();
-                            let mut props = ModelProperties::new();
-                            props.custom_properties.insert("width".to_string(), Value::Float(500.0));
-                            props.custom_properties.insert("height".to_string(), Value::Float(200.0));
-                            props.custom_properties.insert("tiles_x".to_string(), Value::Int(500));
-                            props.custom_properties.insert("tiles_z".to_string(), Value::Int(200));
-                            Arc::get_mut(&mut self.world).unwrap().spawn((plane, transform, props));
-                            success!("Created new plane");
-
-                            self.signal = Signal::None;
+                            self.signal = Signal::Spawn(PendingSpawn2::CreatePlane);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
                             log::debug!("Creating new cube");
-                            let model = Model::load_from_memory(
-                                graphics,
-                                include_bytes!("../../../resources/cube.glb"),
-                                Some("Cube")
-                            );
-                            match model {
-                                Ok(model) => {
-                                    let cube = AdoptedEntity::adopt(
-                                        graphics,
-                                        model,
-                                        Some("Cube")
-                                    );
-                                    Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
-                                }
-                                Err(e) => {
-                                    fatal!("Failed to load cube model: {}", e);
-                                }
-                            }
-                            success!("Created new cube");
-
-                            self.signal = Signal::None;
+                            self.signal = Signal::Spawn(PendingSpawn2::CreateCube);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
                             log::debug!("Creating new cube");
-                            let camera = Camera::predetermined(graphics, None);
-                            let component = CameraComponent::new();
-                            Arc::get_mut(&mut self.world).unwrap().spawn((camera, component));
-                            success!("Created new camera");
-
-                            self.signal = Signal::None;
+                            self.signal = Signal::Spawn(PendingSpawn2::CreateCamera);
                         }
                     });
                 if !show {
@@ -1042,10 +949,67 @@ impl Scene for Editor {
                 }
                 log::info!("====================");
                 self.signal = Signal::None;
+            },
+            Signal::Spawn(entity_type) => {
+                match entity_type {
+                    crate::editor::PendingSpawn2::CreateLight => {
+                        let transform = Transform::new();
+                        let component = LightComponent::default();
+                        let light = Light::new(graphics.shared.clone(), &component, &transform, Some("Light")).await;
+                        Arc::get_mut(&mut self.world).unwrap().spawn((light, component, transform));
+                        success!("Created new light");
+                    },
+                    crate::editor::PendingSpawn2::CreatePlane => {
+                        let plane = PlaneBuilder::new()
+                            .with_size(500.0, 200.0)
+                            .build(
+                                graphics.shared.clone(),
+                                PROTO_TEXTURE,
+                                Some("Plane")
+                            ).await.unwrap();
+
+                        let transform = Transform::new();
+                        let mut props = ModelProperties::new();
+                        props.custom_properties.insert("width".to_string(), Value::Float(500.0));
+                        props.custom_properties.insert("height".to_string(), Value::Float(200.0));
+                        props.custom_properties.insert("tiles_x".to_string(), Value::Int(500));
+                        props.custom_properties.insert("tiles_z".to_string(), Value::Int(200));
+                        Arc::get_mut(&mut self.world).unwrap().spawn((plane, transform, props));
+                        success!("Created new plane");
+                    },
+                    crate::editor::PendingSpawn2::CreateCube => {
+                        let model = Model::load_from_memory(
+                            graphics.shared.clone(),
+                            include_bytes!("../../../resources/cube.glb"),
+                            Some("Cube")
+                        ).await;
+                        match model {
+                            Ok(model) => {
+                                let cube = AdoptedEntity::adopt(
+                                    graphics.shared.clone(),
+                                    model,
+                                    // Some("Cube")
+                                ).await;
+                                Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
+                            }
+                            Err(e) => {
+                                fatal!("Failed to load cube model: {}", e);
+                            }
+                        }
+                        success!("Created new cube");
+                    },
+                    crate::editor::PendingSpawn2::CreateCamera => {
+                        let camera = Camera::predetermined(graphics.shared.clone(), None);
+                        let component = CameraComponent::new();
+                        Arc::get_mut(&mut self.world).unwrap().spawn((camera, component));
+                        success!("Created new camera");
+                    },
+                }
+                self.signal = Signal::None;
             }
         }
 
-        let current_size = graphics.state.viewport_texture.size;
+        let current_size = graphics.shared.viewport_texture.size;
         self.size = current_size;
 
         let new_aspect = current_size.width as f64 / current_size.height as f64;
@@ -1082,12 +1046,12 @@ impl Scene for Editor {
             .iter()
         {
             component.update(camera);
-            camera.update(graphics);
+            camera.update(graphics.shared.clone());
         }
 
         let query = Arc::get_mut(&mut self.world).unwrap().query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
-            entity.update(&graphics, transform);
+            entity.update(graphics.shared.clone(), transform);
         }
 
         let light_query = Arc::get_mut(&mut self.world).unwrap()
@@ -1096,10 +1060,12 @@ impl Scene for Editor {
             light.update(light_component, transform);
         }
 
-        self.light_manager.update(graphics, &Arc::get_mut(&mut self.world).unwrap());
+        self.light_manager.update(graphics.shared.clone(), &Arc::get_mut(&mut self.world).unwrap());
+        
+        crate::debug::show_dependency_progress_window(&graphics.shared.get_egui_context(), &mut self.dep_installer);
     }
 
-    fn render(&mut self, graphics: &mut Graphics) {
+    async fn render<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         // cornflower blue
         let color = Color {
             r: 100.0 / 255.0,
@@ -1109,12 +1075,12 @@ impl Scene for Editor {
         };
 
         self.color = color.clone();
-        self.size = graphics.state.viewport_texture.size.clone();
-        self.texture_id = Some(graphics.state.texture_id.clone());
-        self.show_ui(&graphics.get_egui_context());
+        self.size = graphics.shared.viewport_texture.size.clone();
+        self.texture_id = Some(*graphics.shared.texture_id.clone());
+        self.show_ui(&graphics.shared.get_egui_context());
 
-        self.window = Some(graphics.state.window.clone());
-        logging::render(&graphics.get_egui_context());
+        self.window = Some(graphics.shared.window.clone());
+        logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(active_camera) = self.active_camera {
                 if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
@@ -1158,7 +1124,7 @@ impl Scene for Editor {
                             for (model_ptr, instances) in model_batches {
                                 let model = unsafe { &*model_ptr };
 
-                                let instance_buffer = graphics.state.device.create_buffer_init(
+                                let instance_buffer = graphics.shared.device.create_buffer_init(
                                     &wgpu::util::BufferInitDescriptor {
                                         label: Some("Batched Instance Buffer"),
                                         contents: bytemuck::cast_slice(&instances),

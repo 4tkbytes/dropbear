@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages,
 };
 
-use crate::graphics::Graphics;
+use crate::graphics::SharedGraphicsContext;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
@@ -44,7 +46,7 @@ pub struct Camera {
 impl Camera {
     /// Creates a new camera
     pub fn new(
-        graphics: &Graphics,
+        graphics: Arc<SharedGraphicsContext>,
         eye: DVec3,
         target: DVec3,
         up: DVec3,
@@ -82,20 +84,20 @@ impl Camera {
         };
         camera.update_view_proj();
         let buffer = graphics.create_uniform(camera.uniform, Some("Camera Uniform"));
-        camera.create_bind_group_layout(graphics, buffer.clone());
+        camera.create_bind_group_layout(graphics.clone(), buffer.clone());
         camera.buffer = Some(buffer);
         log::debug!("Created new camera");
         camera
     }
 
     /// Creates a default camera
-    pub fn predetermined(graphics: &Graphics, label: Option<&str>) -> Self {
+    pub fn predetermined(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self::new(
-            graphics,
+            graphics.clone(),
             DVec3::new(0.0, 1.0, 2.0),
             DVec3::new(0.0, 0.0, 0.0),
             DVec3::Y,
-            (graphics.state.config.width / graphics.state.config.height).into(),
+            (graphics.screen_size.0 / graphics.screen_size.1).into(),
             45.0,
             0.1,
             100.0,
@@ -159,10 +161,9 @@ impl Camera {
         result
     }
 
-    pub fn create_bind_group_layout(&mut self, graphics: &Graphics, camera_buffer: Buffer) {
+    pub fn create_bind_group_layout(&mut self, graphics: Arc<SharedGraphicsContext>, camera_buffer: Buffer) {
         let camera_bind_group_layout =
             graphics
-                .state
                 .device
                 .create_bind_group_layout(&BindGroupLayoutDescriptor {
                     entries: &[BindGroupLayoutEntry {
@@ -179,7 +180,6 @@ impl Camera {
                 });
 
         let camera_bind_group = graphics
-            .state
             .device
             .create_bind_group(&BindGroupDescriptor {
                 layout: &camera_bind_group_layout,
@@ -193,9 +193,9 @@ impl Camera {
         self.bind_group = Some(camera_bind_group);
     }
 
-    pub fn update(&mut self, graphics: &Graphics) {
+    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.update_view_proj();
-        graphics.state.queue.write_buffer(
+        graphics.queue.write_buffer(
             &self.buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[self.uniform]),

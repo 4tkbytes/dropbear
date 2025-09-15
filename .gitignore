@@ -23,3 +23,9 @@ Cargo.lock
 dropbear-engine/src/resources/textures/Autism.png
 .vscode
 docs
+
+# gleam
+*.beam
+*.ez
+/build
+erl_crash.dump
