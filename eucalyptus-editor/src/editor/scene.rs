@@ -547,7 +547,7 @@ impl Scene for Editor {
                             script.path.display()
                         );
 
-                        let bytes = match std::fs::read(&script.path) {
+                        let bytes = match tokio::fs::read(&script.path).await {
                             Ok(val) => val,
                             Err(e) => {
                                 fatal!("Unable to read script {} to bytes because {}", &script.path.display(), e);
@@ -937,7 +937,8 @@ impl Scene for Editor {
                 }
             }
             Signal::LogEntities => {
-                log::info!("====================");
+                log::debug!("====================");
+                let mut counter = 0;
                 for entity in Arc::get_mut(&mut self.world).unwrap().iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
                         log::info!("Model: {:?}", entity.label());
@@ -946,8 +947,10 @@ impl Scene for Editor {
                     if let Some(entity) = entity.get::<&Light>() {
                         log::info!("Light: {:?}", entity.label());
                     }
+                    counter += 1;
                 }
-                log::info!("====================");
+                log::debug!("====================");
+                info!("Total entity count: {}", counter);
                 self.signal = Signal::None;
             },
             Signal::Spawn(entity_type) => {
@@ -1062,7 +1065,10 @@ impl Scene for Editor {
 
         self.light_manager.update(graphics.shared.clone(), &Arc::get_mut(&mut self.world).unwrap());
         
-        crate::debug::show_dependency_progress_window(&graphics.shared.get_egui_context(), &mut self.dep_installer);
+        if self.dep_installer.is_installing {
+            self.dep_installer.show_installation_window(&mut graphics.shared.get_egui_context());
+        }
+        self.dep_installer.update_progress();
     }
 
     async fn render<'a>(&mut self, graphics: &mut RenderContext<'a>) {
@@ -1077,7 +1083,7 @@ impl Scene for Editor {
         self.color = color.clone();
         self.size = graphics.shared.viewport_texture.size.clone();
         self.texture_id = Some(*graphics.shared.texture_id.clone());
-        self.show_ui(&graphics.shared.get_egui_context());
+        self.show_ui(&graphics.shared.get_egui_context()).await;
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());

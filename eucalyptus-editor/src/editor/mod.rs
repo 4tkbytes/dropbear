@@ -326,7 +326,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn show_ui(&mut self, ctx: &Context) {
+    pub async fn show_ui(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {

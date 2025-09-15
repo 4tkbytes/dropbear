@@ -3,6 +3,8 @@ use std::process::Command;
 use app_dirs2::{AppInfo, AppDataType, app_dir};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::UnboundedSender;
+use futures_util::StreamExt;
 
 const GLEAM_VERSION: &'static str = "1.12.0";
 const BUN_VERSION: &'static str = "1.2.22";
@@ -12,6 +14,17 @@ pub const APP_INFO: AppInfo = AppInfo {
     name: "Eucalyptus",
     author: "4tkbytes",
 };
+
+pub enum InstallStatus {
+    NotStarted,
+    InProgress {
+        tool: String,
+        step: String,
+        progress: f32,
+    },
+    Success,
+    Failed(String),
+}
 
 /// Compiles a gleam project into WASM through a pipeline. 
 pub struct GleamScriptCompiler {
@@ -26,29 +39,31 @@ impl GleamScriptCompiler {
         }
     }
 
-    pub async fn build(self) -> anyhow::Result<()> {
-        Self::ensure_dependencies().await?;
+    pub async fn build(self, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+        Self::ensure_dependencies(sender).await?;
         Ok(())
     }
 
-    pub async fn ensure_dependencies() -> anyhow::Result<()> {
+    pub async fn ensure_dependencies(sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
         println!("Checking dependencies...");
         
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::InProgress {
+                tool: "None".to_string(),
+                step: "Checking existing tools...".to_string(),
+                progress: 0.05,
+            });
+        }
+
         let gleam_available = Self::check_tool_in_path("gleam").await;
-        if gleam_available {
-            println!("Gleam already exists in path");
-        }
         let bun_available = Self::check_tool_in_path("bun").await;
-        if bun_available {
-            println!("Bun already exists in path");
-        }
         let javy_available = Self::check_tool_in_path("javy").await;
-        if javy_available {
-            println!("Javy already exists in path");
-        }
 
         if gleam_available && bun_available && javy_available {
             println!("All dependencies found in PATH");
+            if let Some(ref s) = sender {
+                let _ = s.send(InstallStatus::Success);
+            }
             return Ok(());
         }
 
@@ -59,18 +74,82 @@ impl GleamScriptCompiler {
         let app_dir = app_dir(AppDataType::UserData, &APP_INFO, "")
             .map_err(|e| anyhow::anyhow!("Failed to get app directory: {}", e))?;
 
+        let tools_to_install: Vec<(&str, bool)> = vec![
+            ("Gleam", gleam_available),
+            ("Bun", bun_available),
+            ("Javy", javy_available),
+        ];
+        let total_to_install = tools_to_install.iter().filter(|(_, avail)| !avail).count();
+        let mut installed_count = 0;
+
         if !gleam_available {
-            Self::download_gleam(&app_dir).await?;
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Gleam".to_string(),
+                    step: "Downloading Gleam...".to_string(),
+                    progress: 0.2 + (installed_count as f32 / total_to_install as f32) * 0.6,
+                });
+            }
+            Self::download_gleam(&app_dir, sender.clone()).await?;
+            installed_count += 1;
+        } else {
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Gleam".to_string(),
+                    step: "Done!".to_string(),
+                    progress: 1.0,
+                });
+            }
+            installed_count += 1;
         }
 
         if !bun_available {
-            Self::download_bun(&app_dir).await?;
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Bun".to_string(),
+                    step: "Downloading Bun...".to_string(),
+                    progress: 0.2 + (installed_count as f32 / total_to_install as f32) * 0.6,
+                });
+            }
+            Self::download_bun(&app_dir, sender.clone()).await?;
+            installed_count += 1;
+        } else {
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Bun".to_string(),
+                    step: "Done!".to_string(),
+                    progress: 1.0,
+                });
+            }
+            installed_count += 1;
         }
 
         if !javy_available {
-            Self::download_javy(&app_dir).await?;
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Javy".to_string(),
+                    step: "Downloading Javy...".to_string(),
+                    progress: 0.2 + (installed_count as f32 / total_to_install as f32) * 0.6,
+                });
+            }
+            Self::download_javy(&app_dir, sender.clone()).await?;
+            installed_count += 1;
+        } else {
+            if let Some(ref s) = sender.clone() {
+                let _ = s.send(InstallStatus::InProgress {
+                    tool: "Javy".to_string(),
+                    step: "Done!".to_string(),
+                    progress: 1.0,
+                });
+            }
+            installed_count += 1;
         }
 
+        if let Some(ref s) = sender.clone() {
+            let _ = s.send(InstallStatus::Success);
+        }
+
+        println!("All {} dependencies installed successfully", installed_count);
         Ok(())
     }
 
@@ -87,7 +166,7 @@ impl GleamScriptCompiler {
         }
     }
 
-    pub async fn download_gleam(app_dir: &PathBuf) -> anyhow::Result<()> {
+    pub async fn download_gleam(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
         let gleam_dir = app_dir.join("dependencies").join("gleam").join(GLEAM_VERSION);
         
         if gleam_dir.exists() {
@@ -98,13 +177,13 @@ impl GleamScriptCompiler {
         println!("Downloading Gleam v{}...", GLEAM_VERSION);
         
         let gleam_link = Self::get_gleam_download_url()?;
-        Self::download_and_extract(&gleam_link, &gleam_dir, "gleam").await?;
+        Self::download_and_extract(&gleam_link, &gleam_dir, "gleam", sender).await?;
         
         println!("Gleam v{} downloaded successfully", GLEAM_VERSION);
         Ok(())
     }
 
-    pub async fn download_bun(app_dir: &PathBuf) -> anyhow::Result<()> {
+    pub async fn download_bun(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
         let bun_dir = app_dir.join("dependencies").join("bun").join(BUN_VERSION);
         
         if bun_dir.exists() {
@@ -115,13 +194,13 @@ impl GleamScriptCompiler {
         println!("Downloading Bun v{}...", BUN_VERSION);
         
         let bun_link = Self::get_bun_download_url()?;
-        Self::download_and_extract(&bun_link, &bun_dir, "bun").await?;
+        Self::download_and_extract(&bun_link, &bun_dir, "bun", sender).await?;
         
         println!("Bun v{} downloaded successfully", BUN_VERSION);
         Ok(())
     }
 
-    pub async fn download_javy(app_dir: &PathBuf) -> anyhow::Result<()> {
+    pub async fn download_javy(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
         let javy_dir = app_dir.join("dependencies").join("javy").join(JAVY_VERSION);
         
         if javy_dir.exists() {
@@ -132,23 +211,69 @@ impl GleamScriptCompiler {
         println!("Downloading Javy v{}...", JAVY_VERSION);
         
         let javy_link = Self::get_javy_download_url()?;
-        Self::download_and_extract(&javy_link, &javy_dir, "javy").await?;
+        Self::download_and_extract(&javy_link, &javy_dir, "javy", sender).await?;
         
         println!("Javy v{} downloaded successfully", JAVY_VERSION);
         Ok(())
     }
 
-    async fn download_and_extract(url: &str, target_dir: &PathBuf, tool_name: &str) -> anyhow::Result<()> {
+    async fn download_and_extract(
+        url: &str, 
+        target_dir: &PathBuf, 
+        tool_name: &str, 
+        sender: Option<UnboundedSender<InstallStatus>>
+    ) -> anyhow::Result<()> {
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::InProgress {
+                step: format!("Creating directories for {}...", tool_name),
+                progress: 0.0,
+                tool: tool_name.to_string(),
+            });
+        }
+
         fs::create_dir_all(target_dir).await?;
-        
+
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::InProgress {
+                step: format!("Downloading {}...", tool_name),
+                progress: 0.3,
+                tool: tool_name.to_string(),
+            });
+        }
+
         let response = reqwest::get(url).await?;
-        let bytes = response.bytes().await?;
-        
+        let total_size = response.content_length().unwrap_or(0);
+        let mut downloaded = 0;
+        let mut stream = response.bytes_stream();
+
         let temp_file = target_dir.join(format!("{}_download", tool_name));
         let mut file = fs::File::create(&temp_file).await?;
-        file.write_all(&bytes).await?;
+
+        while let Some(item) = stream.next().await {
+            let bytes = item?;
+            file.write_all(&bytes).await?;
+            downloaded += bytes.len() as u64;
+
+            if let Some(ref s) = sender {
+                let progress = 0.3 + (downloaded as f32 / total_size as f32) * 0.4;
+                let _ = s.send(InstallStatus::InProgress {
+                    step: format!("Downloading {}...", tool_name),
+                    progress,
+                    tool: tool_name.to_string(),
+                });
+            }
+        }
+
         file.sync_all().await?;
         drop(file);
+
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::InProgress {
+                step: format!("Extracting {}...", tool_name),
+                progress: 0.7,
+                tool: tool_name.to_string(),
+            });
+        }
 
         if url.ends_with(".zip") {
             Self::extract_zip(&temp_file, target_dir).await?;
@@ -159,6 +284,15 @@ impl GleamScriptCompiler {
         }
 
         fs::remove_file(&temp_file).await?;
+
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::InProgress {
+                step: format!("{} installation complete", tool_name),
+                progress: 0.9,
+                tool: tool_name.to_string(),
+            });
+        }
+
         Ok(())
     }
 
@@ -402,5 +536,5 @@ impl GleamScriptCompiler {
 
 #[tokio::test]
 async fn check_if_dependencies_install() {
-    GleamScriptCompiler::ensure_dependencies().await.unwrap();
+    GleamScriptCompiler::ensure_dependencies(None).await.unwrap();
 }

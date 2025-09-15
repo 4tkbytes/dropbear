@@ -407,14 +407,14 @@ impl App {
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+        tokio::fs::create_dir_all(&log_dir).await.expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_filename = format!("{}.{}.log", app_name, datetime_str);

@@ -299,7 +299,6 @@ impl Model {
         buffer: impl AsRef<[u8]>,
         label: Option<&str>
     ) -> anyhow::Result<Model> {
-        println!("========== Benchmarking speed of loading {:?} ==========", label);
         let start = Instant::now();
         let cache_key = label.unwrap_or("default").to_string();
 
@@ -307,7 +306,8 @@ impl Model {
             log::debug!("Model loaded from memory cache: {:?}", cache_key);
             return Ok(cached_model.clone());
         }
-
+        
+        println!("========== Benchmarking speed of loading {:?} ==========", label);
         log::debug!("Loading from memory");
         let res_ref = ResourceReference::from_bytes(buffer.as_ref());
 
@@ -481,7 +481,7 @@ impl Model {
             return Ok(cached_model.clone());
         }
 
-        let buffer = std::fs::read(path)?;
+        let buffer = tokio::fs::read(path).await?;
         let model = Self::load_from_memory(graphics, buffer, label).await?;
 
         MODEL_CACHE.lock().insert(path_str, model.clone());

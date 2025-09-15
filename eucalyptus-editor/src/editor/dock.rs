@@ -18,7 +18,7 @@ use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{
     EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode,
-    math::{DMat4, DVec3},
+    math::DVec3,
 };
 
 pub struct EditorTabViewer<'a> {
@@ -360,30 +360,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     {
                         if let Some((camera, _, _)) = q.get() {
                             self.gizmo.update_config(GizmoConfig {
-                                view_matrix: DMat4::look_at_lh(
-                                    DVec3::new(
-                                        camera.eye.x as f64,
-                                        camera.eye.y as f64,
-                                        camera.eye.z as f64,
-                                    ),
-                                    DVec3::new(
-                                        camera.target.x as f64,
-                                        camera.target.y as f64,
-                                        camera.target.z as f64,
-                                    ),
-                                    DVec3::new(
-                                        camera.up.x as f64,
-                                        camera.up.y as f64,
-                                        camera.up.z as f64,
-                                    ),
-                                )
-                                .into(),
-                                projection_matrix: DMat4::perspective_infinite_reverse_lh(
-                                    camera.fov_y as f64,
-                                    display_width as f64 / display_height as f64,
-                                    camera.znear as f64,
-                                )
-                                .into(),
+                                view_matrix: camera.view_mat.into(),
+                                projection_matrix: camera.proj_mat.into(),
                                 viewport: image_rect,
                                 modes: *self.gizmo_mode,
                                 orientation: transform_gizmo_egui::GizmoOrientation::Global,

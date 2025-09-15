@@ -136,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
 
                 (scene_manager, input_manager)
             })
+            .await
             .unwrap();
         }
         _ => unreachable!(),

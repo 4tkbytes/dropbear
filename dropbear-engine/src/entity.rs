@@ -68,7 +68,7 @@ pub struct LazyAdoptedEntity {
 impl LazyAdoptedEntity {
     /// Create a LazyAdoptedEntity from a file path (can be run on background thread)
     pub async fn from_file(path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let buffer = std::fs::read(path)?;
+        let buffer = tokio::fs::read(path).await?;
         Self::from_memory(buffer, label).await
     }
 
