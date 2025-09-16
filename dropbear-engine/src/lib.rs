@@ -17,7 +17,7 @@ use app_dirs2::{AppDataType, AppInfo};
 use chrono::Local;
 use colored::Colorize;
 use egui::TextureId;
-use egui_wgpu_backend::ScreenDescriptor;
+use egui_wgpu::ScreenDescriptor;
 use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
@@ -173,9 +173,9 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(&device, config.format, 1, &window)));
+        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(&device, config.format, None, 1, &window)));
 
-        let texture_id = Arc::get_mut(&mut egui_renderer).unwrap().lock().renderer().egui_texture_from_wgpu_texture(
+        let texture_id = Arc::get_mut(&mut egui_renderer).unwrap().lock().renderer().register_native_texture(
             &device,
             &viewport_texture.view,
             wgpu::FilterMode::Linear,
@@ -212,15 +212,15 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        self.texture_id = Arc::get_mut(&mut self
+        Arc::get_mut(&mut self
             .egui_renderer).unwrap().lock()
             .renderer()
-            .egui_texture_from_wgpu_texture(
+            .update_egui_texture_from_wgpu_texture(
                 &self.device,
                 &self.viewport_texture.view,
                 wgpu::FilterMode::Linear,
-            )
-            .into();
+                *self.texture_id
+            );
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
@@ -261,12 +261,9 @@ Hardware:
             },
         };
 
-        let size = self.window.inner_size();
-
         let screen_descriptor = ScreenDescriptor {
-            physical_width: size.width,
-            physical_height: size.height,
-            scale_factor: self.window.scale_factor() as f32,
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: self.window.scale_factor() as f32,
         };
 
         let view = output
@@ -280,10 +277,10 @@ Hardware:
 
         let viewport_view = { &self.viewport_texture.view.clone() };
 
-        self.egui_renderer.lock().begin_frame();
+        self.egui_renderer.lock().begin_frame(&self.window);
 
         let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
-        
+
         scene_manager
             .update(previous_dt, &mut graphics, event_loop)
             .await;
@@ -562,7 +559,7 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        state.egui_renderer.lock().handle_input(&event);
+        state.egui_renderer.lock().handle_input(&state.window, &event);
 
         match event {
             WindowEvent::CloseRequested => {

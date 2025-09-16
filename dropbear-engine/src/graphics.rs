@@ -44,7 +44,7 @@ pub struct FrameGraphicsContext<'a> {
 
 impl SharedGraphicsContext {
     pub fn get_egui_context(&self) -> Context {
-        self.egui_renderer.lock().context()
+        self.egui_renderer.lock().context().clone()
     }
 
     pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
@@ -191,7 +191,6 @@ impl<'a> RenderContext<'a> {
                         load: wgpu::LoadOp::Clear(color),
                         store: wgpu::StoreOp::Store,
                     },
-                    depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.frame.depth_texture.view,

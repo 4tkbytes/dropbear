@@ -3,9 +3,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use winit::{event::MouseButton, keyboard::KeyCode, platform::scancode::PhysicalKeyExtScancode};
+use winit::{event::MouseButton, keyboard::KeyCode};
 
-use crate::scripting::{DropbearScriptingAPIContext};
 
 #[derive(Clone)]
 pub struct InputState {
