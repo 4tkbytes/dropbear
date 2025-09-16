@@ -1,3 +1,5 @@
+pub mod gleam;
+
 use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 
 use clap::ArgMatches;

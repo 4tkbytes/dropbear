@@ -1,9 +1,10 @@
 //! Used to aid with debugging any issues with the editor.
+use crate::build::gleam::GleamScriptCompiler;
+use crate::build::gleam::InstallStatus;
 use crate::editor::Signal;
 use egui::Ui;
 use egui::ProgressBar;
 use egui::Window;
-use eucalyptus_core::scripting::build::{GleamScriptCompiler, InstallStatus};
 use tokio::sync::mpsc;
 
 pub struct DependencyInstaller {

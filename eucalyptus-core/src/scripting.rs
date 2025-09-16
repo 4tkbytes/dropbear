@@ -1,32 +1,13 @@
-pub mod dropbear;
-pub mod build;
-
 use crate::input::InputState;
-use crate::scripting::dropbear::DropbearAPI;
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
+use boa_engine::property::PropertyKey;
+use boa_engine::{Context, JsString, JsValue, Source};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
-use wasmer::{FunctionEnv, Imports, Instance, Module, Store, imports};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{collections::HashMap, fs};
-
-/// A trait that describes a module that can be registered.
-pub trait ScriptableModule {
-    type Data;
-
-    fn register(data: &Self::Data, imports: &mut Imports, store: &mut Store) -> anyhow::Result<()>;
-
-    fn module_name() -> &'static str;
-}
-
-pub trait ScriptableModuleWithEnv {
-    type T;
-
-    fn register(env: &FunctionEnv<Self::T>, imports: &mut Imports, store: &mut Store) -> anyhow::Result<()>;
-
-    fn module_name() -> &'static str;
-}
 
 pub const TEMPLATE_SCRIPT: &'static str = include_str!("../../resources/template.ts");
 
@@ -107,20 +88,14 @@ impl DropbearScriptingAPIContext {
 }
 
 pub struct ScriptManager {
-    pub store: Store,
-    compiled_scripts: HashMap<String, Module>,
-    entity_script_data: HashMap<hecs::Entity, u32>,
+    compiled_scripts: HashMap<String, String>,
     script_context: DropbearScriptingAPIContext,
 }
 
 impl ScriptManager {
-    pub fn new() -> anyhow::Result<Self> {
-        let store = Store::default();
-        
+    pub fn new() -> anyhow::Result<Self> {        
         let result = Self {
-            store,
             compiled_scripts: HashMap::new(),
-            entity_script_data: HashMap::new(),
             script_context: DropbearScriptingAPIContext::new(),
         };
 
@@ -128,9 +103,8 @@ impl ScriptManager {
         Ok(result)
     }
 
-    pub fn load_script(&mut self, script_name: &String, script_content: impl AsRef<[u8]>) -> anyhow::Result<String> {
-        let module = Module::new(self.store.engine(), script_content)?;
-        self.compiled_scripts.insert(script_name.clone(), module);
+    pub fn load_script(&mut self, script_name: &String, script_content: String) -> anyhow::Result<String> {
+        self.compiled_scripts.insert(script_name.clone(), script_content);
         log::debug!("Loaded script [{}]", script_name);
         Ok(script_name.clone())
     }
@@ -144,31 +118,24 @@ impl ScriptManager {
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
-        if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
+        if let Some(script_source) = self.compiled_scripts.get(script_name) {
             self.script_context.set_context(entity_id, world.clone(), input_state);
 
-            let import_obj = self.create_imports()?;
-            let instance = Instance::new(&mut self.store, &module, &import_obj)?;
+            let mut context = Context::default();
+            self.expose(&mut context);
 
-            if let Ok(alloc_func) = instance.exports.get_function("__alloc") {
-                let size = std::mem::size_of::<Transform>() as i32;
-                let result = alloc_func.call(&mut self.store, &[size.into()])?;
-                if let Some(wasmer::Value::I32(ptr)) = result.get(0) {
-                    self.entity_script_data.insert(entity_id, *ptr as u32);
-                }
+            context.eval(Source::from_bytes(script_source.clone().as_bytes())).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let load = context.global_object().get(PropertyKey::String(JsString::from_str("load")?), &mut context).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            if load.is_callable() {
+                let _ = load.as_callable().unwrap().call(&JsValue::undefined(), &[], &mut context);
+            } else {
+                log::warn!("Unable to call load in script {}: Load is not a callable function", script_name)
             }
-
-            self.sync_entity_to_memory(entity_id, world, &instance)?;
-
-            if let Ok(init_func) = instance.exports.get_function("init") {
-                init_func.call(&mut self.store, &[])?;
-            }
-
-            self.sync_memory_to_entity(entity_id, world, &instance)?;
 
             self.script_context.clear_context();
-
-            Ok(())
+            return Ok(());
         } else {
             Err(anyhow::anyhow!("Script '{}' not found", script_name))
         }
@@ -186,80 +153,31 @@ impl ScriptManager {
 
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
             self.script_context.set_context(entity_id, world.clone(), input_state);
-            
-            let import_object = self.create_imports()?;
-            let instance = Instance::new(&mut self.store, &module, &import_object)?;
-            
-            self.sync_entity_to_memory(entity_id, world, &instance)?;
-            
-            if let Ok(update_func) = instance.exports.get_function("update") {
-                let dt_value = wasmer::Value::F32(dt);
-                update_func.call(&mut self.store, &[dt_value])?;
+
+            let mut context = Context::default();
+            self.expose(&mut context);
+
+            context.eval(Source::from_bytes(module.as_bytes())).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let update = context.global_object().get(PropertyKey::String(JsString::from_str("update")?), &mut context).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            if update.is_callable() {
+                let dt_val = JsValue::from(dt);
+                let _ = update.as_callable().unwrap().call(&JsValue::undefined(), &[dt_val], &mut context);
+            } else {
+                log::warn!("Unable to call update in script {}: Update is not a callable function", script_name)
             }
-            
-            self.sync_memory_to_entity(entity_id, world, &instance)?;
-            
+
             self.script_context.clear_context();
-            
+            return Ok(())
         } else {
             log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
         }
         Ok(())
     }
 
-    pub fn remove_entity_script(&mut self, entity_id: hecs::Entity) {
-        self.entity_script_data.remove(&entity_id);
-    }
+    pub fn expose(&self, _context: &mut Context) {
 
-    fn sync_entity_to_memory(&self, entity_id: hecs::Entity, world: &mut Arc<World>, instance: &Instance) -> anyhow::Result<()> {
-        if let Some(&memory_offset) = self.entity_script_data.get(&entity_id) {
-            let memory = instance.exports.get_memory("memory")?;
-            let memory_view = memory.view(&self.store);
-
-            if let Ok(transform) = Arc::get_mut(world).unwrap().query_one_mut::<&Transform>(entity_id) {
-                let transform_bytes = unsafe { std::slice::from_raw_parts(
-                    transform as *const Transform as *const u8, 
-                    std::mem::size_of::<Transform>()
-                )};
-                
-                for (i, &byte) in transform_bytes.iter().enumerate() {
-                    memory_view.write_u8((memory_offset + i as u32).into(), byte)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn sync_memory_to_entity(&self, entity_id: hecs::Entity, world: &mut Arc<World>, instance: &Instance) -> anyhow::Result<()> {
-        if let Some(&memory_offset) = self.entity_script_data.get(&entity_id) {
-            let memory = instance.exports.get_memory("memory")?;
-            let memory_view = memory.view(&self.store);
-
-            Self::update::<Transform>(memory_offset, &memory_view, world, &entity_id)?;
-        }
-        Ok(())
-    }
-
-    fn update<T: Send + Sync + 'static>(memory_offset: u32, memory_view: &wasmer::MemoryView<'_>, world: &mut Arc<World>, entity_id: &hecs::Entity) -> anyhow::Result<()> {
-        let mut obj_bytes = vec![0u8; std::mem::size_of::<T>()];
-        for (i, byte) in obj_bytes.iter_mut().enumerate() {
-            *byte = memory_view.read_u8((memory_offset + i as u32).into())?;
-        }
-
-        let obj = unsafe {
-            std::ptr::read(obj_bytes.as_ptr() as *const T)
-        };
-
-        Arc::get_mut(world).unwrap().insert_one(*entity_id, obj)?;
-        Ok(())
-    }
-
-    fn create_imports(&mut self) -> anyhow::Result<Imports> {
-        let mut imports = imports! {};
-
-        DropbearAPI::register(&self.script_context, &mut imports, &mut self.store)?;
-
-        Ok(imports)
     }
 }
 

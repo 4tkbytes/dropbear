@@ -39,7 +39,11 @@ impl GleamScriptCompiler {
         }
     }
 
-    pub async fn build(self, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+    pub async fn evaluate(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    pub async fn build(&self, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
         Self::ensure_dependencies(sender).await?;
         Ok(())
     }

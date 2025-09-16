@@ -547,7 +547,7 @@ impl Scene for Editor {
                             script.path.display()
                         );
 
-                        let bytes = match tokio::fs::read(&script.path).await {
+                        let bytes = match tokio::fs::read_to_string(&script.path).await {
                             Ok(val) => val,
                             Err(e) => {
                                 fatal!("Unable to read script {} to bytes because {}", &script.path.display(), e);
@@ -601,9 +601,10 @@ impl Scene for Editor {
 
                 self.switch_to_debug_camera();
 
-                for (entity_id, _) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
-                    self.script_manager.remove_entity_script(entity_id);
-                }
+                // already kills itself
+                // for (entity_id, _) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
+                //     self.script_manager.remove_entity_script(entity_id);
+                // }
 
                 success!("Exited play mode");
                 log::info!("Back to the editor you go...");

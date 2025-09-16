@@ -24,7 +24,7 @@ parking_lot.workspace = true
 ron.workspace = true
 serde.workspace = true
 winit.workspace = true
-wasmer.workspace = true
+# wasmer.workspace = true
 lazy_static.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
@@ -33,6 +33,7 @@ tar.workspace = true
 zip.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
+boa_engine.workspace = true
 
 [dev-dependencies]
 pollster = "*"
