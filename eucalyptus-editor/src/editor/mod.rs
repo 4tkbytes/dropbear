@@ -20,13 +20,13 @@ use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
     graphics::SharedGraphicsContext,
     lighting::{Light, LightManager},
-    scene::SceneCommand,
+    scene::{Scene, SceneCommand},
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use eucalyptus_core::camera::{
+use eucalyptus_core::{camera::{
     CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera,
-};
+}, states::WorldLoadingStatus};
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
 use eucalyptus_core::states::{
@@ -38,6 +38,7 @@ use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::World;
 use log;
 use parking_lot::Mutex;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
@@ -81,6 +82,9 @@ pub struct Editor {
 
     // channels
     dep_installer: DependencyInstaller,
+    progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
+    progress_rx: Option<UnboundedSender<WorldLoadingStatus>>,
+    is_world_loaded: (bool, bool),
 }
 
 impl Editor {
@@ -146,8 +150,10 @@ impl Editor {
             input_state: InputState::new(),
             light_manager: LightManager::new(),
             active_camera: None,
-            dep_installer: DependencyInstaller::default(), // ..Default::default()
-                                                           // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
+            dep_installer: DependencyInstaller::default(),
+            progress_rx: None,
+            progress_tx: None,
+            is_world_loaded: (false, false), 
         }
     }
 
@@ -271,9 +277,50 @@ impl Editor {
         Ok(())
     }
 
+    fn show_project_loading_window(&mut self, ctx: &egui::Context) {
+        let mut message = "Loading project...".to_string();
+        let mut progress = 0.0;
+
+        if let Some(ref mut tx) = self.progress_tx {
+            while let Ok(status) = tx.try_recv() {
+                match status {
+                    WorldLoadingStatus::LoadingEntity { index, name, total } => {
+                        message = format!("Loading entity: {}", name);
+                        progress = index as f32 / total as f32;
+                    }
+                    WorldLoadingStatus::Completed => {
+                        self.is_world_loaded = (true, false);
+                        self.progress_tx = None;
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        egui::Window::new("Loading Project")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .fixed_size([300.0, 100.0])
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Loading...");
+                    });
+                    ui.add_space(5.0);
+                    ui.add(egui::ProgressBar::new(progress));
+                    ui.label(message);
+                });
+            });
+    }
+
     pub async fn load_project_config(
         &mut self,
         graphics: Arc<SharedGraphicsContext>,
+        sender: Option<UnboundedSender<WorldLoadingStatus>>,
     ) -> anyhow::Result<()> {
         {
             let config = PROJECT.read();
@@ -293,7 +340,7 @@ impl Editor {
         {
             if let Some(first_scene) = first_scene_opt {
                 let cam = first_scene
-                    .load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics)
+                    .load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics, sender)
                     .await?;
                 self.active_camera = Some(cam);
 

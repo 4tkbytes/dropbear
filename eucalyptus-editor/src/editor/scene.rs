@@ -1,91 +1,96 @@
+
 use super::*;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::Model;
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
-    graphics::Shader,
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
 use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
-use eucalyptus_core::states::Value;
+use eucalyptus_core::states::{Value, WorldLoadingStatus, PROJECT, SCENES};
 use eucalyptus_core::utils::{PROTO_TEXTURE, PendingSpawn};
 use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
 use log;
 use parking_lot::Mutex;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use std::sync::{Arc, LazyLock};
 
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
+// Standalone function for loading project config in separate thread
+async fn load_project_config_impl(
+    graphics: Arc<SharedGraphicsContext>,
+    sender: UnboundedSender<WorldLoadingStatus>,
+) -> anyhow::Result<()> {
+    // Load PROJECT config into memory first
+    {
+        let _config = PROJECT.read();
+        // Project is already loaded in memory from menu, just need to load world
+    }
+
+    let first_scene_opt = {
+        let scenes = SCENES.read();
+        scenes.first().cloned()
+    };
+
+    if let Some(first_scene) = first_scene_opt {
+        // Create a temporary world for loading
+        let mut temp_world = hecs::World::new();
+        first_scene
+            .load_into_world(&mut temp_world, graphics, Some(sender.clone()))
+            .await?;
+        
+        // Note: In the real implementation, we'd need to transfer this world
+        // to the main Editor struct, but for now we'll signal completion
+    } else {
+        log::info!("No scenes found, will create default debug camera");
+    }
+
+    // Send completion signal
+    let _ = sender.send(WorldLoadingStatus::Completed);
+
+    Ok(())
+}
+
 #[async_trait::async_trait]
 impl Scene for Editor {
     async fn load<'a>(&mut self, graphics: &mut RenderContext<'a>) {
-        if self.active_camera.is_none() {
-            self.load_project_config(graphics.shared.clone())
-                .await
-                .unwrap();
-        }
-
-        let shader = Shader::new(
-            graphics.shared.clone(),
-            include_str!("../../../resources/shaders/shader.wgsl"),
-            Some("viewport_shader"),
-        );
-
-        self.light_manager
-            .create_light_array_resources(graphics.shared.clone());
-
-        if let Some(active_camera) = self.active_camera {
-            if let Ok(mut q) = self
-                .world
-                .query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(
-                    active_camera,
-                )
-            {
-                if let Some((camera, _component, _follow_target)) = q.get() {
-                    let pipeline = graphics.create_render_pipline(
-                        &shader,
-                        vec![
-                            &graphics.shared.texture_bind_layout.clone(),
-                            camera.layout(),
-                            self.light_manager.layout(),
-                        ],
-                        None,
-                    );
-                    self.render_pipeline = Some(pipeline);
-
-                    self.light_manager.create_render_pipeline(
-                        graphics.shared.clone(),
-                        include_str!("../../../resources/shaders/light.wgsl"),
-                        camera,
-                        Some("Light Pipeline"),
-                    );
-                } else {
-                    log_once::warn_once!(
-                        "Unable to fetch the query result of camera: {:?}",
-                        active_camera
-                    )
+        let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();
+        self.progress_tx = Some(rx);
+        
+        let graphics_shared = graphics.shared.clone();
+        
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                if let Err(e) = load_project_config_impl(graphics_shared, tx).await {
+                    log::error!("Failed to load project config: {}", e);
                 }
-            } else {
-                log_once::warn_once!(
-                    "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
-                    active_camera
-                );
-            }
-        } else {
-            log_once::warn_once!("No active camera found");
-        }
+            });
+        });
 
         self.window = Some(graphics.shared.window.clone());
     }
 
     async fn update<'a>(&mut self, dt: f32, graphics: &mut RenderContext<'a>) {
+        if !self.is_world_loaded.0 {
+            self.show_project_loading_window(&graphics.shared.get_egui_context());
+            return;
+        }
+
+        if !self.is_world_loaded.1 {
+            self.load(graphics).await;
+            self.is_world_loaded = (true, true);
+        }
+
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
