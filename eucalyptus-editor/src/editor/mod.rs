@@ -12,9 +12,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{build::build, debug::DependencyInstaller};
 use crate::camera::UndoableCameraAction;
 use crate::debug;
+use crate::{build::build, debug::DependencyInstaller};
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
@@ -24,9 +24,9 @@ use dropbear_engine::{
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use eucalyptus_core::{camera::{
+use eucalyptus_core::camera::{
     CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera,
-}};
+};
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
 use eucalyptus_core::states::{
@@ -112,7 +112,10 @@ impl Editor {
                         log::error!("{:#?}", t.backtrace());
                     }
                 }
-                panic!("Fatal: {} deadlocks detected, unable to continue on normal process", deadlocks.len());
+                panic!(
+                    "Fatal: {} deadlocks detected, unable to continue on normal process",
+                    deadlocks.len()
+                );
             }
         });
 
@@ -143,9 +146,8 @@ impl Editor {
             input_state: InputState::new(),
             light_manager: LightManager::new(),
             active_camera: None,
-            dep_installer: DependencyInstaller::default()
-            // ..Default::default()
-            // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
+            dep_installer: DependencyInstaller::default(), // ..Default::default()
+                                                           // note to self: DO NOT USE ..DEFAULT::DEFAULT(), IT WILL CAUSE OVERFLOW
         }
     }
 
@@ -269,7 +271,10 @@ impl Editor {
         Ok(())
     }
 
-    pub async fn load_project_config(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+    pub async fn load_project_config(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> anyhow::Result<()> {
         {
             let config = PROJECT.read();
 
@@ -287,7 +292,9 @@ impl Editor {
 
         {
             if let Some(first_scene) = first_scene_opt {
-                let cam = first_scene.load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics).await?;
+                let cam = first_scene
+                    .load_into_world(Arc::get_mut(&mut self.world).unwrap(), graphics)
+                    .await?;
                 self.active_camera = Some(cam);
 
                 log::info!(
@@ -317,7 +324,9 @@ impl Editor {
                     let debug_camera = Camera::predetermined(graphics, Some("Debug Camera"));
                     let component = DebugCamera::new();
 
-                    let e = Arc::get_mut(&mut self.world).unwrap().spawn((debug_camera, component));
+                    let e = Arc::get_mut(&mut self.world)
+                        .unwrap()
+                        .spawn((debug_camera, component));
                     self.active_camera = Some(e);
                 }
             }
@@ -921,10 +930,14 @@ impl PlayModeBackup {
                         }
                     }
                     (true, None) => {
-                        let _ = Arc::get_mut(&mut editor.world).unwrap().remove_one::<ScriptComponent>(*entity_id);
+                        let _ = Arc::get_mut(&mut editor.world)
+                            .unwrap()
+                            .remove_one::<ScriptComponent>(*entity_id);
                     }
                     (false, Some(original)) => {
-                        let _ = Arc::get_mut(&mut editor.world).unwrap().insert_one(*entity_id, original.clone());
+                        let _ = Arc::get_mut(&mut editor.world)
+                            .unwrap()
+                            .insert_one(*entity_id, original.clone());
                     }
                     (false, None) => {
                         // No change needed
@@ -954,10 +967,14 @@ impl PlayModeBackup {
                         }
                     }
                     (true, None) => {
-                        let _ = Arc::get_mut(&mut editor.world).unwrap().remove_one::<CameraFollowTarget>(*entity_id);
+                        let _ = Arc::get_mut(&mut editor.world)
+                            .unwrap()
+                            .remove_one::<CameraFollowTarget>(*entity_id);
                     }
                     (false, Some(original)) => {
-                        let _ = Arc::get_mut(&mut editor.world).unwrap().insert_one(*entity_id, original.clone());
+                        let _ = Arc::get_mut(&mut editor.world)
+                            .unwrap()
+                            .insert_one(*entity_id, original.clone());
                     }
                     (false, None) => {
                         // No change needed

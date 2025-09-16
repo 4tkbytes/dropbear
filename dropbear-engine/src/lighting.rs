@@ -212,13 +212,16 @@ impl LazyType for LazyLight {
 
     fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
         let label_str = self.label.clone().unwrap_or_else(|| "Light".to_string());
-        
+
         let forward = DVec3::new(0.0, 0.0, -1.0);
         let direction = self.transform.rotation * forward;
 
         let uniform = LightUniform {
             position: dvec3_to_uniform_array(self.transform.position),
-            direction: dvec3_direction_to_uniform_array(direction, self.light_component.outer_cutoff_angle),
+            direction: dvec3_direction_to_uniform_array(
+                direction,
+                self.light_component.outer_cutoff_angle,
+            ),
             colour: dvec3_colour_to_uniform_array(
                 self.light_component.colour * self.light_component.intensity as f64,
                 self.light_component.light_type,
@@ -232,33 +235,39 @@ impl LazyType for LazyLight {
         let cube_model = if let Some(lazy_model) = self.cube_lazy_model {
             lazy_model.poke(graphics.clone())?
         } else {
-            anyhow::bail!("The light cube LazyModel has not been initialised yet. Use Light::new(/** params */).preload_cube_model() to preload it (which is required)");
+            anyhow::bail!(
+                "The light cube LazyModel has not been initialised yet. Use Light::new(/** params */).preload_cube_model() to preload it (which is required)"
+            );
         };
 
         let buffer = graphics.create_uniform(uniform, self.label.as_deref());
 
-        let layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: self.label.as_deref(),
-        });
+        let layout = graphics
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: self.label.as_deref(),
+            });
 
-        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-            label: self.label.as_deref(),
-        });
+        let bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+                label: self.label.as_deref(),
+            });
 
         let instance = Instance::new(
             self.transform.position,
@@ -266,11 +275,14 @@ impl LazyType for LazyLight {
             DVec3::new(0.25, 0.25, 0.25),
         );
 
-        let instance_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: self.label.as_deref().or(Some("instance buffer")),
-            contents: bytemuck::cast_slice(&[instance.to_raw()]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        let instance_buffer =
+            graphics
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: self.label.as_deref().or(Some("instance buffer")),
+                    contents: bytemuck::cast_slice(&[instance.to_raw()]),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
 
         log::debug!("Created new light [{}]", label_str);
 
@@ -312,7 +324,8 @@ impl Light {
             let lazy_model = Model::lazy_load(
                 include_bytes!("../../resources/cube.glb").to_vec(),
                 result.label.as_deref(),
-            ).await?;
+            )
+            .await?;
             result.cube_lazy_model = Some(lazy_model);
         }
         Ok(result)
@@ -352,22 +365,21 @@ impl Light {
 
         let buffer = graphics.create_uniform(uniform, label.clone());
 
-        let layout =
-            graphics
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: label.clone(),
-                });
+        let layout = graphics
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: label.clone(),
+            });
 
         let bind_group = graphics
             .device
@@ -472,22 +484,21 @@ impl LightManager {
     }
 
     pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let layout =
-            graphics
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: Some("Light Array Layout"),
-                });
+        let layout = graphics
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Light Array Layout"),
+            });
 
         let buffer = graphics.create_uniform(LightArrayUniform::default(), Some("Light Array"));
 

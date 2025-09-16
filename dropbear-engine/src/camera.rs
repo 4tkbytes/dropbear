@@ -161,7 +161,11 @@ impl Camera {
         result
     }
 
-    pub fn create_bind_group_layout(&mut self, graphics: Arc<SharedGraphicsContext>, camera_buffer: Buffer) {
+    pub fn create_bind_group_layout(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        camera_buffer: Buffer,
+    ) {
         let camera_bind_group_layout =
             graphics
                 .device
@@ -179,16 +183,14 @@ impl Camera {
                     label: Some("camera_bind_group_layout"),
                 });
 
-        let camera_bind_group = graphics
-            .device
-            .create_bind_group(&BindGroupDescriptor {
-                layout: &camera_bind_group_layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                }],
-                label: Some("camera_bind_group"),
-            });
+        let camera_bind_group = graphics.device.create_bind_group(&BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
         self.layout = Some(camera_bind_group_layout);
         self.bind_group = Some(camera_bind_group);
     }

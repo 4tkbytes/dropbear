@@ -83,7 +83,8 @@ impl DropbearScriptingAPIContext {
 
     pub fn cleanup_entity_data(&mut self, entity: Entity) {
         let entity_prefix = format!("entity_{:?}_", entity);
-        self.persistent_data.retain(|k, _| !k.starts_with(&entity_prefix));
+        self.persistent_data
+            .retain(|k, _| !k.starts_with(&entity_prefix));
     }
 }
 
@@ -93,7 +94,7 @@ pub struct ScriptManager {
 }
 
 impl ScriptManager {
-    pub fn new() -> anyhow::Result<Self> {        
+    pub fn new() -> anyhow::Result<Self> {
         let result = Self {
             compiled_scripts: HashMap::new(),
             script_context: DropbearScriptingAPIContext::new(),
@@ -103,8 +104,13 @@ impl ScriptManager {
         Ok(result)
     }
 
-    pub fn load_script(&mut self, script_name: &String, script_content: String) -> anyhow::Result<String> {
-        self.compiled_scripts.insert(script_name.clone(), script_content);
+    pub fn load_script(
+        &mut self,
+        script_name: &String,
+        script_content: String,
+    ) -> anyhow::Result<String> {
+        self.compiled_scripts
+            .insert(script_name.clone(), script_content);
         log::debug!("Loaded script [{}]", script_name);
         Ok(script_name.clone())
     }
@@ -114,24 +120,39 @@ impl ScriptManager {
         entity_id: hecs::Entity,
         script_name: &str,
         world: &mut Arc<World>,
-        input_state: &InputState
+        input_state: &InputState,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
         if let Some(script_source) = self.compiled_scripts.get(script_name) {
-            self.script_context.set_context(entity_id, world.clone(), input_state);
+            self.script_context
+                .set_context(entity_id, world.clone(), input_state);
 
             let mut context = Context::default();
             self.expose(&mut context);
 
-            context.eval(Source::from_bytes(script_source.clone().as_bytes())).map_err(|e| anyhow::anyhow!("{}", e))?;
+            context
+                .eval(Source::from_bytes(script_source.clone().as_bytes()))
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-            let load = context.global_object().get(PropertyKey::String(JsString::from_str("load")?), &mut context).map_err(|e| anyhow::anyhow!("{}", e))?;
+            let load = context
+                .global_object()
+                .get(
+                    PropertyKey::String(JsString::from_str("load")?),
+                    &mut context,
+                )
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             if load.is_callable() {
-                let _ = load.as_callable().unwrap().call(&JsValue::undefined(), &[], &mut context);
+                let _ = load
+                    .as_callable()
+                    .unwrap()
+                    .call(&JsValue::undefined(), &[], &mut context);
             } else {
-                log::warn!("Unable to call load in script {}: Load is not a callable function", script_name)
+                log::warn!(
+                    "Unable to call load in script {}: Load is not a callable function",
+                    script_name
+                )
             }
 
             self.script_context.clear_context();
@@ -152,33 +173,51 @@ impl ScriptManager {
         log_once::debug_once!("Update entity script name: {}", script_name);
 
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
-            self.script_context.set_context(entity_id, world.clone(), input_state);
+            self.script_context
+                .set_context(entity_id, world.clone(), input_state);
 
             let mut context = Context::default();
             self.expose(&mut context);
 
-            context.eval(Source::from_bytes(module.as_bytes())).map_err(|e| anyhow::anyhow!("{}", e))?;
+            context
+                .eval(Source::from_bytes(module.as_bytes()))
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-            let update = context.global_object().get(PropertyKey::String(JsString::from_str("update")?), &mut context).map_err(|e| anyhow::anyhow!("{}", e))?;
+            let update = context
+                .global_object()
+                .get(
+                    PropertyKey::String(JsString::from_str("update")?),
+                    &mut context,
+                )
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             if update.is_callable() {
                 let dt_val = JsValue::from(dt);
-                let _ = update.as_callable().unwrap().call(&JsValue::undefined(), &[dt_val], &mut context);
+                let _ = update.as_callable().unwrap().call(
+                    &JsValue::undefined(),
+                    &[dt_val],
+                    &mut context,
+                );
             } else {
-                log::warn!("Unable to call update in script {}: Update is not a callable function", script_name)
+                log::warn!(
+                    "Unable to call update in script {}: Update is not a callable function",
+                    script_name
+                )
             }
 
             self.script_context.clear_context();
-            return Ok(())
+            return Ok(());
         } else {
-            log_once::error_once!("Unable to fetch compiled scripts for entity {:?}. Script Name: {}", entity_id, script_name);
+            log_once::error_once!(
+                "Unable to fetch compiled scripts for entity {:?}. Script Name: {}",
+                entity_id,
+                script_name
+            );
         }
         Ok(())
     }
 
-    pub fn expose(&self, _context: &mut Context) {
-
-    }
+    pub fn expose(&self, _context: &mut Context) {}
 }
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {

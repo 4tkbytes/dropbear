@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
-    graphics::{SharedGraphicsContext, Instance},
+    graphics::{Instance, SharedGraphicsContext},
     model::{LazyModel, LazyType, Model},
 };
 
@@ -79,7 +79,7 @@ impl LazyAdoptedEntity {
     ) -> anyhow::Result<Self> {
         let lazy_model = Model::lazy_load(buffer, label).await?;
         let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-        
+
         Ok(Self {
             lazy_model,
             label: label_str,
@@ -114,7 +114,11 @@ pub struct AdoptedEntity {
 }
 
 impl AdoptedEntity {
-    pub async fn new(graphics: Arc<SharedGraphicsContext>, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
+    pub async fn new(
+        graphics: Arc<SharedGraphicsContext>,
+        path: &PathBuf,
+        label: Option<&str>,
+    ) -> anyhow::Result<Self> {
         let model = Model::load(graphics.clone(), path, label.clone()).await?;
         Ok(Self::adopt(graphics, model).await)
     }

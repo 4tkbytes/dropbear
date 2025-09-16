@@ -766,19 +766,21 @@ impl SceneConfig {
                         reference
                     );
 
-                    let adopted = AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label)).await;
+                    let adopted =
+                        AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
+                            .await;
 
                     // let adopted = {
                     //     let path_clone = path.clone();
                     //     let label_clone = entity_config.label.clone();
-                        
+
                     //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
+
                     //     tokio::task::spawn_local(async move {
                     //         let entity = LazyAdoptedEntity::from_file(&path_clone, Some(&label_clone)).await;
                     //         let _ = tx.send(entity);
                     //     });
-                        
+
                     //     loop {
                     //         match rx.try_recv() {
                     //             Ok(result) => {
@@ -805,27 +807,32 @@ impl SceneConfig {
                     } else {
                         world.spawn((adopted, transform, entity_config.properties.clone()));
                     }
-                    
+
                     Ok(())
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
                     let bytes = bytes.to_owned();
 
-                    let model = Model::load_from_memory(graphics.clone(), bytes, Some(&entity_config.label)).await?;
+                    let model = Model::load_from_memory(
+                        graphics.clone(),
+                        bytes,
+                        Some(&entity_config.label),
+                    )
+                    .await?;
                     let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
 
                     // let adopted = {
                     //     let bytes_clone = bytes.clone();
                     //     let label_clone = entity_config.label.clone();
-                        
+
                     //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
+
                     //     tokio::task::spawn_local(async move {
                     //         let entity = LazyAdoptedEntity::from_memory(bytes_clone, Some(label_clone.as_str())).await;
                     //         let _ = tx.send(entity);
-                    //     }); 
-                        
+                    //     });
+
                     //     loop {
                     //         match rx.try_recv() {
                     //             Ok(result) => {
@@ -852,7 +859,7 @@ impl SceneConfig {
                     } else {
                         world.spawn((adopted, transform, entity_config.properties.clone()));
                     }
-                    
+
                     Ok(())
                 }
                 ResourceReferenceType::Plane => {
@@ -902,7 +909,8 @@ impl SceneConfig {
                     let plane = PlaneBuilder::new()
                         .with_size(width_val, height_val)
                         .with_tiles(tiles_x_val, tiles_z_val)
-                        .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone)).await?;
+                        .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone))
+                        .await?;
 
                     // let plane = {
                     //     let label_clone = entity_config.label.clone();
@@ -910,9 +918,9 @@ impl SceneConfig {
                     //     let height_val = *height as f32;
                     //     let tiles_x_val = *tiles_x as u32;
                     //     let tiles_z_val = *tiles_z as u32;
-                        
+
                     //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
+
                     //     tokio::task::spawn_local(async move {
                     //         let result = PlaneBuilder::new()
                     //             .with_size(width_val, height_val)
@@ -920,7 +928,7 @@ impl SceneConfig {
                     //             .lazy_build(PROTO_TEXTURE, Some(&label_clone)).await;
                     //         let _ = tx.send(result);
                     //     });
-                        
+
                     //     loop {
                     //         match rx.try_recv() {
                     //             Ok(result) => break result?.poke(graphics)?,
@@ -948,11 +956,9 @@ impl SceneConfig {
 
                     Ok(())
                 }
-                ResourceReferenceType::None => {
-                    Err(anyhow::anyhow!(
-                        "Entity has a resource reference of None, which cannot be loaded or referenced"
-                    ))
-                }
+                ResourceReferenceType::None => Err(anyhow::anyhow!(
+                    "Entity has a resource reference of None, which cannot be loaded or referenced"
+                )),
             };
 
             result?;
@@ -963,14 +969,20 @@ impl SceneConfig {
         for light_config in &self.lights {
             log::debug!("Loading light: {}", light_config.label);
 
-            let light = Light::new(graphics.clone(), &light_config.light_component, &light_config.transform, Some(&light_config.label)).await;
+            let light = Light::new(
+                graphics.clone(),
+                &light_config.light_component,
+                &light_config.transform,
+                Some(&light_config.label),
+            )
+            .await;
 
             // let light = {
             //     let light_comp_clone = light_config.light_component.clone();
             //     let light_trans_clone = light_config.transform.clone();
             //     let label_clone = light_config.label.clone();
             //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                
+
             //     tokio::task::spawn_local(async move {
             //         let result = Light::lazy_new(
             //             light_comp_clone,
@@ -979,7 +991,7 @@ impl SceneConfig {
             //         );
             //         let _ = tx.send(result);
             //     });
-                
+
             //     loop {
             //         match rx.try_recv() {
             //             Ok(result) => break result.poke(graphics)?,
@@ -1057,9 +1069,9 @@ impl SceneConfig {
             log::info!("No lights in scene, spawning default light");
             let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
             let trans = Transform {
-                    position: glam::DVec3::new(2.0, 4.0, 2.0),
-                    ..Default::default()
-                };
+                position: glam::DVec3::new(2.0, 4.0, 2.0),
+                ..Default::default()
+            };
             let light = Light::new(graphics.clone(), &comp, &trans, Some("Default Light")).await;
             // let light = {
             //     let light_comp_clone = LightComponent::directional(glam::DVec3::ONE, 1.0);
@@ -1068,7 +1080,7 @@ impl SceneConfig {
             //         ..Default::default()
             //     };
             //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                
+
             //     tokio::task::spawn_local(async move {
             //         let result = Light::lazy_new(
             //             light_comp_clone,
@@ -1077,7 +1089,7 @@ impl SceneConfig {
             //         );
             //         let _ = tx.send(result);
             //     });
-                
+
             //     loop {
             //         match rx.try_recv() {
             //             Ok(result) => break result.poke(graphics)?,
@@ -1092,12 +1104,7 @@ impl SceneConfig {
             //     }
             // };
 
-            world.spawn((
-                comp,
-                trans,
-                light,
-                ModelProperties::default(),
-            ));
+            world.spawn((comp, trans, light, ModelProperties::default()));
         }
 
         log::info!(

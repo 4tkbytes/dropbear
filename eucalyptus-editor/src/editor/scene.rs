@@ -27,7 +27,9 @@ pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
 impl Scene for Editor {
     async fn load<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         if self.active_camera.is_none() {
-            self.load_project_config(graphics.shared.clone()).await.unwrap();
+            self.load_project_config(graphics.shared.clone())
+                .await
+                .unwrap();
         }
 
         let shader = Shader::new(
@@ -36,7 +38,8 @@ impl Scene for Editor {
             Some("viewport_shader"),
         );
 
-        self.light_manager.create_light_array_resources(graphics.shared.clone());
+        self.light_manager
+            .create_light_array_resources(graphics.shared.clone());
 
         if let Some(active_camera) = self.active_camera {
             if let Ok(mut q) = self
@@ -95,11 +98,20 @@ impl Scene for Editor {
         };
 
         for spawn in spawns_to_process {
-            match AdoptedEntity::new(graphics.shared.clone(), &spawn.asset_path, Some(&spawn.asset_name)).await {
+            match AdoptedEntity::new(
+                graphics.shared.clone(),
+                &spawn.asset_path,
+                Some(&spawn.asset_name),
+            )
+            .await
+            {
                 Ok(adopted) => {
-                    let entity_id = Arc::get_mut(&mut self.world).unwrap()
-                        .spawn((adopted, spawn.transform, spawn.properties));
-                    
+                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
+                        adopted,
+                        spawn.transform,
+                        spawn.properties,
+                    ));
+
                     self.selected_entity = Some(entity_id);
 
                     UndoableAction::push_to_undo(
@@ -125,7 +137,11 @@ impl Scene for Editor {
             }
 
             let mut script_entities = Vec::new();
-            for (entity_id, script) in Arc::get_mut(&mut self.world).unwrap().query::<&mut ScriptComponent>().iter() {
+            for (entity_id, script) in Arc::get_mut(&mut self.world)
+                .unwrap()
+                .query::<&mut ScriptComponent>()
+                .iter()
+            {
                 log_once::debug_once!(
                     "Script Entity -> id: {:?}, component: {:?}",
                     entity_id,
@@ -225,98 +241,109 @@ impl Scene for Editor {
         }
 
         match &self.signal {
-            Signal::Paste(scene_entity) => {
-                match &scene_entity.model_path.ref_type {
-                    dropbear_engine::utils::ResourceReferenceType::None => {
-                        warn!("Resource has a reference type of None");
-                        self.signal = Signal::None;
-                    },
-                    dropbear_engine::utils::ResourceReferenceType::File(reference) => {
-                        match &scene_entity.model_path.to_project_path(self.project_path.clone().unwrap()) {
-                            Some(v) => {
-                                match AdoptedEntity::new(
-                                    graphics.shared.clone(),
-                                    v,
-                                    Some(&scene_entity.label),
-                                ).await {
-                                    Ok(adopted) => {
-                                        let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
-                                            adopted,
-                                            scene_entity.transform,
-                                            ModelProperties::default(),
-                                        ));
-                                        self.selected_entity = Some(entity_id);
-                                        log::debug!(
-                                            "Successfully paste-spawned {} with ID {:?}",
-                                            scene_entity.label,
-                                            entity_id
-                                        );
-
-                                        success_without_console!("Paste!");
-                                        self.signal = Signal::Copy(scene_entity.clone());
-                                    }
-                                    Err(e) => {
-                                        warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
-                                    }
-                                }
-                            },
-                            None => {
-                                fatal!("Unable to convert resource reference [{}] to project related path", reference);
-                                self.signal = Signal::None;
-                            },
-                        };
-                    },
-                    dropbear_engine::utils::ResourceReferenceType::Bytes(bytes) => {
-                        let model = match Model::load_from_memory(graphics.shared.clone(), bytes, Some(&scene_entity.label)).await {
-                            Ok(v) => v,
-                            Err(e) => {
-                                fatal!("Unable to load from memory: {}", e);
-                                self.signal = Signal::None;
-                                return;
-                            },
-                        };
-                        let adopted = AdoptedEntity::adopt(
-                            graphics.shared.clone(),
-                            model,
-                        ).await;
-                        let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
-                            adopted,
-                            scene_entity.transform,
-                            ModelProperties::default(),
-                        ));
-                        self.selected_entity = Some(entity_id);
-                        log::debug!(
-                            "Successfully paste-spawned {} with ID {:?}",
-                            scene_entity.label,
-                            entity_id
-                        );
-
-                        success_without_console!("Paste!");
-                        self.signal = Signal::Copy(scene_entity.clone());
-                    },
-                    _ => {
-                        warn!("Unable to copy, not of bytes or path");
-                        self.signal = Signal::None;
-                        return;
-                    }
+            Signal::Paste(scene_entity) => match &scene_entity.model_path.ref_type {
+                dropbear_engine::utils::ResourceReferenceType::None => {
+                    warn!("Resource has a reference type of None");
+                    self.signal = Signal::None;
                 }
-            }
+                dropbear_engine::utils::ResourceReferenceType::File(reference) => {
+                    match &scene_entity
+                        .model_path
+                        .to_project_path(self.project_path.clone().unwrap())
+                    {
+                        Some(v) => {
+                            match AdoptedEntity::new(
+                                graphics.shared.clone(),
+                                v,
+                                Some(&scene_entity.label),
+                            )
+                            .await
+                            {
+                                Ok(adopted) => {
+                                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
+                                        adopted,
+                                        scene_entity.transform,
+                                        ModelProperties::default(),
+                                    ));
+                                    self.selected_entity = Some(entity_id);
+                                    log::debug!(
+                                        "Successfully paste-spawned {} with ID {:?}",
+                                        scene_entity.label,
+                                        entity_id
+                                    );
+
+                                    success_without_console!("Paste!");
+                                    self.signal = Signal::Copy(scene_entity.clone());
+                                }
+                                Err(e) => {
+                                    warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                                }
+                            }
+                        }
+                        None => {
+                            fatal!(
+                                "Unable to convert resource reference [{}] to project related path",
+                                reference
+                            );
+                            self.signal = Signal::None;
+                        }
+                    };
+                }
+                dropbear_engine::utils::ResourceReferenceType::Bytes(bytes) => {
+                    let model = match Model::load_from_memory(
+                        graphics.shared.clone(),
+                        bytes,
+                        Some(&scene_entity.label),
+                    )
+                    .await
+                    {
+                        Ok(v) => v,
+                        Err(e) => {
+                            fatal!("Unable to load from memory: {}", e);
+                            self.signal = Signal::None;
+                            return;
+                        }
+                    };
+                    let adopted = AdoptedEntity::adopt(graphics.shared.clone(), model).await;
+                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
+                        adopted,
+                        scene_entity.transform,
+                        ModelProperties::default(),
+                    ));
+                    self.selected_entity = Some(entity_id);
+                    log::debug!(
+                        "Successfully paste-spawned {} with ID {:?}",
+                        scene_entity.label,
+                        entity_id
+                    );
+
+                    success_without_console!("Paste!");
+                    self.signal = Signal::Copy(scene_entity.clone());
+                }
+                _ => {
+                    warn!("Unable to copy, not of bytes or path");
+                    self.signal = Signal::None;
+                    return;
+                }
+            },
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
-                    let is_viewport_cam =
-                        if let Ok(mut q) = Arc::get_mut(&mut self.world).unwrap().query_one::<&CameraComponent>(*sel_e) {
-                            if let Some(c) = q.get() {
-                                if matches!(c.camera_type, CameraType::Debug) {
-                                    true
-                                } else {
-                                    false
-                                }
+                    let is_viewport_cam = if let Ok(mut q) = Arc::get_mut(&mut self.world)
+                        .unwrap()
+                        .query_one::<&CameraComponent>(*sel_e)
+                    {
+                        if let Some(c) = q.get() {
+                            if matches!(c.camera_type, CameraType::Debug) {
+                                true
                             } else {
                                 false
                             }
                         } else {
                             false
-                        };
+                        }
+                    } else {
+                        false
+                    };
                     if is_viewport_cam {
                         warn!("You can't delete the viewport camera");
                         self.signal = Signal::None;
@@ -365,8 +392,9 @@ impl Scene for Editor {
                                     path: moved_path.clone(),
                                 };
 
-                                let replaced = if let Ok(mut sc) =
-                                    Arc::get_mut(&mut self.world).unwrap().get::<&mut ScriptComponent>(selected_entity)
+                                let replaced = if let Ok(mut sc) = Arc::get_mut(&mut self.world)
+                                    .unwrap()
+                                    .get::<&mut ScriptComponent>(selected_entity)
                                 {
                                     sc.name = new_script.name.clone();
                                     sc.path = new_script.path.clone();
@@ -390,9 +418,10 @@ impl Scene for Editor {
                                     }
                                 };
 
-                                if let Err(e) =
-                                    scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
-                                {
+                                if let Err(e) = scripting::convert_entity_to_group(
+                                    &Arc::get_mut(&mut self.world).unwrap(),
+                                    selected_entity,
+                                ) {
                                     log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                                 }
 
@@ -425,7 +454,9 @@ impl Scene for Editor {
                         };
 
                         let replaced = if let Ok(mut sc) =
-                            Arc::get_mut(&mut self.world).unwrap().get::<&mut ScriptComponent>(selected_entity)
+                            Arc::get_mut(&mut self.world)
+                                .unwrap()
+                                .get::<&mut ScriptComponent>(selected_entity)
                         {
                             sc.name = new_script.name.clone();
                             sc.path = new_script.path.clone();
@@ -445,9 +476,10 @@ impl Scene for Editor {
                             }
                         };
 
-                        if let Err(e) =
-                            scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
-                        {
+                        if let Err(e) = scripting::convert_entity_to_group(
+                            &Arc::get_mut(&mut self.world).unwrap(),
+                            selected_entity,
+                        ) {
                             log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                         }
 
@@ -466,14 +498,16 @@ impl Scene for Editor {
                 }
                 ScriptAction::RemoveScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        if let Ok(script) =
-                            Arc::get_mut(&mut self.world).unwrap().remove_one::<ScriptComponent>(selected_entity)
+                        if let Ok(script) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .remove_one::<ScriptComponent>(selected_entity)
                         {
                             success!("Removed script from entity {:?}", selected_entity);
 
-                            if let Err(e) =
-                                scripting::convert_entity_to_group(&Arc::get_mut(&mut self.world).unwrap(), selected_entity)
-                            {
+                            if let Err(e) = scripting::convert_entity_to_group(
+                                &Arc::get_mut(&mut self.world).unwrap(),
+                                selected_entity,
+                            ) {
                                 log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
                             }
                             log::debug!("Pushing remove component to undo stack");
@@ -495,7 +529,9 @@ impl Scene for Editor {
                 }
                 ScriptAction::EditScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        if let Ok(mut q) = Arc::get_mut(&mut self.world).unwrap().query_one::<&ScriptComponent>(selected_entity)
+                        if let Ok(mut q) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .query_one::<&ScriptComponent>(selected_entity)
                         {
                             if let Some(script) = q.get() {
                                 match open::that(script.path.clone()) {
@@ -536,7 +572,11 @@ impl Scene for Editor {
                     self.switch_to_player_camera();
 
                     let mut script_entities = Vec::new();
-                    for (entity_id, script) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
+                    for (entity_id, script) in Arc::get_mut(&mut self.world)
+                        .unwrap()
+                        .query::<&ScriptComponent>()
+                        .iter()
+                    {
                         script_entities.push((entity_id, script.clone()));
                     }
 
@@ -550,13 +590,25 @@ impl Scene for Editor {
                         let bytes = match tokio::fs::read_to_string(&script.path).await {
                             Ok(val) => val,
                             Err(e) => {
-                                fatal!("Unable to read script {} to bytes because {}", &script.path.display(), e);
+                                fatal!(
+                                    "Unable to read script {} to bytes because {}",
+                                    &script.path.display(),
+                                    e
+                                );
                                 self.signal = Signal::None;
                                 return;
-                            },
+                            }
                         };
-                        
-                        match self.script_manager.load_script(&script.path.file_name().unwrap().to_string_lossy().to_string(), bytes) {
+
+                        match self.script_manager.load_script(
+                            &script
+                                .path
+                                .file_name()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                            bytes,
+                        ) {
                             Ok(script_name) => {
                                 if let Err(e) = self.script_manager.init_entity_script(
                                     entity_id,
@@ -629,7 +681,10 @@ impl Scene for Editor {
                     if let Some(camera_entity) = player_camera {
                         let mut follow_target = (false, CameraFollowTarget::default());
                         // Find the target entity label
-                        if let Ok(mut query) = Arc::get_mut(&mut self.world).unwrap().query_one::<&AdoptedEntity>(*entity) {
+                        if let Ok(mut query) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .query_one::<&AdoptedEntity>(*entity)
+                        {
                             if let Some(adopted) = query.get() {
                                 follow_target = (
                                     true,
@@ -642,7 +697,9 @@ impl Scene for Editor {
                         }
 
                         if follow_target.0 {
-                            let _ = Arc::get_mut(&mut self.world).unwrap().insert_one(camera_entity, follow_target);
+                            let _ = Arc::get_mut(&mut self.world)
+                                .unwrap()
+                                .insert_one(camera_entity, follow_target);
                             info!("Set player camera target to entity {:?}", entity);
                         }
                     }
@@ -662,7 +719,9 @@ impl Scene for Editor {
                         });
 
                     if let Some(camera_entity) = player_camera {
-                        let _ = Arc::get_mut(&mut self.world).unwrap().remove_one::<CameraFollowTarget>(camera_entity);
+                        let _ = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .remove_one::<CameraFollowTarget>(camera_entity);
                     }
                     info!("Cleared player camera target");
                     self.signal = Signal::None;
@@ -671,7 +730,10 @@ impl Scene for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(e) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&AdoptedEntity>(*entity) {
+                        if let Ok(e) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .query_one_mut::<&AdoptedEntity>(*entity)
+                        {
                             let mut local_signal: Option<Signal> = None;
                             let label = e.label().clone();
                             let mut show = true;
@@ -693,7 +755,8 @@ impl Scene for Editor {
                                             "Adding scripting component to entity [{}]",
                                             label
                                         );
-                                        if let Err(e) = Arc::get_mut(&mut self.world).unwrap()
+                                        if let Err(e) = Arc::get_mut(&mut self.world)
+                                            .unwrap()
                                             .insert_one(*entity, ScriptComponent::default())
                                         {
                                             warn!(
@@ -734,8 +797,9 @@ impl Scene for Editor {
                                             );
                                             let component = CameraComponent::new();
 
-                                            if let Err(e) =
-                                                Arc::get_mut(&mut self.world).unwrap().insert(*entity, (camera, component))
+                                            if let Err(e) = Arc::get_mut(&mut self.world)
+                                                .unwrap()
+                                                .insert(*entity, (camera, component))
                                             {
                                                 warn!(
                                                     "Failed to add camera component to entity: {}",
@@ -761,7 +825,10 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Light => {
-                        if let Ok(light) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&Light>(*entity) {
+                        if let Ok(light) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .query_one_mut::<&Light>(*entity)
+                        {
                             let mut show = true;
                             egui::Window::new(format!("Add component for {}", light.label))
                                 .scroll([false, true])
@@ -799,7 +866,8 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Camera => {
-                        if let Ok((cam, _comp)) = Arc::get_mut(&mut self.world).unwrap()
+                        if let Ok((cam, _comp)) = Arc::get_mut(&mut self.world)
+                            .unwrap()
                             .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
                         {
                             let mut show = true;
@@ -837,7 +905,10 @@ impl Scene for Editor {
             }
             Signal::RemoveComponent(entity, c_type) => match c_type {
                 ComponentType::Script(_) => {
-                    match Arc::get_mut(&mut self.world).unwrap().remove_one::<ScriptComponent>(*entity) {
+                    match Arc::get_mut(&mut self.world)
+                        .unwrap()
+                        .remove_one::<ScriptComponent>(*entity)
+                    {
                         Ok(component) => {
                             success!("Removed script component from entity {:?}", entity);
                             UndoableAction::push_to_undo(
@@ -856,9 +927,13 @@ impl Scene for Editor {
                 }
                 ComponentType::Camera(_, _, follow) => {
                     if let Some(_) = follow {
-                        match Arc::get_mut(&mut self.world).unwrap()
-                            .remove::<(Camera, CameraComponent, CameraFollowTarget)>(*entity)
-                        {
+                        match Arc::get_mut(&mut self.world).unwrap().remove::<(
+                            Camera,
+                            CameraComponent,
+                            CameraFollowTarget,
+                        )>(
+                            *entity
+                        ) {
                             Ok(component) => {
                                 success!("Removed camera component from entity {:?}", entity);
                                 UndoableAction::push_to_undo(
@@ -878,7 +953,10 @@ impl Scene for Editor {
                             }
                         };
                     } else {
-                        match Arc::get_mut(&mut self.world).unwrap().remove::<(Camera, CameraComponent)>(*entity) {
+                        match Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .remove::<(Camera, CameraComponent)>(*entity)
+                        {
                             Ok(component) => {
                                 success!("Removed camera component from entity {:?}", entity);
                                 UndoableAction::push_to_undo(
@@ -953,61 +1031,85 @@ impl Scene for Editor {
                 log::debug!("====================");
                 info!("Total entity count: {}", counter);
                 self.signal = Signal::None;
-            },
+            }
             Signal::Spawn(entity_type) => {
                 match entity_type {
                     crate::editor::PendingSpawn2::CreateLight => {
                         let transform = Transform::new();
                         let component = LightComponent::default();
-                        let light = Light::new(graphics.shared.clone(), &component, &transform, Some("Light")).await;
-                        Arc::get_mut(&mut self.world).unwrap().spawn((light, component, transform));
+                        let light = Light::new(
+                            graphics.shared.clone(),
+                            &component,
+                            &transform,
+                            Some("Light"),
+                        )
+                        .await;
+                        Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .spawn((light, component, transform));
                         success!("Created new light");
-                    },
+                    }
                     crate::editor::PendingSpawn2::CreatePlane => {
                         let plane = PlaneBuilder::new()
                             .with_size(500.0, 200.0)
-                            .build(
-                                graphics.shared.clone(),
-                                PROTO_TEXTURE,
-                                Some("Plane")
-                            ).await.unwrap();
+                            .build(graphics.shared.clone(), PROTO_TEXTURE, Some("Plane"))
+                            .await
+                            .unwrap();
 
                         let transform = Transform::new();
                         let mut props = ModelProperties::new();
-                        props.custom_properties.insert("width".to_string(), Value::Float(500.0));
-                        props.custom_properties.insert("height".to_string(), Value::Float(200.0));
-                        props.custom_properties.insert("tiles_x".to_string(), Value::Int(500));
-                        props.custom_properties.insert("tiles_z".to_string(), Value::Int(200));
-                        Arc::get_mut(&mut self.world).unwrap().spawn((plane, transform, props));
+                        props
+                            .custom_properties
+                            .insert("width".to_string(), Value::Float(500.0));
+                        props
+                            .custom_properties
+                            .insert("height".to_string(), Value::Float(200.0));
+                        props
+                            .custom_properties
+                            .insert("tiles_x".to_string(), Value::Int(500));
+                        props
+                            .custom_properties
+                            .insert("tiles_z".to_string(), Value::Int(200));
+                        Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .spawn((plane, transform, props));
                         success!("Created new plane");
-                    },
+                    }
                     crate::editor::PendingSpawn2::CreateCube => {
                         let model = Model::load_from_memory(
                             graphics.shared.clone(),
                             include_bytes!("../../../resources/cube.glb"),
-                            Some("Cube")
-                        ).await;
+                            Some("Cube"),
+                        )
+                        .await;
                         match model {
                             Ok(model) => {
                                 let cube = AdoptedEntity::adopt(
                                     graphics.shared.clone(),
                                     model,
                                     // Some("Cube")
-                                ).await;
-                                Arc::get_mut(&mut self.world).unwrap().spawn((cube, Transform::new(), ModelProperties::new()));
+                                )
+                                .await;
+                                Arc::get_mut(&mut self.world).unwrap().spawn((
+                                    cube,
+                                    Transform::new(),
+                                    ModelProperties::new(),
+                                ));
                             }
                             Err(e) => {
                                 fatal!("Failed to load cube model: {}", e);
                             }
                         }
                         success!("Created new cube");
-                    },
+                    }
                     crate::editor::PendingSpawn2::CreateCamera => {
                         let camera = Camera::predetermined(graphics.shared.clone(), None);
                         let component = CameraComponent::new();
-                        Arc::get_mut(&mut self.world).unwrap().spawn((camera, component));
+                        Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .spawn((camera, component));
                         success!("Created new camera");
-                    },
+                    }
                 }
                 self.signal = Signal::None;
             }
@@ -1018,7 +1120,10 @@ impl Scene for Editor {
 
         let new_aspect = current_size.width as f64 / current_size.height as f64;
         if let Some(active_camera) = self.active_camera {
-            if let Ok(mut query) = Arc::get_mut(&mut self.world).unwrap().query_one::<&mut Camera>(active_camera) {
+            if let Ok(mut query) = Arc::get_mut(&mut self.world)
+                .unwrap()
+                .query_one::<&mut Camera>(active_camera)
+            {
                 if let Some(camera) = query.get() {
                     camera.aspect = new_aspect;
                 }
@@ -1053,21 +1158,29 @@ impl Scene for Editor {
             camera.update(graphics.shared.clone());
         }
 
-        let query = Arc::get_mut(&mut self.world).unwrap().query_mut::<(&mut AdoptedEntity, &Transform)>();
+        let query = Arc::get_mut(&mut self.world)
+            .unwrap()
+            .query_mut::<(&mut AdoptedEntity, &Transform)>();
         for (_, (entity, transform)) in query {
             entity.update(graphics.shared.clone(), transform);
         }
 
-        let light_query = Arc::get_mut(&mut self.world).unwrap()
-            .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
+        let light_query =
+            Arc::get_mut(&mut self.world)
+                .unwrap()
+                .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
         for (_, (light_component, transform, light)) in light_query {
             light.update(light_component, transform);
         }
 
-        self.light_manager.update(graphics.shared.clone(), &Arc::get_mut(&mut self.world).unwrap());
-        
+        self.light_manager.update(
+            graphics.shared.clone(),
+            &Arc::get_mut(&mut self.world).unwrap(),
+        );
+
         if self.dep_installer.is_installing {
-            self.dep_installer.show_installation_window(&mut graphics.shared.get_egui_context());
+            self.dep_installer
+                .show_installation_window(&mut graphics.shared.get_egui_context());
         }
         self.dep_installer.update_progress();
     }

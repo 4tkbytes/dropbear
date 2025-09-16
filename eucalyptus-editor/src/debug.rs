@@ -2,8 +2,8 @@
 use crate::build::gleam::GleamScriptCompiler;
 use crate::build::gleam::InstallStatus;
 use crate::editor::Signal;
-use egui::Ui;
 use egui::ProgressBar;
+use egui::Ui;
 use egui::Window;
 use tokio::sync::mpsc;
 
@@ -45,9 +45,14 @@ impl DependencyInstaller {
                     InstallStatus::NotStarted => {
                         self.is_installing = false;
                     }
-                    InstallStatus::InProgress { tool, step, progress } => {
+                    InstallStatus::InProgress {
+                        tool,
+                        step,
+                        progress,
+                    } => {
                         self.is_installing = true;
-                        update_tool_status = (true, String::from(&tool), progress, String::from(&step));
+                        update_tool_status =
+                            (true, String::from(&tool), progress, String::from(&step));
                     }
                     InstallStatus::Success => {
                         self.is_installing = false;
@@ -73,7 +78,11 @@ impl DependencyInstaller {
             self.progress_receiver = None;
         }
         if update_tool_status.0 {
-            self.update_tool_status(update_tool_status.1.as_str(), update_tool_status.2, update_tool_status.3.as_str());
+            self.update_tool_status(
+                update_tool_status.1.as_str(),
+                update_tool_status.2,
+                update_tool_status.3.as_str(),
+            );
         }
     }
 
@@ -120,7 +129,8 @@ impl DependencyInstaller {
                 ui.add(ProgressBar::new(self.javy_progress).show_percentage());
                 ui.separator();
 
-                let overall_progress = (self.gleam_progress + self.bun_progress + self.javy_progress) / 3.0;
+                let overall_progress =
+                    (self.gleam_progress + self.bun_progress + self.javy_progress) / 3.0;
                 ui.label("Overall Progress:");
                 ui.add(ProgressBar::new(overall_progress).show_percentage());
 
@@ -134,7 +144,11 @@ impl DependencyInstaller {
     }
 }
 
-pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal, dependency_installer: &mut DependencyInstaller) {
+pub(crate) fn show_menu_bar(
+    ui: &mut Ui,
+    signal: &mut Signal,
+    dependency_installer: &mut DependencyInstaller,
+) {
     ui.menu_button("Debug", |ui_debug| {
         if ui_debug.button("Panic").clicked() {
             log::warn!("Panic caused on purpose from Menu Button Click");
@@ -149,11 +163,11 @@ pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal, dependency_install
         ui_debug.add_enabled_ui(!dependency_installer.is_installing, |ui| {
             if ui.button("Ensure dependencies").clicked() {
                 log::info!("Clicked ensure dependencies from debug menu");
-                
+
                 let (sender, receiver) = mpsc::unbounded_channel();
                 dependency_installer.progress_receiver = Some(receiver);
                 dependency_installer.is_installing = true;
-                
+
                 dependency_installer.gleam_progress = 0.0;
                 dependency_installer.bun_progress = 0.0;
                 dependency_installer.javy_progress = 0.0;

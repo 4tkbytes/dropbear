@@ -44,10 +44,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{
-    egui_renderer::EguiRenderer,
-    graphics::Texture,
-};
+use crate::{egui_renderer::EguiRenderer, graphics::Texture};
 
 pub use gilrs;
 use log::LevelFilter;
@@ -104,9 +101,20 @@ impl State {
             .await?;
 
         let info = adapter.get_info();
+        let os_info = os_info::get();
         log::info!(
             "\n==================== BACKEND INFO ====================
 Backend: {}
+
+Software:
+    Architecture: {:?}
+    Bitness: {:?}
+    Codename: {:?}
+    Edition: {:?}
+    Os Type: {:?}
+    Version: {:?}
+    TLDR: {}
+
 
 Hardware:
     Adapter Name: {}
@@ -118,6 +126,13 @@ Hardware:
 =======================================================
 ",
             info.backend.to_string(),
+            os_info.architecture(),
+            os_info.bitness(),
+            os_info.codename(),
+            os_info.edition(),
+            os_info.os_type(),
+            os_info.version(),
+            os_info,
             info.name,
             info.vendor,
             info.device,
@@ -173,13 +188,19 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(&device, config.format, None, 1, &window)));
-
-        let texture_id = Arc::get_mut(&mut egui_renderer).unwrap().lock().renderer().register_native_texture(
+        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
-            &viewport_texture.view,
-            wgpu::FilterMode::Linear,
-        );
+            config.format,
+            None,
+            1,
+            &window,
+        )));
+
+        let texture_id = Arc::get_mut(&mut egui_renderer)
+            .unwrap()
+            .lock()
+            .renderer()
+            .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
         let result = Self {
             surface,
@@ -212,14 +233,15 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        Arc::get_mut(&mut self
-            .egui_renderer).unwrap().lock()
+        Arc::get_mut(&mut self.egui_renderer)
+            .unwrap()
+            .lock()
             .renderer()
             .update_egui_texture_from_wgpu_texture(
                 &self.device,
                 &self.viewport_texture.view,
                 wgpu::FilterMode::Linear,
-                *self.texture_id
+                *self.texture_id,
             );
     }
 
@@ -411,7 +433,9 @@ impl App {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        tokio::fs::create_dir_all(&log_dir).await.expect("Failed to create log dir");
+        tokio::fs::create_dir_all(&log_dir)
+            .await
+            .expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_filename = format!("{}.{}.log", app_name, datetime_str);
@@ -559,7 +583,10 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        state.egui_renderer.lock().handle_input(&state.window, &event);
+        state
+            .egui_renderer
+            .lock()
+            .handle_input(&state.window, &event);
 
         match event {
             WindowEvent::CloseRequested => {

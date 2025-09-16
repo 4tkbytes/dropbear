@@ -16,10 +16,7 @@ use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
 use eucalyptus_core::utils::PendingSpawn;
 use log;
 use parking_lot::Mutex;
-use transform_gizmo_egui::{
-    EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode,
-    math::DVec3,
-};
+use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -68,7 +65,6 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct DraggedAsset {
@@ -387,8 +383,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 if !matches!(self.viewport_mode, ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
-                        if let Ok(transform) =
-                            Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&mut Transform>(*entity_id)
+                        if let Ok(transform) = Arc::get_mut(&mut self.world)
+                            .unwrap()
+                            .query_one_mut::<&mut Transform>(*entity_id)
                         {
                             let was_focused = cfg.is_focused;
                             cfg.is_focused = self.gizmo.is_focused();
@@ -796,11 +793,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
                     }
 
-                    if let Ok((light, transform, props)) =
-                        Arc::get_mut(&mut self.world).unwrap()
-                            .query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(
-                                *entity,
-                            )
+                    if let Ok((light, transform, props)) = Arc::get_mut(&mut self.world)
+                        .unwrap()
+                        .query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
                     {
                         light.inspect(
                             entity,
@@ -1005,14 +1000,19 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::AddComponent => {
                             log::debug!("Add Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(..) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&AdoptedEntity>(*entity)
+                                if let Ok(..) = Arc::get_mut(&mut self.world)
+                                    .unwrap()
+                                    .query_one_mut::<&AdoptedEntity>(*entity)
                                 {
                                     log::debug!("Queried selected entity, it is an entity");
                                     *self.signal =
                                         Signal::AddComponent(*entity, EntityType::Entity);
                                 }
 
-                                if let Ok(..) = Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&Light>(*entity) {
+                                if let Ok(..) = Arc::get_mut(&mut self.world)
+                                    .unwrap()
+                                    .query_one_mut::<&Light>(*entity)
+                                {
                                     log::debug!("Queried selected entity, it is a light");
                                     *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
@@ -1035,8 +1035,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::RemoveComponent => {
                             log::debug!("Remove Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(script) =
-                                    Arc::get_mut(&mut self.world).unwrap().query_one_mut::<&ScriptComponent>(*entity)
+                                if let Ok(script) = Arc::get_mut(&mut self.world)
+                                    .unwrap()
+                                    .query_one_mut::<&ScriptComponent>(*entity)
                                 {
                                     log::debug!(
                                         "Queried selected entity, it has a script component"

@@ -5,7 +5,6 @@ use std::{
 
 use winit::{event::MouseButton, keyboard::KeyCode};
 
-
 #[derive(Clone)]
 pub struct InputState {
     #[allow(dead_code)]

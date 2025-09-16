@@ -37,6 +37,7 @@ rayon.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 backtrace.workspace = true
+os_info = "*"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

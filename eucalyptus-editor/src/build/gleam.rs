@@ -1,10 +1,10 @@
+use app_dirs2::{AppDataType, AppInfo, app_dir};
+use futures_util::StreamExt;
 use std::path::PathBuf;
 use std::process::Command;
-use app_dirs2::{AppInfo, AppDataType, app_dir};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::UnboundedSender;
-use futures_util::StreamExt;
 
 const GLEAM_VERSION: &'static str = "1.12.0";
 const BUN_VERSION: &'static str = "1.2.22";
@@ -26,7 +26,7 @@ pub enum InstallStatus {
     Failed(String),
 }
 
-/// Compiles a gleam project into WASM through a pipeline. 
+/// Compiles a gleam project into WASM through a pipeline.
 pub struct GleamScriptCompiler {
     #[allow(dead_code)]
     project_location: PathBuf,
@@ -43,14 +43,19 @@ impl GleamScriptCompiler {
         Ok(())
     }
 
-    pub async fn build(&self, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+    pub async fn build(
+        &self,
+        sender: Option<UnboundedSender<InstallStatus>>,
+    ) -> anyhow::Result<()> {
         Self::ensure_dependencies(sender).await?;
         Ok(())
     }
 
-    pub async fn ensure_dependencies(sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+    pub async fn ensure_dependencies(
+        sender: Option<UnboundedSender<InstallStatus>>,
+    ) -> anyhow::Result<()> {
         println!("Checking dependencies...");
-        
+
         if let Some(ref s) = sender {
             let _ = s.send(InstallStatus::InProgress {
                 tool: "None".to_string(),
@@ -71,7 +76,8 @@ impl GleamScriptCompiler {
             return Ok(());
         }
 
-        if !(cfg!(target_os = "windows") || cfg!(target_os = "linux") || cfg!(target_os = "macos")) {
+        if !(cfg!(target_os = "windows") || cfg!(target_os = "linux") || cfg!(target_os = "macos"))
+        {
             anyhow::bail!("The operating system is not supported for building the Gleam project")
         }
 
@@ -153,7 +159,10 @@ impl GleamScriptCompiler {
             let _ = s.send(InstallStatus::Success);
         }
 
-        println!("All {} dependencies installed successfully", installed_count);
+        println!(
+            "All {} dependencies installed successfully",
+            installed_count
+        );
         Ok(())
     }
 
@@ -170,62 +179,86 @@ impl GleamScriptCompiler {
         }
     }
 
-    pub async fn download_gleam(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
-        let gleam_dir = app_dir.join("dependencies").join("gleam").join(GLEAM_VERSION);
-        
+    pub async fn download_gleam(
+        app_dir: &PathBuf,
+        sender: Option<UnboundedSender<InstallStatus>>,
+    ) -> anyhow::Result<()> {
+        let gleam_dir = app_dir
+            .join("dependencies")
+            .join("gleam")
+            .join(GLEAM_VERSION);
+
         if gleam_dir.exists() {
-            println!("Gleam v{} already cached at {}", GLEAM_VERSION, app_dir.display());
+            println!(
+                "Gleam v{} already cached at {}",
+                GLEAM_VERSION,
+                app_dir.display()
+            );
             return Ok(());
         }
 
         println!("Downloading Gleam v{}...", GLEAM_VERSION);
-        
+
         let gleam_link = Self::get_gleam_download_url()?;
         Self::download_and_extract(&gleam_link, &gleam_dir, "gleam", sender).await?;
-        
+
         println!("Gleam v{} downloaded successfully", GLEAM_VERSION);
         Ok(())
     }
 
-    pub async fn download_bun(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+    pub async fn download_bun(
+        app_dir: &PathBuf,
+        sender: Option<UnboundedSender<InstallStatus>>,
+    ) -> anyhow::Result<()> {
         let bun_dir = app_dir.join("dependencies").join("bun").join(BUN_VERSION);
-        
+
         if bun_dir.exists() {
-            println!("Bun v{} already cached at {}", BUN_VERSION, app_dir.display());
+            println!(
+                "Bun v{} already cached at {}",
+                BUN_VERSION,
+                app_dir.display()
+            );
             return Ok(());
         }
 
         println!("Downloading Bun v{}...", BUN_VERSION);
-        
+
         let bun_link = Self::get_bun_download_url()?;
         Self::download_and_extract(&bun_link, &bun_dir, "bun", sender).await?;
-        
+
         println!("Bun v{} downloaded successfully", BUN_VERSION);
         Ok(())
     }
 
-    pub async fn download_javy(app_dir: &PathBuf, sender: Option<UnboundedSender<InstallStatus>>) -> anyhow::Result<()> {
+    pub async fn download_javy(
+        app_dir: &PathBuf,
+        sender: Option<UnboundedSender<InstallStatus>>,
+    ) -> anyhow::Result<()> {
         let javy_dir = app_dir.join("dependencies").join("javy").join(JAVY_VERSION);
-        
+
         if javy_dir.exists() {
-            println!("Javy v{} already cached at {}", JAVY_VERSION, app_dir.display());
+            println!(
+                "Javy v{} already cached at {}",
+                JAVY_VERSION,
+                app_dir.display()
+            );
             return Ok(());
         }
 
         println!("Downloading Javy v{}...", JAVY_VERSION);
-        
+
         let javy_link = Self::get_javy_download_url()?;
         Self::download_and_extract(&javy_link, &javy_dir, "javy", sender).await?;
-        
+
         println!("Javy v{} downloaded successfully", JAVY_VERSION);
         Ok(())
     }
 
     async fn download_and_extract(
-        url: &str, 
-        target_dir: &PathBuf, 
-        tool_name: &str, 
-        sender: Option<UnboundedSender<InstallStatus>>
+        url: &str,
+        target_dir: &PathBuf,
+        tool_name: &str,
+        sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
         if let Some(ref s) = sender {
             let _ = s.send(InstallStatus::InProgress {
@@ -303,11 +336,11 @@ impl GleamScriptCompiler {
     async fn extract_zip(archive: &PathBuf, target_dir: &PathBuf) -> anyhow::Result<()> {
         let file = std::fs::File::open(archive)?;
         let mut archive = zip::ZipArchive::new(file)?;
-        
+
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
             let outpath = target_dir.join(file.name());
-            
+
             if file.is_dir() {
                 fs::create_dir_all(&outpath).await?;
             } else {
@@ -327,7 +360,7 @@ impl GleamScriptCompiler {
         let file = std::fs::File::open(archive)?;
         let tar = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(tar);
-        
+
         for entry in archive.entries()? {
             let mut entry = entry?;
             let path = target_dir.join(entry.path()?);
@@ -336,22 +369,26 @@ impl GleamScriptCompiler {
         Ok(())
     }
 
-    async fn extract_gz(archive: &PathBuf, target_dir: &PathBuf, tool_name: &str) -> anyhow::Result<()> {
+    async fn extract_gz(
+        archive: &PathBuf,
+        target_dir: &PathBuf,
+        tool_name: &str,
+    ) -> anyhow::Result<()> {
         let file = std::fs::File::open(archive)?;
         let mut decoder = flate2::read::GzDecoder::new(file);
         let mut buffer = Vec::new();
         std::io::Read::read_to_end(&mut decoder, &mut buffer)?;
-        
+
         let exe_name = if cfg!(target_os = "windows") {
             format!("{}.exe", tool_name)
         } else {
             tool_name.to_string()
         };
-        
+
         let output_path = target_dir.join(exe_name);
         let mut output_file = fs::File::create(&output_path).await?;
         output_file.write_all(&buffer).await?;
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -359,7 +396,7 @@ impl GleamScriptCompiler {
             perms.set_mode(0o755);
             fs::set_permissions(&output_path, perms).await?;
         }
-        
+
         Ok(())
     }
 
@@ -373,13 +410,14 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-pc-windows-msvc.zip",
-                    GLEAM_VERSION,
-                    GLEAM_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-pc-windows-msvc.zip",
+                    GLEAM_VERSION, GLEAM_VERSION, arch,
                 )
             }
 
@@ -391,17 +429,18 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-unknown-linux-musl.tar.gz",
-                    GLEAM_VERSION,
-                    GLEAM_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-unknown-linux-musl.tar.gz",
+                    GLEAM_VERSION, GLEAM_VERSION, arch,
                 )
             }
 
-            #[cfg(target_os = "macos")] 
+            #[cfg(target_os = "macos")]
             {
                 let arch = {
                     if cfg!(target_arch = "aarch64") {
@@ -409,13 +448,14 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-apple-darwin.tar.gz",
-                    GLEAM_VERSION,
-                    GLEAM_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/gleam-lang/gleam/releases/download/v{}/gleam-v{}-{}-apple-darwin.tar.gz",
+                    GLEAM_VERSION, GLEAM_VERSION, arch,
                 )
             }
         };
@@ -432,12 +472,14 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-windows-{}.zip",
-                    BUN_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-windows-{}.zip",
+                    BUN_VERSION, arch,
                 )
             }
 
@@ -449,16 +491,18 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-linux-{}.zip",
-                    BUN_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-linux-{}.zip",
+                    BUN_VERSION, arch,
                 )
             }
 
-            #[cfg(target_os = "macos")] 
+            #[cfg(target_os = "macos")]
             {
                 let arch = {
                     if cfg!(target_arch = "aarch64") {
@@ -466,12 +510,14 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-darwin-{}.zip",
-                    BUN_VERSION,
-                    arch,
+                format!(
+                    "https://github.com/oven-sh/bun/releases/download/bun-v{}/bun-darwin-{}.zip",
+                    BUN_VERSION, arch,
                 )
             }
         };
@@ -484,17 +530,20 @@ impl GleamScriptCompiler {
             {
                 let arch = {
                     if cfg!(target_arch = "aarch64") {
-                        anyhow::bail!("This arch is not available for prebuilt download. Please build this from source");
+                        anyhow::bail!(
+                            "This arch is not available for prebuilt download. Please build this from source"
+                        );
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-windows-v{}.gz",
-                    JAVY_VERSION,
-                    arch,
-                    JAVY_VERSION
+                format!(
+                    "https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-windows-v{}.gz",
+                    JAVY_VERSION, arch, JAVY_VERSION
                 )
             }
 
@@ -506,17 +555,18 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-linux-v{}.gz",
-                    JAVY_VERSION,
-                    arch,
-                    JAVY_VERSION
+                format!(
+                    "https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-linux-v{}.gz",
+                    JAVY_VERSION, arch, JAVY_VERSION
                 )
             }
 
-            #[cfg(target_os = "macos")] 
+            #[cfg(target_os = "macos")]
             {
                 let arch = {
                     if cfg!(target_arch = "aarch64") {
@@ -524,13 +574,14 @@ impl GleamScriptCompiler {
                     } else if cfg!(target_arch = "x86_64") {
                         "x86_64"
                     } else {
-                        anyhow::bail!("This architecture is not supported for building the gleam project");
+                        anyhow::bail!(
+                            "This architecture is not supported for building the gleam project"
+                        );
                     }
                 };
-                format!("https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-macos-v{}.gz",
-                    JAVY_VERSION,
-                    arch,
-                    JAVY_VERSION
+                format!(
+                    "https://github.com/bytecodealliance/javy/releases/download/v{}/javy-{}-macos-v{}.gz",
+                    JAVY_VERSION, arch, JAVY_VERSION
                 )
             }
         };
@@ -540,5 +591,7 @@ impl GleamScriptCompiler {
 
 #[tokio::test]
 async fn check_if_dependencies_install() {
-    GleamScriptCompiler::ensure_dependencies(None).await.unwrap();
+    GleamScriptCompiler::ensure_dependencies(None)
+        .await
+        .unwrap();
 }

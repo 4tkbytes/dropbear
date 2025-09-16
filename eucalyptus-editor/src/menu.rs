@@ -5,7 +5,9 @@ use std::{
 
 use anyhow::anyhow;
 use dropbear_engine::{
-    graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}
+    graphics::RenderContext,
+    input::{Controller, Keyboard, Mouse},
+    scene::{Scene, SceneCommand},
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
@@ -162,56 +164,57 @@ impl Scene for MainMenu {
         let egui_ctx = graphics.shared.get_egui_context();
         let mut local_open_project = false;
         egui::CentralPanel::default()
-                .frame(Frame::new())
-                .show(&egui_ctx, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(64.0);
-                        ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
-                        ui.add_space(40.0);
+            .frame(Frame::new())
+            .show(&egui_ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(64.0);
+                    ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
+                    ui.add_space(40.0);
 
-                        let button_size = egui::vec2(300.0, 60.0);
+                    let button_size = egui::vec2(300.0, 60.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("New Project"))
-                            .clicked()
-                        {
-                            log::debug!("Creating new project");
-                            self.show_new_project = true;
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("New Project"))
+                        .clicked()
+                    {
+                        log::debug!("Creating new project");
+                        self.show_new_project = true;
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Open Project"))
-                            .clicked()
-                        {
-                            local_open_project = true;
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Open Project"))
+                        .clicked()
+                    {
+                        local_open_project = true;
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Settings"))
-                            .clicked()
-                        {
-                            log::debug!("Settings (not implemented)");
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Settings"))
+                        .clicked()
+                    {
+                        log::debug!("Settings (not implemented)");
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Quit"))
-                            .clicked()
-                        {
-                            self.scene_command = SceneCommand::Quit
-                        }
-                        ui.add_space(20.0);
-                    });
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Quit"))
+                        .clicked()
+                    {
+                        self.scene_command = SceneCommand::Quit
+                    }
+                    ui.add_space(20.0);
                 });
+            });
 
         if local_open_project {
             log::debug!("Opening project");
             self.is_in_file_dialogue = true;
             if let Some(path) = rfd::AsyncFileDialog::new()
                 .add_filter("Eucalyptus Configuration Files", &["eucp"])
-                .pick_file().await
+                .pick_file()
+                .await
             {
                 match ProjectConfig::read_from(&path.into()) {
                     Ok(config) => {
@@ -219,11 +222,11 @@ impl Scene for MainMenu {
                         let mut global = PROJECT.write();
                         *global = config;
                         // println!("Loaded config info: {:#?}", global);
-                        self.scene_command =
-                            SceneCommand::SwitchScene(String::from("editor"));
+                        self.scene_command = SceneCommand::SwitchScene(String::from("editor"));
                     }
-                    Err(e) => if e.to_string().contains("missing field") {
-                        self.toast.add(egui_toast_fork::Toast {
+                    Err(e) => {
+                        if e.to_string().contains("missing field") {
+                            self.toast.add(egui_toast_fork::Toast {
                             kind: egui_toast_fork::ToastKind::Error,
                             text: format!("Your project version is not up to date with the current project version").into(),
                             options: ToastOptions::default()
@@ -231,7 +234,8 @@ impl Scene for MainMenu {
                                 .show_progress(true),
                             ..Default::default()
                         });
-                        log::error!("Failed to load project: {}", e);
+                            log::error!("Failed to load project: {}", e);
+                        }
                     }
                 };
             } else {
@@ -286,7 +290,8 @@ impl Scene for MainMenu {
             if let Some(path) = rfd::AsyncFileDialog::new()
                 .set_title("Save Project")
                 .set_file_name(&self.project_name)
-                .pick_folder().await
+                .pick_folder()
+                .await
             {
                 self.project_path = Some(path.into());
                 log::debug!("Project will be saved at: {:?}", self.project_path);
