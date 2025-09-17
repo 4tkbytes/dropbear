@@ -114,8 +114,8 @@ impl Keyboard for Editor {
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
                     if let Some(entity) = &self.selected_entity {
-                        let query = self
-                            .world
+                        let world = self.world.lock();
+                        let query = world
                             .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                         if let Ok(mut q) = query {
                             if let Some((e, t, props)) = q.get() {
@@ -247,8 +247,8 @@ impl Mouse for Editor {
                 let dx = position.x - last_pos.0;
                 let dy = position.y - last_pos.1;
 
-                if let Some(active_camera) = self.active_camera {
-                    if let Ok(mut q) = self.world.query_one::<(
+                if let Some(active_camera) = *self.active_camera.lock() {
+                    if let Ok(mut q) = self.world.lock().query_one::<(
                         &mut Camera,
                         &CameraComponent,
                         Option<&CameraFollowTarget>,

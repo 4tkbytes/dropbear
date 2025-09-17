@@ -11,54 +11,20 @@ use dropbear_engine::{
 };
 use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
-use eucalyptus_core::states::{Value, WorldLoadingStatus, PROJECT, SCENES};
+use eucalyptus_core::states::{Value, WorldLoadingStatus};
 use eucalyptus_core::utils::{PROTO_TEXTURE, PendingSpawn};
 use eucalyptus_core::{logging, scripting, success_without_console, warn_without_console};
+use hecs::Entity;
 use log;
 use parking_lot::Mutex;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
-
-// Standalone function for loading project config in separate thread
-async fn load_project_config_impl(
-    graphics: Arc<SharedGraphicsContext>,
-    sender: UnboundedSender<WorldLoadingStatus>,
-) -> anyhow::Result<()> {
-    // Load PROJECT config into memory first
-    {
-        let _config = PROJECT.read();
-        // Project is already loaded in memory from menu, just need to load world
-    }
-
-    let first_scene_opt = {
-        let scenes = SCENES.read();
-        scenes.first().cloned()
-    };
-
-    if let Some(first_scene) = first_scene_opt {
-        // Create a temporary world for loading
-        let mut temp_world = hecs::World::new();
-        first_scene
-            .load_into_world(&mut temp_world, graphics, Some(sender.clone()))
-            .await?;
-        
-        // Note: In the real implementation, we'd need to transfer this world
-        // to the main Editor struct, but for now we'll signal completion
-    } else {
-        log::info!("No scenes found, will create default debug camera");
-    }
-
-    // Send completion signal
-    let _ = sender.send(WorldLoadingStatus::Completed);
-
-    Ok(())
-}
 
 #[async_trait::async_trait]
 impl Scene for Editor {
@@ -67,31 +33,41 @@ impl Scene for Editor {
         self.progress_tx = Some(rx);
         
         let graphics_shared = graphics.shared.clone();
+        let world_clone = self.world.clone();
+        let active_camera_clone = self.active_camera.clone();
+        let project_path_clone = self.project_path.clone();
+        let dock_state_clone = self.dock_state.clone();
         
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                if let Err(e) = load_project_config_impl(graphics_shared, tx).await {
+        tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(async {
+                if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), world_clone, active_camera_clone, project_path_clone, dock_state_clone).await {
                     log::error!("Failed to load project config: {}", e);
                 }
-            });
+            })
         });
 
         self.window = Some(graphics.shared.window.clone());
+        self.is_world_loaded.mark_scene_loaded();
     }
 
     async fn update<'a>(&mut self, dt: f32, graphics: &mut RenderContext<'a>) {
-        if !self.is_world_loaded.0 {
+        if !self.is_world_loaded.is_project_ready() {
+            log_once::debug_once!("Project is not loaded yet");
             self.show_project_loading_window(&graphics.shared.get_egui_context());
             return;
+        } else {
+            log_once::debug_once!("Project has loaded successfully");
         }
 
-        if !self.is_world_loaded.1 {
-            self.load(graphics).await;
-            self.is_world_loaded = (true, true);
+        if !self.is_world_loaded.is_fully_loaded() {
+            log::debug!("Scene is not fully loaded, initializing...");
+            // self.load(graphics).await;
+            return;
+        } else {
+            log_once::debug_once!("Scene has fully loaded");
         }
 
-        if let Some((_, tab)) = self.dock_state.find_active_focused() {
+        if let Some((_, tab)) = self.dock_state.lock().find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
             self.is_viewport_focused = false;
@@ -111,11 +87,13 @@ impl Scene for Editor {
             .await
             {
                 Ok(adopted) => {
-                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
-                        adopted,
-                        spawn.transform,
-                        spawn.properties,
-                    ));
+                    let entity_id = {
+                        self.world.lock().spawn((
+                            adopted,
+                            spawn.transform,
+                            spawn.properties,
+                        ))
+                    };
 
                     self.selected_entity = Some(entity_id);
 
@@ -142,24 +120,25 @@ impl Scene for Editor {
             }
 
             let mut script_entities = Vec::new();
-            for (entity_id, script) in Arc::get_mut(&mut self.world)
-                .unwrap()
-                .query::<&mut ScriptComponent>()
-                .iter()
             {
-                log_once::debug_once!(
-                    "Script Entity -> id: {:?}, component: {:?}",
-                    entity_id,
-                    script
-                );
-                script.name = script
-                    .path
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                script_entities.push((entity_id, script.name.clone()));
+                for (entity_id, script) in self.world.lock()
+                    .query::<&mut ScriptComponent>()
+                    .iter()
+                {
+                    log_once::debug_once!(
+                        "Script Entity -> id: {:?}, component: {:?}",
+                        entity_id,
+                        script
+                    );
+                    script.name = script
+                        .path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    script_entities.push((entity_id, script.name.clone()));
+                }
             }
 
             if script_entities.is_empty() {
@@ -170,7 +149,7 @@ impl Scene for Editor {
                 if let Err(e) = self.script_manager.update_entity_script(
                     entity_id,
                     &script_name,
-                    &mut self.world,
+                    self.world.clone(),
                     &self.input_state,
                     dt,
                 ) {
@@ -205,14 +184,13 @@ impl Scene for Editor {
                 .copied()
                 .collect();
 
-            // Handle camera input through ECS
-            if let Some(active_camera) = self.active_camera {
-                if let Ok(mut query) = self
-                    .world
+            let active_cam = self.active_camera.lock();
+            if let Some(active_camera) = *active_cam {
+                let world = self.world.lock();
+                if let Ok(mut query) = world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
                 {
                     if let Some((camera, component)) = query.get() {
-                        // Handle keyboard input based on camera type
                         match component.camera_type {
                             CameraType::Debug => {
                                 DebugCamera::handle_keyboard_input(camera, &movement_keys);
@@ -231,7 +209,6 @@ impl Scene for Editor {
                                 );
                             }
                             CameraType::Normal => {
-                                // Handle normal camera input if needed
                                 DebugCamera::handle_keyboard_input(camera, &movement_keys);
                                 DebugCamera::handle_mouse_input(
                                     camera,
@@ -252,47 +229,63 @@ impl Scene for Editor {
                     self.signal = Signal::None;
                 }
                 dropbear_engine::utils::ResourceReferenceType::File(reference) => {
-                    match &scene_entity
-                        .model_path
-                        .to_project_path(self.project_path.clone().unwrap())
-                    {
-                        Some(v) => {
-                            match AdoptedEntity::new(
-                                graphics.shared.clone(),
-                                v,
-                                Some(&scene_entity.label),
-                            )
-                            .await
-                            {
-                                Ok(adopted) => {
-                                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
-                                        adopted,
-                                        scene_entity.transform,
-                                        ModelProperties::default(),
-                                    ));
-                                    self.selected_entity = Some(entity_id);
-                                    log::debug!(
-                                        "Successfully paste-spawned {} with ID {:?}",
-                                        scene_entity.label,
-                                        entity_id
-                                    );
+                    let cloned = {
+                        let project_path = self.project_path.lock();
+                        project_path.clone()
+                    };
+                    if let Some(proj_root) = cloned {
+                        match &scene_entity
+                            .model_path
+                            .to_project_path(proj_root)
+                        {
+                            Some(v) => {
+                                let entity = {
+                                    AdoptedEntity::new(
+                                        graphics.shared.clone(),
+                                        v,
+                                        Some(&scene_entity.label),
+                                    ).await
+                                };
 
-                                    success_without_console!("Paste!");
-                                    self.signal = Signal::Copy(scene_entity.clone());
-                                }
-                                Err(e) => {
-                                    warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                                match entity
+                                {
+                                    Ok(adopted) => {
+                                        let entity_id = {
+                                            let mut world = self.world.lock();
+                                            world.spawn((
+                                                adopted,
+                                                scene_entity.transform,
+                                                ModelProperties::default(),
+                                            ))
+                                        };
+
+                                        self.selected_entity = Some(entity_id);
+                                        log::debug!(
+                                            "Successfully paste-spawned {} with ID {:?}",
+                                            scene_entity.label,
+                                            entity_id
+                                        );
+
+                                        success_without_console!("Paste!");
+                                        self.signal = Signal::Copy(scene_entity.clone());
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to paste-spawn {}: {}", scene_entity.label, e);
+                                    }
                                 }
                             }
-                        }
-                        None => {
-                            fatal!(
-                                "Unable to convert resource reference [{}] to project related path",
-                                reference
-                            );
-                            self.signal = Signal::None;
-                        }
-                    };
+                            None => {
+                                fatal!(
+                                    "Unable to convert resource reference [{}] to project related path",
+                                    reference
+                                );
+                                self.signal = Signal::None;
+                            }
+                        };
+                    } else {
+                        fatal!("Project path is not set");
+                        self.signal = Signal::None;
+                    }
                 }
                 dropbear_engine::utils::ResourceReferenceType::Bytes(bytes) => {
                     let model = match Model::load_from_memory(
@@ -310,11 +303,15 @@ impl Scene for Editor {
                         }
                     };
                     let adopted = AdoptedEntity::adopt(graphics.shared.clone(), model).await;
-                    let entity_id = Arc::get_mut(&mut self.world).unwrap().spawn((
-                        adopted,
-                        scene_entity.transform,
-                        ModelProperties::default(),
-                    ));
+                    
+                    let entity_id = {
+                        let mut world = self.world.lock();
+                        world.spawn((
+                            adopted,
+                            scene_entity.transform,
+                            ModelProperties::default(),
+                        ))
+                    };
                     self.selected_entity = Some(entity_id);
                     log::debug!(
                         "Successfully paste-spawned {} with ID {:?}",
@@ -333,54 +330,59 @@ impl Scene for Editor {
             },
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
-                    let is_viewport_cam = if let Ok(mut q) = Arc::get_mut(&mut self.world)
-                        .unwrap()
-                        .query_one::<&CameraComponent>(*sel_e)
                     {
-                        if let Some(c) = q.get() {
-                            if matches!(c.camera_type, CameraType::Debug) {
-                                true
+                        let mut world = self.world.lock();
+                        let is_viewport_cam = if let Ok(mut q) = world
+                            .query_one::<&CameraComponent>(*sel_e)
+                        {
+                            if let Some(c) = q.get() {
+                                if matches!(c.camera_type, CameraType::Debug) {
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
                                 false
                             }
                         } else {
                             false
-                        }
-                    } else {
-                        false
-                    };
-                    if is_viewport_cam {
-                        warn!("You can't delete the viewport camera");
-                        self.signal = Signal::None;
-                    } else {
-                        match Arc::get_mut(&mut self.world).unwrap().despawn(*sel_e) {
-                            Ok(_) => {
-                                info!("Decimated entity");
-                                self.signal = Signal::None;
-                            }
-                            Err(e) => {
-                                warn!("Failed to delete entity: {}", e);
-                                self.signal = Signal::None;
+                        };
+                        if is_viewport_cam {
+                            warn!("You can't delete the viewport camera");
+                            self.signal = Signal::None;
+                        } else {
+                            match world.despawn(*sel_e) {
+                                Ok(_) => {
+                                    info!("Decimated entity");
+                                    self.signal = Signal::None;
+                                }
+                                Err(e) => {
+                                    warn!("Failed to delete entity: {}", e);
+                                    self.signal = Signal::None;
+                                }
                             }
                         }
                     }
                 }
             }
             Signal::Undo => {
-                if let Some(action) = self.undo_stack.pop() {
-                    match action.undo(&mut Arc::get_mut(&mut self.world).unwrap()) {
-                        Ok(_) => {
-                            info!("Undid action");
+                {
+                    let mut world = self.world.lock();
+                    if let Some(action) = self.undo_stack.pop() {
+                        match action.undo(&mut *world) {
+                            Ok(_) => {
+                                info!("Undid action");
+                            }
+                            Err(e) => {
+                                warn!("Failed to undo action: {}", e);
+                            }
                         }
-                        Err(e) => {
-                            warn!("Failed to undo action: {}", e);
-                        }
+                    } else {
+                        warn_without_console!("Nothing to undo");
+                        log::debug!("No undoable actions in stack");
                     }
-                } else {
-                    warn_without_console!("Nothing to undo");
-                    log::debug!("No undoable actions in stack");
+                    self.signal = Signal::None;
                 }
-                self.signal = Signal::None;
             }
             Signal::None => {}
             Signal::Copy(_) => {}
@@ -397,20 +399,26 @@ impl Scene for Editor {
                                     path: moved_path.clone(),
                                 };
 
-                                let replaced = if let Ok(mut sc) = Arc::get_mut(&mut self.world)
-                                    .unwrap()
-                                    .get::<&mut ScriptComponent>(selected_entity)
-                                {
-                                    sc.name = new_script.name.clone();
-                                    sc.path = new_script.path.clone();
-                                    true
-                                } else {
+                                let replaced = {
+                                    let world = self.world.lock();
+                                    if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
+                                        sc.name = new_script.name.clone();
+                                        sc.path = new_script.path.clone();
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                };
+
+                                if !replaced {
+                                    let mut world = self.world.lock();
                                     match scripting::attach_script_to_entity(
-                                        &mut Arc::get_mut(&mut self.world).unwrap(),
+                                        &mut world,
                                         selected_entity,
                                         new_script.clone(),
                                     ) {
-                                        Ok(_) => false,
+                                        Ok(_) => {
+                                        }
                                         Err(e) => {
                                             fatal!(
                                                 "Failed to attach script to entity {:?}: {}",
@@ -421,13 +429,15 @@ impl Scene for Editor {
                                             return;
                                         }
                                     }
-                                };
+                                }
 
-                                if let Err(e) = scripting::convert_entity_to_group(
-                                    &Arc::get_mut(&mut self.world).unwrap(),
-                                    selected_entity,
-                                ) {
-                                    log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                                {
+                                    if let Err(e) = scripting::convert_entity_to_group(
+                                        &mut self.world.lock(),
+                                        selected_entity,
+                                    ) {
+                                        log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                                    }
                                 }
 
                                 success!(
@@ -458,34 +468,41 @@ impl Scene for Editor {
                             path: script_path.clone(),
                         };
 
-                        let replaced = if let Ok(mut sc) =
-                            Arc::get_mut(&mut self.world)
-                                .unwrap()
-                                .get::<&mut ScriptComponent>(selected_entity)
-                        {
-                            sc.name = new_script.name.clone();
-                            sc.path = new_script.path.clone();
-                            true
-                        } else {
+                        let replaced = {
+                            let world = self.world.lock();
+                            if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
+                                sc.name = new_script.name.clone();
+                                sc.path = new_script.path.clone();
+                                true
+                            } else {
+                                false
+                            }
+                        };
+
+                        if !replaced {
+                            let mut world = self.world.lock();
                             match scripting::attach_script_to_entity(
-                                Arc::get_mut(&mut self.world).unwrap(),
+                                &mut world,
                                 selected_entity,
                                 new_script.clone(),
                             ) {
-                                Ok(_) => false,
+                                Ok(_) => {
+                                }
                                 Err(e) => {
                                     fatal!("Failed to attach new script: {}", e);
                                     self.signal = Signal::None;
                                     return;
                                 }
                             }
-                        };
+                        }
 
-                        if let Err(e) = scripting::convert_entity_to_group(
-                            &Arc::get_mut(&mut self.world).unwrap(),
-                            selected_entity,
-                        ) {
-                            log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                        {
+                            if let Err(e) = scripting::convert_entity_to_group(
+                                &mut self.world.lock(),
+                                selected_entity,
+                            ) {
+                                log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+                            }
                         }
 
                         success!(
@@ -503,14 +520,22 @@ impl Scene for Editor {
                 }
                 ScriptAction::RemoveScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        if let Ok(script) = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        let mut world = self.world.lock();
+                        let mut success = false;
+                        let mut comp = ScriptComponent::default();
+                        if let Ok(script) = world
                             .remove_one::<ScriptComponent>(selected_entity)
                         {
                             success!("Removed script from entity {:?}", selected_entity);
+                            success = true;
+                            comp = script.clone();
+                        } else {
+                            warn!("No script component found on entity {:?}", selected_entity);
+                        }
 
+                        if success {
                             if let Err(e) = scripting::convert_entity_to_group(
-                                &Arc::get_mut(&mut self.world).unwrap(),
+                                &mut *world,
                                 selected_entity,
                             ) {
                                 log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
@@ -520,11 +545,9 @@ impl Scene for Editor {
                                 &mut self.undo_stack,
                                 UndoableAction::RemoveComponent(
                                     selected_entity,
-                                    ComponentType::Script(script),
+                                    ComponentType::Script(comp),
                                 ),
                             );
-                        } else {
-                            warn!("No script component found on entity {:?}", selected_entity);
                         }
                     } else {
                         warn!("No entity selected to remove script from");
@@ -534,18 +557,22 @@ impl Scene for Editor {
                 }
                 ScriptAction::EditScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        if let Ok(mut q) = Arc::get_mut(&mut self.world)
-                            .unwrap()
-                            .query_one::<&ScriptComponent>(selected_entity)
-                        {
-                            if let Some(script) = q.get() {
-                                match open::that(script.path.clone()) {
-                                    Ok(()) => {
-                                        success!("Opened {}", script.name)
-                                    }
-                                    Err(e) => {
-                                        warn!("Error while opening {}: {}", script.name, e);
-                                    }
+                        let script_opt = {
+                            let world = self.world.lock();
+                            if let Ok(mut q) = world.query_one::<&ScriptComponent>(selected_entity) {
+                                q.get().cloned()
+                            } else {
+                                None
+                            }
+                        };
+
+                        if let Some(script) = script_opt {
+                            match open::that(script.path.clone()) {
+                                Ok(()) => {
+                                    success!("Opened {}", script.name)
+                                }
+                                Err(e) => {
+                                    warn!("Error while opening {}: {}", script.name, e);
                                 }
                             }
                         } else {
@@ -558,15 +585,14 @@ impl Scene for Editor {
                 }
             },
             Signal::Play => {
-                // Check if a player camera target exists
                 let has_player_camera_target = self
-                    .world
+                    .world.lock()
                     .query::<(&Camera, &CameraComponent, &CameraFollowTarget)>()
                     .iter()
                     .any(|(_, (_, comp, _))| matches!(comp.camera_type, CameraType::Player));
 
                 if has_player_camera_target {
-                    if let Err(e) = PlayModeBackup::create_backup(self) {
+                    if let Err(e) = self.create_backup() {
                         fatal!("Failed to create play mode backup: {}", e);
                         self.signal = Signal::None;
                         return;
@@ -577,12 +603,13 @@ impl Scene for Editor {
                     self.switch_to_player_camera();
 
                     let mut script_entities = Vec::new();
-                    for (entity_id, script) in Arc::get_mut(&mut self.world)
-                        .unwrap()
-                        .query::<&ScriptComponent>()
-                        .iter()
                     {
-                        script_entities.push((entity_id, script.clone()));
+                        for (entity_id, script) in self.world.lock()
+                            .query::<&ScriptComponent>()
+                            .iter()
+                        {
+                            script_entities.push((entity_id, script.clone()));
+                        }
                     }
 
                     for (entity_id, script) in script_entities {
@@ -618,7 +645,7 @@ impl Scene for Editor {
                                 if let Err(e) = self.script_manager.init_entity_script(
                                     entity_id,
                                     &script_name,
-                                    &mut self.world,
+                                    self.world.clone(),
                                     &self.input_state,
                                 ) {
                                     log::warn!(
@@ -649,7 +676,7 @@ impl Scene for Editor {
                 self.signal = Signal::None;
             }
             Signal::StopPlaying => {
-                if let Err(e) = PlayModeBackup::restore(self) {
+                if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);
                 }
@@ -670,9 +697,8 @@ impl Scene for Editor {
             }
             Signal::CameraAction(action) => match action {
                 CameraAction::SetPlayerTarget { entity, offset } => {
-                    // Find player camera and add/update CameraFollowTarget component
                     let player_camera = self
-                        .world
+                        .world.lock()
                         .query::<(&Camera, &CameraComponent)>()
                         .iter()
                         .find_map(|(e, (_, comp))| {
@@ -685,9 +711,7 @@ impl Scene for Editor {
 
                     if let Some(camera_entity) = player_camera {
                         let mut follow_target = (false, CameraFollowTarget::default());
-                        // Find the target entity label
-                        if let Ok(mut query) = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        if let Ok(mut query) = self.world.lock()
                             .query_one::<&AdoptedEntity>(*entity)
                         {
                             if let Some(adopted) = query.get() {
@@ -702,8 +726,7 @@ impl Scene for Editor {
                         }
 
                         if follow_target.0 {
-                            let _ = Arc::get_mut(&mut self.world)
-                                .unwrap()
+                            let _ = self.world.lock()
                                 .insert_one(camera_entity, follow_target);
                             info!("Set player camera target to entity {:?}", entity);
                         }
@@ -712,7 +735,7 @@ impl Scene for Editor {
                 }
                 CameraAction::ClearPlayerTarget => {
                     let player_camera = self
-                        .world
+                        .world.lock()
                         .query::<(&Camera, &CameraComponent)>()
                         .iter()
                         .find_map(|(e, (_, comp))| {
@@ -724,8 +747,7 @@ impl Scene for Editor {
                         });
 
                     if let Some(camera_entity) = player_camera {
-                        let _ = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        let _ = self.world.lock()
                             .remove_one::<CameraFollowTarget>(camera_entity);
                     }
                     info!("Cleared player camera target");
@@ -733,10 +755,10 @@ impl Scene for Editor {
                 }
             },
             Signal::AddComponent(entity, e_type) => {
+                let mut world = self.world.lock();
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(e) = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        if let Ok(e) = world
                             .query_one_mut::<&AdoptedEntity>(*entity)
                         {
                             let mut local_signal: Option<Signal> = None;
@@ -760,8 +782,7 @@ impl Scene for Editor {
                                             "Adding scripting component to entity [{}]",
                                             label
                                         );
-                                        if let Err(e) = Arc::get_mut(&mut self.world)
-                                            .unwrap()
+                                        if let Err(e) = world
                                             .insert_one(*entity, ScriptComponent::default())
                                         {
                                             warn!(
@@ -785,8 +806,7 @@ impl Scene for Editor {
                                             label
                                         );
 
-                                        let has_camera = self
-                                            .world
+                                        let has_camera = world
                                             .query_one::<(&Camera, &CameraComponent)>(*entity)
                                             .is_ok();
 
@@ -802,8 +822,7 @@ impl Scene for Editor {
                                             );
                                             let component = CameraComponent::new();
 
-                                            if let Err(e) = Arc::get_mut(&mut self.world)
-                                                .unwrap()
+                                            if let Err(e) = world
                                                 .insert(*entity, (camera, component))
                                             {
                                                 warn!(
@@ -830,8 +849,7 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Light => {
-                        if let Ok(light) = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        if let Ok(light) = world
                             .query_one_mut::<&Light>(*entity)
                         {
                             let mut show = true;
@@ -871,8 +889,7 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Camera => {
-                        if let Ok((cam, _comp)) = Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        if let Ok((cam, _comp)) = world
                             .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
                         {
                             let mut show = true;
@@ -885,7 +902,7 @@ impl Scene for Editor {
                                 .show(&graphics.shared.get_egui_context(), |ui| {
                                     egui_extras::install_image_loaders(ui.ctx());
                                     ui.add(Image::from_bytes(
-                                        "bytes://theres_nothing",
+                                        "bytes://theres_nothing.jpg",
                                         include_bytes!("../../../resources/theres_nothing.jpg"),
                                     ));
                                     ui.label("Theres nothing...");
@@ -908,10 +925,10 @@ impl Scene for Editor {
                     }
                 }
             }
-            Signal::RemoveComponent(entity, c_type) => match c_type {
+            Signal::RemoveComponent(entity, c_type) => 
+            {let mut world = self.world.lock(); match c_type {
                 ComponentType::Script(_) => {
-                    match Arc::get_mut(&mut self.world)
-                        .unwrap()
+                    match world
                         .remove_one::<ScriptComponent>(*entity)
                     {
                         Ok(component) => {
@@ -932,7 +949,7 @@ impl Scene for Editor {
                 }
                 ComponentType::Camera(_, _, follow) => {
                     if let Some(_) = follow {
-                        match Arc::get_mut(&mut self.world).unwrap().remove::<(
+                        match world.remove::<(
                             Camera,
                             CameraComponent,
                             CameraFollowTarget,
@@ -958,8 +975,7 @@ impl Scene for Editor {
                             }
                         };
                     } else {
-                        match Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        match world
                             .remove::<(Camera, CameraComponent)>(*entity)
                         {
                             Ok(component) => {
@@ -978,9 +994,8 @@ impl Scene for Editor {
                         };
                     }
                 }
-            },
+            }},
             Signal::CreateEntity => {
-                // self.show_add_entity_window = true;
                 let mut show = true;
                 egui::Window::new("Add Entity")
                     .scroll([false, true])
@@ -1023,13 +1038,17 @@ impl Scene for Editor {
             Signal::LogEntities => {
                 log::debug!("====================");
                 let mut counter = 0;
-                for entity in Arc::get_mut(&mut self.world).unwrap().iter() {
+                for entity in self.world.lock().iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
                         log::info!("Model: {:?}", entity.label());
                     }
 
                     if let Some(entity) = entity.get::<&Light>() {
                         log::info!("Light: {:?}", entity.label());
+                    }
+
+                    if let Some(_) = entity.get::<&Camera>() {
+                        log::info!("Camera");
                     }
                     counter += 1;
                 }
@@ -1049,8 +1068,7 @@ impl Scene for Editor {
                             Some("Light"),
                         )
                         .await;
-                        Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        self.world.lock()
                             .spawn((light, component, transform));
                         success!("Created new light");
                     }
@@ -1075,8 +1093,7 @@ impl Scene for Editor {
                         props
                             .custom_properties
                             .insert("tiles_z".to_string(), Value::Int(200));
-                        Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        self.world.lock()
                             .spawn((plane, transform, props));
                         success!("Created new plane");
                     }
@@ -1095,7 +1112,7 @@ impl Scene for Editor {
                                     // Some("Cube")
                                 )
                                 .await;
-                                Arc::get_mut(&mut self.world).unwrap().spawn((
+                                self.world.lock().spawn((
                                     cube,
                                     Transform::new(),
                                     ModelProperties::new(),
@@ -1110,8 +1127,7 @@ impl Scene for Editor {
                     crate::editor::PendingSpawn2::CreateCamera => {
                         let camera = Camera::predetermined(graphics.shared.clone(), None);
                         let component = CameraComponent::new();
-                        Arc::get_mut(&mut self.world)
-                            .unwrap()
+                        self.world.lock()
                             .spawn((camera, component));
                         success!("Created new camera");
                     }
@@ -1124,64 +1140,97 @@ impl Scene for Editor {
         self.size = current_size;
 
         let new_aspect = current_size.width as f64 / current_size.height as f64;
-        if let Some(active_camera) = self.active_camera {
-            if let Ok(mut query) = Arc::get_mut(&mut self.world)
-                .unwrap()
-                .query_one::<&mut Camera>(active_camera)
-            {
-                if let Some(camera) = query.get() {
-                    camera.aspect = new_aspect;
-                }
-            }
-        }
 
-        for (_entity_id, (camera, _component, follow_target)) in self
-            .world
-            .query::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
-            .iter()
         {
-            if let Some(target) = follow_target {
-                for (_target_entity_id, (adopted, transform)) in
-                    self.world.query::<(&AdoptedEntity, &Transform)>().iter()
-                {
-                    if adopted.label() == &target.follow_target {
-                        let target_pos = transform.position;
-                        camera.eye = target_pos + target.offset;
-                        camera.target = target_pos;
-                        break;
+            let active_cam = self.active_camera.lock();
+            if let Some(active_camera) = *active_cam {
+                let world = self.world.lock();
+                if let Ok(mut query) = world.query_one::<&mut Camera>(active_camera) {
+                    if let Some(camera) = query.get() {
+                        camera.aspect = new_aspect;
                     }
                 }
             }
         }
 
-        for (_entity_id, (camera, component)) in self
-            .world
-            .query::<(&mut Camera, &mut CameraComponent)>()
-            .iter()
+        // First, gather all camera follow target data
+        let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
+            let world = self.world.lock();
+            world
+                .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
+                .iter()
+                .filter_map(|(entity_id, (_, _, follow_target))| {
+                    follow_target.map(|target| {
+                        (
+                            entity_id,
+                            target.follow_target.clone(),
+                            target.offset.as_vec3() // 👈 Convert DVec3 to Vec3
+                        )
+                    })
+                })
+                .collect()
+        };
+
+        for (camera_entity, target_label, offset) in camera_follow_data {
+            let target_position = {
+                let world = self.world.lock();
+                world
+                    .query::<(&AdoptedEntity, &Transform)>()
+                    .iter()
+                    .find_map(|(_, (adopted, transform))| {
+                        if adopted.label() == &target_label {
+                            Some(transform.position)
+                        } else {
+                            None
+                        }
+                    })
+            };
+
+            if let Some(pos) = target_position {
+                let world = self.world.lock();
+                if let Ok(mut query) = world.query_one::<&mut Camera>(camera_entity) {
+                    if let Some(camera) = query.get() {
+                        camera.eye = pos + offset.as_dvec3();
+                        camera.target = pos;
+                    }
+                }
+            }
+        }
+
         {
-            component.update(camera);
-            camera.update(graphics.shared.clone());
+            let world = self.world.lock();
+            for (_entity_id, (camera, component)) in world
+                .query::<(&mut Camera, &mut CameraComponent)>()
+                .iter()
+            {
+                component.update(camera);
+                camera.update(graphics.shared.clone());
+            }
+        }
+        {
+            let mut world = self.world.lock();
+
+            let query = world
+                .query_mut::<(&mut AdoptedEntity, &Transform)>();
+            for (_, (entity, transform)) in query {
+                entity.update(graphics.shared.clone(), transform);
+            }
+
+            let light_query =
+                world
+                    .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
+            for (_, (light_component, transform, light)) in light_query {
+                light.update(light_component, transform);
+            }
         }
 
-        let query = Arc::get_mut(&mut self.world)
-            .unwrap()
-            .query_mut::<(&mut AdoptedEntity, &Transform)>();
-        for (_, (entity, transform)) in query {
-            entity.update(graphics.shared.clone(), transform);
+        {
+            let mut world = self.world.lock();
+            self.light_manager.update(
+                graphics.shared.clone(),
+                &mut world,
+            );
         }
-
-        let light_query =
-            Arc::get_mut(&mut self.world)
-                .unwrap()
-                .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
-        for (_, (light_component, transform, light)) in light_query {
-            light.update(light_component, transform);
-        }
-
-        self.light_manager.update(
-            graphics.shared.clone(),
-            &Arc::get_mut(&mut self.world).unwrap(),
-        );
 
         if self.dep_installer.is_installing {
             self.dep_installer
@@ -1207,11 +1256,12 @@ impl Scene for Editor {
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
-            if let Some(active_camera) = self.active_camera {
-                if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
+            if let Some(active_camera) = *self.active_camera.lock() {
+                let world = self.world.lock();
+                if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
                     if let Some(camera) = query.get() {
-                        let mut light_query = self.world.query::<(&Light, &LightComponent)>();
-                        let mut entity_query = self.world.query::<(&AdoptedEntity, &Transform)>();
+                        let mut light_query = world.query::<(&Light, &LightComponent)>();
+                        let mut entity_query = world.query::<(&AdoptedEntity, &Transform)>();
                         {
                             let mut render_pass = graphics.clear_colour(color);
 

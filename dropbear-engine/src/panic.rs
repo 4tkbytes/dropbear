@@ -47,7 +47,7 @@ pub fn set_hook() {
 
         log::error!(
             "Additional crash info (backtrace): \n{:#?}",
-            backtrace::Backtrace::new().frames()
+            backtrace::Backtrace::new()
         );
     }));
 }

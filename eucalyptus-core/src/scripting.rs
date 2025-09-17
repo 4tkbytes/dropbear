@@ -4,6 +4,7 @@ use boa_engine::property::PropertyKey;
 use boa_engine::{Context, JsString, JsValue, Source};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
+use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -27,7 +28,7 @@ pub enum ScriptAction {
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
     pub current_entity: Option<Entity>,
-    current_world: Option<Arc<World>>,
+    current_world: Option<Arc<Mutex<World>>>,
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
@@ -44,7 +45,7 @@ impl DropbearScriptingAPIContext {
         }
     }
 
-    pub fn set_context(&mut self, entity: Entity, world: Arc<World>, input: &InputState) {
+    pub fn set_context(&mut self, entity: Entity, world: Arc<Mutex<World>>, input: &InputState) {
         self.current_entity = Some(entity);
         self.current_world = Some(world);
         self.current_input = Some(input.clone());
@@ -119,14 +120,14 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: &mut Arc<World>,
+        world: Arc<Mutex<World>>,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
         if let Some(script_source) = self.compiled_scripts.get(script_name) {
             self.script_context
-                .set_context(entity_id, world.clone(), input_state);
+                .set_context(entity_id, world, input_state);
 
             let mut context = Context::default();
             self.expose(&mut context);
@@ -166,7 +167,7 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: &mut Arc<World>,
+        world: Arc<Mutex<World>>,
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {

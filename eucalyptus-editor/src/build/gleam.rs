@@ -15,6 +15,7 @@ pub const APP_INFO: AppInfo = AppInfo {
     author: "4tkbytes",
 };
 
+#[derive(Clone)]
 pub enum InstallStatus {
     NotStarted,
     InProgress {
@@ -32,7 +33,9 @@ pub struct GleamScriptCompiler {
     project_location: PathBuf,
 }
 
+#[allow(dead_code)]
 impl GleamScriptCompiler {
+    #[allow(dead_code)]
     pub fn new(project_location: &PathBuf) -> Self {
         GleamScriptCompiler {
             project_location: project_location.clone(),
@@ -54,6 +57,10 @@ impl GleamScriptCompiler {
     pub async fn ensure_dependencies(
         sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
+        if let Some(ref s) = sender {
+            let _ = s.send(InstallStatus::NotStarted);
+        }
+
         println!("Checking dependencies...");
 
         if let Some(ref s) = sender {

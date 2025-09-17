@@ -465,6 +465,7 @@ impl Light {
     }
 }
 
+#[derive(Clone)]
 pub struct LightManager {
     pub pipeline: Option<RenderPipeline>,
     light_array_buffer: Option<Buffer>,
@@ -516,6 +517,7 @@ impl LightManager {
         self.light_array_layout = Some(layout);
         self.light_array_buffer = Some(buffer);
         self.light_array_bind_group = Some(bind_group);
+        log::debug!("Created light array resources")
     }
 
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {

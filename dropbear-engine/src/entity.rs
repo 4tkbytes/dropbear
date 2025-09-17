@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc};
+use std::{path::{Path, PathBuf}, sync::Arc};
 use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
@@ -116,10 +116,11 @@ pub struct AdoptedEntity {
 impl AdoptedEntity {
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
-        path: &PathBuf,
+        path: impl AsRef<Path>,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
-        let model = Model::load(graphics.clone(), path, label.clone()).await?;
+        let path = path.as_ref().to_path_buf();
+        let model = Model::load(graphics.clone(), &path, label.clone()).await?;
         Ok(Self::adopt(graphics, model).await)
     }
 
