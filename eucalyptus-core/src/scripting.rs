@@ -4,7 +4,7 @@ use boa_engine::property::PropertyKey;
 use boa_engine::{Context, JsString, JsValue, Source};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ pub enum ScriptAction {
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
     pub current_entity: Option<Entity>,
-    current_world: Option<Arc<Mutex<World>>>,
+    current_world: Option<Arc<RwLock<World>>>,
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
@@ -45,7 +45,7 @@ impl DropbearScriptingAPIContext {
         }
     }
 
-    pub fn set_context(&mut self, entity: Entity, world: Arc<Mutex<World>>, input: &InputState) {
+    pub fn set_context(&mut self, entity: Entity, world: Arc<RwLock<World>>, input: &InputState) {
         self.current_entity = Some(entity);
         self.current_world = Some(world);
         self.current_input = Some(input.clone());
@@ -120,7 +120,7 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: Arc<Mutex<World>>,
+        world: Arc<RwLock<World>>,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
@@ -167,7 +167,7 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: Arc<Mutex<World>>,
+        world: Arc<RwLock<World>>,
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
@@ -300,14 +300,14 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 pub fn convert_entity_to_group(
-    world: &World,
+    world: Arc<RwLock<World>>,
     entity_id: hecs::Entity,
 ) -> anyhow::Result<EntityNode> {
-    if let Ok(mut query) = world.query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
+    if let Ok(mut query) = world.read().query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
         if let Some((adopted, _transform)) = query.get() {
             let entity_name = adopted.model().label.clone();
 
-            let script_node = if let Ok(script) = world.get::<&ScriptComponent>(entity_id) {
+            let script_node = if let Ok(script) = world.read().get::<&ScriptComponent>(entity_id) {
                 Some(EntityNode::Script {
                     name: script.name.clone(),
                     path: script.path.clone(),
@@ -339,12 +339,14 @@ pub fn convert_entity_to_group(
 }
 
 pub fn attach_script_to_entity(
-    world: &mut World,
+    world: Arc<RwLock<World>>,
     entity_id: hecs::Entity,
     script_component: ScriptComponent,
 ) -> anyhow::Result<()> {
-    if let Err(e) = world.insert_one(entity_id, script_component) {
-        return Err(anyhow::anyhow!("Failed to attach script to entity: {}", e));
+    {
+        if let Err(e) = world.write().insert_one(entity_id, script_component) {
+            return Err(anyhow::anyhow!("Failed to attach script to entity: {}", e));
+        }
     }
 
     log::info!("Successfully attached script to entity {:?}", entity_id);

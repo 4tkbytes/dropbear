@@ -67,6 +67,11 @@ impl Scene for Editor {
             log_once::debug_once!("Scene has fully loaded");
         }
 
+        if !self.is_world_loaded.rendering_loaded && self.is_world_loaded.is_fully_loaded() {
+            self.load_wgpu_nerdy_stuff(graphics);
+            return;
+        }
+
         if let Some((_, tab)) = self.dock_state.lock().find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
@@ -88,7 +93,7 @@ impl Scene for Editor {
             {
                 Ok(adopted) => {
                     let entity_id = {
-                        self.world.lock().spawn((
+                        self.world.write().spawn((
                             adopted,
                             spawn.transform,
                             spawn.properties,
@@ -121,7 +126,7 @@ impl Scene for Editor {
 
             let mut script_entities = Vec::new();
             {
-                for (entity_id, script) in self.world.lock()
+                for (entity_id, script) in self.world.read()
                     .query::<&mut ScriptComponent>()
                     .iter()
                 {
@@ -186,7 +191,7 @@ impl Scene for Editor {
 
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam {
-                let world = self.world.lock();
+                let world = self.world.read();
                 if let Ok(mut query) = world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
                 {
@@ -251,8 +256,7 @@ impl Scene for Editor {
                                 {
                                     Ok(adopted) => {
                                         let entity_id = {
-                                            let mut world = self.world.lock();
-                                            world.spawn((
+                                            self.world.write().spawn((
                                                 adopted,
                                                 scene_entity.transform,
                                                 ModelProperties::default(),
@@ -305,8 +309,7 @@ impl Scene for Editor {
                     let adopted = AdoptedEntity::adopt(graphics.shared.clone(), model).await;
                     
                     let entity_id = {
-                        let mut world = self.world.lock();
-                        world.spawn((
+                        self.world.write().spawn((
                             adopted,
                             scene_entity.transform,
                             ModelProperties::default(),
@@ -331,8 +334,7 @@ impl Scene for Editor {
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
                     {
-                        let mut world = self.world.lock();
-                        let is_viewport_cam = if let Ok(mut q) = world
+                        let is_viewport_cam = if let Ok(mut q) = self.world.read()
                             .query_one::<&CameraComponent>(*sel_e)
                         {
                             if let Some(c) = q.get() {
@@ -351,7 +353,7 @@ impl Scene for Editor {
                             warn!("You can't delete the viewport camera");
                             self.signal = Signal::None;
                         } else {
-                            match world.despawn(*sel_e) {
+                            match self.world.write().despawn(*sel_e) {
                                 Ok(_) => {
                                     info!("Decimated entity");
                                     self.signal = Signal::None;
@@ -367,9 +369,8 @@ impl Scene for Editor {
             }
             Signal::Undo => {
                 {
-                    let mut world = self.world.lock();
                     if let Some(action) = self.undo_stack.pop() {
-                        match action.undo(&mut *world) {
+                        match action.undo(self.world.clone()) {
                             Ok(_) => {
                                 info!("Undid action");
                             }
@@ -400,7 +401,7 @@ impl Scene for Editor {
                                 };
 
                                 let replaced = {
-                                    let world = self.world.lock();
+                                    let world = self.world.read();
                                     if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
                                         sc.name = new_script.name.clone();
                                         sc.path = new_script.path.clone();
@@ -411,9 +412,8 @@ impl Scene for Editor {
                                 };
 
                                 if !replaced {
-                                    let mut world = self.world.lock();
                                     match scripting::attach_script_to_entity(
-                                        &mut world,
+                                        self.world.clone(),
                                         selected_entity,
                                         new_script.clone(),
                                     ) {
@@ -433,7 +433,7 @@ impl Scene for Editor {
 
                                 {
                                     if let Err(e) = scripting::convert_entity_to_group(
-                                        &mut self.world.lock(),
+                                        self.world.clone(),
                                         selected_entity,
                                     ) {
                                         log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
@@ -469,7 +469,7 @@ impl Scene for Editor {
                         };
 
                         let replaced = {
-                            let world = self.world.lock();
+                            let world = self.world.read();
                             if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
                                 sc.name = new_script.name.clone();
                                 sc.path = new_script.path.clone();
@@ -480,9 +480,8 @@ impl Scene for Editor {
                         };
 
                         if !replaced {
-                            let mut world = self.world.lock();
                             match scripting::attach_script_to_entity(
-                                &mut world,
+                                self.world.clone(),
                                 selected_entity,
                                 new_script.clone(),
                             ) {
@@ -498,7 +497,7 @@ impl Scene for Editor {
 
                         {
                             if let Err(e) = scripting::convert_entity_to_group(
-                                &mut self.world.lock(),
+                                self.world.clone(),
                                 selected_entity,
                             ) {
                                 log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
@@ -520,22 +519,23 @@ impl Scene for Editor {
                 }
                 ScriptAction::RemoveScript => {
                     if let Some(selected_entity) = self.selected_entity {
-                        let mut world = self.world.lock();
                         let mut success = false;
                         let mut comp = ScriptComponent::default();
-                        if let Ok(script) = world
-                            .remove_one::<ScriptComponent>(selected_entity)
                         {
-                            success!("Removed script from entity {:?}", selected_entity);
-                            success = true;
-                            comp = script.clone();
-                        } else {
-                            warn!("No script component found on entity {:?}", selected_entity);
+                            if let Ok(script) = self.world.write()
+                                .remove_one::<ScriptComponent>(selected_entity)
+                            {
+                                success!("Removed script from entity {:?}", selected_entity);
+                                success = true;
+                                comp = script.clone();
+                            } else {
+                                warn!("No script component found on entity {:?}", selected_entity);
+                            }
                         }
 
                         if success {
                             if let Err(e) = scripting::convert_entity_to_group(
-                                &mut *world,
+                                self.world.clone(),
                                 selected_entity,
                             ) {
                                 log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
@@ -558,7 +558,7 @@ impl Scene for Editor {
                 ScriptAction::EditScript => {
                     if let Some(selected_entity) = self.selected_entity {
                         let script_opt = {
-                            let world = self.world.lock();
+                            let world = self.world.read();
                             if let Ok(mut q) = world.query_one::<&ScriptComponent>(selected_entity) {
                                 q.get().cloned()
                             } else {
@@ -586,7 +586,7 @@ impl Scene for Editor {
             },
             Signal::Play => {
                 let has_player_camera_target = self
-                    .world.lock()
+                    .world.read()
                     .query::<(&Camera, &CameraComponent, &CameraFollowTarget)>()
                     .iter()
                     .any(|(_, (_, comp, _))| matches!(comp.camera_type, CameraType::Player));
@@ -604,7 +604,7 @@ impl Scene for Editor {
 
                     let mut script_entities = Vec::new();
                     {
-                        for (entity_id, script) in self.world.lock()
+                        for (entity_id, script) in self.world.read()
                             .query::<&ScriptComponent>()
                             .iter()
                         {
@@ -698,7 +698,7 @@ impl Scene for Editor {
             Signal::CameraAction(action) => match action {
                 CameraAction::SetPlayerTarget { entity, offset } => {
                     let player_camera = self
-                        .world.lock()
+                        .world.read()
                         .query::<(&Camera, &CameraComponent)>()
                         .iter()
                         .find_map(|(e, (_, comp))| {
@@ -711,7 +711,7 @@ impl Scene for Editor {
 
                     if let Some(camera_entity) = player_camera {
                         let mut follow_target = (false, CameraFollowTarget::default());
-                        if let Ok(mut query) = self.world.lock()
+                        if let Ok(mut query) = self.world.read()
                             .query_one::<&AdoptedEntity>(*entity)
                         {
                             if let Some(adopted) = query.get() {
@@ -725,17 +725,19 @@ impl Scene for Editor {
                             }
                         }
 
-                        if follow_target.0 {
-                            let _ = self.world.lock()
-                                .insert_one(camera_entity, follow_target);
-                            info!("Set player camera target to entity {:?}", entity);
+                        {
+                            if follow_target.0 {
+                                let _ = self.world.write()
+                                    .insert_one(camera_entity, follow_target);
+                                info!("Set player camera target to entity {:?}", entity);
+                            }
                         }
                     }
                     self.signal = Signal::None;
                 }
                 CameraAction::ClearPlayerTarget => {
                     let player_camera = self
-                        .world.lock()
+                        .world.read()
                         .query::<(&Camera, &CameraComponent)>()
                         .iter()
                         .find_map(|(e, (_, comp))| {
@@ -747,18 +749,19 @@ impl Scene for Editor {
                         });
 
                     if let Some(camera_entity) = player_camera {
-                        let _ = self.world.lock()
-                            .remove_one::<CameraFollowTarget>(camera_entity);
+                        {
+                            let _ = self.world.write()
+                                .remove_one::<CameraFollowTarget>(camera_entity);
+                        }
                     }
                     info!("Cleared player camera target");
                     self.signal = Signal::None;
                 }
             },
             Signal::AddComponent(entity, e_type) => {
-                let mut world = self.world.lock();
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(e) = world
+                        if let Ok(e) = self.world.write()
                             .query_one_mut::<&AdoptedEntity>(*entity)
                         {
                             let mut local_signal: Option<Signal> = None;
@@ -782,15 +785,17 @@ impl Scene for Editor {
                                             "Adding scripting component to entity [{}]",
                                             label
                                         );
-                                        if let Err(e) = world
-                                            .insert_one(*entity, ScriptComponent::default())
                                         {
-                                            warn!(
+                                            if let Err(e) = self.world.write()
+                                                .insert_one(*entity, ScriptComponent::default())
+                                            {
+                                                warn!(
                                                 "Failed to add scripting component to entity: {}",
                                                 e
                                             );
-                                        } else {
-                                            success!("Added the scripting component");
+                                            } else {
+                                                success!("Added the scripting component");
+                                            }
                                         }
                                         local_signal = Some(Signal::None);
                                     }
@@ -806,7 +811,7 @@ impl Scene for Editor {
                                             label
                                         );
 
-                                        let has_camera = world
+                                        let has_camera = self.world.read()
                                             .query_one::<(&Camera, &CameraComponent)>(*entity)
                                             .is_ok();
 
@@ -822,15 +827,17 @@ impl Scene for Editor {
                                             );
                                             let component = CameraComponent::new();
 
-                                            if let Err(e) = world
-                                                .insert(*entity, (camera, component))
                                             {
-                                                warn!(
+                                                if let Err(e) = self.world.write()
+                                                    .insert(*entity, (camera, component))
+                                                {
+                                                    warn!(
                                                     "Failed to add camera component to entity: {}",
                                                     e
                                                 );
-                                            } else {
-                                                success!("Added the camera component");
+                                                } else {
+                                                    success!("Added the camera component");
+                                                }
                                             }
                                         }
                                         local_signal = Some(Signal::None);
@@ -849,86 +856,90 @@ impl Scene for Editor {
                         }
                     }
                     EntityType::Light => {
-                        if let Ok(light) = world
-                            .query_one_mut::<&Light>(*entity)
                         {
-                            let mut show = true;
-                            egui::Window::new(format!("Add component for {}", light.label))
-                                .scroll([false, true])
-                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                .enabled(true)
-                                .open(&mut show)
-                                .title_bar(true)
-                                .show(&graphics.shared.get_egui_context(), |ui| {
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width(), 30.0],
-                                            egui::Button::new("Scripting"),
-                                        )
-                                        .clicked()
-                                    {
-                                        log::debug!(
+                            if let Ok(light) = self.world.write()
+                                .query_one_mut::<&Light>(*entity)
+                            {
+                                let mut show = true;
+                                egui::Window::new(format!("Add component for {}", light.label))
+                                    .scroll([false, true])
+                                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                    .enabled(true)
+                                    .open(&mut show)
+                                    .title_bar(true)
+                                    .show(&graphics.shared.get_egui_context(), |ui| {
+                                        if ui
+                                            .add_sized(
+                                                [ui.available_width(), 30.0],
+                                                egui::Button::new("Scripting"),
+                                            )
+                                            .clicked()
+                                        {
+                                            log::debug!(
                                             "Adding scripting component to light [{}]",
                                             light.label
                                         );
 
-                                        success!(
+                                            success!(
                                             "Added the scripting component to light [{}]",
                                             light.label
                                         );
-                                        self.signal = Signal::None;
-                                    }
-                                });
-                            if !show {
-                                self.signal = Signal::None;
-                            }
-                        } else {
-                            log_once::warn_once!(
+                                            self.signal = Signal::None;
+                                        }
+                                    });
+                                if !show {
+                                    self.signal = Signal::None;
+                                }
+                            } else {
+                                log_once::warn_once!(
                                 "Failed to add component to light: no light component found"
                             );
+                            }
                         }
                     }
                     EntityType::Camera => {
-                        if let Ok((cam, _comp)) = world
-                            .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
                         {
-                            let mut show = true;
-                            egui::Window::new(format!("Add component for {}", cam.label))
-                                .scroll([false, true])
-                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                .enabled(true)
-                                .open(&mut show)
-                                .title_bar(true)
-                                .show(&graphics.shared.get_egui_context(), |ui| {
-                                    egui_extras::install_image_loaders(ui.ctx());
-                                    ui.add(Image::from_bytes(
-                                        "bytes://theres_nothing.jpg",
-                                        include_bytes!("../../../resources/theres_nothing.jpg"),
-                                    ));
-                                    ui.label("Theres nothing...");
-                                    // // scripting
-                                    // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
-                                    //     log::debug!("Adding scripting component to camera [{}]", cam.label);
+                            if let Ok((cam, _comp)) = self.world.write()
+                                .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
+                            {
+                                let mut show = true;
+                                egui::Window::new(format!("Add component for {}", cam.label))
+                                    .scroll([false, true])
+                                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                    .enabled(true)
+                                    .open(&mut show)
+                                    .title_bar(true)
+                                    .show(&graphics.shared.get_egui_context(), |ui| {
+                                        egui_extras::install_image_loaders(ui.ctx());
+                                        ui.add(Image::from_bytes(
+                                            "bytes://theres_nothing.jpg",
+                                            include_bytes!("../../../resources/theres_nothing.jpg"),
+                                        ));
+                                        ui.label("Theres nothing...");
+                                        // // scripting
+                                        // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                        //     log::debug!("Adding scripting component to camera [{}]", cam.label);
 
-                                    //     success!("Added the scripting component to camera [{}]", cam.label);
-                                    //     self.signal = Signal::None;
-                                    // }
-                                });
-                            if !show {
-                                self.signal = Signal::None;
-                            }
-                        } else {
-                            log_once::warn_once!(
+                                        //     success!("Added the scripting component to camera [{}]", cam.label);
+                                        //     self.signal = Signal::None;
+                                        // }
+                                    });
+                                if !show {
+                                    self.signal = Signal::None;
+                                }
+                            } else {
+                                log_once::warn_once!(
                                 "Failed to add component to light: no light component found"
                             );
+                            }
                         }
                     }
                 }
             }
             Signal::RemoveComponent(entity, c_type) => 
-            {let mut world = self.world.lock(); match c_type {
+            {match c_type {
                 ComponentType::Script(_) => {
-                    match world
+                    match self.world.write()
                         .remove_one::<ScriptComponent>(*entity)
                     {
                         Ok(component) => {
@@ -949,7 +960,7 @@ impl Scene for Editor {
                 }
                 ComponentType::Camera(_, _, follow) => {
                     if let Some(_) = follow {
-                        match world.remove::<(
+                        match self.world.write().remove::<(
                             Camera,
                             CameraComponent,
                             CameraFollowTarget,
@@ -975,7 +986,7 @@ impl Scene for Editor {
                             }
                         };
                     } else {
-                        match world
+                        match self.world.write()
                             .remove::<(Camera, CameraComponent)>(*entity)
                         {
                             Ok(component) => {
@@ -1038,7 +1049,7 @@ impl Scene for Editor {
             Signal::LogEntities => {
                 log::debug!("====================");
                 let mut counter = 0;
-                for entity in self.world.lock().iter() {
+                for entity in self.world.read().iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
                         log::info!("Model: {:?}", entity.label());
                     }
@@ -1068,8 +1079,10 @@ impl Scene for Editor {
                             Some("Light"),
                         )
                         .await;
-                        self.world.lock()
-                            .spawn((light, component, transform));
+                        {
+                            self.world.write()
+                                .spawn((light, component, transform));
+                        }
                         success!("Created new light");
                     }
                     crate::editor::PendingSpawn2::CreatePlane => {
@@ -1093,8 +1106,10 @@ impl Scene for Editor {
                         props
                             .custom_properties
                             .insert("tiles_z".to_string(), Value::Int(200));
-                        self.world.lock()
-                            .spawn((plane, transform, props));
+                        {
+                            self.world.write()
+                                .spawn((plane, transform, props));
+                        }
                         success!("Created new plane");
                     }
                     crate::editor::PendingSpawn2::CreateCube => {
@@ -1112,11 +1127,13 @@ impl Scene for Editor {
                                     // Some("Cube")
                                 )
                                 .await;
-                                self.world.lock().spawn((
-                                    cube,
-                                    Transform::new(),
-                                    ModelProperties::new(),
-                                ));
+                                {
+                                    self.world.write().spawn((
+                                        cube,
+                                        Transform::new(),
+                                        ModelProperties::new(),
+                                    ));
+                                }
                             }
                             Err(e) => {
                                 fatal!("Failed to load cube model: {}", e);
@@ -1127,8 +1144,10 @@ impl Scene for Editor {
                     crate::editor::PendingSpawn2::CreateCamera => {
                         let camera = Camera::predetermined(graphics.shared.clone(), None);
                         let component = CameraComponent::new();
-                        self.world.lock()
-                            .spawn((camera, component));
+                        {
+                            self.world.write()
+                                .spawn((camera, component));
+                        }
                         success!("Created new camera");
                     }
                 }
@@ -1144,7 +1163,7 @@ impl Scene for Editor {
         {
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam {
-                let world = self.world.lock();
+                let world = self.world.read();
                 if let Ok(mut query) = world.query_one::<&mut Camera>(active_camera) {
                     if let Some(camera) = query.get() {
                         camera.aspect = new_aspect;
@@ -1155,7 +1174,7 @@ impl Scene for Editor {
 
         // First, gather all camera follow target data
         let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
-            let world = self.world.lock();
+            let world = self.world.read();
             world
                 .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
                 .iter()
@@ -1173,7 +1192,7 @@ impl Scene for Editor {
 
         for (camera_entity, target_label, offset) in camera_follow_data {
             let target_position = {
-                let world = self.world.lock();
+                let world = self.world.read();
                 world
                     .query::<(&AdoptedEntity, &Transform)>()
                     .iter()
@@ -1187,7 +1206,7 @@ impl Scene for Editor {
             };
 
             if let Some(pos) = target_position {
-                let world = self.world.lock();
+                let world = self.world.read();
                 if let Ok(mut query) = world.query_one::<&mut Camera>(camera_entity) {
                     if let Some(camera) = query.get() {
                         camera.eye = pos + offset.as_dvec3();
@@ -1198,7 +1217,7 @@ impl Scene for Editor {
         }
 
         {
-            let world = self.world.lock();
+            let world = self.world.read();
             for (_entity_id, (camera, component)) in world
                 .query::<(&mut Camera, &mut CameraComponent)>()
                 .iter()
@@ -1208,24 +1227,28 @@ impl Scene for Editor {
             }
         }
         {
-            let mut world = self.world.lock();
-
-            let query = world
-                .query_mut::<(&mut AdoptedEntity, &Transform)>();
-            for (_, (entity, transform)) in query {
-                entity.update(graphics.shared.clone(), transform);
+            {
+                let mut world = self.world.write();
+                let query = world
+                    .query_mut::<(&mut AdoptedEntity, &Transform)>();
+                for (_, (entity, transform)) in query {
+                    entity.update(graphics.shared.clone(), transform);
+                }
             }
 
-            let light_query =
-                world
-                    .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
-            for (_, (light_component, transform, light)) in light_query {
-                light.update(light_component, transform);
+            {
+                let mut world = self.world.write();
+                let light_query =
+                    world
+                        .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
+                for (_, (light_component, transform, light)) in light_query {
+                    light.update(light_component, transform);
+                }
             }
         }
 
         {
-            let mut world = self.world.lock();
+            let mut world = self.world.read();
             self.light_manager.update(
                 graphics.shared.clone(),
                 &mut world,
@@ -1257,7 +1280,7 @@ impl Scene for Editor {
         logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(active_camera) = *self.active_camera.lock() {
-                let world = self.world.lock();
+                let world = self.world.read();
                 if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
                     if let Some(camera) = query.get() {
                         let mut light_query = world.query::<(&Light, &LightComponent)>();
@@ -1316,9 +1339,17 @@ impl Scene for Editor {
                                 );
                             }
                         }
+                    } else {
+                        log::error!("Unable to complete query, result returned Error");
                     }
+                } else {
+                    log::error!("Unable to query world for active camera");
                 }
+            } else {
+                log::error!("No active camera found");
             }
+        } else {
+            log::error!("No render pipeline exists");
         }
     }
 

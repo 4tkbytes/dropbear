@@ -37,15 +37,16 @@ use eucalyptus_core::utils::ViewportMode;
 use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::World;
 use log;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
+use dropbear_engine::graphics::{RenderContext, Shader};
 
 pub struct Editor {
     scene_command: SceneCommand,
-    world: Arc<Mutex<World>>,
+    world: Arc<RwLock<World>>,
     dock_state: Arc<Mutex<DockState<EditorTab>>>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -133,7 +134,7 @@ impl Editor {
             is_viewport_focused: false,
             // is_cursor_locked: false,
             window: None,
-            world: Arc::new(Mutex::new(World::new())),
+            world: Arc::new(RwLock::new(World::new())),
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),
@@ -189,7 +190,7 @@ impl Editor {
         scene.cameras.clear();
 
         for (id, (adopted, transform, properties, script)) in self
-            .world.lock()
+            .world.read()
             .query::<(
                 &AdoptedEntity,
                 Option<&Transform>,
@@ -214,7 +215,7 @@ impl Editor {
         }
 
         for (id, (light_component, transform, light)) in self
-            .world.lock()
+            .world.read()
             .query::<(
                 &dropbear_engine::lighting::LightComponent,
                 &Transform,
@@ -235,7 +236,7 @@ impl Editor {
         }
 
         for (_id, (camera, component, follow_target)) in self
-            .world.lock()
+            .world.read()
             .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
             .iter()
         {
@@ -304,6 +305,7 @@ impl Editor {
                         log::debug!("Received WorldLoadingStatus::Completed - project loading finished");
                         self.is_world_loaded.mark_project_loaded();
                         self.progress_tx = None;
+                        println!("Returning back");
                         return;
                     }
                     WorldLoadingStatus::Idle => {
@@ -340,7 +342,7 @@ impl Editor {
         // &mut self,
         graphics: Arc<SharedGraphicsContext>,
         sender: Option<UnboundedSender<WorldLoadingStatus>>,
-        world: Arc<Mutex<World>>,
+        world: Arc<RwLock<World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
         dock_state: Arc<Mutex<DockState<EditorTab>>>,
@@ -376,7 +378,7 @@ impl Editor {
                     first_scene.cameras.len(),
                 );
             } else {
-                let existing_debug_camera = world.lock()
+                let existing_debug_camera = world.read()
                     .query::<(&Camera, &CameraComponent)>()
                     .iter()
                     .find_map(|(entity, (_, component))| {
@@ -397,10 +399,12 @@ impl Editor {
                     let debug_camera = Camera::predetermined(graphics, Some("Debug Camera"));
                     let component = DebugCamera::new();
 
-                    let e = world.lock()
-                        .spawn((debug_camera, component));
-                    let mut a_c = active_camera.lock();
-                    *a_c = Some(e).into();
+                    {
+                        let e = world.write()
+                            .spawn((debug_camera, component));
+                        let mut a_c = active_camera.lock();
+                        *a_c = Some(e).into();
+                    }
                 }
             }
         }
@@ -474,7 +478,7 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let world = self.world.lock();
+                            let world = self.world.read();
                             let query = world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
@@ -551,7 +555,7 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        nodes: EntityNode::from_world(&self.world.clone().lock()),
+                        nodes: EntityNode::from_world(&self.world.clone().read()),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         world: &mut self.world,
@@ -589,30 +593,33 @@ impl Editor {
             for (entity_id, original_transform, original_properties, original_script) in
                 &backup.entities
             {
-                if let Ok(mut transform) = self.world.lock().get::<&mut Transform>(*entity_id) {
+                if let Ok(mut transform) = self.world.read().get::<&mut Transform>(*entity_id) {
                     *transform = *original_transform;
                 }
 
-                if let Ok(mut properties) = self.world.lock().get::<&mut ModelProperties>(*entity_id) {
+                if let Ok(mut properties) = self.world.read().get::<&mut ModelProperties>(*entity_id) {
                     *properties = original_properties.clone();
                 }
 
-                let has_script = self.world.lock().get::<&ScriptComponent>(*entity_id).is_ok();
-                let mut world = self.world.lock();
+                let has_script = self.world.read().get::<&ScriptComponent>(*entity_id).is_ok();
                 match (has_script, original_script) {
                     (true, Some(original)) => {
-                        if let Ok(mut script) = self.world.lock().get::<&mut ScriptComponent>(*entity_id)
+                        if let Ok(mut script) = self.world.read().get::<&mut ScriptComponent>(*entity_id)
                         {
                             *script = original.clone();
                         }
                     }
                     (true, None) => {
-                        let _ = world
-                            .remove_one::<ScriptComponent>(*entity_id);
+                        {
+                            let _ = self.world.write()
+                                .remove_one::<ScriptComponent>(*entity_id);
+                        }
                     }
                     (false, Some(original)) => {
-                        let _ = world
-                            .insert_one(*entity_id, original.clone());
+                        {
+                            let _ = self.world.write()
+                                .insert_one(*entity_id, original.clone());
+                        }
                     }
                     (false, None) => {
                     }
@@ -622,31 +629,34 @@ impl Editor {
             for (entity_id, original_camera, original_component, original_follow_target) in
                 &backup.camera_data
             {
-                if let Ok(mut camera) = self.world.lock().get::<&mut Camera>(*entity_id) {
+                if let Ok(mut camera) = self.world.read().get::<&mut Camera>(*entity_id) {
                     *camera = original_camera.clone();
                 }
 
-                if let Ok(mut component) = self.world.lock().get::<&mut CameraComponent>(*entity_id) {
+                if let Ok(mut component) = self.world.read().get::<&mut CameraComponent>(*entity_id) {
                     *component = original_component.clone();
                 }
 
-                let has_follow_target = self.world.lock().get::<&CameraFollowTarget>(*entity_id).is_ok();
-                let mut world = self.world.lock();
+                let has_follow_target = self.world.read().get::<&CameraFollowTarget>(*entity_id).is_ok();
                 match (has_follow_target, original_follow_target) {
                     (true, Some(original)) => {
                         if let Ok(mut follow_target) =
-                            self.world.lock().get::<&mut CameraFollowTarget>(*entity_id)
+                            self.world.read().get::<&mut CameraFollowTarget>(*entity_id)
                         {
                             *follow_target = original.clone();
                         }
                     }
                     (true, None) => {
-                        let _ = world
-                            .remove_one::<CameraFollowTarget>(*entity_id);
+                        {
+                            let _ = self.world.write()
+                                .remove_one::<CameraFollowTarget>(*entity_id);
+                        }
                     }
                     (false, Some(original)) => {
-                        let _ = world
-                            .insert_one(*entity_id, original.clone());
+                        {
+                            let _ = self.world.write()
+                                .insert_one(*entity_id, original.clone());
+                        }
                     }
                     (false, None) => {
                         // No change needed
@@ -667,12 +677,12 @@ impl Editor {
         let mut entities = Vec::new();
 
         for (entity_id, (_, transform, properties)) in self
-            .world.lock()
+            .world.read()
             .query::<(&AdoptedEntity, &Transform, &ModelProperties)>()
             .iter()
         {
             let script = self
-                .world.lock()
+                .world.read()
                 .query_one::<&ScriptComponent>(entity_id)
                 .ok()
                 .and_then(|mut s| s.get().map(|script| script.clone()));
@@ -682,7 +692,7 @@ impl Editor {
         let mut camera_data = Vec::new();
 
         for (entity_id, (camera, component, follow_target)) in self
-            .world.lock()
+            .world.read()
             .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
             .iter()
         {
@@ -709,7 +719,7 @@ impl Editor {
 
     pub fn switch_to_debug_camera(&mut self) {
         let debug_camera = self
-            .world.lock()
+            .world.read()
             .query::<(&Camera, &CameraComponent)>()
             .iter()
             .find_map(|(e, (_cam, comp))| {
@@ -731,7 +741,7 @@ impl Editor {
 
     pub fn switch_to_player_camera(&mut self) {
         let player_camera = self
-            .world.lock()
+            .world.read()
             .query::<(&Camera, &CameraComponent)>()
             .iter()
             .find_map(|(e, (_cam, comp))| {
@@ -755,7 +765,7 @@ impl Editor {
         let active_camera = self.active_camera.lock();
         if let Some(active_camera_entity) = *active_camera {
             if let Ok(mut query) = self
-                .world.lock()
+                .world.read()
                 .query_one::<&CameraComponent>(active_camera_entity)
             {
                 if let Some(component) = query.get() {
@@ -764,6 +774,61 @@ impl Editor {
             }
         }
         false
+    }
+
+    /// To be ran AFTER [`Editor::load_project_config`]
+    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: &mut RenderContext<'a>) {
+        let shader = Shader::new(
+            graphics.shared.clone(),
+            include_str!("../../../resources/shaders/shader.wgsl"),
+            Some("viewport_shader"),
+        );
+
+        self.light_manager.create_light_array_resources(graphics.shared.clone());
+
+        if let Some(active_camera) = *self.active_camera.lock() {
+            if let Ok(mut q) = self
+                .world.read()
+                .query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(
+                    active_camera,
+                )
+            {
+                if let Some((camera, _component, _follow_target)) = q.get() {
+                    let pipeline = graphics.create_render_pipline(
+                        &shader,
+                        vec![
+                            &graphics.shared.texture_bind_layout.clone(),
+                            camera.layout(),
+                            self.light_manager.layout(),
+                        ],
+                        None,
+                    );
+                    self.render_pipeline = Some(pipeline);
+
+                    self.light_manager.create_render_pipeline(
+                        graphics.shared.clone(),
+                        include_str!("../../../resources/shaders/light.wgsl"),
+                        camera,
+                        Some("Light Pipeline"),
+                    );
+                } else {
+                    log_once::warn_once!(
+                        "Unable to fetch the query result of camera: {:?}",
+                        active_camera
+                    )
+                }
+            } else {
+                log_once::warn_once!(
+                    "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
+                    active_camera
+                );
+            }
+        } else {
+            log_once::warn_once!("No active camera found");
+        }
+
+        self.window = Some(graphics.shared.window.clone());
+        self.is_world_loaded.mark_rendering_loaded();
     }
 }
 
@@ -881,105 +946,117 @@ impl UndoableAction {
         // log::debug!("Undo Stack contents: {:#?}", undo_stack);
     }
 
-    pub fn undo(&self, world: &mut hecs::World) -> anyhow::Result<()> {
+    pub fn undo(&self, world: Arc<RwLock<World>>) -> anyhow::Result<()> {
         match self {
             UndoableAction::Transform(entity, transform) => {
-                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
-                    if let Some(e_t) = q.get() {
-                        *e_t = *transform;
-                        log::debug!("Reverted transform");
-                        Ok(())
+                {
+                    if let Ok(mut q) = world.write().query_one::<&mut Transform>(*entity) {
+                        if let Some(e_t) = q.get() {
+                            *e_t = *transform;
+                            log::debug!("Reverted transform");
+                            Ok(())
+                        } else {
+                            Err(anyhow::anyhow!("Unable to query the entity"))
+                        }
                     } else {
-                        Err(anyhow::anyhow!("Unable to query the entity"))
+                        Err(anyhow::anyhow!("Could not find an entity to query"))
                     }
-                } else {
-                    Err(anyhow::anyhow!("Could not find an entity to query"))
                 }
             }
             UndoableAction::Spawn(entity) => {
-                if world.despawn(*entity).is_ok() {
-                    log::debug!("Undid spawn by despawning entity {:?}", entity);
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
+                {
+                    if world.write().despawn(*entity).is_ok() {
+                        log::debug!("Undid spawn by despawning entity {:?}", entity);
+                        Ok(())
+                    } else {
+                        Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
+                    }
                 }
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
                 EntityType::Entity => {
-                    if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            adopted.model_mut().label = original_label.clone();
-                            log::debug!(
+                    {
+                        if let Ok(mut q) = world.write().query_one::<&mut AdoptedEntity>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.model_mut().label = original_label.clone();
+                                log::debug!(
                                 "Reverted label for entity {:?} to '{}'",
                                 entity,
                                 original_label
                             );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!(
                                 "Unable to query the entity for label revert"
                             ))
-                        }
-                    } else {
-                        Err(anyhow::anyhow!(
+                            }
+                        } else {
+                            Err(anyhow::anyhow!(
                             "Could not find an entity to query for label revert"
                         ))
+                        }
                     }
                 }
                 EntityType::Light => {
-                    if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            adopted.label = original_label.clone();
-                            log::debug!(
+                    {
+                        if let Ok(mut q) = world.write().query_one::<&mut Light>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.label = original_label.clone();
+                                log::debug!(
                                 "Reverted label for light {:?} to '{}'",
                                 entity,
                                 original_label
                             );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!(
                                 "Unable to query the light for label revert"
                             ))
-                        }
-                    } else {
-                        Err(anyhow::anyhow!(
+                            }
+                        } else {
+                            Err(anyhow::anyhow!(
                             "Could not find a light to query for label revert"
                         ))
+                        }
                     }
                 }
                 EntityType::Camera => {
-                    if let Ok(mut q) = world.query_one::<&mut Camera>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            adopted.label = original_label.clone();
-                            log::debug!(
+                    {
+                        if let Ok(mut q) = world.write().query_one::<&mut Camera>(*entity) {
+                            if let Some(adopted) = q.get() {
+                                adopted.label = original_label.clone();
+                                log::debug!(
                                 "Reverted label for camera {:?} to '{}'",
                                 entity,
                                 original_label
                             );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!(
                                 "Unable to query the camera for label revert"
                             ))
-                        }
-                    } else {
-                        Err(anyhow::anyhow!(
+                            }
+                        } else {
+                            Err(anyhow::anyhow!(
                             "Could not find a camera to query for label revert"
                         ))
+                        }
                     }
                 }
             },
             UndoableAction::RemoveComponent(entity, c_type) => {
                 match c_type {
                     ComponentType::Script(component) => {
-                        world.insert_one(*entity, component.clone())?;
+                        { world.write().insert_one(*entity, component.clone())?; }
                     }
                     ComponentType::Camera(camera, component, follow) => {
                         if let Some(f) = follow {
-                            world
-                                .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
+                            {
+                                world.write()
+                                    .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
+                            }
                         } else {
-                            world.insert(*entity, (camera.clone(), component.clone()))?;
+                            { world.write().insert(*entity, (camera.clone(), component.clone()))?; }
                         }
                     }
                 }
@@ -988,35 +1065,43 @@ impl UndoableAction {
             UndoableAction::CameraAction(action) => {
                 match action {
                     UndoableCameraAction::Speed(entity, speed) => {
-                        if let Ok((cam, comp)) =
-                            world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
                         {
-                            comp.speed = *speed;
-                            comp.update(cam);
+                            if let Ok((cam, comp)) =
+                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            {
+                                comp.speed = *speed;
+                                comp.update(cam);
+                            }
                         }
                     }
                     UndoableCameraAction::Sensitivity(entity, sensitivity) => {
-                        if let Ok((cam, comp)) =
-                            world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
                         {
-                            comp.sensitivity = *sensitivity;
-                            comp.update(cam);
+                            if let Ok((cam, comp)) =
+                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            {
+                                comp.sensitivity = *sensitivity;
+                                comp.update(cam);
+                            }
                         }
                     }
                     UndoableCameraAction::FOV(entity, fov) => {
-                        if let Ok((cam, comp)) =
-                            world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
                         {
-                            comp.fov_y = *fov;
-                            comp.update(cam);
+                            if let Ok((cam, comp)) =
+                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            {
+                                comp.fov_y = *fov;
+                                comp.update(cam);
+                            }
                         }
                     }
                     UndoableCameraAction::Type(entity, camera_type) => {
-                        if let Ok((cam, comp)) =
-                            world.query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
                         {
-                            comp.camera_type = *camera_type;
-                            comp.update(cam);
+                            if let Ok((cam, comp)) =
+                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            {
+                                comp.camera_type = *camera_type;
+                                comp.update(cam);
+                            }
                         }
                     }
                 };
@@ -1087,6 +1172,8 @@ pub(crate) struct IsWorldLoadedYet {
     pub project_loaded: bool,
     /// Whether the scene rendering and UI setup is complete
     pub scene_loaded: bool,
+    /// Checks if the wgpu rendering contexts have been initialised for rendering
+    pub rendering_loaded: bool,
 }
 
 impl IsWorldLoadedYet {
@@ -1094,6 +1181,7 @@ impl IsWorldLoadedYet {
         Self {
             project_loaded: false,
             scene_loaded: false,
+            rendering_loaded: false,
         }
     }
 
@@ -1111,6 +1199,10 @@ impl IsWorldLoadedYet {
 
     pub fn mark_scene_loaded(&mut self) {
         self.scene_loaded = true;
+    }
+
+    pub fn mark_rendering_loaded(&mut self) {
+        self.rendering_loaded = true;
     }
 }
 
