@@ -101,7 +101,7 @@ impl Editor {
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
         // this shit doesnt work :(
-        // nvm it works (sorta)
+        // nvm it works
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
@@ -118,7 +118,7 @@ impl Editor {
                     }
                 }
                 panic!(
-                    "Fatal: {} deadlocks detected, unable to continue on normal process",
+                    "Fatal: {} deadlocks detected, unable to continue on normal process. To fix this yourself, use a debugger and check the main thread (thread 1) for the last parking_lot function",
                     deadlocks.len()
                 );
             }
@@ -412,7 +412,6 @@ impl Editor {
         if let Some(ref s) = sender.clone() {
             let _ = s.send(WorldLoadingStatus::Completed);
         }
-
         Ok(())
     }
 
@@ -558,7 +557,7 @@ impl Editor {
                         nodes: EntityNode::from_world(&self.world.clone().read()),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
-                        world: &mut self.world,
+                        world: self.world.clone(),
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,

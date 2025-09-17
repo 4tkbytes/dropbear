@@ -31,17 +31,19 @@ impl Scene for Editor {
     async fn load<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();
         self.progress_tx = Some(rx);
-        
+
         let graphics_shared = graphics.shared.clone();
         let world_clone = self.world.clone();
         let active_camera_clone = self.active_camera.clone();
         let project_path_clone = self.project_path.clone();
         let dock_state_clone = self.dock_state.clone();
-        
+
         tokio::task::spawn_blocking(move || {
             tokio::runtime::Handle::current().block_on(async {
-                if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), world_clone, active_camera_clone, project_path_clone, dock_state_clone).await {
-                    log::error!("Failed to load project config: {}", e);
+                {
+                    if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), world_clone, active_camera_clone, project_path_clone, dock_state_clone).await {
+                        log::error!("Failed to load project config: {}", e);
+                    }
                 }
             })
         });
@@ -307,7 +309,7 @@ impl Scene for Editor {
                         }
                     };
                     let adopted = AdoptedEntity::adopt(graphics.shared.clone(), model).await;
-                    
+
                     let entity_id = {
                         self.world.write().spawn((
                             adopted,
@@ -936,7 +938,7 @@ impl Scene for Editor {
                     }
                 }
             }
-            Signal::RemoveComponent(entity, c_type) => 
+            Signal::RemoveComponent(entity, c_type) =>
             {match c_type {
                 ComponentType::Script(_) => {
                     match self.world.write()
@@ -1280,76 +1282,95 @@ impl Scene for Editor {
         logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             if let Some(active_camera) = *self.active_camera.lock() {
-                let world = self.world.read();
-                if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
-                    if let Some(camera) = query.get() {
+                let cam = {
+                    let world = self.world.read();
+                    if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
+                        if let Some(camera) = query.get() {
+                            Some(camera.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(camera) = cam {
+                    let lights = {
+                        let world = self.world.read();
+                        let mut lights = Vec::new();
                         let mut light_query = world.query::<(&Light, &LightComponent)>();
+                        for (_, (light, comp)) in light_query.iter() {
+                            lights.push((light.clone(), comp.clone()));
+                        }
+                        lights
+                    };
+
+                    let entities = {
+                        let world = self.world.read();
+                        let mut entities = Vec::new();
                         let mut entity_query = world.query::<(&AdoptedEntity, &Transform)>();
-                        {
-                            let mut render_pass = graphics.clear_colour(color);
+                        for (_, (entity, transform)) in entity_query.iter() {
+                            entities.push((entity.clone(), transform.clone()));
+                        }
+                        entities
+                    };
 
-                            if let Some(light_pipeline) = &self.light_manager.pipeline {
-                                render_pass.set_pipeline(light_pipeline);
-                                for (_, (light, component)) in light_query.iter() {
-                                    if component.enabled {
-                                        render_pass.set_vertex_buffer(
-                                            1,
-                                            light.instance_buffer.as_ref().unwrap().slice(..),
-                                        );
-                                        render_pass.draw_light_model(
-                                            light.model(),
-                                            camera.bind_group(),
-                                            light.bind_group(),
-                                        );
-                                    }
-                                }
-                            }
-
-                            let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> =
-                                HashMap::new();
-
-                            for (_, (entity, _)) in entity_query.iter() {
-                                let model_ptr = entity.model() as *const Model;
-                                let instance_raw = entity.instance.to_raw();
-                                model_batches
-                                    .entry(model_ptr)
-                                    .or_insert(Vec::new())
-                                    .push(instance_raw);
-                            }
-
-                            render_pass.set_pipeline(pipeline);
-
-                            for (model_ptr, instances) in model_batches {
-                                let model = unsafe { &*model_ptr };
-
-                                let instance_buffer = graphics.shared.device.create_buffer_init(
-                                    &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Batched Instance Buffer"),
-                                        contents: bytemuck::cast_slice(&instances),
-                                        usage: wgpu::BufferUsages::VERTEX,
-                                    },
+                    {
+                        let mut render_pass = graphics.clear_colour(color);
+                        if let Some(light_pipeline) = &self.light_manager.pipeline {
+                            render_pass.set_pipeline(light_pipeline);
+                            for (light, _component) in &lights {
+                                render_pass.set_vertex_buffer(
+                                    1,
+                                    light.instance_buffer.as_ref().unwrap().slice(..),
                                 );
-
-                                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                                render_pass.draw_model_instanced(
-                                    model,
-                                    0..instances.len() as u32,
+                                render_pass.draw_light_model(
+                                    light.model(),
                                     camera.bind_group(),
-                                    self.light_manager.bind_group(),
+                                    light.bind_group(),
                                 );
                             }
                         }
-                    } else {
-                        log::error!("Unable to complete query, result returned Error");
+
+                        let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> =
+                            HashMap::new();
+                        for (entity, _) in &entities {
+                            let model_ptr = entity.model() as *const Model;
+                            let instance_raw = entity.instance.to_raw();
+                            model_batches
+                                .entry(model_ptr)
+                                .or_insert(Vec::new())
+                                .push(instance_raw);
+                        }
+
+                        render_pass.set_pipeline(pipeline);
+                        for (model_ptr, instances) in model_batches {
+                            let model = unsafe { &*model_ptr };
+                            let instance_buffer = graphics.shared.device.create_buffer_init(
+                                &wgpu::util::BufferInitDescriptor {
+                                    label: Some("Batched Instance Buffer"),
+                                    contents: bytemuck::cast_slice(&instances),
+                                    usage: wgpu::BufferUsages::VERTEX,
+                                },
+                            );
+                            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                            render_pass.draw_model_instanced(
+                                model,
+                                0..instances.len() as u32,
+                                camera.bind_group(),
+                                self.light_manager.bind_group(),
+                            );
+                        }
                     }
                 } else {
-                    log::error!("Unable to query world for active camera");
+                    log_once::error_once!("Camera returned None");
                 }
             } else {
-                log::error!("No active camera found");
+                log_once::error_once!("No active camera found");
             }
         } else {
-            log::error!("No render pipeline exists");
+            log_once::error_once!("No render pipeline exists");
         }
     }
 

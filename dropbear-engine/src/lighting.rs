@@ -298,6 +298,7 @@ impl LazyType for LazyLight {
     }
 }
 
+#[derive(Clone)]
 pub struct Light {
     pub uniform: LightUniform,
     cube_model: Model,

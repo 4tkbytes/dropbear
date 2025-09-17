@@ -1,4 +1,4 @@
-use crate::editor::component::Component;
+use crate::editor::component::InspectableComponent;
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::camera::Camera;
 use egui::{CollapsingHeader, Ui};
@@ -6,7 +6,7 @@ use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget,
 use hecs::Entity;
 use std::time::Instant;
 
-impl Component for Camera {
+impl InspectableComponent for Camera {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -81,7 +81,7 @@ pub enum UndoableCameraAction {
     Type(Entity, CameraType),
 }
 
-impl Component for CameraComponent {
+impl InspectableComponent for CameraComponent {
     fn inspect(
         &mut self,
         _entity: &mut Entity,
@@ -159,7 +159,7 @@ impl Component for CameraComponent {
     }
 }
 
-impl Component for CameraFollowTarget {
+impl InspectableComponent for CameraFollowTarget {
     fn inspect(
         &mut self,
         _entity: &mut Entity,

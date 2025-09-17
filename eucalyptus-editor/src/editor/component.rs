@@ -12,7 +12,7 @@ use glam::Vec3;
 use hecs::Entity;
 use std::time::Instant;
 
-pub trait Component {
+pub trait InspectableComponent {
     fn inspect(
         &mut self,
         entity: &mut hecs::Entity,
@@ -24,7 +24,7 @@ pub trait Component {
     );
 }
 
-impl Component for Transform {
+impl InspectableComponent for Transform {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -405,7 +405,7 @@ impl Component for Transform {
     }
 }
 
-impl Component for ScriptComponent {
+impl InspectableComponent for ScriptComponent {
     fn inspect(
         &mut self,
         _entity: &mut Entity,
@@ -506,7 +506,7 @@ impl Component for ScriptComponent {
     }
 }
 
-impl Component for AdoptedEntity {
+impl InspectableComponent for AdoptedEntity {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -552,7 +552,7 @@ impl Component for AdoptedEntity {
     }
 }
 
-impl Component for Light {
+impl InspectableComponent for Light {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -597,7 +597,7 @@ impl Component for Light {
     }
 }
 
-impl Component for LightComponent {
+impl InspectableComponent for LightComponent {
     fn inspect(
         &mut self,
         _entity: &mut Entity,

@@ -745,7 +745,7 @@ impl Texture {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Instance {
     pub position: DVec3,
     pub rotation: DQuat,

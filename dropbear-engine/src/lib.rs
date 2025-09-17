@@ -233,8 +233,7 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        Arc::get_mut(&mut self.egui_renderer)
-            .unwrap()
+        self.egui_renderer
             .lock()
             .renderer()
             .update_egui_texture_from_wgpu_texture(

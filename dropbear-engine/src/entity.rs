@@ -105,7 +105,7 @@ impl LazyType for LazyAdoptedEntity {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AdoptedEntity {
     pub model: Option<Model>,
     pub previous_matrix: DMat4,
