@@ -237,7 +237,7 @@ impl Keyboard for Editor {
 
 impl Mouse for Editor {
     #[cfg(target_os = "linux")]
-    // this impl doesn't have the mouse being recentered back to the center (to be fixed), this works as a usable alternative
+    // this impl doesn't have the mouse being recentered back to the center (to be fixed), this works as a usable alternative for now
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
         if (self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
             || (matches!(self.editor_state, EditorState::Playing)
@@ -285,7 +285,7 @@ impl Mouse for Editor {
                     let dx = position.x - center.x;
                     let dy = position.y - center.y;
 
-                    if let Some(active_camera) = self.active_camera {
+                    if let Some(active_camera) = *self.active_camera.lock() {
                         if let Ok(mut q) = self.world.read().query_one::<(
                             &mut Camera,
                             &CameraComponent,
@@ -295,7 +295,7 @@ impl Mouse for Editor {
                             if let Some((camera, _, _)) = q.get() {
                                 camera.track_mouse_delta(dx, dy);
                             }
-                        }
+                        } 
                     }
 
                     let _ = window.set_cursor_position(center);
