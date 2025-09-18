@@ -13,17 +13,21 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
 pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
 
 lazy_static! {
-    static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
-    static ref MEMORY_MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
+    pub static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ModelId(pub u64);
 
 #[derive(Clone)]
 pub struct Model {
+    pub id: ModelId,
     pub label: String,
     pub path: ResourceReference,
     pub meshes: Vec<Mesh>,
@@ -37,7 +41,7 @@ pub struct Material {
     pub bind_group: wgpu::BindGroup,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct Mesh {
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
@@ -69,8 +73,24 @@ pub struct ParsedMaterialData {
     pub dimensions: (u32, u32),
 }
 
+/// A type that is used to lazily load an object/struct.
+///
+/// It allows for separate threading loading.
 pub trait LazyType {
+    /// The data type of the lazy item
+    ///
+    /// For example, a [`LazyModel`] would have a [`Model`]
     type T;
+
+    /// A function used to load the wgpu graphics items.
+    ///
+    /// This can be ran after the initial thread loading is completed.
+    /// # Parameters
+    /// * [`Arc<SharedGraphicsContext>`] - The graphics context. It can be shared between threads
+    /// if required.
+    ///
+    /// # Returns
+    /// * [`Self::T`] - The data type of the item
     fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T>;
 }
 
@@ -87,8 +107,10 @@ impl LazyType for LazyModel {
     fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
         let start = Instant::now();
 
+        let mut hasher = DefaultHasher::new();
+
         let cache_key = self.parsed_data.label.clone();
-        if let Some(cached_model) = MEMORY_MODEL_CACHE.lock().get(&cache_key) {
+        if let Some(cached_model) = MODEL_CACHE.lock().get(&cache_key) {
             log::debug!("Model loaded from cache during poke: {:?}", cache_key);
             return Ok(cached_model.clone());
         }
@@ -125,6 +147,14 @@ impl LazyType for LazyModel {
 
         let mut meshes = Vec::new();
         for mesh_data in &self.parsed_data.mesh_data {
+
+            for v in &mesh_data.vertices {
+                let _ = v.position.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = v.tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = v.normal.iter().map(|v| (*v as i32).hash(&mut hasher));
+            }
+            mesh_data.indices.hash(&mut hasher);
+
             let buffer_start = Instant::now();
 
             let vertex_buffer =
@@ -167,9 +197,10 @@ impl LazyType for LazyModel {
             materials,
             label: self.parsed_data.label.clone(),
             path: self.parsed_data.path.clone(),
+            id: ModelId(hasher.finish()),
         };
 
-        MEMORY_MODEL_CACHE.lock().insert(cache_key, model.clone());
+        MODEL_CACHE.lock().insert(cache_key, model.clone());
         log::debug!(
             "Model GPU resource creation completed in {:?}",
             start.elapsed()
@@ -326,9 +357,11 @@ impl Model {
         label: Option<&str>,
     ) -> anyhow::Result<Model> {
         let start = Instant::now();
+        let mut hasher = DefaultHasher::new();
+
         let cache_key = label.unwrap_or("default").to_string();
 
-        if let Some(cached_model) = MEMORY_MODEL_CACHE.lock().get(&cache_key) {
+        if let Some(cached_model) = MODEL_CACHE.lock().get(&cache_key) {
             log::debug!("Model loaded from memory cache: {:?}", cache_key);
             return Ok(cached_model.clone());
         }
@@ -456,12 +489,18 @@ impl Model {
                         tex_coords: *tex,
                     })
                     .collect();
+                for v in &vertices {
+                    let _ = v.position.iter().map(|v| (*v as i32).hash(&mut hasher));
+                    let _ = v.normal.iter().map(|v| (*v as i32).hash(&mut hasher));
+                    let _ = v.tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));
+                }
 
                 let indices: Vec<u32> = reader
                     .read_indices()
                     .ok_or_else(|| anyhow::anyhow!("Mesh missing indices"))?
                     .into_u32()
                     .collect();
+                indices.hash(&mut hasher);
 
                 let vertex_buffer =
                     graphics
@@ -499,9 +538,10 @@ impl Model {
             materials,
             label: label.unwrap_or("No named model").to_string(),
             path: res_ref,
+            id: ModelId(hasher.finish()),
         };
 
-        MEMORY_MODEL_CACHE.lock().insert(cache_key, model.clone());
+        MODEL_CACHE.lock().insert(cache_key, model.clone());
         println!("==================== DONE ====================");
         log::debug!("Model cached from memory: {:?}", label);
         log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);

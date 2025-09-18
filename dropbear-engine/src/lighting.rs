@@ -232,13 +232,13 @@ impl LazyType for LazyLight {
             cutoff: f32::cos(self.light_component.cutoff_angle.to_radians()),
         };
 
-        let cube_model = if let Some(lazy_model) = self.cube_lazy_model {
+        let cube_model = Arc::new(if let Some(lazy_model) = self.cube_lazy_model {
             lazy_model.poke(graphics.clone())?
         } else {
             anyhow::bail!(
                 "The light cube LazyModel has not been initialised yet. Use Light::new(/** params */).preload_cube_model() to preload it (which is required)"
             );
-        };
+        });
 
         let buffer = graphics.create_uniform(uniform, self.label.as_deref());
 
@@ -301,7 +301,7 @@ impl LazyType for LazyLight {
 #[derive(Clone)]
 pub struct Light {
     pub uniform: LightUniform,
-    cube_model: Model,
+    pub cube_model: Arc<Model>,
     pub label: String,
     buffer: Option<Buffer>,
     layout: Option<BindGroupLayout>,
@@ -354,13 +354,13 @@ impl Light {
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
         };
 
-        let cube_model = Model::load_from_memory(
+        let cube_model = Arc::new(Model::load_from_memory(
             graphics.clone(),
             include_bytes!("../../resources/cube.glb").to_vec(),
             label.clone(),
         )
         .await
-        .unwrap();
+        .unwrap());
 
         let label_str = label.clone().unwrap_or("Light").to_string();
 

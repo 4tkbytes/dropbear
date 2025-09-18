@@ -1,6 +1,7 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
 use crate::entity::AdoptedEntity;
 use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::model::{Material, Mesh, Model, ModelVertex};
+use crate::model::{Material, Mesh, Model, ModelId, ModelVertex, MODEL_CACHE};
 use crate::utils::{ResourceReference, ResourceReferenceType};
 use futures::executor::block_on;
 use image::GenericImageView;
@@ -26,6 +27,8 @@ pub struct LazyPlaneBuilder {
 
 impl LazyPlaneBuilder {
     pub fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<AdoptedEntity> {
+        let mut hasher = DefaultHasher::new();
+
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -41,6 +44,11 @@ impl LazyPlaneBuilder {
                     x as f32 * self.tiles_x as f32,
                     z as f32 * self.tiles_z as f32,
                 ];
+
+                let _ = position.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = normal.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));
+
                 vertices.push(ModelVertex {
                     position,
                     tex_coords,
@@ -50,6 +58,7 @@ impl LazyPlaneBuilder {
         }
 
         indices.extend_from_slice(&[0, 2, 1, 1, 2, 3]);
+        indices.hash(&mut hasher);
 
         let vertex_buffer = graphics
             .device
@@ -92,6 +101,7 @@ impl LazyPlaneBuilder {
             path: ResourceReference::from_reference(ResourceReferenceType::Plane),
             meshes: vec![mesh],
             materials: vec![material],
+            id: ModelId(hasher.finish())
         };
 
         Ok(block_on(AdoptedEntity::adopt(graphics, model)))
@@ -159,6 +169,8 @@ impl PlaneBuilder {
         texture_bytes: &[u8],
         label: Option<&str>,
     ) -> anyhow::Result<AdoptedEntity> {
+        let label = if let Some(label) = label {label.to_string()} else {format!("{}*{}_tx{}xtz{}_plane", self.width, self.height, self.tiles_x, self.tiles_z)};
+        let mut hasher = DefaultHasher::new();
         if self.tiles_x == 0 && self.tiles_z == 0 {
             self.tiles_x = self.width as u32;
             self.tiles_z = self.height as u32;
@@ -178,6 +190,10 @@ impl PlaneBuilder {
                     x as f32 * self.tiles_x as f32,
                     z as f32 * self.tiles_z as f32,
                 ];
+                let _ = position.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = normal.iter().map(|v| (*v as i32).hash(&mut hasher));
+                let _ = tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));
+
                 vertices.push(ModelVertex {
                     position,
                     tex_coords,
@@ -187,11 +203,19 @@ impl PlaneBuilder {
         }
 
         indices.extend_from_slice(&[0, 2, 1, 1, 2, 3]);
+        indices.hash(&mut hasher);
+
+        let hash = hasher.finish();
+
+        let model = if let Some(cached_model) = MODEL_CACHE.lock().get(&label.clone()) {
+            log::debug!("Model loaded from cache: {:?}", label.clone());
+            Some(cached_model.clone())
+        } else {None};
 
         let vertex_buffer = graphics
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Vertex Buffer", label)),
+                label: Some(&format!("{:?} Vertex Buffer", label.clone())),
                 contents: bytemuck::cast_slice(&vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             });
@@ -220,12 +244,21 @@ impl PlaneBuilder {
             bind_group,
         };
 
-        let model = Model {
-            label: label.unwrap_or("Plane").to_string(),
-            path: ResourceReference::from_reference(ResourceReferenceType::Plane),
-            meshes: vec![mesh],
-            materials: vec![material],
+        let model = if model.is_none() {
+            let m = Model {
+                label: label.to_string(),
+                path: ResourceReference::from_reference(ResourceReferenceType::Plane),
+                meshes: vec![mesh],
+                materials: vec![material],
+                id: ModelId(hash)
+            };
+            MODEL_CACHE.lock().insert(label, m.clone());
+            m
+        } else {
+            // safe to do
+            model.unwrap()
         };
+
 
         Ok(AdoptedEntity::adopt(graphics, model).await)
     }

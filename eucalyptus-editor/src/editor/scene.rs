@@ -1,7 +1,7 @@
 
 use super::*;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
-use dropbear_engine::model::Model;
+use dropbear_engine::model::{Model, MODEL_CACHE};
 use dropbear_engine::starter::plane::PlaneBuilder;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
@@ -724,7 +724,7 @@ impl Scene for Editor {
                                 follow_target = (
                                     true,
                                     CameraFollowTarget {
-                                        follow_target: adopted.label().to_string(),
+                                        follow_target: adopted.model.label.to_string(),
                                         offset: *offset,
                                     },
                                 );
@@ -772,7 +772,7 @@ impl Scene for Editor {
                         {
                             if let Some(e) = q.get() {
                                 let mut local_signal: Option<Signal> = None;
-                                let label = e.label().clone();
+                                let label = e.model.label.clone();
                                 let mut show = true;
                                 egui::Window::new(format!("Add component for {}", label))
                                     .title_bar(true)
@@ -1063,11 +1063,13 @@ impl Scene for Editor {
                 let mut counter = 0;
                 for entity in self.world.read().iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
-                        log::info!("Model: {:?}", entity.label());
+                        log::info!("Model: {:?}", entity.model.label);
+                        log::info!("  |-> Using model: {:?}", entity.model.id);
                     }
 
                     if let Some(entity) = entity.get::<&Light>() {
-                        log::info!("Light: {:?}", entity.label());
+                        log::info!("Light: {:?}", entity.cube_model.label);
+                        log::info!("  |-> Using model: {:?}", entity.cube_model.id);
                     }
 
                     if let Some(_) = entity.get::<&Camera>() {
@@ -1210,7 +1212,7 @@ impl Scene for Editor {
                     .query::<(&AdoptedEntity, &Transform)>()
                     .iter()
                     .find_map(|(_, (adopted, transform))| {
-                        if adopted.label() == &target_label {
+                        if adopted.model.label == target_label {
                             Some(transform.position)
                         } else {
                             None
@@ -1298,6 +1300,7 @@ impl Scene for Editor {
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
+            log_once::debug_once!("Found render pipeline");
             if let Some(active_camera) = *self.active_camera.lock() {
                 let cam = {
                     let world = self.world.read();
@@ -1311,7 +1314,6 @@ impl Scene for Editor {
                         None
                     }
                 };
-                
 
                 if let Some(camera) = cam {
                     let lights = {
@@ -1323,18 +1325,18 @@ impl Scene for Editor {
                         }
                         lights
                     };
-                    
+
 
                     let entities = {
                         let world = self.world.read();
                         let mut entities = Vec::new();
-                        let mut entity_query = world.query::<(&AdoptedEntity, &Transform)>();
-                        for (_, (entity, transform)) in entity_query.iter() {
-                            entities.push((entity.clone(), transform.clone()));
+                        let mut entity_query = world.query::<&AdoptedEntity>();
+                        for (_, entity) in entity_query.iter() {
+                            entities.push(entity.clone());
                         }
                         entities
                     };
-                    
+
 
                     {
                         let mut render_pass = graphics.clear_colour(color);
@@ -1346,42 +1348,56 @@ impl Scene for Editor {
                                     light.instance_buffer.as_ref().unwrap().slice(..),
                                 );
                                 render_pass.draw_light_model(
-                                    light.model(),
+                                    &light.cube_model,
                                     camera.bind_group(),
                                     light.bind_group(),
                                 );
                             }
                         }
-                        
+                    }
 
-                        let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> =
-                            HashMap::new();
-                        for (entity, _) in &entities {
-                            let model_ptr = entity.model() as *const Model;
-                            let instance_raw = entity.instance.to_raw();
-                            model_batches
-                                .entry(model_ptr)
-                                .or_insert(Vec::new())
-                                .push(instance_raw);
-                        }
+                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> =
+                        HashMap::new();
+                    for entity in &entities {
+                        let model_ptr = entity.model.id;
+                        let instance_raw = entity.instance.to_raw();
+                        model_batches
+                            .entry(model_ptr)
+                            .or_insert(Vec::new())
+                            .push(instance_raw);
+                    }
 
-                        render_pass.set_pipeline(pipeline);
-                        for (model_ptr, instances) in model_batches {
-                            let model = unsafe { &*model_ptr };
-                            let instance_buffer = graphics.shared.device.create_buffer_init(
-                                &wgpu::util::BufferInitDescriptor {
-                                    label: Some("Batched Instance Buffer"),
-                                    contents: bytemuck::cast_slice(&instances),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                },
-                            );
-                            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                            render_pass.draw_model_instanced(
-                                model,
-                                0..instances.len() as u32,
-                                camera.bind_group(),
-                                self.light_manager.bind_group(),
-                            );
+                    for (model_ptr, instances) in model_batches {
+                        {
+                            let model_opt = {
+                                let cache = MODEL_CACHE.lock();
+                                cache.values().find(|m| m.id == model_ptr).cloned()
+                            };
+
+                            if let Some(model) = model_opt {
+                                {
+                                    let mut render_pass = graphics.continue_pass();
+                                    render_pass.set_pipeline(pipeline);
+
+                                    let instance_buffer = graphics.shared.device.create_buffer_init(
+                                        &wgpu::util::BufferInitDescriptor {
+                                            label: Some("Batched Instance Buffer"),
+                                            contents: bytemuck::cast_slice(&instances),
+                                            usage: wgpu::BufferUsages::VERTEX,
+                                        },
+                                    );
+                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                    render_pass.draw_model_instanced(
+                                        &model,
+                                        0..instances.len() as u32,
+                                        camera.bind_group(),
+                                        self.light_manager.bind_group(),
+                                    );
+                                }
+                                log_once::debug_once!("Rendered {:?}", model_ptr);
+                            } else {
+                                log_once::error_once!("No such MODEL as {:?}", model_ptr);
+                            }
                         }
                     }
                 } else {

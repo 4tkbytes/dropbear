@@ -712,14 +712,14 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             )>(*entity)
                             {
                                 if let Some((
-                                                e,
-                                                transform,
-                                                _props,
-                                                script,
-                                                camera,
-                                                camera_component,
-                                                follow_target,
-                                            )) = q.get() {
+                                    e,
+                                    transform,
+                                    _props,
+                                    script,
+                                    camera,
+                                    camera_component,
+                                    follow_target,
+                                )) = q.get() {
                                     e.inspect(
                                         entity,
                                         &mut cfg,
@@ -735,7 +735,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             ui,
                                             self.undo_stack,
                                             self.signal,
-                                            e.label_mut(),
+                                            &mut Arc::make_mut(&mut e.model).label,
                                         );
                                     }
 
@@ -772,7 +772,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     }
 
                                     // if let Some(props) = _props {
-                                    //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
+                                    //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
                                     // }
 
                                     if let Some(script) = script {
@@ -782,7 +782,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             ui,
                                             self.undo_stack,
                                             self.signal,
-                                            e.label_mut(),
+                                            &mut Arc::make_mut(&mut e.model).label,
                                         );
                                     }
 

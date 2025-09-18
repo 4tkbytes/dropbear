@@ -1,19 +1,15 @@
-use app_dirs2::{AppDataType, AppInfo, app_dir};
+use app_dirs2::{AppDataType, app_dir};
 use futures_util::StreamExt;
 use std::path::PathBuf;
 use std::process::Command;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::APP_INFO;
 
 const GLEAM_VERSION: &'static str = "1.12.0";
 const BUN_VERSION: &'static str = "1.2.22";
 const JAVY_VERSION: &'static str = "6.0.0";
-
-pub const APP_INFO: AppInfo = AppInfo {
-    name: "Eucalyptus",
-    author: "4tkbytes",
-};
 
 #[derive(Clone)]
 pub enum InstallStatus {
@@ -27,7 +23,7 @@ pub enum InstallStatus {
     Failed(String),
 }
 
-/// Compiles a gleam project into WASM through a pipeline.
+/// Compiles a gleam project into runnable JS using a pipeline
 pub struct GleamScriptCompiler {
     #[allow(dead_code)]
     project_location: PathBuf,

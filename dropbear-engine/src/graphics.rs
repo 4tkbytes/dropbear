@@ -213,6 +213,33 @@ impl<'a> RenderContext<'a> {
             })
             .forget_lifetime()
     }
+
+    pub fn continue_pass(&mut self) -> RenderPass<'static> {
+        self.frame
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.frame.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.frame.depth_texture.view,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            })
+            .forget_lifetime()
+    }
 }
 
 // A nice little struct that stored basic information about a WGPU shader.

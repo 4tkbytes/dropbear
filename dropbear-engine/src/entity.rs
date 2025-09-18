@@ -9,10 +9,17 @@ use crate::{
     model::{LazyModel, LazyType, Model},
 };
 
+/// A type that represents a position, rotation and scale of an entity
+///
+/// This type is the most primitive model, as it implements most traits.
+#[repr(C)]
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 pub struct Transform {
+    /// The position of the entity as [`DVec3`]
     pub position: DVec3,
+    /// The rotation of the entity as [`DQuat`]
     pub rotation: DQuat,
+    /// The scale of the entity as [`DVec3`]
     pub scale: DVec3,
 }
 
@@ -27,30 +34,42 @@ impl Default for Transform {
 }
 
 impl Transform {
+    /// Creates a new default instance of Transform
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn matrix(&self) -> DMat4 {
+    /// Returns the matrix of the model
+    pub(crate) fn matrix(&self) -> DMat4 {
         DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 
+    /// Rotates the model on its X axis by a certain angle
     pub fn rotate_x(&mut self, angle_rad: f64) {
         self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, angle_rad, 0.0, 0.0);
     }
 
+    /// Rotates the model on its Y axis by a certain value
     pub fn rotate_y(&mut self, angle_rad: f64) {
         self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, 0.0, angle_rad, 0.0);
     }
 
+    /// Rotates the model on its Z axis by a certain value
     pub fn rotate_z(&mut self, angle_rad: f64) {
         self.rotation *= DQuat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, angle_rad);
     }
 
+    /// Translates (moves) the model by a translation [`DVec3`].
+    ///
+    /// Doesn't replace the position value,
+    /// it adds the value.
     pub fn translate(&mut self, translation: DVec3) {
         self.position += translation;
     }
 
+    /// Scales the model by a scale value.
+    ///
+    /// Doesn't replace the scale value, just multiplies.
     pub fn scale(&mut self, scale: DVec3) {
         self.scale *= scale;
     }
@@ -105,12 +124,14 @@ impl LazyType for LazyAdoptedEntity {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AdoptedEntity {
-    pub model: Option<Model>,
+    pub model: Arc<Model>,
     pub previous_matrix: DMat4,
     pub instance: Instance,
     pub instance_buffer: Option<Buffer>,
+    pub dirty: bool,
+    last_frame_rendered: Option<u64>,
 }
 
 impl AdoptedEntity {
@@ -122,18 +143,6 @@ impl AdoptedEntity {
         let path = path.as_ref().to_path_buf();
         let model = Model::load(graphics.clone(), &path, label.clone()).await?;
         Ok(Self::adopt(graphics, model).await)
-    }
-
-    pub fn label(&self) -> &String {
-        &self.model().label
-    }
-
-    pub fn label_mut(&mut self) -> &mut String {
-        &mut self.model_mut().label
-    }
-
-    pub fn set_label(&mut self, label: &str) {
-        self.model_mut().label = label.to_string();
     }
 
     pub async fn adopt(graphics: Arc<SharedGraphicsContext>, model: Model) -> Self {
@@ -151,10 +160,12 @@ impl AdoptedEntity {
                 });
 
         Self {
-            model: Some(model),
+            model: Arc::new(model),
             instance,
             instance_buffer: Some(instance_buffer),
             previous_matrix: initial_matrix,
+            dirty: true,
+            last_frame_rendered: None,
         }
     }
 
@@ -172,12 +183,41 @@ impl AdoptedEntity {
         }
     }
 
-    pub fn model(&self) -> &Model {
-        self.model.as_ref().unwrap()
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
     }
 
-    pub fn model_mut(&mut self) -> &mut Model {
-        self.model.as_mut().unwrap()
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn flush_to_gpu(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        if self.dirty {
+            let instance_raw = self.instance.to_raw();
+            if let Some(buffer) = &self.instance_buffer {
+                graphics
+                    .queue
+                    .write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
+            }
+            self.dirty = false;
+        }
+    }
+
+    pub fn mark_rendered(&mut self, frame_number: u64) {
+        self.last_frame_rendered = Some(frame_number);
+    }
+
+    pub fn was_recently_rendered(&self, current_frame: u64, max_frames_ago: u64) -> bool {
+        if let Some(last_frame) = self.last_frame_rendered {
+            current_frame - last_frame <= max_frames_ago
+        } else {
+            false
+        }
+    }
+
+    pub fn get_instance_buffer(&mut self, graphics: Arc<SharedGraphicsContext>) -> Option<&Buffer> {
+        self.flush_to_gpu(graphics);
+        self.instance_buffer.as_ref()
     }
 }
 

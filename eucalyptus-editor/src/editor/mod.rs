@@ -43,6 +43,7 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 use dropbear_engine::graphics::{RenderContext, Shader};
+use dropbear_engine::model::{ModelId};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -211,8 +212,8 @@ impl Editor {
             let transform = transform.unwrap_or(&Transform::default()).clone();
 
             let scene_entity = SceneEntity {
-                model_path: adopted.model().path.clone(),
-                label: adopted.model().label.clone(),
+                model_path: adopted.model.path.clone(),
+                label: adopted.model.label.clone(),
                 transform,
                 properties: properties.clone(),
                 script: script.cloned(),
@@ -220,7 +221,7 @@ impl Editor {
             };
 
             scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", adopted.label());
+            log::debug!("Pushed entity: {}", adopted.model.label);
         }
 
         for (id, (light_component, transform, light)) in self
@@ -233,7 +234,7 @@ impl Editor {
             .iter()
         {
             let light_config = LightConfig {
-                label: light.label().to_string(),
+                label: light.cube_model.label.to_string(),
                 transform: *transform,
                 light_component: light_component.clone(),
                 enabled: light_component.enabled,
@@ -241,7 +242,7 @@ impl Editor {
             };
 
             scene.lights.push(light_config);
-            log::debug!("Pushed light into lights: {}", light.label());
+            log::debug!("Pushed light into lights: {}", light.cube_model.label);
         }
 
         for (_id, (camera, component, follow_target)) in self
@@ -311,7 +312,7 @@ impl Editor {
                             self.is_world_loaded.mark_project_loaded();
                             self.current_state = WorldLoadingStatus::Completed;
                             self.progress_tx = None;
-                            println!("Returning back");
+                            log::debug!("Returning back");
                             return;
                         }
                         WorldLoadingStatus::Idle => {
@@ -500,8 +501,8 @@ impl Editor {
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
                                     let s_entity = states::SceneEntity {
-                                        model_path: e.model().path.clone(),
-                                        label: e.model().label.clone(),
+                                        model_path: e.model.path.clone(),
+                                        label: e.model.label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
@@ -1004,7 +1005,7 @@ impl UndoableAction {
                     {
                         if let Ok(mut q) = world.write().query_one::<&mut AdoptedEntity>(*entity) {
                             if let Some(adopted) = q.get() {
-                                adopted.model_mut().label = original_label.clone();
+                                Arc::make_mut(&mut adopted.model).label = original_label.clone();
                                 log::debug!(
                                 "Reverted label for entity {:?} to '{}'",
                                 entity,

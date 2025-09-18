@@ -19,7 +19,7 @@ struct Light {
 }
 
 struct LightArray {
-    lights: array<Light, MAX_LIGHTS>,
+    _lights: array<Light, MAX_LIGHTS>,
     light_count: u32,
     ambient_strength: f32,
 }
@@ -181,12 +181,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var total_ambient = vec3<f32>(0.0);
     for (var i: u32 = 0u; i < light_array.light_count; i = i + 1u) {
-        let light = light_array.lights[i];
+        let light = light_array._lights[i];
         total_ambient += light.color.xyz * light_array.ambient_strength;
     }
 
     for (var i: u32 = 0u; i < light_array.light_count; i = i + 1u) {
-        let light = light_array.lights[i];
+        let light = light_array._lights[i];
 
         // light type is color.w
         if light.color.w == 0.0 {

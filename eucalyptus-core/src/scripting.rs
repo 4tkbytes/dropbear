@@ -305,7 +305,7 @@ pub fn convert_entity_to_group(
 ) -> anyhow::Result<EntityNode> {
     if let Ok(mut query) = world.read().query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
         if let Some((adopted, _transform)) = query.get() {
-            let entity_name = adopted.model().label.clone();
+            let entity_name = adopted.model.label.clone();
 
             let script_node = if let Ok(script) = world.read().get::<&ScriptComponent>(entity_id) {
                 Some(EntityNode::Script {

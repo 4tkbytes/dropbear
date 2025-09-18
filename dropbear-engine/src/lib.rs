@@ -510,7 +510,18 @@ impl App {
         }
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
-
+        log::info!("======================================================================");
+        log::info!("dropbear-engine v{} compiled with rustc {}", env!("CARGO_PKG_VERSION"),
+            rustc_version_runtime::version_meta().short_version_string);
+        log::info!("Made by tk with love at https://github.com/4tkbytes/dropbear <3");
+        log::info!("======================================================================");
+        log::info!("dropbear-engine running...");
+        let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
+        match ad {
+            Ok(path) => {log::info!("App data is stored at {}", path.display())},
+            Err(_) => {}
+        };
+        log::debug!("Additional nerdy stuff: {:#?}", rustc_version_runtime::version_meta());
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
         let mut app = Box::new(App::new(config));

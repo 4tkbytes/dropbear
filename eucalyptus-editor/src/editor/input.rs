@@ -120,8 +120,8 @@ impl Keyboard for Editor {
                         if let Ok(mut q) = query {
                             if let Some((e, t, props)) = q.get() {
                                 let s_entity = SceneEntity {
-                                    model_path: e.model().path.clone(),
-                                    label: e.model().label.clone(),
+                                    model_path: e.model.path.clone(),
+                                    label: e.model.label.clone(),
                                     transform: *t,
                                     properties: props.clone(),
                                     script: None,

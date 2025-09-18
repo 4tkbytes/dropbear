@@ -482,7 +482,7 @@ impl EntityNode {
             )>()
             .iter()
         {
-            let name = adopted.model().label.clone();
+            let name = adopted.model.label.clone();
 
             // grouped entity (entity and script)
             nodes.push(EntityNode::Group {
@@ -513,7 +513,7 @@ impl EntityNode {
             if handled.contains(&id) {
                 continue;
             }
-            let name = adopted.model().label.clone();
+            let name = adopted.model.label.clone();
 
             nodes.push(EntityNode::Entity { id, name });
         }
@@ -745,163 +745,160 @@ impl SceneConfig {
 
         log::info!("World cleared, now has {} entities", world.read().len());
 
-        for (_i, entity_config) in self.entities.iter().cloned().enumerate() {
+        let entity_configs: Vec<(usize, SceneEntity)> = {
+            let cloned = self.entities.clone();
+            cloned.into_par_iter().enumerate().map(|(i, e)| (i, e)).collect()
+        };
+
+        for (index, entity_config) in entity_configs {
             log::debug!("Loading entity: {}", entity_config.label);
 
-            let entity_configs: Vec<(usize, SceneEntity)> = {
-                let cloned = self.entities.clone();
-                cloned.into_par_iter().enumerate().map(|(i, e)| (i, e)).collect()
-            };
+            let total = self.entities.len();
 
-            let total = entity_configs.len();
+            if let Some(ref s) = progress_sender {
+                let _ = s.send(WorldLoadingStatus::LoadingEntity { index, name: entity_config.label.clone(), total });
+            }
 
-            for (index, entity_config) in entity_configs {
-                log::debug!("Loading entity: {}", entity_config.label);
-                if let Some(ref s) = progress_sender {
-                    let _ = s.send(WorldLoadingStatus::LoadingEntity { index, name: entity_config.label.clone(), total });
-                }
-
-                let result = match &entity_config.model_path.ref_type {
-                    ResourceReferenceType::File(reference) => {
-                        let path: PathBuf = {
-                            if cfg!(feature = "editor") {
-                                log::debug!("Using feature editor");
-                                entity_config
-                                    .model_path
-                                    .to_project_path(project_config.clone())
-                                    .ok_or_else(|| {
-                                        anyhow::anyhow!(
+            let result = match &entity_config.model_path.ref_type {
+                ResourceReferenceType::File(reference) => {
+                    let path: PathBuf = {
+                        if cfg!(feature = "editor") {
+                            log::debug!("Using feature editor");
+                            entity_config
+                                .model_path
+                                .to_project_path(project_config.clone())
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
                                             "Unable to convert resource reference [{}] to project path",
                                             reference
                                         )
-                                    })?
-                            } else {
-                                log::debug!("Using feature data-only");
-                                entity_config.model_path.to_executable_path()?
-                            }
-                        };
-                        log::debug!(
+                                })?
+                        } else {
+                            log::debug!("Using feature data-only");
+                            entity_config.model_path.to_executable_path()?
+                        }
+                    };
+                    log::debug!(
                             "Path for entity {} is {} from reference {}",
                             entity_config.label,
                             path.display(),
                             reference
                         );
 
-                        let adopted =
-                            AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
-                                .await;
-                        let transform = entity_config.transform;
+                    let adopted =
+                        AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
+                            .await;
+                    let transform = entity_config.transform;
 
-                        if let Some(script_config) = &entity_config.script {
-                            let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
-                            };
-                            { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
-                        } else {
-                            { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
-                        }
-
-                        Ok(())
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                    } else {
+                        { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
                     }
-                    ResourceReferenceType::Bytes(bytes) => {
-                        log::info!("Loading entity from bytes [Len: {}]", bytes.len());
-                        let bytes = bytes.to_owned();
 
-                        let model = Model::load_from_memory(
-                            graphics.clone(),
-                            bytes,
-                            Some(&entity_config.label),
-                        )
+                    Ok(())
+                }
+                ResourceReferenceType::Bytes(bytes) => {
+                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
+                    let bytes = bytes.to_owned();
+
+                    let model = Model::load_from_memory(
+                        graphics.clone(),
+                        bytes,
+                        Some(&entity_config.label),
+                    )
                         .await?;
-                        let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
+                    let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
 
-                        let transform = entity_config.transform;
+                    let transform = entity_config.transform;
 
-                        if let Some(script_config) = &entity_config.script {
-                            let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
-                            };
-                            { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
-                        } else {
-                            { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
-                        }
-
-                        Ok(())
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
+                        };
+                        { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                    } else {
+                        { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
                     }
-                    ResourceReferenceType::Plane => {
-                        let width = entity_config
-                            .properties
-                            .custom_properties
-                            .get("width")
-                            .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
-                        let width = match width {
-                            Value::Float(width) => width,
-                            _ => panic!("Entity has a width property that is not a float"),
+
+                    Ok(())
+                }
+                ResourceReferenceType::Plane => {
+                    let width = entity_config
+                        .properties
+                        .custom_properties
+                        .get("width")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
+                    let width = match width {
+                        Value::Float(width) => width,
+                        _ => panic!("Entity has a width property that is not a float"),
+                    };
+                    let height = entity_config
+                        .properties
+                        .custom_properties
+                        .get("height")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
+                    let height = match height {
+                        Value::Float(height) => height,
+                        _ => panic!("Entity has a height property that is not a float"),
+                    };
+                    let tiles_x = entity_config
+                        .properties
+                        .custom_properties
+                        .get("tiles_x")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
+                    let tiles_x = match tiles_x {
+                        Value::Int(tiles_x) => tiles_x,
+                        _ => panic!("Entity has a tiles_x property that is not an int"),
+                    };
+                    let tiles_z = entity_config
+                        .properties
+                        .custom_properties
+                        .get("tiles_z")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
+                    let tiles_z = match tiles_z {
+                        Value::Int(tiles_z) => tiles_z,
+                        _ => panic!("Entity has a tiles_z property that is not an int"),
+                    };
+
+                    let label_clone = entity_config.label.clone();
+                    let width_val = *width as f32;
+                    let height_val = *height as f32;
+                    let tiles_x_val = *tiles_x as u32;
+                    let tiles_z_val = *tiles_z as u32;
+
+                    let plane = PlaneBuilder::new()
+                        .with_size(width_val, height_val)
+                        .with_tiles(tiles_x_val, tiles_z_val)
+                        .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone))
+                        .await?;
+
+                    let transform = entity_config.transform;
+
+                    if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            name: script_config.name.clone(),
+                            path: script_config.path.clone(),
                         };
-                        let height = entity_config
-                            .properties
-                            .custom_properties
-                            .get("height")
-                            .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
-                        let height = match height {
-                            Value::Float(height) => height,
-                            _ => panic!("Entity has a height property that is not a float"),
-                        };
-                        let tiles_x = entity_config
-                            .properties
-                            .custom_properties
-                            .get("tiles_x")
-                            .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
-                        let tiles_x = match tiles_x {
-                            Value::Int(tiles_x) => tiles_x,
-                            _ => panic!("Entity has a tiles_x property that is not an int"),
-                        };
-                        let tiles_z = entity_config
-                            .properties
-                            .custom_properties
-                            .get("tiles_z")
-                            .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
-                        let tiles_z = match tiles_z {
-                            Value::Int(tiles_z) => tiles_z,
-                            _ => panic!("Entity has a tiles_z property that is not an int"),
-                        };
-
-                        let label_clone = entity_config.label.clone();
-                        let width_val = *width as f32;
-                        let height_val = *height as f32;
-                        let tiles_x_val = *tiles_x as u32;
-                        let tiles_z_val = *tiles_z as u32;
-
-                        let plane = PlaneBuilder::new()
-                            .with_size(width_val, height_val)
-                            .with_tiles(tiles_x_val, tiles_z_val)
-                            .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone))
-                            .await?;
-
-                        let transform = entity_config.transform;
-
-                        if let Some(script_config) = &entity_config.script {
-                            let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
-                            };
-                            { world.write().spawn((plane, transform, script, entity_config.properties.clone())); }
-                        } else {
-                            { world.write().spawn((plane, transform, entity_config.properties.clone())); }
-                        }
-
-                        Ok(())
+                        { world.write().spawn((plane, transform, script, entity_config.properties.clone())); }
+                    } else {
+                        { world.write().spawn((plane, transform, entity_config.properties.clone())); }
                     }
-                    ResourceReferenceType::None => Err(anyhow::anyhow!(
+
+                    Ok(())
+                }
+                ResourceReferenceType::None => Err(anyhow::anyhow!(
                         "Entity has a resource reference of None, which cannot be loaded or referenced"
                     )),
-                };
+            };
 
-                result?;
-                log::debug!("Loaded!");
-            }
+            result?;
+            log::debug!("Loaded!");
         }
 
         let total = self.lights.len();

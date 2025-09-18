@@ -60,6 +60,7 @@ boa_engine = "0.20"
 backtrace = "0.3"
 gltf = "1"
 os_info = "3.12"
+rustc_version_runtime = "0.3"
 
 [workspace.dependencies.image]
 version = "0.25"

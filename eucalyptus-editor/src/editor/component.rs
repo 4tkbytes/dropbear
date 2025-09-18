@@ -1,5 +1,6 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
+use std::sync::Arc;
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
@@ -521,12 +522,12 @@ impl InspectableComponent for AdoptedEntity {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
 
-                let resp = ui.text_edit_singleline(self.label_mut());
+                let resp = ui.text_edit_singleline(&mut Arc::make_mut(&mut self.model).label);
 
                 if resp.changed() {
                     if cfg.old_label_entity.is_none() {
                         cfg.old_label_entity = Some(entity.clone());
-                        cfg.label_original = Some(self.label().clone());
+                        cfg.label_original = Some(self.model.label.clone());
                     }
                     cfg.label_last_edit = Some(Instant::now());
                 }
