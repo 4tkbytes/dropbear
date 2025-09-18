@@ -5,7 +5,9 @@ use std::{
 
 use anyhow::anyhow;
 use dropbear_engine::{
-    graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}
+    graphics::RenderContext,
+    input::{Controller, Keyboard, Mouse},
+    scene::{Scene, SceneCommand},
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
@@ -160,83 +162,90 @@ impl Scene for MainMenu {
             graphics.shared.window.inner_size().height as f32 - 100.0,
         );
         let egui_ctx = graphics.shared.get_egui_context();
-
+        let mut local_open_project = false;
         egui::CentralPanel::default()
-                .frame(Frame::new())
-                .show(&egui_ctx, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(64.0);
-                        ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
-                        ui.add_space(40.0);
+            .frame(Frame::new())
+            .show(&egui_ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(64.0);
+                    ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
+                    ui.add_space(40.0);
 
-                        let button_size = egui::vec2(300.0, 60.0);
+                    let button_size = egui::vec2(300.0, 60.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("New Project"))
-                            .clicked()
-                        {
-                            log::debug!("Creating new project");
-                            self.show_new_project = true;
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("New Project"))
+                        .clicked()
+                    {
+                        log::debug!("Creating new project");
+                        self.show_new_project = true;
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Open Project"))
-                            .clicked()
-                        {
-                            log::debug!("Opening project");
-                            self.is_in_file_dialogue = true;
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Eucalyptus Configuration Files", &["eucp"])
-                                .pick_file()
-                            {
-                                match ProjectConfig::read_from(&path) {
-                                    Ok(config) => {
-                                        log::info!("Loaded project!");
-                                        let mut global = PROJECT.write();
-                                        *global = config;
-                                        // println!("Loaded config info: {:#?}", global);
-                                        self.scene_command =
-                                            SceneCommand::SwitchScene(String::from("editor"));
-                                    }
-                                    Err(e) => if e.to_string().contains("missing field") {
-                                        self.toast.add(egui_toast_fork::Toast {
-                                            kind: egui_toast_fork::ToastKind::Error,
-                                            text: format!("Your project version is not up to date with the current project version").into(),
-                                            options: ToastOptions::default()
-                                                .duration_in_seconds(10.0)
-                                                .show_progress(true),
-                                            ..Default::default()
-                                        });
-                                        log::error!("Failed to load project: {}", e);
-                                    }
-                                };
-                            } else {
-                                log::warn!("File dialog returned \"None\"");
-                            }
-                            self.is_in_file_dialogue = false;
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Open Project"))
+                        .clicked()
+                    {
+                        local_open_project = true;
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Settings"))
-                            .clicked()
-                        {
-                            log::debug!("Settings (not implemented)");
-                        }
-                        ui.add_space(20.0);
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Settings"))
+                        .clicked()
+                    {
+                        log::debug!("Settings (not implemented)");
+                    }
+                    ui.add_space(20.0);
 
-                        if ui
-                            .add_sized(button_size, egui::Button::new("Quit"))
-                            .clicked()
-                        {
-                            self.scene_command = SceneCommand::Quit
-                        }
-                        ui.add_space(20.0);
-                    });
+                    if ui
+                        .add_sized(button_size, egui::Button::new("Quit"))
+                        .clicked()
+                    {
+                        self.scene_command = SceneCommand::Quit
+                    }
+                    ui.add_space(20.0);
                 });
+            });
+
+        if local_open_project {
+            log::debug!("Opening project");
+            self.is_in_file_dialogue = true;
+            if let Some(path) = rfd::AsyncFileDialog::new()
+                .add_filter("Eucalyptus Configuration Files", &["eucp"])
+                .pick_file()
+                .await
+            {
+                match ProjectConfig::read_from(&path.into()) {
+                    Ok(config) => {
+                        log::info!("Loaded project!");
+                        let mut global = PROJECT.write();
+                        *global = config;
+                        // println!("Loaded config info: {:#?}", global);
+                        self.scene_command = SceneCommand::SwitchScene(String::from("editor"));
+                    }
+                    Err(e) => {
+                        if e.to_string().contains("missing field") {
+                            self.toast.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Error,
+                            text: format!("Your project version is not up to date with the current project version").into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(10.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                            log::error!("Failed to load project: {}", e);
+                        }
+                    }
+                };
+            } else {
+                log::warn!("File dialog returned \"None\"");
+            }
+            self.is_in_file_dialogue = false;
+        }
 
         let mut show_new_project = self.show_new_project;
+        let mut local_select_project = false;
         egui::Window::new("Create new project")
             .open(&mut show_new_project)
             .resizable(true)
@@ -260,16 +269,7 @@ impl Scene for MainMenu {
 
                     ui.add_space(5.0);
                     if ui.button("Choose Location").clicked() {
-                        self.is_in_file_dialogue = true;
-                        if let Some(path) = rfd::FileDialog::new()
-                            .set_title("Save Project")
-                            .set_file_name(&self.project_name)
-                            .pick_folder()
-                        {
-                            self.project_path = Some(path);
-                            log::debug!("Project will be saved at: {:?}", self.project_path);
-                        }
-                        self.is_in_file_dialogue = false;
+                        local_select_project = true;
                     }
 
                     let can_create = self.project_path.is_some() && !self.project_name.is_empty();
@@ -284,6 +284,20 @@ impl Scene for MainMenu {
                 });
             });
         self.show_new_project = show_new_project;
+
+        if local_select_project {
+            self.is_in_file_dialogue = true;
+            if let Some(path) = rfd::AsyncFileDialog::new()
+                .set_title("Save Project")
+                .set_file_name(&self.project_name)
+                .pick_folder()
+                .await
+            {
+                self.project_path = Some(path.into());
+                log::debug!("Project will be saved at: {:?}", self.project_path);
+            }
+            self.is_in_file_dialogue = false;
+        }
 
         if let Some(rx) = self.progress_rx.as_mut() {
             while let Ok(progress) = rx.try_recv() {

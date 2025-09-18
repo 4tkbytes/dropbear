@@ -1,11 +1,11 @@
 use futures::executor::block_on;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc};
+use std::{path::{Path, PathBuf}, sync::Arc};
 use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
-    graphics::{SharedGraphicsContext, Instance},
+    graphics::{Instance, SharedGraphicsContext},
     model::{LazyModel, LazyType, Model},
 };
 
@@ -68,7 +68,7 @@ pub struct LazyAdoptedEntity {
 impl LazyAdoptedEntity {
     /// Create a LazyAdoptedEntity from a file path (can be run on background thread)
     pub async fn from_file(path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let buffer = std::fs::read(path)?;
+        let buffer = tokio::fs::read(path).await?;
         Self::from_memory(buffer, label).await
     }
 
@@ -79,7 +79,7 @@ impl LazyAdoptedEntity {
     ) -> anyhow::Result<Self> {
         let lazy_model = Model::lazy_load(buffer, label).await?;
         let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-        
+
         Ok(Self {
             lazy_model,
             label: label_str,
@@ -105,7 +105,7 @@ impl LazyType for LazyAdoptedEntity {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AdoptedEntity {
     pub model: Option<Model>,
     pub previous_matrix: DMat4,
@@ -114,8 +114,13 @@ pub struct AdoptedEntity {
 }
 
 impl AdoptedEntity {
-    pub async fn new(graphics: Arc<SharedGraphicsContext>, path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let model = Model::load(graphics.clone(), path, label.clone()).await?;
+    pub async fn new(
+        graphics: Arc<SharedGraphicsContext>,
+        path: impl AsRef<Path>,
+        label: Option<&str>,
+    ) -> anyhow::Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        let model = Model::load(graphics.clone(), &path, label.clone()).await?;
         Ok(Self::adopt(graphics, model).await)
     }
 

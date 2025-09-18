@@ -33,6 +33,7 @@ pub enum ProjectProgress {
     Done,
 }
 
+#[derive(Clone)]
 pub enum ViewportMode {
     None,
     CameraMove,

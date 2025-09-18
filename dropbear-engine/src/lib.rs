@@ -17,7 +17,7 @@ use app_dirs2::{AppDataType, AppInfo};
 use chrono::Local;
 use colored::Colorize;
 use egui::TextureId;
-use egui_wgpu_backend::ScreenDescriptor;
+use egui_wgpu::ScreenDescriptor;
 use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
@@ -44,10 +44,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{
-    egui_renderer::EguiRenderer,
-    graphics::Texture,
-};
+use crate::{egui_renderer::EguiRenderer, graphics::Texture};
 
 pub use gilrs;
 use log::LevelFilter;
@@ -104,9 +101,20 @@ impl State {
             .await?;
 
         let info = adapter.get_info();
+        let os_info = os_info::get();
         log::info!(
             "\n==================== BACKEND INFO ====================
 Backend: {}
+
+Software:
+    Architecture: {:?}
+    Bitness: {:?}
+    Codename: {:?}
+    Edition: {:?}
+    Os Type: {:?}
+    Version: {:?}
+    TLDR: {}
+
 
 Hardware:
     Adapter Name: {}
@@ -118,6 +126,13 @@ Hardware:
 =======================================================
 ",
             info.backend.to_string(),
+            os_info.architecture(),
+            os_info.bitness(),
+            os_info.codename(),
+            os_info.edition(),
+            os_info.os_type(),
+            os_info.version(),
+            os_info,
             info.name,
             info.vendor,
             info.device,
@@ -173,13 +188,19 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
-        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(&device, config.format, 1, &window)));
-
-        let texture_id = Arc::get_mut(&mut egui_renderer).unwrap().lock().renderer().egui_texture_from_wgpu_texture(
+        let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
-            &viewport_texture.view,
-            wgpu::FilterMode::Linear,
-        );
+            config.format,
+            None,
+            1,
+            &window,
+        )));
+
+        let texture_id = Arc::get_mut(&mut egui_renderer)
+            .unwrap()
+            .lock()
+            .renderer()
+            .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
         let result = Self {
             surface,
@@ -212,15 +233,15 @@ Hardware:
             Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
             Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
-        self.texture_id = Arc::get_mut(&mut self
-            .egui_renderer).unwrap().lock()
+        self.egui_renderer
+            .lock()
             .renderer()
-            .egui_texture_from_wgpu_texture(
+            .update_egui_texture_from_wgpu_texture(
                 &self.device,
                 &self.viewport_texture.view,
                 wgpu::FilterMode::Linear,
-            )
-            .into();
+                *self.texture_id,
+            );
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
@@ -261,12 +282,9 @@ Hardware:
             },
         };
 
-        let size = self.window.inner_size();
-
         let screen_descriptor = ScreenDescriptor {
-            physical_width: size.width,
-            physical_height: size.height,
-            scale_factor: self.window.scale_factor() as f32,
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: self.window.scale_factor() as f32,
         };
 
         let view = output
@@ -280,10 +298,10 @@ Hardware:
 
         let viewport_view = { &self.viewport_texture.view.clone() };
 
-        self.egui_renderer.lock().begin_frame();
+        self.egui_renderer.lock().begin_frame(&self.window);
 
         let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
-        
+
         scene_manager
             .update(previous_dt, &mut graphics, event_loop)
             .await;
@@ -407,14 +425,16 @@ impl App {
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+        tokio::fs::create_dir_all(&log_dir)
+            .await
+            .expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_filename = format!("{}.{}.log", app_name, datetime_str);
@@ -562,7 +582,10 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        state.egui_renderer.lock().handle_input(&event);
+        state
+            .egui_renderer
+            .lock()
+            .handle_input(&state.window, &event);
 
         match event {
             WindowEvent::CloseRequested => {

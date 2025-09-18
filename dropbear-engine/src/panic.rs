@@ -44,5 +44,10 @@ pub fn set_hook() {
                 .set_level(MessageLevel::Error)
                 .show();
         }
+
+        log::error!(
+            "Additional crash info (backtrace): \n{:#?}",
+            backtrace::Backtrace::new()
+        );
     }));
 }

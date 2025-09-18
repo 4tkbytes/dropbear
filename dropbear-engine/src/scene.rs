@@ -74,7 +74,7 @@ impl Manager {
     pub async fn update<'a>(
         &mut self,
         dt: f32,
-        graphics: &mut crate::graphics::RenderContext<'a>,    
+        graphics: &mut crate::graphics::RenderContext<'a>,
         event_loop: &ActiveEventLoop,
     ) {
         // transition scene

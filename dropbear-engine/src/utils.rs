@@ -76,7 +76,7 @@ impl ResourceReference {
     }
 
     /// Creates a new `ResourceReference` from bytes
-    pub fn from_bytes(bytes: impl AsRef<[u8]>,) -> Self {
+    pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
         Self {
             ref_type: ResourceReferenceType::Bytes(bytes.as_ref().to_vec()),
         }

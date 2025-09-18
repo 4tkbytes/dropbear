@@ -114,8 +114,8 @@ impl Keyboard for Editor {
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
                     if let Some(entity) = &self.selected_entity {
-                        let query = self
-                            .world
+                        let world = self.world.read();
+                        let query = world
                             .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                         if let Ok(mut q) = query {
                             if let Some((e, t, props)) = q.get() {
@@ -240,14 +240,20 @@ impl Mouse for Editor {
     // this impl doesn't have the mouse being recentered back to the center (to be fixed), this works as a usable alternative
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
         if (self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
-            || (matches!(self.editor_state, EditorState::Playing) && !self.input_state.is_cursor_locked)
+            || (matches!(self.editor_state, EditorState::Playing)
+                && !self.input_state.is_cursor_locked)
         {
             if let Some(last_pos) = self.input_state.last_mouse_pos {
                 let dx = position.x - last_pos.0;
                 let dy = position.y - last_pos.1;
-                
-                if let Some(active_camera) = self.active_camera {
-                    if let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+
+                if let Some(active_camera) = *self.active_camera.lock() {
+                    if let Ok(mut q) = self.world.read().query_one::<(
+                        &mut Camera,
+                        &CameraComponent,
+                        Option<&CameraFollowTarget>,
+                    )>(active_camera)
+                    {
                         if let Some((camera, _, _)) = q.get() {
                             camera.track_mouse_delta(dx, dy);
                         }
@@ -256,7 +262,7 @@ impl Mouse for Editor {
             }
             self.input_state.last_mouse_pos = Some((position.x, position.y));
         }
-        
+
         self.input_state.mouse_pos = (position.x, position.y);
     }
 
@@ -264,33 +270,41 @@ impl Mouse for Editor {
     // for some reason, this doesn't work on linux but works on windows (not tested on anywhere else)
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
         if (self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
-            || (matches!(self.editor_state, EditorState::Playing) && !self.input_state.is_cursor_locked)
+            || (matches!(self.editor_state, EditorState::Playing)
+                && !self.input_state.is_cursor_locked)
         {
             if let Some(window) = &self.window {
                 let size = window.inner_size();
-                let center = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
-                
-                let distance_from_center = ((position.x - center.x).powi(2) + (position.y - center.y).powi(2)).sqrt();
-                
+                let center =
+                    PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+
+                let distance_from_center =
+                    ((position.x - center.x).powi(2) + (position.y - center.y).powi(2)).sqrt();
+
                 if distance_from_center > 5.0 {
                     let dx = position.x - center.x;
                     let dy = position.y - center.y;
-                    
+
                     if let Some(active_camera) = self.active_camera {
-                        if let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                        if let Ok(mut q) = self.world.query_one::<(
+                            &mut Camera,
+                            &CameraComponent,
+                            Option<&CameraFollowTarget>,
+                        )>(active_camera)
+                        {
                             if let Some((camera, _, _)) = q.get() {
                                 camera.track_mouse_delta(dx, dy);
                             }
                         }
                     }
-                    
+
                     let _ = window.set_cursor_position(center);
                 }
-                
+
                 window.set_cursor_visible(false);
             }
         }
-        
+
         self.input_state.mouse_pos = (position.x, position.y);
     }
 

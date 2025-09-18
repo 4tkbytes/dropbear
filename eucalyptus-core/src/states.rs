@@ -15,11 +15,13 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::UnboundedSender;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, fs};
+use rayon::prelude::*;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -716,15 +718,21 @@ impl SceneConfig {
 
     pub async fn load_into_world(
         &self,
-        world: &mut hecs::World,
+        world: Arc<RwLock<hecs::World>>,
         graphics: Arc<SharedGraphicsContext>,
+        progress_sender: Option<UnboundedSender<WorldLoadingStatus>>
     ) -> anyhow::Result<hecs::Entity> {
+
+        if let Some(ref s) = progress_sender {
+            let _ = s.send(WorldLoadingStatus::Idle);
+        }
+
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
-            world.len()
+            world.read().len()
         );
-        world.clear();
+        { world.write().clear(); }
 
         #[allow(unused_variables)]
         let project_config = if cfg!(feature = "editor") {
@@ -735,281 +743,202 @@ impl SceneConfig {
             PathBuf::new()
         };
 
-        log::info!("World cleared, now has {} entities", world.len());
+        log::info!("World cleared, now has {} entities", world.read().len());
 
-        for (_entity_index, entity_config) in self.entities.iter().enumerate() {
+        for (_i, entity_config) in self.entities.iter().cloned().enumerate() {
             log::debug!("Loading entity: {}", entity_config.label);
 
-            let result = match &entity_config.model_path.ref_type {
-                ResourceReferenceType::File(reference) => {
-                    let path: PathBuf = {
-                        if cfg!(feature = "editor") {
-                            log::debug!("Using feature editor");
-                            entity_config
-                                .model_path
-                                .to_project_path(project_config.clone())
-                                .ok_or_else(|| {
-                                    anyhow::anyhow!(
-                                        "Unable to convert resource reference [{}] to project path",
-                                        reference
-                                    )
-                                })?
-                        } else {
-                            log::debug!("Using feature data-only");
-                            entity_config.model_path.to_executable_path()?
-                        }
-                    };
-                    log::debug!(
-                        "Path for entity {} is {} from reference {}",
-                        entity_config.label,
-                        path.display(),
-                        reference
-                    );
-
-                    let adopted = AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label)).await;
-
-                    // let adopted = {
-                    //     let path_clone = path.clone();
-                    //     let label_clone = entity_config.label.clone();
-                        
-                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
-                    //     tokio::task::spawn_local(async move {
-                    //         let entity = LazyAdoptedEntity::from_file(&path_clone, Some(&label_clone)).await;
-                    //         let _ = tx.send(entity);
-                    //     });
-                        
-                    //     loop {
-                    //         match rx.try_recv() {
-                    //             Ok(result) => {
-                    //                 break result?.poke(graphics)?;
-                    //             },
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                    //                 std::thread::yield_now();
-                    //                 continue;
-                    //             }
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
-                    //             }
-                    //         }
-                    //     }
-                    // };
-                    let transform = entity_config.transform;
-
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
-                        };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
-                    } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()));
-                    }
-                    
-                    Ok(())
-                }
-                ResourceReferenceType::Bytes(bytes) => {
-                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
-                    let bytes = bytes.to_owned();
-
-                    let model = Model::load_from_memory(graphics.clone(), bytes, Some(&entity_config.label)).await?;
-                    let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
-
-                    // let adopted = {
-                    //     let bytes_clone = bytes.clone();
-                    //     let label_clone = entity_config.label.clone();
-                        
-                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
-                    //     tokio::task::spawn_local(async move {
-                    //         let entity = LazyAdoptedEntity::from_memory(bytes_clone, Some(label_clone.as_str())).await;
-                    //         let _ = tx.send(entity);
-                    //     }); 
-                        
-                    //     loop {
-                    //         match rx.try_recv() {
-                    //             Ok(result) => {
-                    //                 break result?.poke(graphics)?;
-                    //             },
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                    //                 std::thread::yield_now();
-                    //                 continue;
-                    //             }
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
-                    //             }
-                    //         }
-                    //     }
-                    // };
-                    let transform = entity_config.transform;
-
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
-                        };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()));
-                    } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()));
-                    }
-                    
-                    Ok(())
-                }
-                ResourceReferenceType::Plane => {
-                    let width = entity_config
-                        .properties
-                        .custom_properties
-                        .get("width")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
-                    let width = match width {
-                        Value::Float(width) => width,
-                        _ => panic!("Entity has a width property that is not a float"),
-                    };
-                    let height = entity_config
-                        .properties
-                        .custom_properties
-                        .get("height")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
-                    let height = match height {
-                        Value::Float(height) => height,
-                        _ => panic!("Entity has a height property that is not a float"),
-                    };
-                    let tiles_x = entity_config
-                        .properties
-                        .custom_properties
-                        .get("tiles_x")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
-                    let tiles_x = match tiles_x {
-                        Value::Int(tiles_x) => tiles_x,
-                        _ => panic!("Entity has a tiles_x property that is not an int"),
-                    };
-                    let tiles_z = entity_config
-                        .properties
-                        .custom_properties
-                        .get("tiles_z")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
-                    let tiles_z = match tiles_z {
-                        Value::Int(tiles_z) => tiles_z,
-                        _ => panic!("Entity has a tiles_z property that is not an int"),
-                    };
-
-                    let label_clone = entity_config.label.clone();
-                    let width_val = *width as f32;
-                    let height_val = *height as f32;
-                    let tiles_x_val = *tiles_x as u32;
-                    let tiles_z_val = *tiles_z as u32;
-
-                    let plane = PlaneBuilder::new()
-                        .with_size(width_val, height_val)
-                        .with_tiles(tiles_x_val, tiles_z_val)
-                        .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone)).await?;
-
-                    // let plane = {
-                    //     let label_clone = entity_config.label.clone();
-                    //     let width_val = *width as f32;
-                    //     let height_val = *height as f32;
-                    //     let tiles_x_val = *tiles_x as u32;
-                    //     let tiles_z_val = *tiles_z as u32;
-                        
-                    //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                        
-                    //     tokio::task::spawn_local(async move {
-                    //         let result = PlaneBuilder::new()
-                    //             .with_size(width_val, height_val)
-                    //             .with_tiles(tiles_x_val, tiles_z_val)
-                    //             .lazy_build(PROTO_TEXTURE, Some(&label_clone)).await;
-                    //         let _ = tx.send(result);
-                    //     });
-                        
-                    //     loop {
-                    //         match rx.try_recv() {
-                    //             Ok(result) => break result?.poke(graphics)?,
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                    //                 std::thread::yield_now();
-                    //                 continue;
-                    //             }
-                    //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
-                    //             }
-                    //         }
-                    //     }
-                    // };
-                    let transform = entity_config.transform;
-
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
-                        };
-                        world.spawn((plane, transform, script, entity_config.properties.clone()));
-                    } else {
-                        world.spawn((plane, transform, entity_config.properties.clone()));
-                    }
-
-                    Ok(())
-                }
-                ResourceReferenceType::None => {
-                    Err(anyhow::anyhow!(
-                        "Entity has a resource reference of None, which cannot be loaded or referenced"
-                    ))
-                }
+            let entity_configs: Vec<(usize, SceneEntity)> = {
+                let cloned = self.entities.clone();
+                cloned.into_par_iter().enumerate().map(|(i, e)| (i, e)).collect()
             };
 
-            result?;
-            // processed_items += 1;
-            log::debug!("Loaded!");
+            let total = entity_configs.len();
+
+            for (index, entity_config) in entity_configs {
+                log::debug!("Loading entity: {}", entity_config.label);
+                if let Some(ref s) = progress_sender {
+                    let _ = s.send(WorldLoadingStatus::LoadingEntity { index, name: entity_config.label.clone(), total });
+                }
+
+                let result = match &entity_config.model_path.ref_type {
+                    ResourceReferenceType::File(reference) => {
+                        let path: PathBuf = {
+                            if cfg!(feature = "editor") {
+                                log::debug!("Using feature editor");
+                                entity_config
+                                    .model_path
+                                    .to_project_path(project_config.clone())
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!(
+                                            "Unable to convert resource reference [{}] to project path",
+                                            reference
+                                        )
+                                    })?
+                            } else {
+                                log::debug!("Using feature data-only");
+                                entity_config.model_path.to_executable_path()?
+                            }
+                        };
+                        log::debug!(
+                            "Path for entity {} is {} from reference {}",
+                            entity_config.label,
+                            path.display(),
+                            reference
+                        );
+
+                        let adopted =
+                            AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
+                                .await;
+                        let transform = entity_config.transform;
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                        } else {
+                            { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
+                        }
+
+                        Ok(())
+                    }
+                    ResourceReferenceType::Bytes(bytes) => {
+                        log::info!("Loading entity from bytes [Len: {}]", bytes.len());
+                        let bytes = bytes.to_owned();
+
+                        let model = Model::load_from_memory(
+                            graphics.clone(),
+                            bytes,
+                            Some(&entity_config.label),
+                        )
+                        .await?;
+                        let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
+
+                        let transform = entity_config.transform;
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                        } else {
+                            { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
+                        }
+
+                        Ok(())
+                    }
+                    ResourceReferenceType::Plane => {
+                        let width = entity_config
+                            .properties
+                            .custom_properties
+                            .get("width")
+                            .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
+                        let width = match width {
+                            Value::Float(width) => width,
+                            _ => panic!("Entity has a width property that is not a float"),
+                        };
+                        let height = entity_config
+                            .properties
+                            .custom_properties
+                            .get("height")
+                            .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
+                        let height = match height {
+                            Value::Float(height) => height,
+                            _ => panic!("Entity has a height property that is not a float"),
+                        };
+                        let tiles_x = entity_config
+                            .properties
+                            .custom_properties
+                            .get("tiles_x")
+                            .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
+                        let tiles_x = match tiles_x {
+                            Value::Int(tiles_x) => tiles_x,
+                            _ => panic!("Entity has a tiles_x property that is not an int"),
+                        };
+                        let tiles_z = entity_config
+                            .properties
+                            .custom_properties
+                            .get("tiles_z")
+                            .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
+                        let tiles_z = match tiles_z {
+                            Value::Int(tiles_z) => tiles_z,
+                            _ => panic!("Entity has a tiles_z property that is not an int"),
+                        };
+
+                        let label_clone = entity_config.label.clone();
+                        let width_val = *width as f32;
+                        let height_val = *height as f32;
+                        let tiles_x_val = *tiles_x as u32;
+                        let tiles_z_val = *tiles_z as u32;
+
+                        let plane = PlaneBuilder::new()
+                            .with_size(width_val, height_val)
+                            .with_tiles(tiles_x_val, tiles_z_val)
+                            .build(graphics.clone(), PROTO_TEXTURE, Some(&label_clone))
+                            .await?;
+
+                        let transform = entity_config.transform;
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            { world.write().spawn((plane, transform, script, entity_config.properties.clone())); }
+                        } else {
+                            { world.write().spawn((plane, transform, entity_config.properties.clone())); }
+                        }
+
+                        Ok(())
+                    }
+                    ResourceReferenceType::None => Err(anyhow::anyhow!(
+                        "Entity has a resource reference of None, which cannot be loaded or referenced"
+                    )),
+                };
+
+                result?;
+                log::debug!("Loaded!");
+            }
         }
 
-        for light_config in &self.lights {
+        let total = self.lights.len();
+        
+        for (index, light_config) in self.lights.iter().enumerate() {
             log::debug!("Loading light: {}", light_config.label);
+            if let Some(ref s) = progress_sender {
+                let _ = s.send(WorldLoadingStatus::LoadingLight { index, name: light_config.label.clone(), total });
+            }
 
-            let light = Light::new(graphics.clone(), &light_config.light_component, &light_config.transform, Some(&light_config.label)).await;
-
-            // let light = {
-            //     let light_comp_clone = light_config.light_component.clone();
-            //     let light_trans_clone = light_config.transform.clone();
-            //     let label_clone = light_config.label.clone();
-            //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                
-            //     tokio::task::spawn_local(async move {
-            //         let result = Light::lazy_new(
-            //             light_comp_clone,
-            //             light_trans_clone,
-            //             Some(&label_clone),
-            //         );
-            //         let _ = tx.send(result);
-            //     });
-                
-            //     loop {
-            //         match rx.try_recv() {
-            //             Ok(result) => break result.poke(graphics)?,
-            //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-            //                 std::thread::yield_now();
-            //                 continue;
-            //             }
-            //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-            //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
-            //             }
-            //         }
-            //     }
-            // };
-
-            world.spawn((
-                light_config.light_component.clone(),
-                light_config.transform,
-                light,
-                ModelProperties::default(),
-            ));
-
-            // processed_items += 1;
+            let light = Light::new(
+                graphics.clone(),
+                &light_config.light_component,
+                &light_config.transform,
+                Some(&light_config.label),
+            )
+            .await;
+            {
+                world.write().spawn((
+                    light_config.light_component.clone(),
+                    light_config.transform,
+                    light,
+                    ModelProperties::default(),
+                ));
+            }
         }
 
-        for camera_config in &self.cameras {
+        let total = self.cameras.len();
+        for (index, camera_config) in self.cameras.iter().enumerate() {
             log::debug!(
                 "Loading camera {} of type {:?}",
                 camera_config.label,
                 camera_config.camera_type
             );
+            if let Some(ref s) = progress_sender {
+                let _ = s.send(WorldLoadingStatus::LoadingCamera { index, name: camera_config.label.clone(), total });
+            }
 
             let camera = Camera::new(
                 graphics.clone(),
@@ -1040,64 +969,30 @@ impl SceneConfig {
                     follow_target: target_label.clone(),
                     offset: DVec3::from_array(*offset),
                 };
-                world.spawn((camera, component, follow_target));
+                { world.write().spawn((camera, component, follow_target)); }
             } else {
-                world.spawn((camera, component));
+                { world.write().spawn((camera, component)); }
             }
-
-            // processed_items += 1;
         }
 
-        if world
+        if world.read()
             .query::<(&LightComponent, &Light)>()
             .iter()
             .next()
             .is_none()
         {
             log::info!("No lights in scene, spawning default light");
+            if let Some(ref s) = progress_sender {
+                let _ = s.send(WorldLoadingStatus::LoadingLight { index: 0, name: String::from("Default Light"), total: 1 });
+            }
             let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
             let trans = Transform {
-                    position: glam::DVec3::new(2.0, 4.0, 2.0),
-                    ..Default::default()
-                };
+                position: glam::DVec3::new(2.0, 4.0, 2.0),
+                ..Default::default()
+            };
             let light = Light::new(graphics.clone(), &comp, &trans, Some("Default Light")).await;
-            // let light = {
-            //     let light_comp_clone = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            //     let default_transform = Transform {
-            //         position: glam::DVec3::new(2.0, 4.0, 2.0),
-            //         ..Default::default()
-            //     };
-            //     let (tx, mut rx) = tokio::sync::oneshot::channel();
-                
-            //     tokio::task::spawn_local(async move {
-            //         let result = Light::lazy_new(
-            //             light_comp_clone,
-            //             default_transform,
-            //             Some("Default Light"),
-            //         );
-            //         let _ = tx.send(result);
-            //     });
-                
-            //     loop {
-            //         match rx.try_recv() {
-            //             Ok(result) => break result.poke(graphics)?,
-            //             Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-            //                 std::thread::yield_now();
-            //                 continue;
-            //             }
-            //             Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-            //                 return Err(anyhow::anyhow!("Loading task was cancelled"));
-            //             }
-            //         }
-            //     }
-            // };
 
-            world.spawn((
-                comp,
-                trans,
-                light,
-                ModelProperties::default(),
-            ));
+            world.write().spawn((comp, trans, light, ModelProperties::default()));
         }
 
         log::info!(
@@ -1109,7 +1004,7 @@ impl SceneConfig {
         #[cfg(feature = "editor")]
         {
             // Editor mode - look for debug camera, create one if none exists
-            let debug_camera = world
+            let debug_camera = world.read()
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
                 .find_map(|(entity, (_, component))| {
@@ -1125,9 +1020,12 @@ impl SceneConfig {
                 Ok(camera_entity)
             } else {
                 log::info!("No debug camera found, creating viewport camera for editor");
+                if let Some(ref s) = progress_sender {
+                    let _ = s.send(WorldLoadingStatus::LoadingCamera { index: 0, name: String::from("Viewport Camera"), total: 1 });
+                }
                 let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
                 let component = DebugCamera::new();
-                let camera_entity = world.spawn((camera, component));
+                let camera_entity = { world.write().spawn((camera, component)) };
                 Ok(camera_entity)
             }
         }
@@ -1135,7 +1033,7 @@ impl SceneConfig {
         #[cfg(not(feature = "editor"))]
         {
             // Runtime mode - look for player camera, panic if none exists
-            let player_camera = world
+            let player_camera = world.read()
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
                 .find_map(|(entity, (_, component))| {
@@ -1202,4 +1100,28 @@ pub enum EditorTab {
     ResourceInspector, // left side,
     ModelEntityList,   // right side,
     Viewport,          // middle,
+}
+
+/// An enum that describes the status of loading the world.
+///
+/// This is enum is used by [`SceneConfig::load_into_world`] heavily. This enum
+/// is recommended to be used with an [`UnboundedSender`]
+pub enum WorldLoadingStatus {
+    Idle,
+    LoadingEntity {
+        index: usize,
+        name: String,
+        total: usize,
+    },
+    LoadingLight {
+        index: usize,
+        name: String,
+        total: usize,
+    },
+    LoadingCamera {
+        index: usize,
+        name: String,
+        total: usize,
+    },
+    Completed,
 }
