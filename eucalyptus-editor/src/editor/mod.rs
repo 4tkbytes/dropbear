@@ -79,13 +79,21 @@ pub struct Editor {
     script_manager: ScriptManager,
     play_mode_backup: Option<PlayModeBackup>,
 
+    /// State of the input
     input_state: InputState,
 
     // channels
+    /// A channel for installing dependencies.
     dep_installer: DependencyInstaller,
+    /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
     progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
+    /// Unused: A threadsafe Unbounded Sender
     _progress_rx: Option<UnboundedSender<WorldLoadingStatus>>,
+    /// Used to check if the world has been loaded in
     is_world_loaded: IsWorldLoadedYet,
+    /// Used to fetch the current status of the loading, so it can be used for different
+    /// egui loading windows or splash screens and such.
+    current_state: WorldLoadingStatus,
 }
 
 impl Editor {
@@ -154,7 +162,8 @@ impl Editor {
             dep_installer: DependencyInstaller::default(),
             _progress_rx: None,
             progress_tx: None,
-            is_world_loaded: IsWorldLoadedYet::new(), 
+            is_world_loaded: IsWorldLoadedYet::new(),
+            current_state: WorldLoadingStatus::Idle,
         }
     }
 
@@ -279,40 +288,39 @@ impl Editor {
         Ok(())
     }
 
+    /// The window when loading a project or a scene or anything that uses [`WorldLoadingStatus`]
     fn show_project_loading_window(&mut self, ctx: &egui::Context) {
-        let mut message = "Loading project...".to_string();
-        let mut progress = 0.0;
-
         if let Some(ref mut rx) = self.progress_tx {
-            while let Ok(status) = rx.try_recv() {
-                match status {
-                    WorldLoadingStatus::LoadingEntity { index, name, total } => {
-                        log::debug!("Loading entity: {} ({}/{})", name, index + 1, total);
-                        message = format!("Loading entity: {}", name);
-                        progress = index as f32 / total as f32;
+            match rx.try_recv() {
+                Ok(status) => {
+                    match status {
+                        WorldLoadingStatus::LoadingEntity { index, name, total } => {
+                            log::debug!("Loading entity: {} ({}/{})", name, index + 1, total);
+                            self.current_state = WorldLoadingStatus::LoadingEntity { index, name, total };
+                        }
+                        WorldLoadingStatus::LoadingLight { index, name, total } => {
+                            log::debug!("Loading light: {} ({}/{})", name, index + 1, total);
+                            self.current_state = WorldLoadingStatus::LoadingLight { index, name, total };
+                        }
+                        WorldLoadingStatus::LoadingCamera { index, name, total } => {
+                            log::debug!("Loading camera: {} ({}/{})", name, index + 1, total);
+                            self.current_state = WorldLoadingStatus::LoadingCamera { index, name, total };
+                        }
+                        WorldLoadingStatus::Completed => {
+                            log::debug!("Received WorldLoadingStatus::Completed - project loading finished");
+                            self.is_world_loaded.mark_project_loaded();
+                            self.current_state = WorldLoadingStatus::Completed;
+                            self.progress_tx = None;
+                            println!("Returning back");
+                            return;
+                        }
+                        WorldLoadingStatus::Idle => {
+                            log::debug!("Project loading is idle");
+                        }
                     }
-                    WorldLoadingStatus::LoadingLight { index, name, total } => {
-                        log::debug!("Loading light: {} ({}/{})", name, index + 1, total);
-                        message = format!("Loading light: {}", name);
-                        progress = index as f32 / total as f32;
-                    }
-                    WorldLoadingStatus::LoadingCamera { index, name, total } => {
-                        log::debug!("Loading camera: {} ({}/{})", name, index + 1, total);
-                        message = format!("Loading camera: {}", name);
-                        progress = index as f32 / total as f32;
-                    }
-                    WorldLoadingStatus::Completed => {
-                        log::debug!("Received WorldLoadingStatus::Completed - project loading finished");
-                        self.is_world_loaded.mark_project_loaded();
-                        self.progress_tx = None;
-                        println!("Returning back");
-                        return;
-                    }
-                    WorldLoadingStatus::Idle => {
-                        log::debug!("Project loading is idle");
-                        message = "Initializing...".to_string();
-                        progress = 0.0;
-                    }
+                }
+                Err(_) => {
+                    // log::debug!("Unable to receive the progress: {}", e);
                 }
             }
         } else {
@@ -331,13 +339,23 @@ impl Editor {
                         ui.spinner();
                         ui.label("Loading...");
                     });
-                    ui.add_space(5.0);
-                    ui.add(egui::ProgressBar::new(progress).text(format!("{:.0}%", progress * 100.0)));
-                    ui.label(message);
+                    // ui.add_space(5.0);
+                    // ui.add(egui::ProgressBar::new(progress).text(format!("{:.0}%", progress * 100.0)));
+                    match &self.current_state {
+                        WorldLoadingStatus::Idle => {ui.label("Initialising...");}
+                        WorldLoadingStatus::LoadingEntity { name, ..} => {ui.label(format!("Loading entity: {}", name));}
+                        WorldLoadingStatus::LoadingLight { name, .. } => {ui.label(format!("Loading light: {}", name));}
+                        WorldLoadingStatus::LoadingCamera { name, .. } => {ui.label(format!("Loading camera: {}", name));}
+                        WorldLoadingStatus::Completed => {ui.label("Done!");}
+                    }
                 });
             });
     }
 
+    /// Loads the project config.
+    ///
+    /// It uses an unbounded sender to send messages back to the receiver so it can
+    /// be used within threads.
     pub async fn load_project_config(
         // &mut self,
         graphics: Arc<SharedGraphicsContext>,
@@ -589,6 +607,7 @@ impl Editor {
         }
     }
 
+    /// Restores transform components back to its original state before PlayMode.
     pub fn restore(&mut self) -> anyhow::Result<()> {
         if let Some(backup) = &self.play_mode_backup {
             for (entity_id, original_transform, original_properties, original_script) in
@@ -777,7 +796,9 @@ impl Editor {
         false
     }
 
-    /// To be ran AFTER [`Editor::load_project_config`]
+    /// Loads all the wgpu resources such as renderer.
+    ///
+    /// **Note**: To be ran AFTER [`Editor::load_project_config`]
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: &mut RenderContext<'a>) {
         let shader = Shader::new(
             graphics.shared.clone(),
@@ -925,9 +946,13 @@ fn show_entity_tree(
 /// Describes an action that is undoable
 #[derive(Debug)]
 pub enum UndoableAction {
+    /// A change in transform. The entity + the old transform. Undoing will revert the transform
     Transform(hecs::Entity, Transform),
+    /// A spawn of the entity. Undoing will delete the entity
     Spawn(hecs::Entity),
+    /// A change of label of the entity. Undoing will revert its label
     Label(hecs::Entity, String, EntityType),
+    /// Removing a component. Undoing will add back the component.
     RemoveComponent(hecs::Entity, ComponentType),
     #[allow(dead_code)]
     CameraAction(UndoableCameraAction),

@@ -1102,6 +1102,10 @@ pub enum EditorTab {
     Viewport,          // middle,
 }
 
+/// An enum that describes the status of loading the world.
+///
+/// This is enum is used by [`SceneConfig::load_into_world`] heavily. This enum
+/// is recommended to be used with an [`UnboundedSender`]
 pub enum WorldLoadingStatus {
     Idle,
     LoadingEntity {
