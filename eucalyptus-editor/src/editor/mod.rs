@@ -1092,41 +1092,49 @@ impl UndoableAction {
                 match action {
                     UndoableCameraAction::Speed(entity, speed) => {
                         {
-                            if let Ok((cam, comp)) =
-                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) =
+                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             {
-                                comp.speed = *speed;
-                                comp.update(cam);
+                                if let Some((cam, comp)) = q.get() {
+                                    comp.speed = *speed;
+                                    comp.update(cam);
+                                }
                             }
                         }
                     }
                     UndoableCameraAction::Sensitivity(entity, sensitivity) => {
                         {
-                            if let Ok((cam, comp)) =
-                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) =
+                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             {
-                                comp.sensitivity = *sensitivity;
-                                comp.update(cam);
+                                if let Some((cam, comp)) = q.get() {
+                                    comp.sensitivity = *sensitivity;
+                                    comp.update(cam);
+                                }
                             }
                         }
                     }
                     UndoableCameraAction::FOV(entity, fov) => {
                         {
-                            if let Ok((cam, comp)) =
-                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) =
+                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             {
-                                comp.fov_y = *fov;
-                                comp.update(cam);
+                                if let Some((cam, comp)) = q.get() {
+                                    comp.fov_y = *fov;
+                                    comp.update(cam);
+                                }
                             }
                         }
                     }
                     UndoableCameraAction::Type(entity, camera_type) => {
                         {
-                            if let Ok((cam, comp)) =
-                                world.write().query_one_mut::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) =
+                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             {
-                                comp.camera_type = *camera_type;
-                                comp.update(cam);
+                                if let Some((cam, comp)) = q.get() {
+                                    comp.camera_type = *camera_type;
+                                    comp.update(cam);
+                                }
                             }
                         }
                     }

@@ -767,112 +767,19 @@ impl Scene for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(e) = self.world.write()
-                            .query_one_mut::<&AdoptedEntity>(*entity)
+                        if let Ok(mut q) = self.world.read()
+                            .query_one::<&AdoptedEntity>(*entity)
                         {
-                            let mut local_signal: Option<Signal> = None;
-                            let label = e.label().clone();
-                            let mut show = true;
-                            egui::Window::new(format!("Add component for {}", label))
-                                .title_bar(true)
-                                .open(&mut show)
-                                .scroll([false, true])
-                                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                .enabled(true)
-                                .show(&graphics.shared.get_egui_context(), |ui| {
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width(), 30.0],
-                                            egui::Button::new("Scripting"),
-                                        )
-                                        .clicked()
-                                    {
-                                        log::debug!(
-                                            "Adding scripting component to entity [{}]",
-                                            label
-                                        );
-                                        {
-                                            if let Err(e) = self.world.write()
-                                                .insert_one(*entity, ScriptComponent::default())
-                                            {
-                                                warn!(
-                                                "Failed to add scripting component to entity: {}",
-                                                e
-                                            );
-                                            } else {
-                                                success!("Added the scripting component");
-                                            }
-                                        }
-                                        local_signal = Some(Signal::None);
-                                    }
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width(), 30.0],
-                                            egui::Button::new("Camera"),
-                                        )
-                                        .clicked()
-                                    {
-                                        log::debug!(
-                                            "Adding camera component to entity [{}]",
-                                            label
-                                        );
-
-                                        let has_camera = self.world.read()
-                                            .query_one::<(&Camera, &CameraComponent)>(*entity)
-                                            .is_ok();
-
-                                        if has_camera {
-                                            warn!(
-                                                "Entity [{}] already has a camera component",
-                                                label
-                                            );
-                                        } else {
-                                            let camera = Camera::predetermined(
-                                                graphics.shared.clone(),
-                                                Some(&format!("{} Camera", label)),
-                                            );
-                                            let component = CameraComponent::new();
-
-                                            {
-                                                if let Err(e) = self.world.write()
-                                                    .insert(*entity, (camera, component))
-                                                {
-                                                    warn!(
-                                                    "Failed to add camera component to entity: {}",
-                                                    e
-                                                );
-                                                } else {
-                                                    success!("Added the camera component");
-                                                }
-                                            }
-                                        }
-                                        local_signal = Some(Signal::None);
-                                    }
-                                });
-                            if !show {
-                                self.signal = Signal::None;
-                            }
-                            if let Some(signal) = local_signal {
-                                self.signal = signal
-                            }
-                        } else {
-                            log_once::warn_once!(
-                                "Failed to add component to entity: no entity component found"
-                            );
-                        }
-                    }
-                    EntityType::Light => {
-                        {
-                            if let Ok(light) = self.world.write()
-                                .query_one_mut::<&Light>(*entity)
-                            {
+                            if let Some(e) = q.get() {
+                                let mut local_signal: Option<Signal> = None;
+                                let label = e.label().clone();
                                 let mut show = true;
-                                egui::Window::new(format!("Add component for {}", light.label))
+                                egui::Window::new(format!("Add component for {}", label))
+                                    .title_bar(true)
+                                    .open(&mut show)
                                     .scroll([false, true])
                                     .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                                     .enabled(true)
-                                    .open(&mut show)
-                                    .title_bar(true)
                                     .show(&graphics.shared.get_egui_context(), |ui| {
                                         if ui
                                             .add_sized(
@@ -882,19 +789,116 @@ impl Scene for Editor {
                                             .clicked()
                                         {
                                             log::debug!(
-                                            "Adding scripting component to light [{}]",
-                                            light.label
+                                            "Adding scripting component to entity [{}]",
+                                            label
+                                        );
+                                            {
+                                                if let Err(e) = self.world.write()
+                                                    .insert_one(*entity, ScriptComponent::default())
+                                                {
+                                                    warn!(
+                                                "Failed to add scripting component to entity: {}",
+                                                e
+                                            );
+                                                } else {
+                                                    success!("Added the scripting component");
+                                                }
+                                            }
+                                            local_signal = Some(Signal::None);
+                                        }
+                                        if ui
+                                            .add_sized(
+                                                [ui.available_width(), 30.0],
+                                                egui::Button::new("Camera"),
+                                            )
+                                            .clicked()
+                                        {
+                                            log::debug!(
+                                            "Adding camera component to entity [{}]",
+                                            label
                                         );
 
-                                            success!(
-                                            "Added the scripting component to light [{}]",
-                                            light.label
-                                        );
-                                            self.signal = Signal::None;
+                                            let has_camera = self.world.read()
+                                                .query_one::<(&Camera, &CameraComponent)>(*entity)
+                                                .is_ok();
+
+                                            if has_camera {
+                                                warn!(
+                                                "Entity [{}] already has a camera component",
+                                                label
+                                            );
+                                            } else {
+                                                let camera = Camera::predetermined(
+                                                    graphics.shared.clone(),
+                                                    Some(&format!("{} Camera", label)),
+                                                );
+                                                let component = CameraComponent::new();
+
+                                                {
+                                                    if let Err(e) = self.world.write()
+                                                        .insert(*entity, (camera, component))
+                                                    {
+                                                        warn!(
+                                                    "Failed to add camera component to entity: {}",
+                                                    e
+                                                );
+                                                    } else {
+                                                        success!("Added the camera component");
+                                                    }
+                                                }
+                                            }
+                                            local_signal = Some(Signal::None);
                                         }
                                     });
                                 if !show {
                                     self.signal = Signal::None;
+                                }
+                                if let Some(signal) = local_signal {
+                                    self.signal = signal
+                                }
+                            }
+                        } else {
+                            log_once::warn_once!(
+                                "Failed to add component to entity: no entity component found"
+                            );
+                        }
+                    }
+                    EntityType::Light => {
+                        {
+                            if let Ok(mut q) = self.world.read()
+                                .query_one::<&Light>(*entity)
+                            {
+                                if let Some(light) = q.get() {
+                                    let mut show = true;
+                                    egui::Window::new(format!("Add component for {}", light.label))
+                                        .scroll([false, true])
+                                        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                        .enabled(true)
+                                        .open(&mut show)
+                                        .title_bar(true)
+                                        .show(&graphics.shared.get_egui_context(), |ui| {
+                                            if ui
+                                                .add_sized(
+                                                    [ui.available_width(), 30.0],
+                                                    egui::Button::new("Scripting"),
+                                                )
+                                                .clicked()
+                                            {
+                                                log::debug!(
+                                            "Adding scripting component to light [{}]",
+                                            light.label
+                                        );
+
+                                                success!(
+                                            "Added the scripting component to light [{}]",
+                                            light.label
+                                        );
+                                                self.signal = Signal::None;
+                                            }
+                                        });
+                                    if !show {
+                                        self.signal = Signal::None;
+                                    }
                                 }
                             } else {
                                 log_once::warn_once!(
@@ -905,33 +909,35 @@ impl Scene for Editor {
                     }
                     EntityType::Camera => {
                         {
-                            if let Ok((cam, _comp)) = self.world.write()
-                                .query_one_mut::<(&Camera, &CameraComponent)>(*entity)
+                            if let Ok(mut q) = self.world.write()
+                                .query_one::<(&Camera, &CameraComponent)>(*entity)
                             {
-                                let mut show = true;
-                                egui::Window::new(format!("Add component for {}", cam.label))
-                                    .scroll([false, true])
-                                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                    .enabled(true)
-                                    .open(&mut show)
-                                    .title_bar(true)
-                                    .show(&graphics.shared.get_egui_context(), |ui| {
-                                        egui_extras::install_image_loaders(ui.ctx());
-                                        ui.add(Image::from_bytes(
-                                            "bytes://theres_nothing.jpg",
-                                            include_bytes!("../../../resources/theres_nothing.jpg"),
-                                        ));
-                                        ui.label("Theres nothing...");
-                                        // // scripting
-                                        // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
-                                        //     log::debug!("Adding scripting component to camera [{}]", cam.label);
+                                if let Some((cam, _comp)) = q.get() {
+                                    let mut show = true;
+                                    egui::Window::new(format!("Add component for {}", cam.label))
+                                        .scroll([false, true])
+                                        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                                        .enabled(true)
+                                        .open(&mut show)
+                                        .title_bar(true)
+                                        .show(&graphics.shared.get_egui_context(), |ui| {
+                                            egui_extras::install_image_loaders(ui.ctx());
+                                            ui.add(Image::from_bytes(
+                                                "bytes://theres_nothing.jpg",
+                                                include_bytes!("../../../resources/theres_nothing.jpg"),
+                                            ));
+                                            ui.label("Theres nothing...");
+                                            // // scripting
+                                            // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
+                                            //     log::debug!("Adding scripting component to camera [{}]", cam.label);
 
-                                        //     success!("Added the scripting component to camera [{}]", cam.label);
-                                        //     self.signal = Signal::None;
-                                        // }
-                                    });
-                                if !show {
-                                    self.signal = Signal::None;
+                                            //     success!("Added the scripting component to camera [{}]", cam.label);
+                                            //     self.signal = Signal::None;
+                                            // }
+                                        });
+                                    if !show {
+                                        self.signal = Signal::None;
+                                    }
                                 }
                             } else {
                                 log_once::warn_once!(

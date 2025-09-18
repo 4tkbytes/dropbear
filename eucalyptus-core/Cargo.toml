@@ -28,9 +28,6 @@ tokio.workspace = true
 boa_engine.workspace = true
 rayon.workspace = true
 
-[dev-dependencies]
-pollster = "*"
-
 [features]
 editor = []
 

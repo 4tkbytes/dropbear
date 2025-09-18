@@ -386,47 +386,49 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if !matches!(self.viewport_mode, ViewportMode::None) {
                     if let Some(entity_id) = self.selected_entity {
                         {
-                            if let Ok(transform) = self.world.write()
-                                .query_one_mut::<&mut Transform>(*entity_id)
+                            if let Ok(mut q) = self.world.read()
+                                .query_one::<&mut Transform>(*entity_id)
                             {
-                                let was_focused = cfg.is_focused;
-                                cfg.is_focused = self.gizmo.is_focused();
+                                if let Some(transform) = q.get() {
+                                    let was_focused = cfg.is_focused;
+                                    cfg.is_focused = self.gizmo.is_focused();
 
-                                if cfg.is_focused && !was_focused {
-                                    cfg.old_pos = *transform;
-                                }
-
-                                let gizmo_transform =
-                                    transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                                        transform.scale,
-                                        transform.rotation,
-                                        transform.position,
-                                    );
-
-                                if let Some((_result, new_transforms)) =
-                                    self.gizmo.interact(ui, &[gizmo_transform])
-                                {
-                                    if let Some(new_transform) = new_transforms.first() {
-                                        transform.position = new_transform.translation.into();
-                                        transform.rotation = new_transform.rotation.into();
-                                        transform.scale = new_transform.scale.into();
+                                    if cfg.is_focused && !was_focused {
+                                        cfg.old_pos = *transform;
                                     }
-                                }
 
-                                if was_focused && !cfg.is_focused {
-                                    let transform_changed = cfg.old_pos.position != transform.position
-                                        || cfg.old_pos.rotation != transform.rotation
-                                        || cfg.old_pos.scale != transform.scale;
-
-                                    if transform_changed {
-                                        UndoableAction::push_to_undo(
-                                            &mut self.undo_stack,
-                                            UndoableAction::Transform(
-                                                entity_id.clone(),
-                                                cfg.old_pos.clone(),
-                                            ),
+                                    let gizmo_transform =
+                                        transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                            transform.scale,
+                                            transform.rotation,
+                                            transform.position,
                                         );
-                                        log::debug!("Pushed transform action to stack");
+
+                                    if let Some((_result, new_transforms)) =
+                                        self.gizmo.interact(ui, &[gizmo_transform])
+                                    {
+                                        if let Some(new_transform) = new_transforms.first() {
+                                            transform.position = new_transform.translation.into();
+                                            transform.rotation = new_transform.rotation.into();
+                                            transform.scale = new_transform.scale.into();
+                                        }
+                                    }
+
+                                    if was_focused && !cfg.is_focused {
+                                        let transform_changed = cfg.old_pos.position != transform.position
+                                            || cfg.old_pos.rotation != transform.rotation
+                                            || cfg.old_pos.scale != transform.scale;
+
+                                        if transform_changed {
+                                            UndoableAction::push_to_undo(
+                                                &mut self.undo_stack,
+                                                UndoableAction::Transform(
+                                                    entity_id.clone(),
+                                                    cfg.old_pos.clone(),
+                                                ),
+                                            );
+                                            log::debug!("Pushed transform action to stack");
+                                        }
                                     }
                                 }
                             }
@@ -1018,21 +1020,25 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             log::debug!("Add Component clicked");
                             if let Some(entity) = self.selected_entity {
                                 {
-                                    if let Ok(..) = self.world.write()
-                                        .query_one_mut::<&AdoptedEntity>(*entity)
+                                    if let Ok(mut q) = self.world.read()
+                                        .query_one::<&AdoptedEntity>(*entity)
                                     {
-                                        log::debug!("Queried selected entity, it is an entity");
-                                        *self.signal =
-                                            Signal::AddComponent(*entity, EntityType::Entity);
+                                        if let Some(..) = q.get() {
+                                            log::debug!("Queried selected entity, it is an entity");
+                                            *self.signal =
+                                                Signal::AddComponent(*entity, EntityType::Entity);
+                                        }
                                     }
                                 }
 
                                 {
-                                    if let Ok(..) = self.world.write()
-                                        .query_one_mut::<&Light>(*entity)
+                                    if let Ok(mut q) = self.world.read()
+                                        .query_one::<&Light>(*entity)
                                     {
-                                        log::debug!("Queried selected entity, it is a light");
-                                        *self.signal = Signal::AddComponent(*entity, EntityType::Light);
+                                        if let Some(..) = q.get() {
+                                            log::debug!("Queried selected entity, it is a light");
+                                            *self.signal = Signal::AddComponent(*entity, EntityType::Light);
+                                        }
                                     }
                                 }
                             } else {
@@ -1054,16 +1060,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::RemoveComponent => {
                             log::debug!("Remove Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(script) = self.world.write()
-                                    .query_one_mut::<&ScriptComponent>(*entity)
+                                if let Ok(mut q) = self.world.write()
+                                    .query_one::<&ScriptComponent>(*entity)
                                 {
-                                    log::debug!(
-                                        "Queried selected entity, it has a script component"
-                                    );
-                                    *self.signal = Signal::RemoveComponent(
-                                        *entity,
-                                        ComponentType::Script(script.clone()),
-                                    );
+                                    if let Some(script) = q.get() {
+                                        log::debug!(
+                                            "Queried selected entity, it has a script component"
+                                        );
+                                        *self.signal = Signal::RemoveComponent(
+                                            *entity,
+                                            ComponentType::Script(script.clone()),
+                                        );
+                                    }
                                 } else {
                                     warn!(
                                         "Selected entity does not have a script component to remove"

@@ -1,0 +1,16 @@
+[package]
+name = "deny_query_one_mut_lint"
+version.workspace = true
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+readme = "README.md"
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies]
+
+
+[features]
+default = []
