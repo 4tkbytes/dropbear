@@ -118,7 +118,7 @@ impl Editor {
                     }
                 }
                 panic!(
-                    "Fatal: {} deadlocks detected, unable to continue on normal process. To fix this yourself, use a debugger and check the main thread (thread 1) for the last parking_lot function",
+                    "Fatal: {} deadlocks detected, unable to continue on normal process",
                     deadlocks.len()
                 );
             }
@@ -501,6 +501,7 @@ impl Editor {
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
+                        
                     }
 
                     if ui.button("Paste").clicked() {
@@ -548,6 +549,7 @@ impl Editor {
 
         egui::CentralPanel::default().show(&ctx, |ui| {
             let mut dock_state = self.dock_state.lock();
+            
             DockArea::new(&mut dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(

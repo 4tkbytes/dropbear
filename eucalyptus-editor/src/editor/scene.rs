@@ -227,6 +227,7 @@ impl Scene for Editor {
                     }
                 }
             }
+            
         }
 
         match &self.signal {
@@ -264,6 +265,7 @@ impl Scene for Editor {
                                                 ModelProperties::default(),
                                             ))
                                         };
+                                        
 
                                         self.selected_entity = Some(entity_id);
                                         log::debug!(
@@ -317,6 +319,7 @@ impl Scene for Editor {
                             ModelProperties::default(),
                         ))
                     };
+                    
                     self.selected_entity = Some(entity_id);
                     log::debug!(
                         "Successfully paste-spawned {} with ID {:?}",
@@ -365,6 +368,7 @@ impl Scene for Editor {
                                     self.signal = Signal::None;
                                 }
                             }
+                            // println!("is world still locked here [{}]: {}", file!(), self.world.is_locked_exclusive())
                         }
                     }
                 }
@@ -1172,9 +1176,9 @@ impl Scene for Editor {
                     }
                 }
             }
+            
         }
 
-        // First, gather all camera follow target data
         let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
             let world = self.world.read();
             world
@@ -1185,12 +1189,13 @@ impl Scene for Editor {
                         (
                             entity_id,
                             target.follow_target.clone(),
-                            target.offset.as_vec3() // 👈 Convert DVec3 to Vec3
+                            target.offset.as_vec3()
                         )
                     })
                 })
                 .collect()
         };
+        
 
         for (camera_entity, target_label, offset) in camera_follow_data {
             let target_position = {
@@ -1206,6 +1211,7 @@ impl Scene for Editor {
                         }
                     })
             };
+            
 
             if let Some(pos) = target_position {
                 let world = self.world.read();
@@ -1216,6 +1222,7 @@ impl Scene for Editor {
                     }
                 }
             }
+            
         }
 
         {
@@ -1228,6 +1235,7 @@ impl Scene for Editor {
                 camera.update(graphics.shared.clone());
             }
         }
+        
         {
             {
                 let mut world = self.world.write();
@@ -1237,6 +1245,7 @@ impl Scene for Editor {
                     entity.update(graphics.shared.clone(), transform);
                 }
             }
+            
 
             {
                 let mut world = self.world.write();
@@ -1247,6 +1256,7 @@ impl Scene for Editor {
                     light.update(light_component, transform);
                 }
             }
+            
         }
 
         {
@@ -1256,6 +1266,7 @@ impl Scene for Editor {
                 &mut world,
             );
         }
+        
 
         if self.dep_installer.is_installing {
             self.dep_installer
@@ -1276,7 +1287,7 @@ impl Scene for Editor {
         self.color = color.clone();
         self.size = graphics.shared.viewport_texture.size.clone();
         self.texture_id = Some(*graphics.shared.texture_id.clone());
-        self.show_ui(&graphics.shared.get_egui_context()).await;
+        { self.show_ui(&graphics.shared.get_egui_context()).await; }
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());
@@ -1294,6 +1305,7 @@ impl Scene for Editor {
                         None
                     }
                 };
+                
 
                 if let Some(camera) = cam {
                     let lights = {
@@ -1305,6 +1317,7 @@ impl Scene for Editor {
                         }
                         lights
                     };
+                    
 
                     let entities = {
                         let world = self.world.read();
@@ -1315,6 +1328,7 @@ impl Scene for Editor {
                         }
                         entities
                     };
+                    
 
                     {
                         let mut render_pass = graphics.clear_colour(color);
@@ -1332,6 +1346,7 @@ impl Scene for Editor {
                                 );
                             }
                         }
+                        
 
                         let mut model_batches: HashMap<*const Model, Vec<InstanceRaw>> =
                             HashMap::new();

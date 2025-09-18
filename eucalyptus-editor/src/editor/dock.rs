@@ -696,17 +696,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
                     {
-                        let mut world = self.world.write();
-                        // if let Some(mut world) = self.world.try_write() {
-                            if let Ok((
-                                  e,
-                                  transform,
-                                  _props,
-                                  script,
-                                  camera,
-                                  camera_component,
-                                  follow_target,
-                              )) = world.query_one_mut::<(
+                        let world = self.world.read();
+                        // Note: Use self.world.read() and query_one instead of self.world.write() and query_one_mut as
+                        // that causes a deadlock
+                            if let Ok(mut q) = world.query_one::<(
                                 &mut AdoptedEntity,
                                 Option<&mut Transform>,
                                 Option<&ModelProperties>,
@@ -716,28 +709,159 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 Option<&mut CameraFollowTarget>,
                             )>(*entity)
                             {
-                                e.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut String::new(),
-                                );
-                                if let Some(t) = transform {
-                                    t.inspect(
+                                if let Some((
+                                                e,
+                                                transform,
+                                                _props,
+                                                script,
+                                                camera,
+                                                camera_component,
+                                                follow_target,
+                                            )) = q.get() {
+                                    e.inspect(
                                         entity,
                                         &mut cfg,
                                         ui,
                                         self.undo_stack,
                                         self.signal,
-                                        e.label_mut(),
+                                        &mut String::new(),
                                     );
-                                }
+                                    if let Some(t) = transform {
+                                        t.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            e.label_mut(),
+                                        );
+                                    }
 
-                                if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
-                                    ui.separator();
-                                    ui.label("Camera Components:");
+                                    if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                                        ui.separator();
+                                        ui.label("Camera Components:");
+                                        camera.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            &mut String::new(),
+                                        );
+                                        camera_component.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            &mut camera.label.clone(),
+                                        );
+
+                                        if let Some(target) = follow_target {
+                                            target.inspect(
+                                                entity,
+                                                &mut cfg,
+                                                ui,
+                                                self.undo_stack,
+                                                self.signal,
+                                                &mut camera.label.clone(),
+                                            );
+                                        }
+                                    }
+
+                                    // if let Some(props) = _props {
+                                    //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
+                                    // }
+
+                                    if let Some(script) = script {
+                                        script.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            e.label_mut(),
+                                        );
+                                    }
+
+                                    if let Some(t) = cfg.label_last_edit {
+                                        if t.elapsed() >= Duration::from_millis(500) {
+                                            if let Some(ent) = cfg.old_label_entity.take() {
+                                                if let Some(orig) = cfg.label_original.take() {
+                                                    UndoableAction::push_to_undo(
+                                                        &mut self.undo_stack,
+                                                        UndoableAction::Label(ent, orig, EntityType::Entity),
+                                                    );
+                                                    log::debug!(
+                                            "Pushed label change to undo stack after 500ms debounce period"
+                                        );
+                                                }
+                                            }
+                                            cfg.label_last_edit = None;
+                                        }
+                                    }
+                                }
+                            } else {
+                                log_once::debug_once!("Unable to query entity inside resource inspector");
+                            }
+
+                            if let Ok(mut q) = world
+                                .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
+                            {
+                                if let Some((light, transform, props)) = q.get() {
+                                    light.inspect(
+                                        entity,
+                                        &mut cfg,
+                                        ui,
+                                        self.undo_stack,
+                                        self.signal,
+                                        &mut String::new(),
+                                    );
+                                    transform.inspect(
+                                        entity,
+                                        &mut cfg,
+                                        ui,
+                                        self.undo_stack,
+                                        self.signal,
+                                        &mut light.label,
+                                    );
+                                    props.inspect(
+                                        entity,
+                                        &mut cfg,
+                                        ui,
+                                        self.undo_stack,
+                                        self.signal,
+                                        &mut light.label,
+                                    );
+                                    if let Some(t) = cfg.label_last_edit {
+                                        if t.elapsed() >= Duration::from_millis(500) {
+                                            if let Some(ent) = cfg.old_label_entity.take() {
+                                                if let Some(orig) = cfg.label_original.take() {
+                                                    UndoableAction::push_to_undo(
+                                                        &mut self.undo_stack,
+                                                        UndoableAction::Label(ent, orig, EntityType::Light),
+                                                    );
+                                                    log::debug!(
+                                            "Pushed label change to undo stack after 500ms debounce period"
+                                        );
+                                                }
+                                            }
+                                            cfg.label_last_edit = None;
+                                        }
+                                    }
+                                }
+                            } else {
+                                log_once::debug_once!("Unable to query light inside resource inspector");
+                            }
+
+                            if let Ok(mut q) =
+                                world.query_one::<(
+                                    &mut Camera,
+                                    &mut CameraComponent,
+                                    Option<&mut CameraFollowTarget>,
+                                )>(*entity)
+                            {
+                                if let Some((camera, camera_component, follow_target)) = q.get() {
                                     camera.inspect(
                                         entity,
                                         &mut cfg,
@@ -754,7 +878,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut camera.label.clone(),
                                     );
-
                                     if let Some(target) = follow_target {
                                         target.inspect(
                                             entity,
@@ -765,140 +888,23 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             &mut camera.label.clone(),
                                         );
                                     }
-                                }
 
-                                // if let Some(props) = _props {
-                                //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, e.label_mut());
-                                // }
-
-                                if let Some(script) = script {
-                                    script.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        e.label_mut(),
-                                    );
-                                }
-
-                                if let Some(t) = cfg.label_last_edit {
-                                    if t.elapsed() >= Duration::from_millis(500) {
-                                        if let Some(ent) = cfg.old_label_entity.take() {
-                                            if let Some(orig) = cfg.label_original.take() {
-                                                UndoableAction::push_to_undo(
-                                                    &mut self.undo_stack,
-                                                    UndoableAction::Label(ent, orig, EntityType::Entity),
-                                                );
-                                                log::debug!(
-                                            "Pushed label change to undo stack after 500ms debounce period"
-                                        );
-                                            }
-                                        }
-                                        cfg.label_last_edit = None;
-                                    }
-                                }
-                            } else {
-                                log_once::debug_once!("Unable to query entity inside resource inspector");
-                            }
-
-                            if let Ok((light, transform, props)) = world
-                                .query_one_mut::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
-                            {
-                                light.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut String::new(),
-                                );
-                                transform.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut light.label,
-                                );
-                                props.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut light.label,
-                                );
-                                if let Some(t) = cfg.label_last_edit {
-                                    if t.elapsed() >= Duration::from_millis(500) {
-                                        if let Some(ent) = cfg.old_label_entity.take() {
-                                            if let Some(orig) = cfg.label_original.take() {
-                                                UndoableAction::push_to_undo(
-                                                    &mut self.undo_stack,
-                                                    UndoableAction::Label(ent, orig, EntityType::Light),
-                                                );
-                                                log::debug!(
-                                            "Pushed label change to undo stack after 500ms debounce period"
-                                        );
-                                            }
-                                        }
-                                        cfg.label_last_edit = None;
-                                    }
-                                }
-                            } else {
-                                log_once::debug_once!("Unable to query light inside resource inspector");
-                            }
-
-                            if let Ok((camera, camera_component, follow_target)) =
-                                world.query_one_mut::<(
-                                    &mut Camera,
-                                    &mut CameraComponent,
-                                    Option<&mut CameraFollowTarget>,
-                                )>(*entity)
-                            {
-                                camera.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut String::new(),
-                                );
-                                camera_component.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut camera.label.clone(),
-                                );
-                                if let Some(target) = follow_target {
-                                    target.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut camera.label.clone(),
-                                    );
-                                }
-
-                                ui.separator();
-                                ui.label("Camera Controls:");
-                                let mut active_camera = self.active_camera.lock();
-                                if ui.button("Set as Active Camera").clicked() {
-                                    *active_camera = Some(*entity).into();
-                                    log::info!("Set camera '{}' as active", camera.label);
-                                }
-
-                                if matches!(self.editor_mode, EditorState::Editing) {
-                                    if ui.button("Switch to This Camera").clicked() {
+                                    ui.separator();
+                                    ui.label("Camera Controls:");
+                                    let mut active_camera = self.active_camera.lock();
+                                    if ui.button("Set as Active Camera").clicked() {
                                         *active_camera = Some(*entity).into();
-                                        log::info!("Switched to camera '{}'", camera.label);
+                                        log::info!("Set camera '{}' as active", camera.label);
+                                    }
+
+                                    if matches!(self.editor_mode, EditorState::Editing) {
+                                        if ui.button("Switch to This Camera").clicked() {
+                                            *active_camera = Some(*entity).into();
+                                            log::info!("Switched to camera '{}'", camera.label);
+                                        }
                                     }
                                 }
                             }
-                        // }
                     }
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
