@@ -1,3 +1,5 @@
+//! Camera and components related to cameras. 
+
 use std::sync::Arc;
 
 use glam::{DMat4, DQuat, DVec3, Mat4};
@@ -8,6 +10,7 @@ use wgpu::{
 
 use crate::graphics::SharedGraphicsContext;
 
+/// Matrix that converts OpenGL (from [`glam`]) to [`wgpu`] values
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
@@ -16,33 +19,50 @@ pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.5, 1.0],
 ];
 
+/// The basic values of a Camera.
 #[derive(Default, Debug, Clone)]
 pub struct Camera {
+    /// The name of the camera
     pub label: String,
 
+    /// Eye of camera / Position
     pub eye: DVec3,
+    /// Target of camera / Looking at
     pub target: DVec3,
+    /// Up
     pub up: DVec3,
+    /// Aspect ratio
     pub aspect: f64,
+    /// FOV of camera
     pub fov_y: f64,
+    /// Near buffer?
     pub znear: f64,
+    /// Far buffer?
     pub zfar: f64,
+    /// Yaw (rotation)
     pub yaw: f64,
+    /// Pitch (rotation)
     pub pitch: f64,
 
+    /// Uniform/interface for Rust and the GPU
     pub uniform: CameraUniform,
     buffer: Option<Buffer>,
 
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
 
+    /// Speed of the camera
     pub speed: f64,
+    /// Sensitivity of the mouse for the camera
     pub sensitivity: f64,
 
+    /// View matrix
     pub view_mat: DMat4,
+    /// Projection Matrix
     pub proj_mat: DMat4,
 }
 
+/// A simple builder/struct that allows you to build a [`Camera`]
 pub struct CameraBuilder {
     pub eye: DVec3,
     pub target: DVec3,
@@ -112,7 +132,7 @@ impl Camera {
             label,
         )
     }
-
+    
     pub fn rotation(&self) -> DQuat {
         let yaw = DQuat::from_axis_angle(DVec3::Y, self.yaw);
         let pitch = DQuat::from_axis_angle(DVec3::X, self.pitch);
@@ -139,6 +159,7 @@ impl Camera {
         self.eye
     }
 
+    /// Prints out the values of the camera. 
     pub fn debug_camera_state(&self) {
         let camera = self;
         log::debug!("Camera state:");

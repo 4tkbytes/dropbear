@@ -1,3 +1,5 @@
+//! Vertices and different buffers used for wgpu
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {

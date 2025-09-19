@@ -8,11 +8,10 @@ use crate::input;
 use std::{collections::HashMap, rc::Rc};
 use parking_lot::RwLock;
 
-#[async_trait::async_trait]
 pub trait Scene {
-    async fn load<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
-    async fn update<'a>(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext<'a>);
-    async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
+    fn load(&mut self, graphics: &mut crate::graphics::RenderContext);
+    fn update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
+    fn render(&mut self, graphics: &mut crate::graphics::RenderContext);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     /// By far a mess of a trait however it works.
     ///
@@ -82,7 +81,7 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub async fn update<'a>(
+    pub fn update<'a>(
         &mut self,
         dt: f32,
         graphics: &mut crate::graphics::RenderContext<'a>,
@@ -95,7 +94,7 @@ impl Manager {
                 { scene.write().exit(event_loop); }
                 }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                { scene.write().load(graphics).await; }
+                { scene.write().load(graphics); }
             }
             self.current_scene = Some(next_scene_name);
         }
@@ -105,8 +104,7 @@ impl Manager {
             && let Some(scene) = self.scenes.get_mut(scene_name) {
                 {
                     scene.write()
-                        .update(dt, graphics)
-                        .await;
+                        .update(dt, graphics);
                 }
                 let command = scene.write().run_command();
                 match command {
@@ -116,7 +114,7 @@ impl Manager {
                                 // reload the scene
                                 if let Some(scene) = self.scenes.get_mut(current) {
                                     { scene.write().exit(event_loop); }
-                                    { scene.write().load(graphics).await; }
+                                    { scene.write().load(graphics) }
 
                                     log::debug!("Reloaded scene: {}", current);
                                 }
@@ -137,11 +135,11 @@ impl Manager {
             }
     }
 
-    pub async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
+    pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
-            { scene.write().render(graphics).await; }
+            { scene.write().render(graphics) }
         }
     }
 

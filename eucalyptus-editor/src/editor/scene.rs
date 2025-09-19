@@ -26,38 +26,39 @@ use std::sync::LazyLock;
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
-#[async_trait::async_trait]
 impl Scene for Editor {
-    async fn load<'a>(&mut self, graphics: &mut RenderContext<'a>) {
+    fn load(&mut self, graphics: &mut RenderContext) {
         let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();
         self.progress_tx = Some(rx);
 
         let graphics_shared = graphics.shared.clone();
-        let world_clone = self.world.clone();
+        let world_clone = self._temp_world.clone();
         let active_camera_clone = self.active_camera.clone();
         let project_path_clone = self.project_path.clone();
-        let dock_state_clone = self.dock_state.clone();
+        let dock_state_clone = Arc::new(Mutex::new(self.dock_state.clone()));
 
-        tokio::task::spawn_blocking(move || {
-            tokio::runtime::Handle::current().block_on(async {
-                {
-                    if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), world_clone, active_camera_clone, project_path_clone, dock_state_clone).await {
-                        log::error!("Failed to load project config: {}", e);
-                    }
-                }
-            })
+        let handle = self.queue.push(async move {
+            if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), world_clone, active_camera_clone, project_path_clone, dock_state_clone).await {
+                log::error!("Failed to load project config: {}", e);
+            }
         });
+
+        self.world_load_handle = Some(handle);
 
         self.window = Some(graphics.shared.window.clone());
         self.is_world_loaded.mark_scene_loaded();
     }
 
-    async fn update<'a>(&mut self, dt: f32, graphics: &mut RenderContext<'a>) {
+    fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
         if !self.is_world_loaded.is_project_ready() {
             log_once::debug_once!("Project is not loaded yet");
             self.show_project_loading_window(&graphics.shared.get_egui_context());
             return;
         } else {
+            {
+                let world = self._temp_world.lock();
+                self.world = *world;
+            }
             log_once::debug_once!("Project has loaded successfully");
         }
 
@@ -74,7 +75,7 @@ impl Scene for Editor {
             return;
         }
 
-        if let Some((_, tab)) = self.dock_state.lock().find_active_focused() {
+        if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {
             self.is_viewport_focused = false;
@@ -86,40 +87,30 @@ impl Scene for Editor {
         };
 
         for spawn in spawns_to_process {
-            match AdoptedEntity::new(
-                graphics.shared.clone(),
-                &spawn.asset_path,
-                Some(&spawn.asset_name),
-            )
-            .await
-            {
-                Ok(adopted) => {
-                    let entity_id = {
-                        self.world.write().spawn((
-                            adopted,
-                            spawn.transform,
-                            spawn.properties,
-                        ))
-                    };
+            let graphics_shared = graphics.shared.clone();
+            let asset_path = spawn.asset_path;
+            let asset_name = spawn.asset_name;
 
-                    self.selected_entity = Some(entity_id);
-
-                    UndoableAction::push_to_undo(
-                        &mut self.undo_stack,
-                        UndoableAction::Spawn(entity_id),
-                    );
-
-                    log::info!(
-                        "Successfully spawned {} with ID {:?}",
-                        spawn.asset_name,
-                        entity_id
-                    );
+            let handle = self.queue.push(async move {
+                match AdoptedEntity::new(
+                    graphics_shared,
+                    asset_path,
+                    Some(&asset_name),
+                ).await {
+                    Ok(adopted) => {
+                        Ok((adopted, transform, properties, asset_name))
+                    }
+                    Err(e) => {
+                        log::error!("Failed to spawn {}: {}", asset_name, e);
+                        Err(e)
+                    }
                 }
-                Err(e) => {
-                    log::error!("Failed to spawn {}: {}", spawn.asset_name, e);
-                }
-            }
+            });
+
+            self.pending_spawn_handles.push(handle);
         }
+
+        self.is_spawning = true;
 
         if matches!(self.editor_state, EditorState::Playing) {
             if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
@@ -128,7 +119,7 @@ impl Scene for Editor {
 
             let mut script_entities = Vec::new();
             {
-                for (entity_id, script) in self.world.read()
+                for (entity_id, script) in self.world
                     .query::<&mut ScriptComponent>()
                     .iter()
                 {
@@ -193,7 +184,7 @@ impl Scene for Editor {
 
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam {
-                let world = self.world.read();
+                let world = self.world;
                 if let Ok(mut query) = world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
                     && let Some((camera, component)) = query.get() {
@@ -337,7 +328,7 @@ impl Scene for Editor {
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
                     {
-                        let is_viewport_cam = if let Ok(mut q) = self.world.read()
+                        let is_viewport_cam = if let Ok(mut q) = self.world
                             .query_one::<&CameraComponent>(*sel_e)
                         {
                             if let Some(c) = q.get() {
@@ -401,7 +392,7 @@ impl Scene for Editor {
                                 };
 
                                 let replaced = {
-                                    let world = self.world.read();
+                                    let world = self.world;
                                     if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
                                         sc.name = new_script.name.clone();
                                         sc.path = new_script.path.clone();
@@ -469,7 +460,7 @@ impl Scene for Editor {
                         };
 
                         let replaced = {
-                            let world = self.world.read();
+                            let world = self.world;
                             if let Ok(mut sc) = world.get::<&mut ScriptComponent>(selected_entity) {
                                 sc.name = new_script.name.clone();
                                 sc.path = new_script.path.clone();
@@ -558,7 +549,7 @@ impl Scene for Editor {
                 ScriptAction::EditScript => {
                     if let Some(selected_entity) = self.selected_entity {
                         let script_opt = {
-                            let world = self.world.read();
+                            let world = self.world;
                             if let Ok(mut q) = world.query_one::<&ScriptComponent>(selected_entity) {
                                 q.get().cloned()
                             } else {
@@ -604,7 +595,7 @@ impl Scene for Editor {
 
                     let mut script_entities = Vec::new();
                     {
-                        for (entity_id, script) in self.world.read()
+                        for (entity_id, script) in self.world
                             .query::<&ScriptComponent>()
                             .iter()
                         {
@@ -711,7 +702,7 @@ impl Scene for Editor {
 
                     if let Some(camera_entity) = player_camera {
                         let mut follow_target = (false, CameraFollowTarget::default());
-                        if let Ok(mut query) = self.world.read()
+                        if let Ok(mut query) = self.world
                             .query_one::<&AdoptedEntity>(*entity)
                             && let Some(adopted) = query.get() {
                                 follow_target = (
@@ -759,7 +750,7 @@ impl Scene for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(mut q) = self.world.read()
+                        if let Ok(mut q) = self.world
                             .query_one::<&AdoptedEntity>(*entity)
                         {
                             if let Some(e) = q.get() {
@@ -810,7 +801,7 @@ impl Scene for Editor {
                                             label
                                         );
 
-                                            let has_camera = self.world.read()
+                                            let has_camera = self.world
                                                 .query_one::<(&Camera, &CameraComponent)>(*entity)
                                                 .is_ok();
 
@@ -857,7 +848,7 @@ impl Scene for Editor {
                     }
                     EntityType::Light => {
                         {
-                            if let Ok(mut q) = self.world.read()
+                            if let Ok(mut q) = self.world
                                 .query_one::<&Light>(*entity)
                             {
                                 if let Some(light) = q.get() {
@@ -1053,7 +1044,7 @@ impl Scene for Editor {
             Signal::LogEntities => {
                 log::debug!("====================");
                 let mut counter = 0;
-                for entity in self.world.read().iter() {
+                for entity in self.world.iter() {
                     if let Some(entity) = entity.get::<&AdoptedEntity>() {
                         log::info!("Model: {:?}", entity.model.label);
                         log::info!("  |-> Using model: {:?}", entity.model.id);
@@ -1169,7 +1160,7 @@ impl Scene for Editor {
         {
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam {
-                let world = self.world.read();
+                let world = self.world;
                 if let Ok(mut query) = world.query_one::<&mut Camera>(active_camera)
                     && let Some(camera) = query.get() {
                         camera.aspect = new_aspect;
@@ -1179,7 +1170,7 @@ impl Scene for Editor {
         }
 
         let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
-            let world = self.world.read();
+            let world = self.world;
             world
                 .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
                 .iter()
@@ -1198,7 +1189,7 @@ impl Scene for Editor {
 
         for (camera_entity, target_label, offset) in camera_follow_data {
             let target_position = {
-                let world = self.world.read();
+                let world = self.world;
                 world
                     .query::<(&AdoptedEntity, &Transform)>()
                     .iter()
@@ -1213,7 +1204,7 @@ impl Scene for Editor {
 
 
             if let Some(pos) = target_position {
-                let world = self.world.read();
+                let world = self.world;
                 if let Ok(mut query) = world.query_one::<&mut Camera>(camera_entity)
                     && let Some(camera) = query.get() {
                         camera.eye = pos + offset.as_dvec3();
@@ -1224,7 +1215,7 @@ impl Scene for Editor {
         }
 
         {
-            let world = self.world.read();
+            let world = self.world;
             for (_entity_id, (camera, component)) in world
                 .query::<(&mut Camera, &mut CameraComponent)>()
                 .iter()
@@ -1258,7 +1249,7 @@ impl Scene for Editor {
         }
 
         {
-            let world = self.world.read();
+            let world = self.world;
             self.light_manager.update(
                 graphics.shared.clone(),
                 &world,
@@ -1272,7 +1263,7 @@ impl Scene for Editor {
         self.dep_installer.update_progress();
     }
 
-    async fn render<'a>(&mut self, graphics: &mut RenderContext<'a>) {
+    fn render(&mut self, graphics: &mut RenderContext) {
         // cornflower blue
         let color = Color {
             r: 100.0 / 255.0,
@@ -1292,8 +1283,7 @@ impl Scene for Editor {
             log_once::debug_once!("Found render pipeline");
             if let Some(active_camera) = *self.active_camera.lock() {
                 let cam = {
-                    let world = self.world.read();
-                    if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
+                    if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
                         query.get().cloned()
                     } else {
                         None
@@ -1302,7 +1292,7 @@ impl Scene for Editor {
 
                 if let Some(camera) = cam {
                     let lights = {
-                        let world = self.world.read();
+                        let world = self.world;
                         let mut lights = Vec::new();
                         let mut light_query = world.query::<(&Light, &LightComponent)>();
                         for (_, (light, comp)) in light_query.iter() {
@@ -1313,7 +1303,7 @@ impl Scene for Editor {
 
 
                     let entities = {
-                        let world = self.world.read();
+                        let world = self.world;
                         let mut entities = Vec::new();
                         let mut entity_query = world.query::<&AdoptedEntity>();
                         for (_, entity) in entity_query.iter() {

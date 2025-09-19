@@ -12,7 +12,7 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui_dock_fork::DockState;
 use glam::DVec3;
 use once_cell::sync::Lazy;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -698,7 +698,7 @@ impl SceneConfig {
 
     pub async fn load_into_world(
         &self,
-        world: Arc<RwLock<hecs::World>>,
+        world: Arc<Mutex<hecs::World>>,
         graphics: Arc<SharedGraphicsContext>,
         progress_sender: Option<UnboundedSender<WorldLoadingStatus>>
     ) -> anyhow::Result<hecs::Entity> {
@@ -710,9 +710,9 @@ impl SceneConfig {
         log::info!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
-            world.read().len()
+            world.lock().len()
         );
-        { world.write().clear(); }
+        { world.lock().clear(); }
 
         #[allow(unused_variables)]
         let project_config = if cfg!(feature = "editor") {
@@ -723,7 +723,7 @@ impl SceneConfig {
             PathBuf::new()
         };
 
-        log::info!("World cleared, now has {} entities", world.read().len());
+        log::info!("World cleared, now has {} entities", world.lock().len());
 
         let entity_configs: Vec<(usize, SceneEntity)> = {
             let cloned = self.entities.clone();
@@ -775,9 +775,9 @@ impl SceneConfig {
                             name: script_config.name.clone(),
                             path: script_config.path.clone(),
                         };
-                        { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                        { world.lock().spawn((adopted, transform, script, entity_config.properties.clone())); }
                     } else {
-                        { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
+                        { world.lock().spawn((adopted, transform, entity_config.properties.clone())); }
                     }
 
                     Ok(())
@@ -801,9 +801,9 @@ impl SceneConfig {
                             name: script_config.name.clone(),
                             path: script_config.path.clone(),
                         };
-                        { world.write().spawn((adopted, transform, script, entity_config.properties.clone())); }
+                        { world.lock().spawn((adopted, transform, script, entity_config.properties.clone())); }
                     } else {
-                        { world.write().spawn((adopted, transform, entity_config.properties.clone())); }
+                        { world.lock().spawn((adopted, transform, entity_config.properties.clone())); }
                     }
 
                     Ok(())
@@ -865,9 +865,9 @@ impl SceneConfig {
                             name: script_config.name.clone(),
                             path: script_config.path.clone(),
                         };
-                        { world.write().spawn((plane, transform, script, entity_config.properties.clone())); }
+                        { world.lock().spawn((plane, transform, script, entity_config.properties.clone())); }
                     } else {
-                        { world.write().spawn((plane, transform, entity_config.properties.clone())); }
+                        { world.lock().spawn((plane, transform, entity_config.properties.clone())); }
                     }
 
                     Ok(())
@@ -897,7 +897,7 @@ impl SceneConfig {
             )
             .await;
             {
-                world.write().spawn((
+                world.lock().spawn((
                     light_config.light_component.clone(),
                     light_config.transform,
                     light,
@@ -948,30 +948,37 @@ impl SceneConfig {
                     follow_target: target_label.clone(),
                     offset: DVec3::from_array(*offset),
                 };
-                { world.write().spawn((camera, component, follow_target)); }
+                { world.lock().spawn((camera, component, follow_target)); }
             } else {
-                { world.write().spawn((camera, component)); }
+                { world.lock().spawn((camera, component)); }
             }
         }
 
-        if world.read()
-            .query::<(&LightComponent, &Light)>()
-            .iter()
-            .next()
-            .is_none()
         {
-            log::info!("No lights in scene, spawning default light");
-            if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingLight { index: 0, name: String::from("Default Light"), total: 1 });
+            let mut is_none = false;
+            if world.lock()
+                .query::<(&LightComponent, &Light)>()
+                .iter()
+                .next()
+                .is_none()
+            {
+                log::info!("No lights in scene, spawning default light");
+                is_none = true;
             }
-            let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            let trans = Transform {
-                position: glam::DVec3::new(2.0, 4.0, 2.0),
-                ..Default::default()
-            };
-            let light = Light::new(graphics.clone(), &comp, &trans, Some("Default Light")).await;
+            
+            if is_none {
+                if let Some(ref s) = progress_sender {
+                    let _ = s.send(WorldLoadingStatus::LoadingLight { index: 0, name: String::from("Default Light"), total: 1 });
+                }
+                let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
+                let trans = Transform {
+                    position: glam::DVec3::new(2.0, 4.0, 2.0),
+                    ..Default::default()
+                };
+                let light = Light::new(graphics.clone(), &comp, &trans, Some("Default Light")).await;
 
-            world.write().spawn((comp, trans, light, ModelProperties::default()));
+                { world.lock().spawn((comp, trans, light, ModelProperties::default())); }
+            }
         }
 
         log::info!(
@@ -983,36 +990,40 @@ impl SceneConfig {
         #[cfg(feature = "editor")]
         {
             // Editor mode - look for debug camera, create one if none exists
-            let debug_camera = world.read()
-                .query::<(&Camera, &CameraComponent)>()
-                .iter()
-                .find_map(|(entity, (_, component))| {
-                    if matches!(component.camera_type, CameraType::Debug) {
-                        Some(entity)
-                    } else {
-                        None
-                    }
-                });
+            let debug_camera = {
+                world.lock()
+                    .query::<(&Camera, &CameraComponent)>()
+                    .iter()
+                    .find_map(|(entity, (_, component))| {
+                        if matches!(component.camera_type, CameraType::Debug) {
+                            Some(entity)
+                        } else {
+                            None
+                        }
+                    })
+            };
 
-            if let Some(camera_entity) = debug_camera {
-                log::info!("Using existing debug camera for editor");
-                Ok(camera_entity)
-            } else {
-                log::info!("No debug camera found, creating viewport camera for editor");
-                if let Some(ref s) = progress_sender {
-                    let _ = s.send(WorldLoadingStatus::LoadingCamera { index: 0, name: String::from("Viewport Camera"), total: 1 });
+            {
+                if let Some(camera_entity) = debug_camera {
+                    log::info!("Using existing debug camera for editor");
+                    Ok(camera_entity)
+                } else {
+                    log::info!("No debug camera found, creating viewport camera for editor");
+                    if let Some(ref s) = progress_sender {
+                        let _ = s.send(WorldLoadingStatus::LoadingCamera { index: 0, name: String::from("Viewport Camera"), total: 1 });
+                    }
+                    let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
+                    let component = DebugCamera::new();
+                    let camera_entity = { world.lock().spawn((camera, component)) };
+                    Ok(camera_entity)
                 }
-                let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
-                let component = DebugCamera::new();
-                let camera_entity = { world.write().spawn((camera, component)) };
-                Ok(camera_entity)
             }
         }
 
         #[cfg(not(feature = "editor"))]
         {
             // Runtime mode - look for player camera, panic if none exists
-            let player_camera = world.read()
+            let player_camera = world.lock()
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
                 .find_map(|(entity, (_, component))| {

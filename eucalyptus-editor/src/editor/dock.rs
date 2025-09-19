@@ -23,7 +23,7 @@ pub struct EditorTabViewer<'a> {
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub world: Arc<RwLock<World>>,
+    pub world: &'a mut World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
@@ -130,7 +130,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 log_once::debug_once!("Viewport focused");
                 // ------------------- Template for querying active camera -----------------
                 // if let Some(active_camera) = self.active_camera {
-                //     if let Ok(mut q) = self.world.read().query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                //     if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
                 //         if let Some((camera, component, follow_target)) = q.get() {
 
                 //         } else {
@@ -191,7 +191,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     let active_cam = self.active_camera.lock();
                     if let Some(active_camera) = *active_cam {
                         {
-                            if let Ok(mut q) = self.world.read().query_one::<(
+                            if let Ok(mut q) = self.world.query_one::<(
                                 &Camera,
                                 &CameraComponent,
                                 Option<&CameraFollowTarget>,
@@ -275,9 +275,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             let mut entity_count = 0;
 
                                             {
-                                                let world_read_guard = self.world.read();
                                                 for (entity_id, (transform, _)) in
-                                                    world_read_guard.query::<(&Transform, &AdoptedEntity)>().iter()
+                                                    self.world.query::<(&Transform, &AdoptedEntity)>().iter()
                                                 {
                                                     entity_count += 1;
                                                     let entity_pos = transform.position;
@@ -315,7 +314,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 *self.selected_entity = Some(entity_id);
                                                 log::debug!("Selected entity: {:?}", entity_id);
                                             } else if entity_count == 0 {
-                                                log::debug!("No entities in world.read() to select");
+                                                log::debug!("No entities in world to select");
                                             } else {
                                                 log::debug!(
                                                 "No entity hit by ray (checked {} entities)",
@@ -350,8 +349,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let active_cam = self.active_camera.lock();
                 if let Some(active_camera) = *active_cam {
                     let camera_data = {
-                        let world = self.world.read();
-                        if let Ok(mut q) = world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
                             let val = q.get();
                             if let Some(val) = val {
                                 Some(val.0.clone())
@@ -381,7 +379,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if !matches!(self.viewport_mode, ViewportMode::None)
                     && let Some(entity_id) = self.selected_entity {
                         {
-                            if let Ok(mut q) = self.world.read()
+                            if let Ok(mut q) = self.world
                                 .query_one::<&mut Transform>(*entity_id)
                                 && let Some(transform) = q.get() {
                                     let was_focused = cfg.is_focused;
@@ -617,7 +615,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     {
                                                         let active_cam = self.active_camera.lock();
                                                         if let Some(active_camera) = *active_cam {
-                                                            if let Ok(mut q) = self.world.read().query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                                                            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
                                                                 if let Some((camera, _, _)) = q.get() {
                                                                     spawn_position = camera.eye;
                                                                 } else {
@@ -687,10 +685,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
                     {
-                        let world = self.world.read();
-                        // Note: Use self.world.read() and query_one instead of self.world.write() and query_one_mut as
-                        // that causes a deadlock
-                            if let Ok(mut q) = world.query_one::<(
+                            if let Ok(mut q) = self.world.query_one::<(
                                 &mut AdoptedEntity,
                                 Option<&mut Transform>,
                                 Option<&ModelProperties>,
@@ -794,7 +789,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 log_once::debug_once!("Unable to query entity inside resource inspector");
                             }
 
-                            if let Ok(mut q) = world
+                            if let Ok(mut q) = self.world
                                 .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
                             {
                                 if let Some((light, transform, props)) = q.get() {
@@ -842,7 +837,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             if let Ok(mut q) =
-                                world.query_one::<(
+                                self.world.query_one::<(
                                     &mut Camera,
                                     &mut CameraComponent,
                                     Option<&mut CameraFollowTarget>,
@@ -1002,7 +997,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             log::debug!("Add Component clicked");
                             if let Some(entity) = self.selected_entity {
                                 {
-                                    if let Ok(mut q) = self.world.read()
+                                    if let Ok(mut q) = self.world
                                         .query_one::<&AdoptedEntity>(*entity)
                                         && q.get().is_some() {
                                             log::debug!("Queried selected entity, it is an entity");
@@ -1012,7 +1007,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 }
 
                                 {
-                                    if let Ok(mut q) = self.world.read()
+                                    if let Ok(mut q) = self.world
                                         .query_one::<&Light>(*entity)
                                         && q.get().is_some() {
                                             log::debug!("Queried selected entity, it is a light");
@@ -1038,7 +1033,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::RemoveComponent => {
                             log::debug!("Remove Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(mut q) = self.world.write()
+                                if let Ok(mut q) = self.world
                                     .query_one::<&ScriptComponent>(*entity)
                                 {
                                     if let Some(script) = q.get() {

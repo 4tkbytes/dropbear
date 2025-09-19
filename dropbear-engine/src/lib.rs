@@ -12,6 +12,7 @@ pub mod resources;
 pub mod scene;
 pub mod procedural;
 pub mod utils;
+pub mod future;
 
 use app_dirs2::{AppDataType, AppInfo};
 use chrono::Local;
@@ -50,6 +51,7 @@ pub use gilrs;
 use log::LevelFilter;
 pub use wgpu;
 pub use winit;
+use crate::future::FutureQueue;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -64,13 +66,14 @@ pub struct State {
     pub instance: Instance,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
+    pub future_queue: Arc<FutureQueue>,
 
     pub window: Arc<Window>,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         // create backend
@@ -215,6 +218,7 @@ Hardware:
             egui_renderer,
             viewport_texture,
             texture_id: Arc::new(texture_id),
+            future_queue
         };
 
         Ok(result)
@@ -245,7 +249,7 @@ Hardware:
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
-    async fn render(
+    fn render(
         &mut self,
         scene_manager: &mut scene::Manager,
         previous_dt: f32,
@@ -303,9 +307,8 @@ Hardware:
         let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
 
         scene_manager
-            .update(previous_dt, &mut graphics, event_loop)
-            .await;
-        scene_manager.render(&mut graphics).await;
+            .update(previous_dt, &mut graphics, event_loop);
+        scene_manager.render(&mut graphics);
 
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
@@ -370,14 +373,16 @@ pub struct App {
     target_fps: u32,
     /// The library used for polling controllers, specifically the instance of that.
     gilrs: Gilrs,
-    // /// A task pool used for background async work
-    // runtime: Runtime,
+    /// A queue that polls through futures for asynchronous functions
+    /// 
+    /// Winit doesn't use async, so this is the next best alternative. 
+    future_queue: Arc<FutureQueue>,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
-    fn new(config: WindowConfiguration) -> Self {
+    fn new(config: WindowConfiguration, future_queue: Option<Arc<FutureQueue>>) -> Self {
         let result = Self {
             state: None,
             config: config.clone(),
@@ -388,7 +393,7 @@ impl App {
             target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
-            // runtime,
+            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
         };
         log::debug!("Created new instance of app");
         result
@@ -425,7 +430,7 @@ impl App {
     /// 
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Arc<FutureQueue>>, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
@@ -524,7 +529,7 @@ impl App {
         log::debug!("Additional nerdy stuff: {:#?}", rustc_version_runtime::version_meta());
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
-        let mut app = Box::new(App::new(config));
+        let mut app = Box::new(App::new(config, future_queue));
         log::debug!("Configured app with details: {}", app.config);
 
         log::debug!("Running through setup");
@@ -546,10 +551,14 @@ impl App {
 /// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life
 /// easier by not having to guess your package name if it changes).
 ///
-/// See also the docs for a further run down on the parameters of how it is run: [`App::run()`]
+/// # Parameters
+/// * config - [`WindowConfiguration`]: The configuration/settings of the window. 
+/// * queue - [`Option<Arc<FutureQueue>>`]: An optional value for a [`FutureQueue`]
+/// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
+///   but instead be set as an [`Arc<Mutex<T>>>`]. 
 macro_rules! run_app {
-    ($config:expr, $setup:expr) => {
-        $crate::App::run($config, env!("CARGO_PKG_NAME"), $setup)
+    ($config:expr, $queue:expr, $setup:expr) => {
+        $crate::App::run($config, env!("CARGO_PKG_NAME"), $queue, $setup)
     };
 }
 
@@ -572,7 +581,7 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
-        self.state = Some(block_on(State::new(window)).unwrap());
+        self.state = Some(block_on(State::new(window, self.future_queue.clone())).unwrap());
 
         if let Some(state) = &mut self.state {
             let size = state.window.inner_size();
@@ -605,6 +614,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
+                self.future_queue.poll();
+                
                 let frame_start = Instant::now();
 
                 let active_handlers = self.scene_manager.get_active_input_handlers();
@@ -612,8 +623,7 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update(&mut self.gilrs);
 
-                let render_result =
-                    block_on(state.render(&mut self.scene_manager, self.delta_time, event_loop));
+                let render_result = state.render(&mut self.scene_manager, self.delta_time, event_loop);
 
                 if let Err(e) = render_result {
                     log::error!("Render failed: {:?}", e);
@@ -636,6 +646,7 @@ impl ApplicationHandler for App {
                 }
 
                 state.window.request_redraw();
+                self.future_queue.cleanup();
             }
             WindowEvent::KeyboardInput {
                 event:
