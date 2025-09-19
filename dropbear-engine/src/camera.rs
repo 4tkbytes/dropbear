@@ -43,38 +43,42 @@ pub struct Camera {
     pub proj_mat: DMat4,
 }
 
+pub struct CameraBuilder {
+    pub eye: DVec3,
+    pub target: DVec3,
+    pub up: DVec3,
+    pub aspect: f64,
+    pub fov_y: f64,
+    pub znear: f64,
+    pub zfar: f64,
+    pub speed: f64,
+    pub sensitivity: f64,
+}
+
 impl Camera {
     /// Creates a new camera
     pub fn new(
         graphics: Arc<SharedGraphicsContext>,
-        eye: DVec3,
-        target: DVec3,
-        up: DVec3,
-        aspect: f64,
-        fov_y: f64,
-        znear: f64,
-        zfar: f64,
-        speed: f64,
-        sensitivity: f64,
+        builder: CameraBuilder,
         label: Option<&str>,
     ) -> Self {
         let uniform = CameraUniform::new();
         let mut camera = Self {
-            eye,
-            target,
-            up,
-            aspect,
-            fov_y,
-            znear,
-            zfar,
+            eye: builder.eye,
+            target: builder.target,
+            up: builder.up,
+            aspect: builder.aspect,
+            fov_y: builder.fov_y,
+            znear: builder.znear,
+            zfar: builder.zfar,
             uniform,
             buffer: None,
             layout: None,
             bind_group: None,
-            speed,
+            speed: builder.speed,
             yaw: 0.0,
             pitch: 0.0,
-            sensitivity,
+            sensitivity: builder.sensitivity,
             label: if let Some(l) = label {
                 l.to_string()
             } else {
@@ -94,15 +98,17 @@ impl Camera {
     pub fn predetermined(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self::new(
             graphics.clone(),
-            DVec3::new(0.0, 1.0, 2.0),
-            DVec3::new(0.0, 0.0, 0.0),
-            DVec3::Y,
-            (graphics.screen_size.0 / graphics.screen_size.1).into(),
-            45.0,
-            0.1,
-            100.0,
-            1.0,
-            0.002,
+            CameraBuilder {
+                eye: DVec3::new(0.0, 1.0, 2.0),
+                target: DVec3::new(0.0, 0.0, 0.0),
+                up: DVec3::Y,
+                aspect: (graphics.screen_size.0 / graphics.screen_size.1).into(),
+                fov_y: 45.0,
+                znear: 0.1,
+                zfar: 100.0,
+                speed: 1.0,
+                sensitivity: 0.002,
+            },
             label,
         )
     }
@@ -154,11 +160,10 @@ impl Camera {
             self.znear,
         );
 
-        self.view_mat = view.clone();
-        self.proj_mat = proj.clone();
+        self.view_mat = view;
+        self.proj_mat = proj;
 
-        let result = DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view;
-        result
+        DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view
     }
 
     pub fn create_bind_group_layout(
@@ -198,7 +203,7 @@ impl Camera {
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.update_view_proj();
         graphics.queue.write_buffer(
-            &self.buffer.as_ref().unwrap(),
+            self.buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[self.uniform]),
         );

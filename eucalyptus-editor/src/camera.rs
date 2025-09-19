@@ -27,7 +27,7 @@ impl InspectableComponent for Camera {
 
                         if resp.changed() {
                             if cfg.old_label_entity.is_none() {
-                                cfg.old_label_entity = Some(entity.clone());
+                                cfg.old_label_entity = Some(*entity);
                                 cfg.label_original = Some(self.label.clone());
                             }
                             cfg.label_last_edit = Some(Instant::now());
@@ -77,7 +77,7 @@ impl InspectableComponent for Camera {
 pub enum UndoableCameraAction {
     Speed(Entity, f64),
     Sensitivity(Entity, f64),
-    FOV(Entity, f64),
+    Fov(Entity, f64),
     Type(Entity, CameraType),
 }
 

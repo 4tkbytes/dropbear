@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{collections::HashMap, fs};
 
-pub const TEMPLATE_SCRIPT: &'static str = include_str!("../../resources/template.ts");
+pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/template.ts");
 
 pub enum ScriptAction {
     AttachScript {
@@ -32,6 +32,12 @@ pub struct DropbearScriptingAPIContext {
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
+}
+
+impl Default for DropbearScriptingAPIContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DropbearScriptingAPIContext {
@@ -157,7 +163,7 @@ impl ScriptManager {
             }
 
             self.script_context.clear_context();
-            return Ok(());
+            Ok(())
         } else {
             Err(anyhow::anyhow!("Script '{}' not found", script_name))
         }

@@ -1,15 +1,15 @@
 use app_dirs2::{AppDataType, app_dir};
 use futures_util::StreamExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::UnboundedSender;
 use crate::APP_INFO;
 
-const GLEAM_VERSION: &'static str = "1.12.0";
-const BUN_VERSION: &'static str = "1.2.22";
-const JAVY_VERSION: &'static str = "6.0.0";
+const GLEAM_VERSION: &str = "1.12.0";
+const BUN_VERSION: &str = "1.2.22";
+const JAVY_VERSION: &str = "6.0.0";
 
 #[derive(Clone)]
 pub enum InstallStatus {
@@ -32,9 +32,9 @@ pub struct GleamScriptCompiler {
 #[allow(dead_code)]
 impl GleamScriptCompiler {
     #[allow(dead_code)]
-    pub fn new(project_location: &PathBuf) -> Self {
+    pub fn new(project_location: impl AsRef<Path>) -> Self {
         GleamScriptCompiler {
-            project_location: project_location.clone(),
+            project_location: project_location.as_ref().to_path_buf(),
         }
     }
 
@@ -183,10 +183,10 @@ impl GleamScriptCompiler {
     }
 
     pub async fn download_gleam(
-        app_dir: &PathBuf,
+        app_dir: impl AsRef<Path>,
         sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
-        let gleam_dir = app_dir
+        let gleam_dir = app_dir.as_ref()
             .join("dependencies")
             .join("gleam")
             .join(GLEAM_VERSION);
@@ -195,7 +195,7 @@ impl GleamScriptCompiler {
             log::info!(
                 "Gleam v{} already cached at {}",
                 GLEAM_VERSION,
-                app_dir.display()
+                app_dir.as_ref().display()
             );
             return Ok(());
         }
@@ -210,16 +210,16 @@ impl GleamScriptCompiler {
     }
 
     pub async fn download_bun(
-        app_dir: &PathBuf,
+        app_dir: impl AsRef<Path>,
         sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
-        let bun_dir = app_dir.join("dependencies").join("bun").join(BUN_VERSION);
+        let bun_dir = app_dir.as_ref().join("dependencies").join("bun").join(BUN_VERSION);
 
         if bun_dir.exists() {
             log::info!(
                 "Bun v{} already cached at {}",
                 BUN_VERSION,
-                app_dir.display()
+                app_dir.as_ref().display()
             );
             return Ok(());
         }
@@ -234,16 +234,16 @@ impl GleamScriptCompiler {
     }
 
     pub async fn download_javy(
-        app_dir: &PathBuf,
+        app_dir: impl AsRef<Path>,
         sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
-        let javy_dir = app_dir.join("dependencies").join("javy").join(JAVY_VERSION);
+        let javy_dir = app_dir.as_ref().join("dependencies").join("javy").join(JAVY_VERSION);
 
         if javy_dir.exists() {
             log::info!(
                 "Javy v{} already cached at {}",
                 JAVY_VERSION,
-                app_dir.display()
+                app_dir.as_ref().display()
             );
             return Ok(());
         }
@@ -259,7 +259,7 @@ impl GleamScriptCompiler {
 
     async fn download_and_extract(
         url: &str,
-        target_dir: &PathBuf,
+        target_dir: impl AsRef<Path>,
         tool_name: &str,
         sender: Option<UnboundedSender<InstallStatus>>,
     ) -> anyhow::Result<()> {
@@ -271,7 +271,7 @@ impl GleamScriptCompiler {
             });
         }
 
-        fs::create_dir_all(target_dir).await?;
+        fs::create_dir_all(target_dir.as_ref()).await?;
 
         if let Some(ref s) = sender {
             let _ = s.send(InstallStatus::InProgress {
@@ -286,7 +286,7 @@ impl GleamScriptCompiler {
         let mut downloaded = 0;
         let mut stream = response.bytes_stream();
 
-        let temp_file = target_dir.join(format!("{}_download", tool_name));
+        let temp_file = target_dir.as_ref().join(format!("{}_download", tool_name));
         let mut file = fs::File::create(&temp_file).await?;
 
         while let Some(item) = stream.next().await {
@@ -336,13 +336,13 @@ impl GleamScriptCompiler {
         Ok(())
     }
 
-    async fn extract_zip(archive: &PathBuf, target_dir: &PathBuf) -> anyhow::Result<()> {
+    async fn extract_zip(archive: impl AsRef<Path>, target_dir: impl AsRef<Path>) -> anyhow::Result<()> {
         let file = std::fs::File::open(archive)?;
         let mut archive = zip::ZipArchive::new(file)?;
 
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
-            let outpath = target_dir.join(file.name());
+            let outpath = target_dir.as_ref().join(file.name());
 
             if file.is_dir() {
                 fs::create_dir_all(&outpath).await?;
@@ -359,22 +359,22 @@ impl GleamScriptCompiler {
         Ok(())
     }
 
-    async fn extract_tar_gz(archive: &PathBuf, target_dir: &PathBuf) -> anyhow::Result<()> {
+    async fn extract_tar_gz(archive: impl AsRef<Path>, target_dir: impl AsRef<Path>) -> anyhow::Result<()> {
         let file = std::fs::File::open(archive)?;
         let tar = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(tar);
 
         for entry in archive.entries()? {
             let mut entry = entry?;
-            let path = target_dir.join(entry.path()?);
+            let path = target_dir.as_ref().join(entry.path()?);
             entry.unpack(path)?;
         }
         Ok(())
     }
 
     async fn extract_gz(
-        archive: &PathBuf,
-        target_dir: &PathBuf,
+        archive: impl AsRef<Path>,
+        target_dir: impl AsRef<Path>,
         tool_name: &str,
     ) -> anyhow::Result<()> {
         let file = std::fs::File::open(archive)?;
@@ -388,7 +388,7 @@ impl GleamScriptCompiler {
             tool_name.to_string()
         };
 
-        let output_path = target_dir.join(exe_name);
+        let output_path = target_dir.as_ref().join(exe_name);
         let mut output_file = fs::File::create(&output_path).await?;
         output_file.write_all(&buffer).await?;
 

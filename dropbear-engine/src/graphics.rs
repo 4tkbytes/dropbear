@@ -21,8 +21,8 @@ use crate::{
     model::{self, Vertex},
 };
 
-pub const NO_TEXTURE: &'static [u8] = include_bytes!("../../resources/no-texture.png");
-pub const NO_MODEL: &'static [u8] = include_bytes!("../../resources/error.glb");
+pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/no-texture.png");
+pub const NO_MODEL: &[u8] = include_bytes!("../../resources/error.glb");
 
 pub struct RenderContext<'a> {
     pub shared: Arc<SharedGraphicsContext>,
@@ -193,7 +193,7 @@ impl<'a> RenderContext<'a> {
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.frame.view,
+                    view: self.frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(color),
@@ -220,7 +220,7 @@ impl<'a> RenderContext<'a> {
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.frame.view,
+                    view: self.frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -400,7 +400,7 @@ impl Texture {
         };
 
         let desc = TextureDescriptor {
-            label: label,
+            label,
             size,
             mip_level_count: 1,
             sample_count: 1,

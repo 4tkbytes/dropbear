@@ -10,7 +10,7 @@ pub mod model;
 pub mod panic;
 pub mod resources;
 pub mod scene;
-pub mod starter;
+pub mod procedural;
 pub mod utils;
 
 use app_dirs2::{AppDataType, AppInfo};
@@ -29,8 +29,8 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
-    u32,
 };
+use bytemuck::Contiguous;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -74,13 +74,13 @@ impl State {
         let size = window.inner_size();
 
         // create backend
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             // flags: wgpu::InstanceFlags::empty(),
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = instance.create_surface(window.clone())?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -125,7 +125,7 @@ Hardware:
     Driver Info: {}
 =======================================================
 ",
-            info.backend.to_string(),
+            info.backend,
             os_info.architecture(),
             os_info.bitness(),
             os_info.codename(),
@@ -148,7 +148,7 @@ Hardware:
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(TextureFormat::Rgba8Unorm);
-        let config = wgpu::SurfaceConfiguration {
+        let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
@@ -257,27 +257,27 @@ Hardware:
 
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
-            Err(e) => match e {
+            Err(e) => return match e {
                 SurfaceError::Lost => {
                     log_once::warn_once!("Surface lost, reconfiguring...");
                     self.surface.configure(&self.device, &self.config);
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::Outdated => {
                     log_once::warn_once!("Surface outdated, reconfiguring...");
                     self.surface.configure(&self.device, &self.config);
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::Timeout => {
                     log_once::warn_once!("Surface timeout, skipping frame");
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::OutOfMemory => {
-                    return Err(anyhow::anyhow!("Surface out of memory: {:?}", e));
+                    Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
                 }
                 SurfaceError::Other => {
                     log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                    return Ok(());
+                    Ok(())
                 }
             },
         };
@@ -346,8 +346,7 @@ Hardware:
 pub fn get_current_time_as_ns() -> u128 {
     let now = SystemTime::now();
     let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-    let timestamp_ns = duration_since_epoch.as_nanos();
-    timestamp_ns
+    duration_since_epoch.as_nanos()
 }
 
 /// A struct storing the information about the application/game that is using the engine.
@@ -384,7 +383,7 @@ impl App {
             config: config.clone(),
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
-            delta_time: (1.0 / 60.0),
+            delta_time: 1.0 / 60.0,
             next_frame_time: None,
             target_fps: config.max_fps,
             // default settings for now
@@ -397,7 +396,7 @@ impl App {
 
     /// A constant that lets you not have any fps count.
     /// It is just the max value of an unsigned 32 bit number lol.
-    pub const NO_FPS_CAP: u32 = u32::MAX;
+    pub const NO_FPS_CAP: u32 = u32::MAX_VALUE;
 
     /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
     pub fn set_target_fps(&mut self, fps: u32) {
@@ -423,6 +422,7 @@ impl App {
     /// - config: The window configuration, such as the title, and window dimensions.
     /// - app_name: A string to the app name for debugging.
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
+    /// 
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
     pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
@@ -432,8 +432,7 @@ impl App {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        tokio::fs::create_dir_all(&log_dir)
-            .await
+        std::fs::create_dir_all(&log_dir)
             .expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
@@ -521,10 +520,7 @@ impl App {
         }
         log::info!("dropbear-engine running...");
         let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
-        match ad {
-            Ok(path) => {log::info!("App data is stored at {}", path.display())},
-            Err(_) => {}
-        };
+        if let Ok(path) = ad {log::info!("App data is stored at {}", path.display())};
         log::debug!("Additional nerdy stuff: {:#?}", rustc_version_runtime::version_meta());
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
@@ -650,8 +646,8 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if code == KeyCode::F11 && key_state.is_pressed() {
-                    if let Some(state) = &self.state {
+                if code == KeyCode::F11 && key_state.is_pressed()
+                    && let Some(state) = &self.state {
                         match self.config.windowed_mode {
                             WindowedModes::Windowed(_, _) => {
                                 if state.window.fullscreen().is_some() {
@@ -686,7 +682,6 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                }
                 self.input_manager
                     .handle_key_input(code, key_state.is_pressed(), event_loop);
             }
@@ -709,7 +704,7 @@ impl ApplicationHandler for App {
 /// The window configuration of the app/game.
 ///
 /// This struct is primitive but has purpose in the way that it sets the initial specs of the window.
-/// Thats all it does. And it can also display. But thats about it.
+/// That's all it does. And it can also display. But that's about it.
 #[derive(Debug, Clone)]
 pub struct WindowConfiguration {
     pub windowed_mode: WindowedModes,

@@ -2,7 +2,7 @@
 use super::*;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::{Model, MODEL_CACHE};
-use dropbear_engine::starter::plane::PlaneBuilder;
+use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
     lighting::{Light, LightComponent},
@@ -196,8 +196,7 @@ impl Scene for Editor {
                 let world = self.world.read();
                 if let Ok(mut query) = world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
-                {
-                    if let Some((camera, component)) = query.get() {
+                    && let Some((camera, component)) = query.get() {
                         match component.camera_type {
                             CameraType::Debug => {
                                 DebugCamera::handle_keyboard_input(camera, &movement_keys);
@@ -225,7 +224,6 @@ impl Scene for Editor {
                             }
                         }
                     }
-                }
             }
 
         }
@@ -343,11 +341,7 @@ impl Scene for Editor {
                             .query_one::<&CameraComponent>(*sel_e)
                         {
                             if let Some(c) = q.get() {
-                                if matches!(c.camera_type, CameraType::Debug) {
-                                    true
-                                } else {
-                                    false
-                                }
+                                matches!(c.camera_type, CameraType::Debug)
                             } else {
                                 false
                             }
@@ -551,7 +545,7 @@ impl Scene for Editor {
                                 &mut self.undo_stack,
                                 UndoableAction::RemoveComponent(
                                     selected_entity,
-                                    ComponentType::Script(comp),
+                                    Box::new(ComponentType::Script(comp)),
                                 ),
                             );
                         }
@@ -625,7 +619,7 @@ impl Scene for Editor {
                             script.path.display()
                         );
 
-                        let bytes = match tokio::fs::read_to_string(&script.path).await {
+                        let bytes = match std::fs::read_to_string(&script.path) {
                             Ok(val) => val,
                             Err(e) => {
                                 fatal!(
@@ -719,8 +713,7 @@ impl Scene for Editor {
                         let mut follow_target = (false, CameraFollowTarget::default());
                         if let Ok(mut query) = self.world.read()
                             .query_one::<&AdoptedEntity>(*entity)
-                        {
-                            if let Some(adopted) = query.get() {
+                            && let Some(adopted) = query.get() {
                                 follow_target = (
                                     true,
                                     CameraFollowTarget {
@@ -729,7 +722,6 @@ impl Scene for Editor {
                                     },
                                 );
                             }
-                        }
 
                         {
                             if follow_target.0 {
@@ -949,7 +941,7 @@ impl Scene for Editor {
                 }
             }
             Signal::RemoveComponent(entity, c_type) =>
-            {match c_type {
+            {match &**c_type {
                 ComponentType::Script(_) => {
                     match self.world.write()
                         .remove_one::<ScriptComponent>(*entity)
@@ -960,7 +952,7 @@ impl Scene for Editor {
                                 &mut self.undo_stack,
                                 UndoableAction::RemoveComponent(
                                     *entity,
-                                    ComponentType::Script(component),
+                                    Box::new(ComponentType::Script(component)),
                                 ),
                             );
                         }
@@ -971,7 +963,7 @@ impl Scene for Editor {
                     self.signal = Signal::None;
                 }
                 ComponentType::Camera(_, _, follow) => {
-                    if let Some(_) = follow {
+                    if follow.is_some() {
                         match self.world.write().remove::<(
                             Camera,
                             CameraComponent,
@@ -985,11 +977,11 @@ impl Scene for Editor {
                                     &mut self.undo_stack,
                                     UndoableAction::RemoveComponent(
                                         *entity,
-                                        ComponentType::Camera(
-                                            component.0,
+                                        Box::new(ComponentType::Camera(
+                                            Box::new(component.0),
                                             component.1,
                                             Some(component.2),
-                                        ),
+                                        )),
                                     ),
                                 );
                             }
@@ -1007,7 +999,7 @@ impl Scene for Editor {
                                     &mut self.undo_stack,
                                     UndoableAction::RemoveComponent(
                                         *entity,
-                                        ComponentType::Camera(component.0, component.1, None),
+                                        Box::new(ComponentType::Camera(Box::new(component.0), component.1, None)),
                                     ),
                                 );
                             }
@@ -1036,22 +1028,22 @@ impl Scene for Editor {
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Light")).clicked() {
                             log::debug!("Creating new lighting");
-                            self.signal = Signal::Spawn(PendingSpawn2::CreateLight);
+                            self.signal = Signal::Spawn(PendingSpawn2::Light);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
                             log::debug!("Creating new plane");
-                            self.signal = Signal::Spawn(PendingSpawn2::CreatePlane);
+                            self.signal = Signal::Spawn(PendingSpawn2::Plane);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
                             log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawn2::CreateCube);
+                            self.signal = Signal::Spawn(PendingSpawn2::Cube);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
                             log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawn2::CreateCamera);
+                            self.signal = Signal::Spawn(PendingSpawn2::Camera);
                         }
                     });
                 if !show {
@@ -1072,7 +1064,7 @@ impl Scene for Editor {
                         log::info!("  |-> Using model: {:?}", entity.cube_model.id);
                     }
 
-                    if let Some(_) = entity.get::<&Camera>() {
+                    if entity.get::<&Camera>().is_some() {
                         log::info!("Camera");
                     }
                     counter += 1;
@@ -1083,7 +1075,7 @@ impl Scene for Editor {
             }
             Signal::Spawn(entity_type) => {
                 match entity_type {
-                    crate::editor::PendingSpawn2::CreateLight => {
+                    crate::editor::PendingSpawn2::Light => {
                         let transform = Transform::new();
                         let component = LightComponent::default();
                         let light = Light::new(
@@ -1099,7 +1091,7 @@ impl Scene for Editor {
                         }
                         success!("Created new light");
                     }
-                    crate::editor::PendingSpawn2::CreatePlane => {
+                    crate::editor::PendingSpawn2::Plane => {
                         let plane = PlaneBuilder::new()
                             .with_size(500.0, 200.0)
                             .build(graphics.shared.clone(), PROTO_TEXTURE, Some("Plane"))
@@ -1126,7 +1118,7 @@ impl Scene for Editor {
                         }
                         success!("Created new plane");
                     }
-                    crate::editor::PendingSpawn2::CreateCube => {
+                    crate::editor::PendingSpawn2::Cube => {
                         let model = Model::load_from_memory(
                             graphics.shared.clone(),
                             include_bytes!("../../../resources/cube.glb"),
@@ -1155,7 +1147,7 @@ impl Scene for Editor {
                         }
                         success!("Created new cube");
                     }
-                    crate::editor::PendingSpawn2::CreateCamera => {
+                    crate::editor::PendingSpawn2::Camera => {
                         let camera = Camera::predetermined(graphics.shared.clone(), None);
                         let component = CameraComponent::new();
                         {
@@ -1178,11 +1170,10 @@ impl Scene for Editor {
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam {
                 let world = self.world.read();
-                if let Ok(mut query) = world.query_one::<&mut Camera>(active_camera) {
-                    if let Some(camera) = query.get() {
+                if let Ok(mut query) = world.query_one::<&mut Camera>(active_camera)
+                    && let Some(camera) = query.get() {
                         camera.aspect = new_aspect;
                     }
-                }
             }
 
         }
@@ -1223,12 +1214,11 @@ impl Scene for Editor {
 
             if let Some(pos) = target_position {
                 let world = self.world.read();
-                if let Ok(mut query) = world.query_one::<&mut Camera>(camera_entity) {
-                    if let Some(camera) = query.get() {
+                if let Ok(mut query) = world.query_one::<&mut Camera>(camera_entity)
+                    && let Some(camera) = query.get() {
                         camera.eye = pos + offset.as_dvec3();
                         camera.target = pos;
                     }
-                }
             }
 
         }
@@ -1268,17 +1258,16 @@ impl Scene for Editor {
         }
 
         {
-            let mut world = self.world.read();
+            let world = self.world.read();
             self.light_manager.update(
                 graphics.shared.clone(),
-                &mut world,
+                &world,
             );
         }
-        
 
         if self.dep_installer.is_installing {
             self.dep_installer
-                .show_installation_window(&mut graphics.shared.get_egui_context());
+                .show_installation_window(&graphics.shared.get_egui_context());
         }
         self.dep_installer.update_progress();
     }
@@ -1292,8 +1281,8 @@ impl Scene for Editor {
             a: 1.0,
         };
 
-        self.color = color.clone();
-        self.size = graphics.shared.viewport_texture.size.clone();
+        self.color = color;
+        self.size = graphics.shared.viewport_texture.size;
         self.texture_id = Some(*graphics.shared.texture_id.clone());
         { self.show_ui(&graphics.shared.get_egui_context()).await; }
 
@@ -1305,11 +1294,7 @@ impl Scene for Editor {
                 let cam = {
                     let world = self.world.read();
                     if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
-                        if let Some(camera) = query.get() {
-                            Some(camera.clone())
-                        } else {
-                            None
-                        }
+                        query.get().cloned()
                     } else {
                         None
                     }
@@ -1363,7 +1348,7 @@ impl Scene for Editor {
                         let instance_raw = entity.instance.to_raw();
                         model_batches
                             .entry(model_ptr)
-                            .or_insert(Vec::new())
+                            .or_default()
                             .push(instance_raw);
                     }
 

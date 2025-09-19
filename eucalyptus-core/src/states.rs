@@ -2,12 +2,12 @@ use crate::camera::DebugCamera;
 use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
-use dropbear_engine::camera::Camera;
+use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
-use dropbear_engine::starter::plane::PlaneBuilder;
+use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui_dock_fork::DockState;
 use glam::DVec3;
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
 use rayon::prelude::*;
@@ -52,24 +52,13 @@ pub struct ProjectConfig {
 impl ProjectConfig {
     /// Creates a new instance of the ProjectConfig. This function is typically used when creating
     /// a new project, with it creating new defaults for everything.
-    pub fn new(project_name: String, project_path: &PathBuf) -> Self {
+    pub fn new(project_name: String, project_path: impl AsRef<Path>) -> Self {
         let date_created = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         let date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
-        // #[cfg(not(feature = "editor"))]
-        // {
-        //     let mut result = Self {
-        //         project_name,
-        //         project_path: project_path.to_path_buf(),
-        //         date_created,
-        //         date_last_accessed,
-        //     };
-        //     let _ = result.load_config_to_memory(); // TODO: Deal with later...
-        //     result
-        // }
 
         let mut result = Self {
             project_name,
-            project_path: project_path.to_path_buf(),
+            project_path: project_path.as_ref().to_path_buf(),
             date_created,
             date_last_accessed,
             editor_settings: Default::default(),
@@ -84,15 +73,14 @@ impl ProjectConfig {
     ///
     /// # Parameters
     /// * path - The root **folder** of the project.
-
-    pub fn write_to(&mut self, path: &PathBuf) -> anyhow::Result<()> {
+    pub fn write_to(&mut self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         self.load_config_to_memory()?;
         self.date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
         // self.assets = Assets::walk(path);
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
-        self.project_path = path.to_path_buf();
+        let config_path = path.as_ref().join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
+        self.project_path = path.as_ref().to_path_buf();
 
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -103,10 +91,10 @@ impl ProjectConfig {
     ///
     /// # Parameters
     /// * path - The root config **file** for the project
-    pub fn read_from(path: &PathBuf) -> anyhow::Result<Self> {
-        let ron_str = fs::read_to_string(path)?;
-        let mut config: ProjectConfig = ron::de::from_str(&ron_str.as_str())?;
-        config.project_path = path.parent().unwrap().to_path_buf();
+    pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let ron_str = fs::read_to_string(path.as_ref())?;
+        let mut config: ProjectConfig = ron::de::from_str(ron_str.as_str())?;
+        config.project_path = path.as_ref().parent().unwrap().to_path_buf();
         log::info!("Loaded project!");
         log::debug!("Loaded config info");
         log::debug!("Updating with new content");
@@ -222,7 +210,7 @@ impl ProjectConfig {
     /// # Parameters
     /// * path - The root folder of the project
     pub fn write_to_all(&mut self) -> anyhow::Result<()> {
-        let path = PathBuf::from(self.project_path.clone());
+        let path = self.project_path.clone();
 
         {
             let resources_config = RESOURCES.read();
@@ -307,15 +295,15 @@ impl ResourceConfig {
 
     /// # Parameters
     /// - path: The root **folder** of the project
-    pub fn write_to(&self, path: &PathBuf) -> anyhow::Result<()> {
-        let resource_dir = path.join("resources");
+    pub fn write_to(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let resource_dir = path.as_ref().join("resources");
         let updated_config = ResourceConfig {
             path: resource_dir.clone(),
-            nodes: collect_nodes(&resource_dir, path, vec!["thumbnails"].as_slice()),
+            nodes: collect_nodes(&resource_dir, path.as_ref(), vec!["thumbnails"].as_slice()),
         };
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.join("resources").join("resources.eucc");
+        let config_path = path.as_ref().join("resources").join("resources.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -334,8 +322,8 @@ impl ResourceConfig {
 
     /// # Parameters
     /// - path: The location to the **resources.eucc** file
-    pub fn read_from(path: &PathBuf) -> anyhow::Result<Self> {
-        let config_path = path.join("resources").join("resources.eucc");
+    pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let config_path = path.as_ref().join("resources").join("resources.eucc");
         let ron_str = fs::read_to_string(&config_path)?;
         let config: ResourceConfig = ron::de::from_str(&ron_str)
             .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
@@ -360,16 +348,16 @@ impl SourceConfig {
 
     /// # Parameters
     /// - path: The root **folder** of the project
-    pub fn write_to(&self, path: &PathBuf) -> anyhow::Result<()> {
-        let resource_dir = path.join("src");
+    pub fn write_to(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let resource_dir = path.as_ref().join("src");
         let updated_config = SourceConfig {
             path: resource_dir.clone(),
-            nodes: collect_nodes(&resource_dir, path, vec!["scripts"].as_slice()),
+            nodes: collect_nodes(&resource_dir, path.as_ref(), vec!["scripts"].as_slice()),
         };
 
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialisation error: {}", e))?;
-        let config_path = path.join("src").join("source.eucc");
+        let config_path = path.as_ref().join("src").join("source.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -377,8 +365,8 @@ impl SourceConfig {
 
     /// # Parameters
     /// - path: The location to the **source.eucc** file
-    pub fn read_from(path: &PathBuf) -> anyhow::Result<Self> {
-        let config_path = path.join("src").join("source.eucc");
+    pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let config_path = path.as_ref().join("src").join("source.eucc");
         let ron_str = fs::read_to_string(&config_path)?;
         let config: SourceConfig = ron::de::from_str(&ron_str)
             .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
@@ -386,7 +374,7 @@ impl SourceConfig {
     }
 }
 
-fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -> Vec<Node> {
+fn collect_nodes(dir: impl AsRef<Path>, _project_path: impl AsRef<Path>, exclude_list: &[&str]) -> Vec<Node> {
     let mut nodes = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -397,13 +385,13 @@ fn collect_nodes(dir: &PathBuf, project_path: &PathBuf, exclude_list: &[&str]) -
                 .to_string_lossy()
                 .to_string();
 
-            if entry_path.is_dir() && exclude_list.iter().any(|ex| &ex.to_string() == &name) {
+            if entry_path.is_dir() && exclude_list.iter().any(|ex| ex.to_string() == *name) {
                 log::debug!("Skipped past folder {:?}", name);
                 continue;
             }
 
             if entry_path.is_dir() {
-                let folder_nodes = collect_nodes(&entry_path, project_path, exclude_list);
+                let folder_nodes = collect_nodes(&entry_path, _project_path.as_ref(), exclude_list);
                 nodes.push(Node::Folder(Folder {
                     name,
                     path: entry_path.clone(),
@@ -606,16 +594,8 @@ impl CameraConfig {
             far: camera.zfar as f32,
             speed: component.speed as f32,
             sensitivity: component.sensitivity as f32,
-            follow_target_entity_label: if let Some(target) = follow_target {
-                Some(target.follow_target.clone())
-            } else {
-                None
-            },
-            follow_offset: if let Some(target) = follow_target {
-                Some(target.offset.to_array())
-            } else {
-                None
-            },
+            follow_target_entity_label: follow_target.map(|target| target.follow_target.clone()),
+            follow_offset: follow_target.map(|target| target.offset.to_array()),
         }
     }
 }
@@ -683,10 +663,10 @@ pub struct SceneConfig {
 
 impl SceneConfig {
     /// Creates a new instance of the scene config
-    pub fn new(scene_name: String, path: PathBuf) -> Self {
+    pub fn new(scene_name: String, path: impl AsRef<Path>) -> Self {
         Self {
             scene_name,
-            path,
+            path: path.as_ref().to_path_buf(),
             entities: Vec::new(),
             cameras: Vec::new(),
             lights: Vec::new(),
@@ -694,11 +674,11 @@ impl SceneConfig {
     }
 
     /// Write the scene config to a .eucs file
-    pub fn write_to(&self, project_path: &PathBuf) -> anyhow::Result<()> {
+    pub fn write_to(&self, project_path: impl AsRef<Path>) -> anyhow::Result<()> {
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
 
-        let scenes_dir = project_path.join("scenes");
+        let scenes_dir = project_path.as_ref().join("scenes");
         fs::create_dir_all(&scenes_dir)?;
 
         let config_path = scenes_dir.join(format!("{}.eucs", self.scene_name));
@@ -707,12 +687,12 @@ impl SceneConfig {
     }
 
     /// Read a scene config from a .eucs file
-    pub fn read_from(scene_path: &PathBuf) -> anyhow::Result<Self> {
-        let ron_str = fs::read_to_string(scene_path)?;
+    pub fn read_from(scene_path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let ron_str = fs::read_to_string(scene_path.as_ref())?;
         let mut config: SceneConfig = ron::de::from_str(&ron_str)
             .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
 
-        config.path = scene_path.clone();
+        config.path = scene_path.as_ref().to_path_buf();
         Ok(config)
     }
 
@@ -939,15 +919,17 @@ impl SceneConfig {
 
             let camera = Camera::new(
                 graphics.clone(),
-                DVec3::from_array(camera_config.position),
-                DVec3::from_array(camera_config.target),
-                DVec3::from_array(camera_config.up),
-                camera_config.aspect,
-                camera_config.fov as f64,
-                camera_config.near as f64,
-                camera_config.far as f64,
-                camera_config.speed as f64,
-                camera_config.sensitivity as f64,
+                CameraBuilder {
+                    eye: DVec3::from_array(camera_config.position),
+                    target: DVec3::from_array(camera_config.target),
+                    up: DVec3::from_array(camera_config.up),
+                    aspect: camera_config.aspect,
+                    fov_y: camera_config.fov as f64,
+                    znear: camera_config.near as f64,
+                    zfar: camera_config.far as f64,
+                    speed: camera_config.speed as f64,
+                    sensitivity: camera_config.sensitivity as f64,
+                },
                 Some(&camera_config.label),
             );
 

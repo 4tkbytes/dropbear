@@ -1,7 +1,7 @@
 pub mod gleam;
 
 use std::{collections::HashMap, fs, path::PathBuf, process::Command};
-
+use std::path::Path;
 use clap::ArgMatches;
 use zip::write::SimpleFileOptions;
 
@@ -62,7 +62,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
 
     println!("Building {} for release", project_name);
     let mut cargo_build = Command::new("cargo")
-        .args(&["build", "--release"])
+        .args(["build", "--release"])
         .current_dir(&runtime_dir)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -168,16 +168,16 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     Ok(())
 }
 
-fn clone_repository(build_dir: &PathBuf) -> anyhow::Result<()> {
+fn clone_repository(build_dir: impl AsRef<Path>) -> anyhow::Result<()> {
     git2::build::RepoBuilder::new().clone(
         "https://github.com/4tkbytes/redback-runtime",
-        &build_dir.join("redback-runtime"),
+        &build_dir.as_ref().join("redback-runtime"),
     )?;
     println!("Repository cloned successfully!");
     Ok(())
 }
 
-fn should_update_repository(repo_dir: &PathBuf) -> anyhow::Result<bool> {
+fn should_update_repository(repo_dir: impl AsRef<Path>) -> anyhow::Result<bool> {
     let repo = match git2::Repository::open(repo_dir) {
         Ok(repo) => repo,
         Err(_) => {
@@ -214,8 +214,8 @@ fn should_update_repository(repo_dir: &PathBuf) -> anyhow::Result<bool> {
     Ok(head != remote_commit)
 }
 
-fn copy_resources_folder(src: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
-    std::fs::create_dir_all(dest)?;
+fn copy_resources_folder(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
+    fs::create_dir_all(dest.as_ref())?;
 
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -226,7 +226,7 @@ fn copy_resources_folder(src: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
             continue;
         }
 
-        let dest_path = dest.join(&file_name);
+        let dest_path = dest.as_ref().join(&file_name);
 
         if src_path.is_dir() {
             copy_resources_folder(&src_path, &dest_path)?;
@@ -238,7 +238,7 @@ fn copy_resources_folder(src: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn copy_system_libraries(output_dir: &PathBuf) -> anyhow::Result<()> {
+fn copy_system_libraries(output_dir: impl AsRef<Path>) -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
         let dll_paths = vec![
@@ -251,7 +251,7 @@ fn copy_system_libraries(output_dir: &PathBuf) -> anyhow::Result<()> {
         for dll_path in dll_paths {
             if std::path::Path::new(dll_path).exists() {
                 let dll_name = std::path::Path::new(dll_path).file_name().unwrap();
-                let dest = output_dir.join(dll_name);
+                let dest = output_dir.as_ref().join(dll_name);
                 std::fs::copy(dll_path, dest)?;
                 println!("Copied system library: {}", dll_name.to_string_lossy());
                 break;
@@ -261,7 +261,7 @@ fn copy_system_libraries(output_dir: &PathBuf) -> anyhow::Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        let lib_dir = output_dir.join("lib");
+        let lib_dir = output_dir.as_ref().join("lib");
         std::fs::create_dir_all(&lib_dir)?;
 
         let lib_paths = vec![
@@ -287,28 +287,28 @@ fn copy_system_libraries(output_dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_zip_package(source_dir: &PathBuf, zip_path: &PathBuf) -> anyhow::Result<()> {
-    let file = fs::File::create(zip_path)?;
+fn create_zip_package(source_dir: impl AsRef<Path>, zip_path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let file = fs::File::create(zip_path.as_ref())?;
     let mut zip = zip::ZipWriter::new(file);
 
-    let walkdir = walkdir::WalkDir::new(source_dir);
+    let walkdir = walkdir::WalkDir::new(source_dir.as_ref());
     for entry in walkdir {
         let entry = entry?;
         let path = entry.path();
 
         if path.is_file() {
-            let relative_path = path.strip_prefix(source_dir)?;
+            let relative_path = path.strip_prefix(source_dir.as_ref())?;
             let name = relative_path.to_string_lossy();
 
             let options: SimpleFileOptions = Default::default();
-            zip.start_file(name, options.into())?;
+            zip.start_file(name, options)?;
             let mut file = std::fs::File::open(path)?;
             std::io::copy(&mut file, &mut zip)?;
         }
     }
 
     zip.finish()?;
-    println!("Created zip package: {}", zip_path.display());
+    println!("Created zip package: {}", zip_path.as_ref().display());
     Ok(())
 }
 
@@ -362,14 +362,13 @@ pub fn build(
         for entry in fs::read_dir(&script_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if let Some(ext) = path.extension() {
-                if ext == "rhai" {
+            if let Some(ext) = path.extension()
+                && ext == "rhai" {
                     let name = path.file_name().unwrap().to_string_lossy().to_string();
                     let contents = fs::read_to_string(&path)?;
                     println!(" > Copied script info from [{}]", name);
                     scripts.insert(name, contents);
                 }
-            }
         }
     }
 
@@ -496,24 +495,21 @@ fn check_assimp_availability() -> bool {
         }
 
         if let Ok(output) = Command::new("pkg-config")
-            .args(&["--exists", "assimp"])
+            .args(["--exists", "assimp"])
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 return true;
             }
-        }
 
         #[cfg(target_os = "linux")]
         {
-            if let Ok(output) = Command::new("ldconfig").args(&["-p"]).output() {
-                if output.status.success() {
+            if let Ok(output) = Command::new("ldconfig").args(["-p"]).output()
+                && output.status.success() {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("libassimp") {
                         return true;
                     }
                 }
-            }
         }
     }
 

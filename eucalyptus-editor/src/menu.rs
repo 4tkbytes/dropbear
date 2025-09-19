@@ -11,7 +11,6 @@ use dropbear_engine::{
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
-use gilrs;
 use git2::Repository;
 use log::{self, debug};
 use winit::{
@@ -111,7 +110,7 @@ impl MainMenu {
                         }
                     } else if folder == "src2" {
                         if let Some(path) = &project_path {
-                            let mut config = ProjectConfig::new(project_name.clone(), &path);
+                            let mut config = ProjectConfig::new(project_name.clone(), path);
                             let _ = config.write_to_all();
                             let mut global = PROJECT.write();
                             *global = config;
@@ -119,15 +118,13 @@ impl MainMenu {
                         } else {
                             Err(anyhow!("Project path not found"))
                         }
+                    } else if !full_path.exists() {
+                        fs::create_dir_all(&full_path)
+                            .map_err(|e| anyhow!(e))
+                            .map(|_| ())
                     } else {
-                        if !full_path.exists() {
-                            fs::create_dir_all(&full_path)
-                                .map_err(|e| anyhow!(e))
-                                .map(|_| ())
-                        } else {
-                            log::warn!("{:?} already exists", full_path);
-                            Ok(())
-                        }
+                        log::warn!("{:?} already exists", full_path);
+                        Ok(())
                     };
                     if let Err(e) = result {
                         tx.send(ProjectProgress::Error(e.to_string())).ok();
@@ -216,7 +213,7 @@ impl Scene for MainMenu {
                 .pick_file()
                 .await
             {
-                match ProjectConfig::read_from(&path.into()) {
+                match ProjectConfig::read_from(path.path()) {
                     Ok(config) => {
                         log::info!("Loaded project!");
                         let mut global = PROJECT.write();
@@ -228,7 +225,7 @@ impl Scene for MainMenu {
                         if e.to_string().contains("missing field") {
                             self.toast.add(egui_toast_fork::Toast {
                             kind: egui_toast_fork::ToastKind::Error,
-                            text: format!("Your project version is not up to date with the current project version").into(),
+                            text: "Your project version is not up to date with the current project version".to_string().into(),
                             options: ToastOptions::default()
                                 .duration_in_seconds(10.0)
                                 .show_progress(true),
@@ -353,11 +350,10 @@ impl Scene for MainMenu {
 
 impl Keyboard for MainMenu {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
-        if key == KeyCode::Escape {
-            if !self.show_new_project && !self.is_in_file_dialogue {
+        if key == KeyCode::Escape
+            && !self.show_new_project && !self.is_in_file_dialogue {
                 event_loop.exit();
             }
-        }
     }
 
     fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {}

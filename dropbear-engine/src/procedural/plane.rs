@@ -1,7 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use crate::entity::AdoptedEntity;
 use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::model::{Material, Mesh, Model, ModelId, ModelVertex, MODEL_CACHE};
+use crate::model::{LazyType, Material, Mesh, Model, ModelId, ModelVertex, MODEL_CACHE};
 use crate::utils::{ResourceReference, ResourceReferenceType};
 use futures::executor::block_on;
 use image::GenericImageView;
@@ -25,8 +25,10 @@ pub struct LazyPlaneBuilder {
     label: Option<String>,
 }
 
-impl LazyPlaneBuilder {
-    pub fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<AdoptedEntity> {
+impl LazyType for LazyPlaneBuilder {
+    type T = AdoptedEntity;
+
+    fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
         let mut hasher = DefaultHasher::new();
 
         let mut vertices = Vec::new();
@@ -114,6 +116,12 @@ pub struct PlaneBuilder {
     height: f32,
     tiles_x: u32,
     tiles_z: u32,
+}
+
+impl Default for PlaneBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PlaneBuilder {
@@ -244,7 +252,9 @@ impl PlaneBuilder {
             bind_group,
         };
 
-        let model = if model.is_none() {
+        let model = if let Some(m) = model {
+            m
+        } else {
             let m = Model {
                 label: label.to_string(),
                 path: ResourceReference::from_reference(ResourceReferenceType::Plane),
@@ -254,9 +264,6 @@ impl PlaneBuilder {
             };
             MODEL_CACHE.lock().insert(label, m.clone());
             m
-        } else {
-            // safe to do
-            model.unwrap()
         };
 
 

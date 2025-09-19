@@ -16,7 +16,7 @@ use std::{mem, ops::Range, path::PathBuf};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
+pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/grey.png");
 
 lazy_static! {
     pub static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
@@ -87,7 +87,7 @@ pub trait LazyType {
     /// This can be ran after the initial thread loading is completed.
     /// # Parameters
     /// * [`Arc<SharedGraphicsContext>`] - The graphics context. It can be shared between threads
-    /// if required.
+    ///   if required.
     ///
     /// # Returns
     /// * [`Self::T`] - The data type of the item
@@ -564,7 +564,7 @@ impl Model {
             return Ok(cached_model.clone());
         }
 
-        let buffer = tokio::fs::read(path).await?;
+        let buffer = std::fs::read(path)?;
         let model = Self::load_from_memory(graphics, buffer, label).await?;
 
         MODEL_CACHE.lock().insert(path_str, model.clone());

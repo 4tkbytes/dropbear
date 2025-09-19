@@ -53,21 +53,20 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed X transform change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -80,21 +79,20 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Y transform change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -108,21 +106,20 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Z transform change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -158,8 +155,8 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -168,15 +165,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed X rotation change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -199,8 +195,8 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -209,15 +205,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Y rotation change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -240,8 +235,8 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -250,15 +245,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Z rotation change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -298,8 +292,8 @@ impl InspectableComponent for Transform {
                         );
 
                         if response.drag_started() {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -313,15 +307,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed X scale change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -335,8 +328,8 @@ impl InspectableComponent for Transform {
                         let response = ui.add_enabled(!cfg.scale_locked, y_slider);
 
                         if response.drag_started() && !cfg.scale_locked {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -345,15 +338,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Y scale change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -367,8 +359,8 @@ impl InspectableComponent for Transform {
                         let response = ui.add_enabled(!cfg.scale_locked, z_slider);
 
                         if response.drag_started() && !cfg.scale_locked {
-                            cfg.transform_old_entity = Some(entity.clone());
-                            cfg.transform_original_transform = Some((*self).clone());
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
                             cfg.transform_in_progress = true;
                         }
 
@@ -377,15 +369,14 @@ impl InspectableComponent for Transform {
                         }
 
                         if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take() {
-                                if let Some(orig) = cfg.transform_original_transform.take() {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take() {
                                     UndoableAction::push_to_undo(
                                         undo_stack,
                                         UndoableAction::Transform(ent, orig),
                                     );
                                     log::debug!("Pushed Z scale change to undo stack");
                                 }
-                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -424,8 +415,8 @@ impl InspectableComponent for ScriptComponent {
                 .default_open(true)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.button("Browse").clicked() {
-                            if let Some(script_file) = rfd::FileDialog::new()
+                        if ui.button("Browse").clicked()
+                            && let Some(script_file) = rfd::FileDialog::new()
                                 .add_filter("Typescript", &["ts"])
                                 .pick_file()
                             {
@@ -435,7 +426,7 @@ impl InspectableComponent for ScriptComponent {
                                     .to_string_lossy()
                                     .to_string();
                                 let lib_path = &script_file.clone().parent().unwrap().join("dropbear.ts");
-                                if let Err(_) = std::fs::read(lib_path) {
+                                if std::fs::read(lib_path).is_err() {
                                     log::warn!("dropbear.ts library does not exist in project source directory, copying...");
                                     if let Err(e) = std::fs::write(lib_path, include_str!("../../../resources/dropbear.ts")) {
                                         log::error!("Non-fatal error: Creating library file failed: {}", e);
@@ -448,10 +439,9 @@ impl InspectableComponent for ScriptComponent {
                                     script_name,
                                 });
                             }
-                        }
 
-                        if ui.button("New").clicked() {
-                            if let Some(script_path) = rfd::FileDialog::new()
+                        if ui.button("New").clicked()
+                            && let Some(script_path) = rfd::FileDialog::new()
                                 .add_filter("TypeScript", &["ts"])
                                 .set_file_name(format!("{}_script.ts", label))
                                 .save_file()
@@ -459,7 +449,7 @@ impl InspectableComponent for ScriptComponent {
                                 // check if dropbear module exists
                                 // todo: change this to an %APPDATA% file instead of to memory. 
                                 let lib_path = &script_path.clone().parent().unwrap().join("dropbear.ts");
-                                if let Err(_) = std::fs::read(lib_path) {
+                                if std::fs::read(lib_path).is_err() {
                                     log::warn!("dropbear.ts library does not exist in project source directory, copying...");
                                     if let Err(e) = std::fs::write(lib_path, include_str!("../../../resources/dropbear.ts")) {
                                         log::error!("Non-fatal error: Creating library file failed: {}", e);
@@ -484,7 +474,6 @@ impl InspectableComponent for ScriptComponent {
                                     },
                                 }
                             }
-                        }
                     });
 
                     ui.separator();
@@ -527,7 +516,7 @@ impl InspectableComponent for AdoptedEntity {
 
                 if resp.changed() {
                     if cfg.old_label_entity.is_none() {
-                        cfg.old_label_entity = Some(entity.clone());
+                        cfg.old_label_entity = Some(*entity);
                         cfg.label_original = Some(self.model.label.clone());
                     }
                     cfg.label_last_edit = Some(Instant::now());
@@ -572,7 +561,7 @@ impl InspectableComponent for Light {
 
                 if resp.changed() {
                     if cfg.old_label_entity.is_none() {
-                        cfg.old_label_entity = Some(entity.clone());
+                        cfg.old_label_entity = Some(*entity);
                         cfg.label_original = Some(self.label.clone().to_string());
                     }
                     cfg.label_last_edit = Some(Instant::now());
@@ -658,10 +647,10 @@ impl InspectableComponent for LightComponent {
                 ui.horizontal(|ui| {
                     ComboBox::new("Range", "Range")
                         // .width(ui.available_width())
-                        .selected_text(format!("Range {}", self.attenuation.range.to_string()))
+                        .selected_text(format!("Range {}", self.attenuation.range))
                         .show_ui(ui, |ui| {
                             for (preset, label) in ATTENUATION_PRESETS {
-                                ui.selectable_value(&mut self.attenuation, preset.clone(), *label);
+                                ui.selectable_value(&mut self.attenuation, *preset, *label);
                             }
                         });
                 });
