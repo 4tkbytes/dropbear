@@ -113,8 +113,8 @@ impl Manager {
                             if current == &target {
                                 // reload the scene
                                 if let Some(scene) = self.scenes.get_mut(current) {
-                                    { scene.write().exit(event_loop); }
-                                    { scene.write().load(graphics) }
+                                    scene.write().exit(event_loop);
+                                    scene.write().load(graphics);
 
                                     log::debug!("Reloaded scene: {}", current);
                                 }
@@ -139,7 +139,7 @@ impl Manager {
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
-            { scene.write().render(graphics) }
+            scene.write().render(graphics)
         }
     }
 

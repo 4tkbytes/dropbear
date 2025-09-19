@@ -192,3 +192,257 @@ impl Default for FutureQueue {
         Self::new()
     }
 }
+
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::watch;
+    use tokio::time::sleep;
+    use crate::future::{FutureHandle, FutureQueue, FutureStatus};
+
+    #[tokio::test]
+    async fn test_basic_future_completion() {
+        let queue = Arc::new(FutureQueue::new());
+
+        // Push a simple future
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            42i32
+        });
+
+        // Poll to start it
+        queue.poll();
+
+        // Wait for completion
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Exchange result
+        let result = queue.exchange_as::<i32>(&handle).unwrap();
+        assert_eq!(*result, 42);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_futures() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handles: Vec<FutureHandle> = (0..5)
+            .map(|i| {
+                queue.push(async move {
+                    sleep(Duration::from_millis(10 + i * 5)).await;
+                    i * 10
+                })
+            })
+            .collect();
+
+        queue.poll();
+
+        // Wait for all to complete
+        tokio::time::sleep(Duration::from_millis(10000)).await;
+
+        // Check all results
+        for (i, handle) in handles.iter().enumerate() {
+            let result = queue.exchange_as::<i32>(handle).unwrap();
+            assert_eq!(*result, (i * 10) as i32);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_status_tracking() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(50)).await;
+            "done".to_string()
+        });
+
+        // Before polling
+        assert!(matches!(queue.get_status(handle.id), Some(FutureStatus::NotPolled)));
+
+        queue.poll();
+
+        // After polling, before completion
+        assert!(matches!(queue.get_status(handle.id), Some(FutureStatus::CurrentlyPolling)));
+
+        // Wait for completion
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Should be completed
+        assert!(matches!(queue.get_status(handle.id), Some(FutureStatus::Completed(_))));
+
+        // Exchange should still work
+        let result = queue.exchange_as::<String>(&handle).unwrap();
+        assert_eq!(*result, "done");
+    }
+
+    #[tokio::test]
+    async fn test_exchange_before_completion_returns_none() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(100)).await;
+            true
+        });
+
+        queue.poll();
+
+        // Try to exchange immediately — should return None
+        assert!(queue.exchange_as::<bool>(&handle).is_none());
+
+        // Wait and try again
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(queue.exchange_as::<bool>(&handle).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_removes_completed_handles() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            123i32
+        });
+
+        queue.poll();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Should be in registry before cleanup
+        assert!(queue.get_handle(handle.id).is_some());
+
+        queue.cleanup();
+
+        // Should be removed after cleanup
+        assert!(queue.get_handle(handle.id).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_progress_channel_integration() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let (progress_tx, mut progress_rx) = watch::channel(0.0f32);
+
+        let handle = queue.push(async move {
+            progress_tx.send(0.25).unwrap();
+            sleep(Duration::from_millis(20)).await;
+
+            progress_tx.send(0.75).unwrap();
+            sleep(Duration::from_millis(20)).await;
+
+            progress_tx.send(1.0).unwrap();
+            "final_result".to_string()
+        });
+
+        queue.poll();
+
+        // Check progress updates
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(*progress_rx.borrow_and_update(), 0.25);
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(*progress_rx.borrow_and_update(), 0.75);
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(*progress_rx.borrow_and_update(), 1.0);
+
+        // Check final result
+        let result = queue.exchange_as::<String>(&handle).unwrap();
+        assert_eq!(*result, "final_result");
+    }
+
+    #[tokio::test]
+    async fn test_error_handling() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            Result::<i32, &'static str>::Err("something went wrong")
+        });
+
+        queue.poll();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let result = queue.exchange_as::<Result<i32, &'static str>>(&handle).unwrap();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "something went wrong");
+    }
+
+    #[tokio::test]
+    async fn test_get_handle_returns_correct_handle() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            999i32
+        });
+
+        let retrieved_handle = queue.get_handle(handle.id).unwrap();
+        assert_eq!(retrieved_handle.id, handle.id);
+
+        // Invalid ID should return None
+        assert!(queue.get_handle(999999).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_exchange_by_id() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            "test_string".to_string()
+        });
+
+        queue.poll();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let result = queue.exchange_as::<String>(&handle).unwrap();
+        assert_eq!(*result, "test_string");
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_futures() {
+        let queue = Arc::new(FutureQueue::new());
+
+        // Push 10 concurrent futures
+        let handles: Vec<FutureHandle> = (0..10)
+            .map(|i| {
+                queue.push(async move {
+                    // Simulate variable work
+                    let delay = Duration::from_millis(10 + (i * 5) as u64);
+                    sleep(delay).await;
+                    i
+                })
+            })
+            .collect();
+
+        queue.poll();
+
+        // Wait for all to complete
+        tokio::time::sleep(Duration::from_millis(10000)).await;
+
+        // Verify all results
+        for (i, handle) in handles.iter().enumerate() {
+            let result = queue.exchange_as::<usize>(handle).unwrap();
+            assert_eq!(*result, i);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_downcast_failure_returns_none() {
+        let queue = Arc::new(FutureQueue::new());
+
+        let handle = queue.push(async {
+            sleep(Duration::from_millis(10)).await;
+            42i32
+        });
+
+        queue.poll();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Try to downcast to wrong type
+        let result = queue.exchange_as::<String>(&handle);
+        assert!(result.is_none());
+
+        // But correct type works
+        let result = queue.exchange_as::<i32>(&handle).unwrap();
+        assert_eq!(*result, 42);
+    }
+}
