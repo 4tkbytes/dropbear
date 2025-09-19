@@ -511,10 +511,14 @@ impl App {
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
         log::info!("======================================================================");
-        log::info!("dropbear-engine v{} compiled with rustc {}", env!("CARGO_PKG_VERSION"),
+        log::info!("dropbear-engine v{} compiled with {}", env!("CARGO_PKG_VERSION"),
             rustc_version_runtime::version_meta().short_version_string);
         log::info!("Made by tk with love at https://github.com/4tkbytes/dropbear <3");
         log::info!("======================================================================");
+        #[cfg(debug_assertions)]
+        {
+            log::warn!("⚠️ Just a heads up: this is compiled with the debug profile. Expect shit to be slow...");
+        }
         log::info!("dropbear-engine running...");
         let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
         match ad {

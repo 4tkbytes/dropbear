@@ -13,10 +13,11 @@ use glam::Vec3;
 use hecs::Entity;
 use std::time::Instant;
 
+/// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
     fn inspect(
         &mut self,
-        entity: &mut hecs::Entity,
+        entity: &mut Entity,
         cfg: &mut StaticallyKept,
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,

@@ -57,7 +57,7 @@ impl GleamScriptCompiler {
             let _ = s.send(InstallStatus::NotStarted);
         }
 
-        println!("Checking dependencies...");
+        log::info!("Checking dependencies...");
 
         if let Some(ref s) = sender {
             let _ = s.send(InstallStatus::InProgress {
@@ -72,7 +72,7 @@ impl GleamScriptCompiler {
         let javy_available = Self::check_tool_in_path("javy").await;
 
         if gleam_available && bun_available && javy_available {
-            println!("All dependencies found in PATH");
+            log::info!("All dependencies found in PATH");
             if let Some(ref s) = sender {
                 let _ = s.send(InstallStatus::Success);
             }
@@ -162,7 +162,7 @@ impl GleamScriptCompiler {
             let _ = s.send(InstallStatus::Success);
         }
 
-        println!(
+        log::info!(
             "All {} dependencies installed successfully",
             installed_count
         );
@@ -192,7 +192,7 @@ impl GleamScriptCompiler {
             .join(GLEAM_VERSION);
 
         if gleam_dir.exists() {
-            println!(
+            log::info!(
                 "Gleam v{} already cached at {}",
                 GLEAM_VERSION,
                 app_dir.display()
@@ -200,12 +200,12 @@ impl GleamScriptCompiler {
             return Ok(());
         }
 
-        println!("Downloading Gleam v{}...", GLEAM_VERSION);
+        log::info!("Downloading Gleam v{}...", GLEAM_VERSION);
 
         let gleam_link = Self::get_gleam_download_url()?;
         Self::download_and_extract(&gleam_link, &gleam_dir, "gleam", sender).await?;
 
-        println!("Gleam v{} downloaded successfully", GLEAM_VERSION);
+        log::info!("Gleam v{} downloaded successfully", GLEAM_VERSION);
         Ok(())
     }
 
@@ -216,7 +216,7 @@ impl GleamScriptCompiler {
         let bun_dir = app_dir.join("dependencies").join("bun").join(BUN_VERSION);
 
         if bun_dir.exists() {
-            println!(
+            log::info!(
                 "Bun v{} already cached at {}",
                 BUN_VERSION,
                 app_dir.display()
@@ -224,12 +224,12 @@ impl GleamScriptCompiler {
             return Ok(());
         }
 
-        println!("Downloading Bun v{}...", BUN_VERSION);
+        log::info!("Downloading Bun v{}...", BUN_VERSION);
 
         let bun_link = Self::get_bun_download_url()?;
         Self::download_and_extract(&bun_link, &bun_dir, "bun", sender).await?;
 
-        println!("Bun v{} downloaded successfully", BUN_VERSION);
+        log::info!("Bun v{} downloaded successfully", BUN_VERSION);
         Ok(())
     }
 
@@ -240,7 +240,7 @@ impl GleamScriptCompiler {
         let javy_dir = app_dir.join("dependencies").join("javy").join(JAVY_VERSION);
 
         if javy_dir.exists() {
-            println!(
+            log::info!(
                 "Javy v{} already cached at {}",
                 JAVY_VERSION,
                 app_dir.display()
@@ -248,12 +248,12 @@ impl GleamScriptCompiler {
             return Ok(());
         }
 
-        println!("Downloading Javy v{}...", JAVY_VERSION);
+        log::info!("Downloading Javy v{}...", JAVY_VERSION);
 
         let javy_link = Self::get_javy_download_url()?;
         Self::download_and_extract(&javy_link, &javy_dir, "javy", sender).await?;
 
-        println!("Javy v{} downloaded successfully", JAVY_VERSION);
+        log::info!("Javy v{} downloaded successfully", JAVY_VERSION);
         Ok(())
     }
 

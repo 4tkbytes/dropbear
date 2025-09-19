@@ -227,7 +227,7 @@ impl Scene for Editor {
                     }
                 }
             }
-            
+
         }
 
         match &self.signal {
@@ -265,7 +265,7 @@ impl Scene for Editor {
                                                 ModelProperties::default(),
                                             ))
                                         };
-                                        
+
 
                                         self.selected_entity = Some(entity_id);
                                         log::debug!(
@@ -319,7 +319,7 @@ impl Scene for Editor {
                             ModelProperties::default(),
                         ))
                     };
-                    
+
                     self.selected_entity = Some(entity_id);
                     log::debug!(
                         "Successfully paste-spawned {} with ID {:?}",
@@ -1184,7 +1184,7 @@ impl Scene for Editor {
                     }
                 }
             }
-            
+
         }
 
         let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
@@ -1203,7 +1203,7 @@ impl Scene for Editor {
                 })
                 .collect()
         };
-        
+
 
         for (camera_entity, target_label, offset) in camera_follow_data {
             let target_position = {
@@ -1219,7 +1219,7 @@ impl Scene for Editor {
                         }
                     })
             };
-            
+
 
             if let Some(pos) = target_position {
                 let world = self.world.read();
@@ -1230,7 +1230,7 @@ impl Scene for Editor {
                     }
                 }
             }
-            
+
         }
 
         {
@@ -1243,7 +1243,7 @@ impl Scene for Editor {
                 camera.update(graphics.shared.clone());
             }
         }
-        
+
         {
             {
                 let mut world = self.world.write();
@@ -1253,7 +1253,7 @@ impl Scene for Editor {
                     entity.update(graphics.shared.clone(), transform);
                 }
             }
-            
+
 
             {
                 let mut world = self.world.write();
@@ -1407,7 +1407,7 @@ impl Scene for Editor {
                 log_once::error_once!("No active camera found");
             }
         } else {
-            log_once::error_once!("No render pipeline exists");
+            log_once::warn_once!("No render pipeline exists");
         }
     }
 
