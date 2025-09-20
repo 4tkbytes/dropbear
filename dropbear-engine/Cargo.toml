@@ -9,6 +9,7 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
+dropbear_future-queue = { path = "../dropbear_future-queue" }
 anyhow.workspace = true
 app_dirs2.workspace = true
 bytemuck.workspace = true
@@ -32,11 +33,9 @@ parking_lot.workspace = true
 lazy_static.workspace = true
 gltf.workspace = true
 rayon.workspace = true
-tokio.workspace = true
 backtrace.workspace = true
 os_info.workspace = true
 rustc_version_runtime.workspace = true
-ahash = "0.8.12"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

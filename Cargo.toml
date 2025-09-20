@@ -6,7 +6,7 @@ package.repository = "https://github.com/4tkbytes/dropbear-engine"
 package.readme = "README.md"
 
 resolver = "3"
-members = [ "dropbear-engine", "eucalyptus-core", "eucalyptus-editor"]
+members = [ "dropbear-engine", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor"]
 # members = ["dropbear-engine", "eucalyptus-core", "eucalyptus-editor", "redback-runtime"]
 
 

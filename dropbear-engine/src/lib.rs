@@ -12,7 +12,6 @@ pub mod resources;
 pub mod scene;
 pub mod procedural;
 pub mod utils;
-pub mod future;
 
 use app_dirs2::{AppDataType, AppInfo};
 use chrono::Local;
@@ -31,6 +30,8 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use std::cell::RefCell;
+use std::rc::Rc;
 use bytemuck::Contiguous;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
@@ -51,7 +52,8 @@ pub use gilrs;
 use log::LevelFilter;
 pub use wgpu;
 pub use winit;
-use crate::future::FutureQueue;
+pub use dropbear_future_queue as future;
+use dropbear_future_queue::{FutureQueue, Throwable};
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -66,14 +68,14 @@ pub struct State {
     pub instance: Instance,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
-    pub future_queue: Arc<FutureQueue>,
+    pub future_queue: Throwable<FutureQueue>,
 
     pub window: Arc<Window>,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, future_queue: Throwable<FutureQueue>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         // create backend
@@ -376,13 +378,13 @@ pub struct App {
     /// A queue that polls through futures for asynchronous functions
     /// 
     /// Winit doesn't use async, so this is the next best alternative. 
-    future_queue: Arc<FutureQueue>,
+    future_queue: Throwable<FutureQueue>,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
-    fn new(config: WindowConfiguration, future_queue: Option<Arc<FutureQueue>>) -> Self {
+    fn new(config: WindowConfiguration, future_queue: Option<Throwable<FutureQueue>>) -> Self {
         let result = Self {
             state: None,
             config: config.clone(),
@@ -393,7 +395,7 @@ impl App {
             target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
-            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
+            future_queue: future_queue.unwrap_or_else(|| Rc::new(RefCell::new(FutureQueue::new()))),
         };
         log::debug!("Created new instance of app");
         result
@@ -430,7 +432,7 @@ impl App {
     /// 
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Arc<FutureQueue>>, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Throwable<FutureQueue>>, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
@@ -553,7 +555,7 @@ impl App {
 ///
 /// # Parameters
 /// * config - [`WindowConfiguration`]: The configuration/settings of the window. 
-/// * queue - [`Option<Arc<FutureQueue>>`]: An optional value for a [`FutureQueue`]
+/// * queue - [`Option<Throwable<FutureQueue>>`]: An optional value for a [`FutureQueue`]
 /// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
 ///   but instead be set as an [`Arc<Mutex<T>>>`]. 
 macro_rules! run_app {
@@ -614,7 +616,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
-                self.future_queue.poll();
+                self.future_queue.borrow_mut().poll();
                 
                 let frame_start = Instant::now();
 
@@ -646,7 +648,7 @@ impl ApplicationHandler for App {
                 }
 
                 state.window.request_redraw();
-                self.future_queue.cleanup();
+                self.future_queue.borrow_mut().cleanup();
             }
             WindowEvent::KeyboardInput {
                 event:
