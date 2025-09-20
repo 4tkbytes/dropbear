@@ -12,7 +12,7 @@ If you might have not realised, all the crates/projects names are after Australi
 - [redback-runtime](https://github.com/4tkbytes/redback-runtime) is the runtime used to load .eupak files and run the games loaded on them.
 
 ### Related Projects
-
+- [dropbear_future-queue](https://github.com/4tkbytes/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
 - [model_to_image](https://github.com/4tkbytes/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng`
 
 ## Build
@@ -54,21 +54,14 @@ If you do not want to build it locally, you are able to download the latest acti
 
 ## Usage
 
-~~Depsite it looking like a dependency for `eucalyptus`, it can serve as a framework too. Looking through the `docs.rs` will you find related documentation onhow to use it and for rendering your own projects.~~
-
-dropbear cannot be used as a framework (yet), but is best compatible with the eucalyptus editor when making games. For 
-scripting, eucalyptus uses `typescript`. The main philosophy of scripting is to be able to have **type safety**, which can aid developers with their code, which is the reason as to why I didn't use `javascript` for scripting instead.
-
-The typescript used in the scripting is ran with the deno runtime. 
-
-Documentation is hosted on GitHub Pages with typedoc. The website is at this link: [4tkbytes.github.io/dropbear][https://4tkbytes.github.io/dropbear/]
+todo
 
 ## Compability
 
-|            | Windows | macOS | Linux | Web | Android | iOS |
-|------------|---------|-------|-------|-----|---------|-----|
-| eucalyptus |    ✅    |   ✅   |   ✅   |  ❌<sup>1</sup>  |    ❌<sup>1</sup>    |  ❌<sup>1</sup>  |
-| redback    |    ✅    |   ✅   |   ✅   |  ❌<sup>2</sup>  |    ❌<sup>2</sup>    |  ❌  |
+|            | Windows | macOS | Linux | Web           | Android       | iOS           |
+|------------|---------|-------|-------|---------------|---------------|---------------|
+| eucalyptus | ✅       | ✅     | ✅     | ❌<sup>1</sup> | ❌<sup>1</sup> | ❌<sup>1</sup> |
+| redback    | ✅       | ✅     | ✅     | ❌<sup>2</sup> | ❌<sup>2</sup> | ❌             |
 
 <sup>1</sup> Will never be implemented; not intended for that platform.
 
