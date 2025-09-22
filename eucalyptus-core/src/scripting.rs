@@ -12,23 +12,11 @@ use std::{collections::HashMap, fs};
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/template.ts");
 
-pub enum ScriptAction {
-    AttachScript {
-        script_path: PathBuf,
-        script_name: String,
-    },
-    CreateAndAttachScript {
-        script_path: PathBuf,
-        script_name: String,
-    },
-    RemoveScript,
-    EditScript,
-}
-
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
     pub current_entity: Option<Entity>,
-    current_world: Option<Arc<RwLock<World>>>,
+    // fyi: im pretty sure this is safe because I can just null with [`Option::None`]
+    current_world: Option<*const World>,
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
@@ -51,9 +39,9 @@ impl DropbearScriptingAPIContext {
         }
     }
 
-    pub fn set_context(&mut self, entity: Entity, world: Arc<RwLock<World>>, input: &InputState) {
+    pub fn set_context(&mut self, entity: Entity, world: &mut World, input: &InputState) {
         self.current_entity = Some(entity);
-        self.current_world = Some(world);
+        self.current_world = Some(world as *mut World);
         self.current_input = Some(input.clone());
     }
 
@@ -126,7 +114,7 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: Arc<RwLock<World>>,
+        world: &mut World,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
@@ -173,7 +161,7 @@ impl ScriptManager {
         &mut self,
         entity_id: hecs::Entity,
         script_name: &str,
-        world: Arc<RwLock<World>>,
+        world: &mut World,
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
@@ -181,7 +169,7 @@ impl ScriptManager {
 
         if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
             self.script_context
-                .set_context(entity_id, world.clone(), input_state);
+                .set_context(entity_id, world, input_state);
 
             let mut context = Context::default();
             self.expose(&mut context);
@@ -306,14 +294,14 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 pub fn convert_entity_to_group(
-    world: Arc<RwLock<World>>,
+    world: &mut World,
     entity_id: hecs::Entity,
 ) -> anyhow::Result<EntityNode> {
-    if let Ok(mut query) = world.read().query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
+    if let Ok(mut query) = world.query_one::<(&AdoptedEntity, &Transform)>(entity_id) {
         if let Some((adopted, _transform)) = query.get() {
             let entity_name = adopted.model.label.clone();
 
-            let script_node = if let Ok(script) = world.read().get::<&ScriptComponent>(entity_id) {
+            let script_node = if let Ok(script) = world.get::<&ScriptComponent>(entity_id) {
                 Some(EntityNode::Script {
                     name: script.name.clone(),
                     path: script.path.clone(),
@@ -345,16 +333,29 @@ pub fn convert_entity_to_group(
 }
 
 pub fn attach_script_to_entity(
-    world: Arc<RwLock<World>>,
+    world: &mut World,
     entity_id: hecs::Entity,
     script_component: ScriptComponent,
 ) -> anyhow::Result<()> {
     {
-        if let Err(e) = world.write().insert_one(entity_id, script_component) {
+        if let Err(e) = world.insert_one(entity_id, script_component) {
             return Err(anyhow::anyhow!("Failed to attach script to entity: {}", e));
         }
     }
 
     log::info!("Successfully attached script to entity {:?}", entity_id);
     Ok(())
+}
+
+pub enum ScriptAction {
+    AttachScript {
+        script_path: PathBuf,
+        script_name: String,
+    },
+    CreateAndAttachScript {
+        script_path: PathBuf,
+        script_name: String,
+    },
+    RemoveScript,
+    EditScript,
 }

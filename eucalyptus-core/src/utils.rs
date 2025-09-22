@@ -39,12 +39,3 @@ pub enum ViewportMode {
     CameraMove,
     Gizmo,
 }
-
-#[derive(Clone, Debug)]
-pub struct PendingSpawn {
-    pub asset_path: PathBuf,
-    pub asset_name: String,
-    pub transform: Transform,
-    pub properties: ModelProperties,
-    pub handle_id: Option<u64>,
-}

@@ -33,11 +33,12 @@ use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
 };
-use eucalyptus_core::utils::ViewportMode;
+use eucalyptus_core::utils::{ViewportMode};
 use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::World;
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
@@ -46,9 +47,8 @@ use dropbear_engine::graphics::{RenderContext, Shader};
 use dropbear_engine::model::{ModelId};
 
 pub struct Editor {
-    queue: Arc<FutureQueue>,
     scene_command: SceneCommand,
-    world: World,
+    pub world: World,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -64,25 +64,25 @@ pub struct Editor {
 
     show_new_project: bool,
     project_name: String,
-    project_path: Arc<Mutex<Option<PathBuf>>>,
+    pub(crate) project_path: Arc<Mutex<Option<PathBuf>>>,
     pending_scene_switch: bool,
 
     gizmo: Gizmo,
-    selected_entity: Option<hecs::Entity>,
+    pub(crate) selected_entity: Option<hecs::Entity>,
     viewport_mode: ViewportMode,
 
-    signal: Signal,
-    undo_stack: Vec<UndoableAction>,
+    pub(crate) signal: Signal,
+    pub(crate) undo_stack: Vec<UndoableAction>,
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
-    editor_state: EditorState,
+    pub(crate) editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
-    script_manager: ScriptManager,
+    pub(crate) script_manager: ScriptManager,
     play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
-    input_state: InputState,
+    pub(crate) input_state: InputState,
 
     // channels
     /// A channel for installing dependencies.
@@ -99,14 +99,12 @@ pub struct Editor {
 
     // handles for futures
     world_load_handle: Option<FutureHandle>,
-    pending_spawn_handles: Vec<FutureHandle>,
-
-    is_spawning: bool,
-    _temp_world: Arc<Mutex<World>>,
+    pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
+    world_receiver: Option<oneshot::Receiver<hecs::World>>,
 }
 
 impl Editor {
-    pub fn new(future_queue: Arc<FutureQueue>) -> Self {
+    pub fn new() -> Self {
         let tabs = vec![EditorTab::Viewport];
         let mut dock_state = DockState::new(tabs);
 
@@ -142,7 +140,6 @@ impl Editor {
         });
 
         Self {
-            queue: future_queue,
             scene_command: SceneCommand::None,
             dock_state,
             texture_id: None,
@@ -175,9 +172,8 @@ impl Editor {
             is_world_loaded: IsWorldLoadedYet::new(),
             current_state: WorldLoadingStatus::Idle,
             world_load_handle: None,
-            pending_spawn_handles: vec![],
-            is_spawning: false,
-            _temp_world: Arc::new(Mutex::new(World::new())),
+            alt_pending_spawn_queue: vec![],
+            world_receiver: None,
         }
     }
 
@@ -374,7 +370,8 @@ impl Editor {
         // &mut self,
         graphics: Arc<SharedGraphicsContext>,
         sender: Option<UnboundedSender<WorldLoadingStatus>>,
-        world: Arc<Mutex<World>>,
+        world: &mut World,
+        world_sender: Option<oneshot::Sender<hecs::World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
         dock_state: Arc<Mutex<DockState<EditorTab>>>,
@@ -411,7 +408,7 @@ impl Editor {
                 );
             } else {
                 let existing_debug_camera = {
-                    world.lock()
+                    world
                         .query::<(&Camera, &CameraComponent)>()
                         .iter()
                         .find_map(|(entity, (_, component))| {
@@ -434,7 +431,7 @@ impl Editor {
                     let component = DebugCamera::new();
 
                     {
-                        let e = world.lock()
+                        let e = world
                             .spawn((debug_camera, component));
                         let mut a_c = active_camera.lock();
                         *a_c = Some(e);
@@ -446,10 +443,15 @@ impl Editor {
         if let Some(ref s) = sender.clone() {
             let _ = s.send(WorldLoadingStatus::Completed);
         }
+
+        if let Some(ws) = world_sender {
+            let _ = ws.send(std::mem::take(world));
+        }
+
         Ok(())
     }
 
-    pub async fn show_ui(&mut self, ctx: &Context) {
+    pub fn show_ui(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {

@@ -5,6 +5,8 @@ mod debug;
 mod editor;
 mod menu;
 mod utils;
+mod spawn;
+mod signal;
 
 use clap::{Arg, Command};
 use dropbear_engine::{scene, WindowConfiguration};
@@ -119,8 +121,8 @@ async fn main() -> anyhow::Result<()> {
             
             let mut future_queue = Arc::new(FutureQueue::new());
 
-            let main_menu = Rc::new(RwLock::new(menu::MainMenu::new(future_queue.clone())));
-            let editor = Rc::new(RwLock::new(editor::Editor::new(future_queue.clone())));
+            let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
+            let editor = Rc::new(RwLock::new(editor::Editor::new()));
 
             dropbear_engine::run_app!(config, Some(future_queue), |mut scene_manager, mut input_manager| {
                 scene::add_scene_with_input(

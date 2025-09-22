@@ -14,7 +14,7 @@ use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
 use git2::Repository;
 use log::{self, debug};
-use rfd::{AsyncFileDialog, FileDialog};
+use rfd::FileDialog; // ← Sync version — no async needed
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
@@ -33,7 +33,6 @@ pub enum ProjectProgress {
 
 #[derive(Default)]
 pub struct MainMenu {
-    queue: Arc<FutureQueue>,
     scene_command: SceneCommand,
     show_new_project: bool,
     project_name: String,
@@ -45,17 +44,16 @@ pub struct MainMenu {
     progress: f32,
     progress_message: String,
 
-    file_dialog: Option<FutureHandle>,
-    project_creation_handle: Option<FutureHandle>,
+    // ❌ REMOVED: file_dialog: Option<FutureHandle>,
+    project_creation_handle: Option<FutureHandle>, // ← Keep — project creation is async
 
     toast: Toasts,
     is_in_file_dialogue: bool,
 }
 
 impl MainMenu {
-    pub fn new(queue: Arc<FutureQueue>) -> Self {
+    pub fn new() -> Self {
         Self {
-            queue,
             show_progress: false,
             toast: Toasts::new()
                 .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
@@ -64,7 +62,7 @@ impl MainMenu {
         }
     }
 
-    fn start_project_creation(&mut self) {
+    fn start_project_creation(&mut self, queue: Arc<FutureQueue>) {
         let project_name = self.project_name.clone();
         let project_path = self.project_path.clone();
 
@@ -77,7 +75,7 @@ impl MainMenu {
         self.show_progress = true;
         self.progress = 0.0;
 
-        let handle = self.queue.push(async move {
+        let handle = queue.push(async move {
             let mut errors = Vec::new();
             let folders = [
                 ("git", 0.1, "Initializing git repository..."),
@@ -154,8 +152,8 @@ impl MainMenu {
         });
 
         self.project_creation_handle = Some(handle);
-        self.queue.poll();
-        log::debug!("Starting project creation");
+        queue.poll();
+        debug!("Starting project creation");
     }
 }
 
@@ -167,45 +165,9 @@ impl Scene for MainMenu {
     fn update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
 
     fn render(&mut self, graphics: &mut RenderContext) {
-        if let Some(ref handle) = self.file_dialog {
-            if let Some(result) = self.queue.exchange_as::<Option<PathBuf>>(handle) {
-                self.is_in_file_dialogue = false;
-                self.file_dialog = None;
-
-                if let Some(path) = &*result.clone() {
-                    match ProjectConfig::read_from(&path) {
-                        Ok(config) => {
-                            log::info!("Loaded project: {:?}", path);
-                            let mut global = PROJECT.write();
-                            *global = config;
-                            self.scene_command = SceneCommand::SwitchScene("editor".to_string());
-                        }
-                        Err(e) => {
-                            let error_msg = if e.to_string().contains("missing field") {
-                                "Project version is outdated. Please update your .eucp file."
-                            } else {
-                                &e.to_string()
-                            };
-
-                            self.toast.add(egui_toast_fork::Toast {
-                                kind: egui_toast_fork::ToastKind::Error,
-                                text: error_msg.to_string().into(),
-                                options: ToastOptions::default()
-                                    .duration_in_seconds(8.0)
-                                    .show_progress(true),
-                                ..Default::default()
-                            });
-                            log::error!("Failed to load project: {}", e);
-                        }
-                    }
-                } else {
-                    log::info!("User cancelled file dialog");
-                }
-            }
-        }
-
-        if let Some(ref handle) = self.project_creation_handle {
-            if let Some(result) = self.queue.exchange_as::<anyhow::Result<()>>(handle) {
+        #[allow(clippy::collapsible_if)]
+        if let Some(handle) = self.project_creation_handle.as_ref() {
+            if let Some(result) = graphics.shared.future_queue.exchange_as::<anyhow::Result<()>>(handle) {
                 self.project_creation_handle = None;
 
                 if result.is_ok() {
@@ -218,9 +180,10 @@ impl Scene for MainMenu {
                 }
             }
         }
-
+        
+        #[allow(clippy::collapsible_if)]
         if let Some(rx) = self.project_progress_rx.as_ref() {
-            if rx.has_changed().unwrap_or(false) {
+            if let Ok(true) = rx.has_changed() {
                 let progress = rx.borrow().clone();
                 match progress {
                     ProjectProgress::Step { progress, message } => {
@@ -230,9 +193,7 @@ impl Scene for MainMenu {
                     ProjectProgress::Error(err) => {
                         self.project_error.get_or_insert_with(Vec::new).push(err);
                     }
-                    ProjectProgress::Done => {
-                        // Handled in exchange_as above
-                    }
+                    ProjectProgress::Done => {}
                 }
             }
         }
@@ -292,17 +253,43 @@ impl Scene for MainMenu {
             });
 
         if local_open_project {
-            log::debug!("Opening project dialog");
+            debug!("Opening project dialog");
             self.is_in_file_dialogue = true;
 
-            let handle = self.queue.push(async {
-                FileDialog::new()
-                    .add_filter("Eucalyptus Configuration Files", &["eucp"])
-                    .pick_file()
-            });
+            if let Some(path) = FileDialog::new()
+                .add_filter("Eucalyptus Configuration Files", &["eucp"])
+                .pick_file()
+            {
+                match ProjectConfig::read_from(&path) {
+                    Ok(config) => {
+                        log::info!("Loaded project: {:?}", path);
+                        let mut global = PROJECT.write();
+                        *global = config;
+                        self.scene_command = SceneCommand::SwitchScene("editor".to_string());
+                    }
+                    Err(e) => {
+                        let error_msg = if e.to_string().contains("missing field") {
+                            "Project version is outdated. Please update your .eucp file."
+                        } else {
+                            &e.to_string()
+                        };
 
-            self.file_dialog = Some(handle);
-            self.queue.poll();
+                        self.toast.add(egui_toast_fork::Toast {
+                            kind: egui_toast_fork::ToastKind::Error,
+                            text: error_msg.to_string().into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(8.0)
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                        log::error!("Failed to load project: {}", e);
+                    }
+                }
+            } else {
+                log::info!("User cancelled file dialog");
+            }
+
+            self.is_in_file_dialogue = false;
         }
 
         let mut show_new_project = self.show_new_project;
@@ -338,7 +325,7 @@ impl Scene for MainMenu {
                         .clicked()
                     {
                         log::info!("Creating new project at {:?}", self.project_path);
-                        self.start_project_creation();
+                        self.start_project_creation(graphics.shared.future_queue.clone());
                     }
                 });
             });
@@ -349,28 +336,16 @@ impl Scene for MainMenu {
             self.is_in_file_dialogue = true;
 
             let name = self.project_name.clone();
-            let handle = self.queue.push(async move {
-                FileDialog::new()
-                    .set_title("Select Project Folder")
-                    .set_file_name(&name)
-                    .pick_folder()
-            });
-
-            self.file_dialog = Some(handle);
-            self.queue.poll();
-        }
-
-        if let Some(ref handle) = self.file_dialog {
-            if self.is_in_file_dialogue && self.project_path.is_none() {
-                if let Some(result) = self.queue.exchange_as::<Option<PathBuf>>(handle) {
-                    if let Some(path) = &*result {
-                        self.project_path = Some(path.clone());
-                        log::debug!("Selected project location: {:?}", path);
-                    }
-                    self.is_in_file_dialogue = false;
-                    self.file_dialog = None;
-                }
+            if let Some(path) = FileDialog::new()
+                .set_title("Select Project Folder")
+                .set_file_name(&name)
+                .pick_folder()
+            {
+                self.project_path = Some(path.clone());
+                log::debug!("Selected project location: {:?}", path);
             }
+
+            self.is_in_file_dialogue = false;
         }
 
         if self.show_progress {

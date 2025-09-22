@@ -14,7 +14,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::window::Window;
-
+use dropbear_future_queue::{FutureQueue, Throwable};
 use crate::{
     State,
     egui_renderer::EguiRenderer,
@@ -40,6 +40,7 @@ pub struct SharedGraphicsContext {
     pub diffuse_sampler: Arc<Sampler>,
     pub screen_size: (f32, f32),
     pub texture_id: Arc<TextureId>,
+    pub future_queue: Arc<FutureQueue>,
 }
 
 pub struct FrameGraphicsContext<'a> {
@@ -101,6 +102,7 @@ impl<'a> RenderContext<'a> {
         }));
         Self {
             shared: Arc::new(SharedGraphicsContext {
+                future_queue: state.future_queue.clone(),
                 device: state.device.clone(),
                 queue: state.queue.clone(),
                 instance: Arc::new(state.instance.clone()),

@@ -68,14 +68,14 @@ pub struct State {
     pub instance: Instance,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
-    pub future_queue: Throwable<FutureQueue>,
+    pub future_queue: Arc<FutureQueue>,
 
     pub window: Arc<Window>,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>, future_queue: Throwable<FutureQueue>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         // create backend
@@ -378,13 +378,13 @@ pub struct App {
     /// A queue that polls through futures for asynchronous functions
     /// 
     /// Winit doesn't use async, so this is the next best alternative. 
-    future_queue: Throwable<FutureQueue>,
+    future_queue: Arc<FutureQueue>,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
-    fn new(config: WindowConfiguration, future_queue: Option<Throwable<FutureQueue>>) -> Self {
+    fn new(config: WindowConfiguration, future_queue: Option<Arc<FutureQueue>>) -> Self {
         let result = Self {
             state: None,
             config: config.clone(),
@@ -395,7 +395,7 @@ impl App {
             target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
-            future_queue: future_queue.unwrap_or_else(|| Rc::new(RefCell::new(FutureQueue::new()))),
+            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
         };
         log::debug!("Created new instance of app");
         result
@@ -432,7 +432,7 @@ impl App {
     /// 
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Throwable<FutureQueue>>, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Arc<FutureQueue>>, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
@@ -616,7 +616,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
-                self.future_queue.borrow_mut().poll();
+                self.future_queue.poll();
                 
                 let frame_start = Instant::now();
 
@@ -648,7 +648,7 @@ impl ApplicationHandler for App {
                 }
 
                 state.window.request_redraw();
-                self.future_queue.borrow_mut().cleanup();
+                self.future_queue.cleanup();
             }
             WindowEvent::KeyboardInput {
                 event:

@@ -4,7 +4,6 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use crate::APP_INFO;
 use crate::editor::component::InspectableComponent;
-use crate::editor::scene::PENDING_SPAWNS;
 use dropbear_engine::{
     entity::Transform,
     lighting::{Light, LightComponent},
@@ -13,10 +12,11 @@ use egui;
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
-use eucalyptus_core::utils::PendingSpawn;
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
+use dropbear_engine::utils::ResourceReference;
+use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -42,22 +42,21 @@ impl<'a> EditorTabViewer<'a> {
     ) -> anyhow::Result<()> {
         let transform = Transform { position, ..Default::default() };
         {
-            let mut pending_spawns = PENDING_SPAWNS.lock();
             if let Some(props) = properties {
-                pending_spawns.push(PendingSpawn {
+                push_pending_spawn(PendingSpawn {
                     asset_path: asset.path.clone(),
                     asset_name: asset.name.clone(),
                     transform,
                     properties: props,
-                    handle_id: None,
+                    handle: None,
                 });
             } else {
-                pending_spawns.push(PendingSpawn {
+                push_pending_spawn(PendingSpawn {
                     asset_path: asset.path.clone(),
                     asset_name: asset.name.clone(),
                     transform,
                     properties: ModelProperties::default(),
-                    handle_id: None,
+                    handle: None,
                 });
             }
             Ok(())
@@ -68,7 +67,7 @@ impl<'a> EditorTabViewer<'a> {
 #[derive(Clone, Debug)]
 pub struct DraggedAsset {
     pub name: String,
-    pub path: PathBuf,
+    pub path: ResourceReference,
 }
 
 pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
@@ -317,9 +316,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 log::debug!("No entities in world to select");
                                             } else {
                                                 log::debug!(
-                                                "No entity hit by ray (checked {} entities)",
-                                                entity_count
-                                            );
+                                                    "No entity hit by ray (checked {} entities)",
+                                                    entity_count
+                                                );
                                             }
                                         }
                                     }
@@ -631,7 +630,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
-                                                        path: asset_path.clone(),
+                                                        path: ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|e| { fatal!("Unable to fetch asset from path"); return Default::default(); }),
                                                         // asset_type: asset_type.clone(),
                                                     };
 

@@ -12,6 +12,7 @@ description = "A queue for polling futures in a synchronous context"
 ahash = "0.8"
 parking_lot = "0.12"
 tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread"] }
+anyhow = "1.0.100"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread"] }

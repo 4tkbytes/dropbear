@@ -334,8 +334,8 @@ impl Light {
 
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
-        light: &LightComponent,
-        transform: &Transform,
+        light: LightComponent,
+        transform: Transform,
         label: Option<&str>,
     ) -> Self {
         let forward = DVec3::new(0.0, 0.0, -1.0);

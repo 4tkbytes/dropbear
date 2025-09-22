@@ -70,7 +70,7 @@ pub type Throwable<T> = Rc<RefCell<T>>;
 pub enum FutureStatus {
     NotPolled,
     CurrentlyPolling,
-    Completed(AnyResult),
+    Completed,
 }
 
 /// A handle to the future task
@@ -135,11 +135,11 @@ impl FutureQueue {
             let boxed_result: AnyResult = Arc::new(result);
             log("Future completed, sending result");
 
-            let _ = sender.send(boxed_result.clone());
+            let _ = sender.send(boxed_result);
 
             let mut registry = registry_clone.lock();
             if let Some(entry) = registry.get_mut(&id) {
-                entry.status = FutureStatus::Completed(boxed_result);
+                entry.status = FutureStatus::Completed;
                 log("Updated status to completed");
             }
         });
@@ -193,41 +193,42 @@ impl FutureQueue {
     pub fn exchange(&self, handle: &FutureHandle) -> Option<AnyResult> {
         let mut registry = self.handle_registry.lock();
         if let Some(entry) = registry.get_mut(handle) {
-            return match &entry.status {
-                FutureStatus::Completed(result) => {
-                    log("FutureStatus::Completed - returning cached result");
-                    Some(result.clone())
+            match &entry.status {
+                FutureStatus::Completed => {
+                    log("FutureStatus::Completed - result already consumed or not stored");
+                    None
                 }
                 _ => {
                     log("Future not completed yet, checking receiver");
                     match entry.receiver.try_recv() {
                         Ok(result) => {
                             log("Received result from channel");
-                            entry.status = FutureStatus::Completed(result.clone());
+                            entry.status = FutureStatus::Completed;
                             Some(result)
                         }
                         Err(oneshot::error::TryRecvError::Empty) => {
                             log("Channel is empty - future still running");
                             None
-                        },
+                        }
                         Err(oneshot::error::TryRecvError::Closed) => {
                             log("Channel is closed - future may have panicked");
                             None
-                        },
+                        }
                     }
                 }
             }
         } else {
             log("Handle not found in registry");
+            None
         }
-        None
     }
 
     /// Exchanges the handle and safely downcasts it into a specific type.
-    pub fn exchange_as<T: Any + Send + Sync + 'static>(&self, handle: &FutureHandle) -> Option<Arc<T>> {
+    pub fn exchange_as<T: Any + Send + Sync + 'static>(&self, handle: &FutureHandle) -> Option<T> {
         self.exchange(handle)?
-            .downcast()
+            .downcast::<T>()
             .ok()
+            .and_then(|arc| Arc::try_unwrap(arc).ok())
     }
 
     /// Get status of a handle
@@ -244,7 +245,7 @@ impl FutureQueue {
         let completed_ids: Vec<FutureHandle> = registry
             .iter()
             .filter_map(|(&id, entry)| {
-                matches!(entry.status, FutureStatus::Completed(_)).then_some(id)
+                matches!(entry.status, FutureStatus::Completed).then_some(id)
             })
             .collect();
 
