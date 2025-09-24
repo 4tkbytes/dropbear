@@ -31,7 +31,7 @@ pub enum ResourceReferenceType {
     /// A simple plane. Some of the types in [`ResourceReferenceType`] can be simple, just as a signal
     /// to load that entity as a plane or another type.
     ///
-    /// In specifics, the plane (as from [`crate::starter::plane::PlaneBuilder`]) is a model that
+    /// In specifics, the plane (as from [`crate::procedural::plane::PlaneBuilder`]) is a model that
     /// has meshes and a textured material, but is created "in house" (during runtime instead of loaded).
     Plane,
 }
@@ -50,12 +50,11 @@ impl Default for ResourceReferenceType {
 ///
 /// The resource reference will be `models/cube.obj`.
 ///
-/// - If ran in the editor, it translates to
-/// `/home/tk/project/resources/models/cube.obj`.
+/// - If ran in the editor, it translates to `/home/tk/project/resources/models/cube.obj`.
 ///
 /// - In the runtime (with redback-runtime), it
-/// translates to `/home/tk/Downloads/Maze/resources/models/cube.obj`
-/// _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
+///   translates to `/home/tk/Downloads/Maze/resources/models/cube.obj`
+///   _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResourceReference {
     pub ref_type: ResourceReferenceType,
@@ -104,8 +103,8 @@ impl ResourceReference {
         let components: Vec<_> = path.components().collect();
 
         for (i, component) in components.iter().enumerate() {
-            if let std::path::Component::Normal(name) = component {
-                if *name == "resources" {
+            if let std::path::Component::Normal(name) = component
+                && *name == "resources" {
                     let remaining_components = &components[i + 1..];
                     if remaining_components.is_empty() {
                         anyhow::bail!("Unable to locate any remaining components");
@@ -124,7 +123,6 @@ impl ResourceReference {
                         ref_type: ResourceReferenceType::File(resource_path),
                     });
                 }
-            }
         }
 
         anyhow::bail!("Nothing here")
@@ -184,11 +182,10 @@ impl ResourceReference {
                 anyhow::bail!("Cannot resolve bytes")
             }
             ResourceReferenceType::File(path) => {
-                if let Ok(exe_path) = self.to_executable_path() {
-                    if exe_path.exists() {
+                if let Ok(exe_path) = self.to_executable_path()
+                    && exe_path.exists() {
                         return Ok(exe_path);
                     }
-                }
 
                 Ok(std::env::current_dir()?
                     .join("resources")

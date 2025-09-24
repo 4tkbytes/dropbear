@@ -45,15 +45,14 @@ pub fn show_new_project_window<F>(
                 }
 
                 ui.add_space(5.0);
-                if ui.button("Choose Location").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
+                if ui.button("Choose Location").clicked()
+                    && let Some(path) = rfd::FileDialog::new()
                         .set_title("Save Project")
                         .set_file_name(project_name.clone())
                         .pick_folder()
                     {
                         *project_path = Some(path);
                     }
-                }
 
                 let can_create = project_path.is_some() && !project_name.is_empty();
                 if ui
@@ -150,7 +149,7 @@ pub fn start_project_creation(
                     }
                 } else if folder == "src2" {
                     if let Some(path) = &project_path {
-                        let mut config = ProjectConfig::new(project_name.clone(), &path);
+                        let mut config = ProjectConfig::new(project_name.clone(), path);
                         let _ = config.write_to_all();
                         let mut global = PROJECT.write();
                         *global = config;
@@ -158,14 +157,12 @@ pub fn start_project_creation(
                     } else {
                         Err(anyhow!("Project path not found"))
                     }
+                } else if !full_path.exists() {
+                    fs::create_dir_all(&full_path)
+                        .map_err(|e| anyhow!(e))
+                        .map(|_| ())
                 } else {
-                    if !full_path.exists() {
-                        fs::create_dir_all(&full_path)
-                            .map_err(|e| anyhow!(e))
-                            .map(|_| ())
-                    } else {
-                        Ok(())
-                    }
+                    Ok(())
                 };
                 if let Err(e) = result {
                     tx.send(ProjectProgress::Error(e.to_string())).ok();

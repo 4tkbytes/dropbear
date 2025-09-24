@@ -33,22 +33,23 @@ use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
 };
-use eucalyptus_core::utils::ViewportMode;
+use eucalyptus_core::utils::{ViewportMode};
 use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::World;
-use log;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
+use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::{RenderContext, Shader};
 use dropbear_engine::model::{ModelId};
 
 pub struct Editor {
     scene_command: SceneCommand,
-    world: Arc<RwLock<World>>,
-    dock_state: Arc<Mutex<DockState<EditorTab>>>,
+    pub world: World,
+    dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
     render_pipeline: Option<RenderPipeline>,
@@ -63,25 +64,25 @@ pub struct Editor {
 
     show_new_project: bool,
     project_name: String,
-    project_path: Arc<Mutex<Option<PathBuf>>>,
+    pub(crate) project_path: Arc<Mutex<Option<PathBuf>>>,
     pending_scene_switch: bool,
 
     gizmo: Gizmo,
-    selected_entity: Option<hecs::Entity>,
+    pub(crate) selected_entity: Option<hecs::Entity>,
     viewport_mode: ViewportMode,
 
-    signal: Signal,
-    undo_stack: Vec<UndoableAction>,
+    pub(crate) signal: Signal,
+    pub(crate) undo_stack: Vec<UndoableAction>,
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
-    editor_state: EditorState,
+    pub(crate) editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
-    script_manager: ScriptManager,
+    pub(crate) script_manager: ScriptManager,
     play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
-    input_state: InputState,
+    pub(crate) input_state: InputState,
 
     // channels
     /// A channel for installing dependencies.
@@ -95,6 +96,11 @@ pub struct Editor {
     /// Used to fetch the current status of the loading, so it can be used for different
     /// egui loading windows or splash screens and such.
     current_state: WorldLoadingStatus,
+
+    // handles for futures
+    world_load_handle: Option<FutureHandle>,
+    pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
+    world_receiver: Option<oneshot::Receiver<hecs::World>>,
 }
 
 impl Editor {
@@ -109,7 +115,7 @@ impl Editor {
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
-        // this shit doesnt work :(
+        // this shit doesn't work :(
         // nvm it works
         std::thread::spawn(move || {
             loop {
@@ -135,7 +141,7 @@ impl Editor {
 
         Self {
             scene_command: SceneCommand::None,
-            dock_state: Arc::new(Mutex::new(dock_state)),
+            dock_state,
             texture_id: None,
             size: Extent3d::default(),
             render_pipeline: None,
@@ -143,7 +149,7 @@ impl Editor {
             is_viewport_focused: false,
             // is_cursor_locked: false,
             window: None,
-            world: Arc::new(RwLock::new(World::new())),
+            world: World::new(),
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),
@@ -165,6 +171,9 @@ impl Editor {
             progress_tx: None,
             is_world_loaded: IsWorldLoadedYet::new(),
             current_state: WorldLoadingStatus::Idle,
+            world_load_handle: None,
+            alt_pending_spawn_queue: vec![],
+            world_receiver: None,
         }
     }
 
@@ -200,7 +209,7 @@ impl Editor {
         scene.cameras.clear();
 
         for (id, (adopted, transform, properties, script)) in self
-            .world.read()
+            .world
             .query::<(
                 &AdoptedEntity,
                 Option<&Transform>,
@@ -209,7 +218,7 @@ impl Editor {
             )>()
             .iter()
         {
-            let transform = transform.unwrap_or(&Transform::default()).clone();
+            let transform = *transform.unwrap_or(&Transform::default());
 
             let scene_entity = SceneEntity {
                 model_path: adopted.model.path.clone(),
@@ -225,7 +234,7 @@ impl Editor {
         }
 
         for (id, (light_component, transform, light)) in self
-            .world.read()
+            .world
             .query::<(
                 &dropbear_engine::lighting::LightComponent,
                 &Transform,
@@ -246,7 +255,7 @@ impl Editor {
         }
 
         for (_id, (camera, component, follow_target)) in self
-            .world.read()
+            .world
             .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
             .iter()
         {
@@ -269,8 +278,8 @@ impl Editor {
 
         {
             let mut config = PROJECT.write();
-            let dock_state = self.dock_state.lock();
-            config.dock_layout = Some(dock_state.clone());
+            let dock_state = self.dock_state.clone();
+            config.dock_layout = Some(dock_state);
         }
 
         {
@@ -361,7 +370,8 @@ impl Editor {
         // &mut self,
         graphics: Arc<SharedGraphicsContext>,
         sender: Option<UnboundedSender<WorldLoadingStatus>>,
-        world: Arc<RwLock<World>>,
+        world: &mut World,
+        world_sender: Option<oneshot::Sender<hecs::World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
         dock_state: Arc<Mutex<DockState<EditorTab>>>,
@@ -389,7 +399,7 @@ impl Editor {
                     .load_into_world(world, graphics, sender.clone())
                     .await?;
                 let mut a_c = active_camera.lock();
-                *a_c = Some(cam).into();
+                *a_c = Some(cam);
 
                 log::info!(
                     "Successfully loaded scene with {} entities and {} camera configs",
@@ -397,21 +407,23 @@ impl Editor {
                     first_scene.cameras.len(),
                 );
             } else {
-                let existing_debug_camera = world.read()
-                    .query::<(&Camera, &CameraComponent)>()
-                    .iter()
-                    .find_map(|(entity, (_, component))| {
-                        if matches!(component.camera_type, CameraType::Debug) {
-                            Some(entity)
-                        } else {
-                            None
-                        }
-                    });
+                let existing_debug_camera = {
+                    world
+                        .query::<(&Camera, &CameraComponent)>()
+                        .iter()
+                        .find_map(|(entity, (_, component))| {
+                            if matches!(component.camera_type, CameraType::Debug) {
+                                Some(entity)
+                            } else {
+                                None
+                            }
+                        })
+                };
 
                 if let Some(camera_entity) = existing_debug_camera {
                     log::info!("Using existing debug camera");
                     let mut a_c = active_camera.lock();
-                    *a_c = Some(camera_entity).into();
+                    *a_c = Some(camera_entity);
                 } else {
                     log::info!("No scenes found, creating default debug camera");
 
@@ -419,10 +431,10 @@ impl Editor {
                     let component = DebugCamera::new();
 
                     {
-                        let e = world.write()
+                        let e = world
                             .spawn((debug_camera, component));
                         let mut a_c = active_camera.lock();
-                        *a_c = Some(e).into();
+                        *a_c = Some(e);
                     }
                 }
             }
@@ -431,10 +443,15 @@ impl Editor {
         if let Some(ref s) = sender.clone() {
             let _ = s.send(WorldLoadingStatus::Completed);
         }
+
+        if let Some(ws) = world_sender {
+            let _ = ws.send(std::mem::take(world));
+        }
+
         Ok(())
     }
 
-    pub async fn show_ui(&mut self, ctx: &Context) {
+    pub fn show_ui(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -459,10 +476,8 @@ impl Editor {
                         if ui.button("Stop").clicked() {
                             self.signal = Signal::StopPlaying;
                         }
-                    } else {
-                        if ui.button("Play").clicked() {
-                            self.signal = Signal::Play;
-                        }
+                    } else if ui.button("Play").clicked() {
+                        self.signal = Signal::Play;
                     }
                     ui.menu_button("Export", |ui| {
                         // todo: create a window for better build menu
@@ -496,8 +511,7 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let world = self.world.read();
-                            let query = world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
+                            let query = self.world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
                                     let s_entity = states::SceneEntity {
@@ -541,20 +555,19 @@ impl Editor {
                 });
 
                 ui.menu_button("Window", |ui_window| {
-                    let mut dock_state = self.dock_state.lock();
                     if ui_window.button("Open Asset Viewer").clicked() {
-                        dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
+                        self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
                     }
                     if ui_window.button("Open Resource Inspector").clicked() {
-                        dock_state
+                        self.dock_state
                             .push_to_focused_leaf(EditorTab::ResourceInspector);
                     }
                     if ui_window.button("Open Entity List").clicked() {
-                        dock_state
+                        self.dock_state
                             .push_to_focused_leaf(EditorTab::ModelEntityList);
                     }
                     if ui_window.button("Open Viewport").clicked() {
-                        dock_state.push_to_focused_leaf(EditorTab::Viewport);
+                        self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
                 });
                 {
@@ -566,19 +579,18 @@ impl Editor {
             });
         });
 
-        egui::CentralPanel::default().show(&ctx, |ui| {
-            let mut dock_state = self.dock_state.lock();
-            
-            DockArea::new(&mut dock_state)
+        egui::CentralPanel::default().show(ctx, |ui| {
+
+            DockArea::new(&mut self.dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        nodes: EntityNode::from_world(&self.world.clone().read()),
+                        nodes: EntityNode::from_world(&self.world),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
-                        world: self.world.clone(),
+                        world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         viewport_mode: &mut self.viewport_mode,
                         undo_stack: &mut self.undo_stack,
@@ -614,31 +626,31 @@ impl Editor {
             for (entity_id, original_transform, original_properties, original_script) in
                 &backup.entities
             {
-                if let Ok(mut transform) = self.world.read().get::<&mut Transform>(*entity_id) {
+                if let Ok(mut transform) = self.world.get::<&mut Transform>(*entity_id) {
                     *transform = *original_transform;
                 }
 
-                if let Ok(mut properties) = self.world.read().get::<&mut ModelProperties>(*entity_id) {
+                if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
                     *properties = original_properties.clone();
                 }
 
-                let has_script = self.world.read().get::<&ScriptComponent>(*entity_id).is_ok();
+                let has_script = self.world.get::<&ScriptComponent>(*entity_id).is_ok();
                 match (has_script, original_script) {
                     (true, Some(original)) => {
-                        if let Ok(mut script) = self.world.read().get::<&mut ScriptComponent>(*entity_id)
+                        if let Ok(mut script) = self.world.get::<&mut ScriptComponent>(*entity_id)
                         {
                             *script = original.clone();
                         }
                     }
                     (true, None) => {
                         {
-                            let _ = self.world.write()
+                            let _ = self.world
                                 .remove_one::<ScriptComponent>(*entity_id);
                         }
                     }
                     (false, Some(original)) => {
                         {
-                            let _ = self.world.write()
+                            let _ = self.world
                                 .insert_one(*entity_id, original.clone());
                         }
                     }
@@ -650,32 +662,32 @@ impl Editor {
             for (entity_id, original_camera, original_component, original_follow_target) in
                 &backup.camera_data
             {
-                if let Ok(mut camera) = self.world.read().get::<&mut Camera>(*entity_id) {
+                if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
                     *camera = original_camera.clone();
                 }
 
-                if let Ok(mut component) = self.world.read().get::<&mut CameraComponent>(*entity_id) {
+                if let Ok(mut component) = self.world.get::<&mut CameraComponent>(*entity_id) {
                     *component = original_component.clone();
                 }
 
-                let has_follow_target = self.world.read().get::<&CameraFollowTarget>(*entity_id).is_ok();
+                let has_follow_target = self.world.get::<&CameraFollowTarget>(*entity_id).is_ok();
                 match (has_follow_target, original_follow_target) {
                     (true, Some(original)) => {
                         if let Ok(mut follow_target) =
-                            self.world.read().get::<&mut CameraFollowTarget>(*entity_id)
+                            self.world.get::<&mut CameraFollowTarget>(*entity_id)
                         {
                             *follow_target = original.clone();
                         }
                     }
                     (true, None) => {
                         {
-                            let _ = self.world.write()
+                            let _ = self.world
                                 .remove_one::<CameraFollowTarget>(*entity_id);
                         }
                     }
                     (false, Some(original)) => {
                         {
-                            let _ = self.world.write()
+                            let _ = self.world
                                 .insert_one(*entity_id, original.clone());
                         }
                     }
@@ -698,22 +710,22 @@ impl Editor {
         let mut entities = Vec::new();
 
         for (entity_id, (_, transform, properties)) in self
-            .world.read()
+            .world
             .query::<(&AdoptedEntity, &Transform, &ModelProperties)>()
             .iter()
         {
             let script = self
-                .world.read()
+                .world
                 .query_one::<&ScriptComponent>(entity_id)
                 .ok()
-                .and_then(|mut s| s.get().map(|script| script.clone()));
+                .and_then(|mut s| s.get().cloned());
             entities.push((entity_id, *transform, properties.clone(), script));
         }
 
         let mut camera_data = Vec::new();
 
         for (entity_id, (camera, component, follow_target)) in self
-            .world.read()
+            .world
             .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
             .iter()
         {
@@ -740,7 +752,7 @@ impl Editor {
 
     pub fn switch_to_debug_camera(&mut self) {
         let debug_camera = self
-            .world.read()
+            .world
             .query::<(&Camera, &CameraComponent)>()
             .iter()
             .find_map(|(e, (_cam, comp))| {
@@ -762,7 +774,7 @@ impl Editor {
 
     pub fn switch_to_player_camera(&mut self) {
         let player_camera = self
-            .world.read()
+            .world
             .query::<(&Camera, &CameraComponent)>()
             .iter()
             .find_map(|(e, (_cam, comp))| {
@@ -784,16 +796,13 @@ impl Editor {
 
     pub fn is_using_debug_camera(&self) -> bool {
         let active_camera = self.active_camera.lock();
-        if let Some(active_camera_entity) = *active_camera {
-            if let Ok(mut query) = self
-                .world.read()
+        if let Some(active_camera_entity) = *active_camera
+            && let Ok(mut query) = self
+                .world
                 .query_one::<&CameraComponent>(active_camera_entity)
-            {
-                if let Some(component) = query.get() {
+                && let Some(component) = query.get() {
                     return matches!(component.camera_type, CameraType::Debug);
                 }
-            }
-        }
         false
     }
 
@@ -811,7 +820,7 @@ impl Editor {
 
         if let Some(active_camera) = *self.active_camera.lock() {
             if let Ok(mut q) = self
-                .world.read()
+                .world
                 .query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(
                     active_camera,
                 )
@@ -859,7 +868,7 @@ pub static LOGGED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::ne
 
 fn show_entity_tree(
     ui: &mut egui::Ui,
-    nodes: &mut Vec<EntityNode>,
+    nodes: &mut [EntityNode],
     selected: &mut Option<hecs::Entity>,
     id_source: &str,
 ) {
@@ -881,7 +890,7 @@ fn show_entity_tree(
                     handle.ui(ui, |ui| {
                         ui.label("📜");
                     });
-                    ui.label(format!("{name}"));
+                    ui.label(name.to_string());
                 });
             }
             EntityNode::Group {
@@ -896,7 +905,7 @@ fn show_entity_tree(
                             .show(ui, |ui| {
                                 show_entity_tree(ui, children, selected, name);
                             });
-                        *collapsed = !header.body_returned.is_some();
+                        *collapsed = header.body_returned.is_none();
                     });
                 });
             }
@@ -949,12 +958,13 @@ fn show_entity_tree(
 pub enum UndoableAction {
     /// A change in transform. The entity + the old transform. Undoing will revert the transform
     Transform(hecs::Entity, Transform),
+    #[allow(dead_code)] // don't know why its considered dead code, todo: check the cause
     /// A spawn of the entity. Undoing will delete the entity
     Spawn(hecs::Entity),
     /// A change of label of the entity. Undoing will revert its label
     Label(hecs::Entity, String, EntityType),
     /// Removing a component. Undoing will add back the component.
-    RemoveComponent(hecs::Entity, ComponentType),
+    RemoveComponent(hecs::Entity, Box<ComponentType>),
     #[allow(dead_code)]
     CameraAction(UndoableCameraAction),
 }
@@ -973,11 +983,11 @@ impl UndoableAction {
         // log::debug!("Undo Stack contents: {:#?}", undo_stack);
     }
 
-    pub fn undo(&self, world: Arc<RwLock<World>>) -> anyhow::Result<()> {
+    pub fn undo(&self, world: &mut World) -> anyhow::Result<()> {
         match self {
             UndoableAction::Transform(entity, transform) => {
                 {
-                    if let Ok(mut q) = world.write().query_one::<&mut Transform>(*entity) {
+                    if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
                         if let Some(e_t) = q.get() {
                             *e_t = *transform;
                             log::debug!("Reverted transform");
@@ -991,19 +1001,17 @@ impl UndoableAction {
                 }
             }
             UndoableAction::Spawn(entity) => {
-                {
-                    if world.write().despawn(*entity).is_ok() {
-                        log::debug!("Undid spawn by despawning entity {:?}", entity);
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
-                    }
+                if world.despawn(*entity).is_ok() {
+                    log::debug!("Undid spawn by despawning entity {:?}", entity);
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
                 }
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
                 EntityType::Entity => {
                     {
-                        if let Ok(mut q) = world.write().query_one::<&mut AdoptedEntity>(*entity) {
+                        if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
                             if let Some(adopted) = q.get() {
                                 Arc::make_mut(&mut adopted.model).label = original_label.clone();
                                 log::debug!(
@@ -1026,7 +1034,7 @@ impl UndoableAction {
                 }
                 EntityType::Light => {
                     {
-                        if let Ok(mut q) = world.write().query_one::<&mut Light>(*entity) {
+                        if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
                             if let Some(adopted) = q.get() {
                                 adopted.label = original_label.clone();
                                 log::debug!(
@@ -1049,7 +1057,7 @@ impl UndoableAction {
                 }
                 EntityType::Camera => {
                     {
-                        if let Ok(mut q) = world.write().query_one::<&mut Camera>(*entity) {
+                        if let Ok(mut q) = world.query_one::<&mut Camera>(*entity) {
                             if let Some(adopted) = q.get() {
                                 adopted.label = original_label.clone();
                                 log::debug!(
@@ -1072,18 +1080,18 @@ impl UndoableAction {
                 }
             },
             UndoableAction::RemoveComponent(entity, c_type) => {
-                match c_type {
+                match &**c_type {
                     ComponentType::Script(component) => {
-                        { world.write().insert_one(*entity, component.clone())?; }
+                        world.insert_one(*entity, component.clone())?;
                     }
                     ComponentType::Camera(camera, component, follow) => {
                         if let Some(f) = follow {
                             {
-                                world.write()
+                                world
                                     .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
                             }
                         } else {
-                            { world.write().insert(*entity, (camera.clone(), component.clone()))?; }
+                            world.insert(*entity, (camera.clone(), component.clone()))?;
                         }
                     }
                 }
@@ -1094,49 +1102,41 @@ impl UndoableAction {
                     UndoableCameraAction::Speed(entity, speed) => {
                         {
                             if let Ok(mut q) =
-                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            {
-                                if let Some((cam, comp)) = q.get() {
+                                world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                                && let Some((cam, comp)) = q.get() {
                                     comp.speed = *speed;
                                     comp.update(cam);
                                 }
-                            }
                         }
                     }
                     UndoableCameraAction::Sensitivity(entity, sensitivity) => {
                         {
                             if let Ok(mut q) =
-                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            {
-                                if let Some((cam, comp)) = q.get() {
+                                world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                                && let Some((cam, comp)) = q.get() {
                                     comp.sensitivity = *sensitivity;
                                     comp.update(cam);
                                 }
-                            }
                         }
                     }
-                    UndoableCameraAction::FOV(entity, fov) => {
+                    UndoableCameraAction::Fov(entity, fov) => {
                         {
                             if let Ok(mut q) =
-                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            {
-                                if let Some((cam, comp)) = q.get() {
+                                world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                                && let Some((cam, comp)) = q.get() {
                                     comp.fov_y = *fov;
                                     comp.update(cam);
                                 }
-                            }
                         }
                     }
                     UndoableCameraAction::Type(entity, camera_type) => {
                         {
                             if let Ok(mut q) =
-                                world.read().query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            {
-                                if let Some((cam, comp)) = q.get() {
+                                world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                                && let Some((cam, comp)) = q.get() {
                                     comp.camera_type = *camera_type;
                                     comp.update(cam);
                                 }
-                            }
                         }
                     }
                 };
@@ -1159,7 +1159,7 @@ pub enum Signal {
     Play,
     StopPlaying,
     AddComponent(hecs::Entity, EntityType),
-    RemoveComponent(hecs::Entity, ComponentType),
+    RemoveComponent(hecs::Entity, Box<ComponentType>),
     CreateEntity,
     LogEntities,
     Spawn(PendingSpawn2),
@@ -1170,7 +1170,7 @@ pub enum Signal {
 // todo: deal with the Camera and create an implementation
 pub enum ComponentType {
     Script(ScriptComponent),
-    Camera(Camera, CameraComponent, Option<CameraFollowTarget>),
+    Camera(Box<Camera>, CameraComponent, Option<CameraFollowTarget>),
 }
 
 #[derive(Clone)]
@@ -1195,10 +1195,10 @@ pub enum EditorState {
 }
 
 pub enum PendingSpawn2 {
-    CreateLight,
-    CreatePlane,
-    CreateCube,
-    CreateCamera,
+    Light,
+    Plane,
+    Cube,
+    Camera,
 }
 
 
@@ -1224,6 +1224,9 @@ impl IsWorldLoadedYet {
         self.project_loaded && self.scene_loaded
     }
 
+    // I don't know whether this should be kept or removed, but 
+    // im adding dead code just in case. 
+    #[allow(dead_code)]
     pub fn is_project_ready(&self) -> bool {
         self.project_loaded
     }

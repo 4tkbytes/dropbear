@@ -69,7 +69,7 @@ impl Keyboard for Editor {
             }
             KeyCode::Delete => {
                 if !is_playing {
-                    if let Some(_) = &self.selected_entity {
+                    if self.selected_entity.is_some() {
                         self.signal = Signal::Delete;
                     } else {
                         warn!("Failed to delete: No entity selected");
@@ -80,7 +80,7 @@ impl Keyboard for Editor {
             }
             KeyCode::Escape => {
                 if is_double_press {
-                    if let Some(_) = &self.selected_entity {
+                    if self.selected_entity.is_some() {
                         self.selected_entity = None;
                         log::debug!("Deselected entity");
                     }
@@ -114,8 +114,7 @@ impl Keyboard for Editor {
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
                     if let Some(entity) = &self.selected_entity {
-                        let world = self.world.read();
-                        let query = world
+                        let query = self.world
                             .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
                         if let Ok(mut q) = query {
                             if let Some((e, t, props)) = q.get() {
@@ -218,11 +217,10 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyP => {
-                if !is_playing {
-                    if ctrl_pressed {
+                if !is_playing
+                    && ctrl_pressed {
                         self.signal = Signal::Play
                     }
-                }
             }
             _ => {
                 self.input_state.pressed_keys.insert(key);
@@ -247,18 +245,15 @@ impl Mouse for Editor {
                 let dx = position.x - last_pos.0;
                 let dy = position.y - last_pos.1;
 
-                if let Some(active_camera) = *self.active_camera.lock() {
-                    if let Ok(mut q) = self.world.read().query_one::<(
+                if let Some(active_camera) = *self.active_camera.lock()
+                    && let Ok(mut q) = self.world.query_one::<(
                         &mut Camera,
                         &CameraComponent,
                         Option<&CameraFollowTarget>,
                     )>(active_camera)
-                    {
-                        if let Some((camera, _, _)) = q.get() {
+                        && let Some((camera, _, _)) = q.get() {
                             camera.track_mouse_delta(dx, dy);
                         }
-                    }
-                }
             }
             self.input_state.last_mouse_pos = Some((position.x, position.y));
         }
@@ -309,10 +304,8 @@ impl Mouse for Editor {
     }
 
     fn mouse_down(&mut self, button: MouseButton) {
-        match button {
-            _ => {
-                self.input_state.mouse_button.insert(button);
-            }
+        {
+            self.input_state.mouse_button.insert(button);
         }
     }
 

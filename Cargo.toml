@@ -2,11 +2,11 @@
 package.version = "0.1.2"
 package.edition = "2024"
 package.license-file = "LICENSE.md"
-package.repository = "https://github.com/4tkbytes/dropbear-engine"
+package.repository = "https://github.com/4tkbytes/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
-members = [ "dropbear-engine", "eucalyptus-core", "eucalyptus-editor"]
+members = [ "dropbear-engine", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor"]
 # members = ["dropbear-engine", "eucalyptus-core", "eucalyptus-editor", "redback-runtime"]
 
 

@@ -12,6 +12,12 @@ pub struct CameraComponent {
     pub camera_type: CameraType,
 }
 
+impl Default for CameraComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CameraComponent {
     pub fn new() -> Self {
         Self {
@@ -35,6 +41,7 @@ impl CameraComponent {
 pub struct PlayerCamera;
 
 impl PlayerCamera {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> CameraComponent {
         CameraComponent {
             camera_type: CameraType::Player,
@@ -70,6 +77,7 @@ impl PlayerCamera {
 pub struct DebugCamera;
 
 impl DebugCamera {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> CameraComponent {
         CameraComponent {
             camera_type: CameraType::Debug,

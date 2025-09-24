@@ -1,13 +1,17 @@
+// yeah this lint is required to be allowed because winit doesn't use async
+// logically, it wouldn't be possible to deadlock
+#![allow(clippy::await_holding_lock)]
+
 use winit::event_loop::ActiveEventLoop;
 
 use crate::input;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
+use parking_lot::RwLock;
 
-#[async_trait::async_trait]
 pub trait Scene {
-    async fn load<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
-    async fn update<'a>(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext<'a>);
-    async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>);
+    fn load(&mut self, graphics: &mut crate::graphics::RenderContext);
+    fn update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
+    fn render(&mut self, graphics: &mut crate::graphics::RenderContext);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     /// By far a mess of a trait however it works.
     ///
@@ -33,7 +37,7 @@ impl Default for SceneCommand {
     }
 }
 
-pub type SceneImpl = Rc<RefCell<dyn Scene>>;
+pub type SceneImpl = Rc<RwLock<dyn Scene>>;
 
 #[derive(Clone)]
 pub struct Manager {
@@ -41,6 +45,12 @@ pub struct Manager {
     next_scene: Option<String>,
     scenes: HashMap<String, SceneImpl>,
     scene_input_map: HashMap<String, String>,
+}
+
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Manager {
@@ -62,7 +72,7 @@ impl Manager {
         }
     }
 
-    pub fn add(&mut self, name: &str, scene: Rc<RefCell<dyn Scene>>) {
+    pub fn add(&mut self, name: &str, scene: SceneImpl) {
         self.scenes.insert(name.to_string(), scene);
     }
 
@@ -71,7 +81,7 @@ impl Manager {
             .insert(scene_name.to_string(), input_name.to_string());
     }
 
-    pub async fn update<'a>(
+    pub fn update<'a>(
         &mut self,
         dt: f32,
         graphics: &mut crate::graphics::RenderContext<'a>,
@@ -79,30 +89,33 @@ impl Manager {
     ) {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
-            if let Some(current_scene_name) = &self.current_scene {
-                if let Some(scene) = self.scenes.get_mut(current_scene_name) {
-                    scene.borrow_mut().exit(event_loop);
+            if let Some(current_scene_name) = &self.current_scene
+                && let Some(scene) = self.scenes.get_mut(current_scene_name) {
+                { scene.write().exit(event_loop); }
                 }
-            }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                scene.borrow_mut().load(graphics).await;
+                { scene.write().load(graphics); }
             }
             self.current_scene = Some(next_scene_name);
         }
 
         // update scene
-        if let Some(scene_name) = &self.current_scene {
-            if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().update(dt, graphics).await;
-                let command = scene.borrow_mut().run_command();
+        if let Some(scene_name) = &self.current_scene
+            && let Some(scene) = self.scenes.get_mut(scene_name) {
+                {
+                    scene.write()
+                        .update(dt, graphics);
+                }
+                let command = scene.write().run_command();
                 match command {
                     SceneCommand::SwitchScene(target) => {
                         if let Some(current) = &self.current_scene {
                             if current == &target {
                                 // reload the scene
                                 if let Some(scene) = self.scenes.get_mut(current) {
-                                    scene.borrow_mut().exit(event_loop);
-                                    scene.borrow_mut().load(graphics).await;
+                                    scene.write().exit(event_loop);
+                                    scene.write().load(graphics);
+
                                     log::debug!("Reloaded scene: {}", current);
                                 }
                             } else {
@@ -120,14 +133,13 @@ impl Manager {
                     SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
                 }
             }
-        }
     }
 
-    pub async fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
-        if let Some(scene_name) = &self.current_scene {
-            if let Some(scene) = self.scenes.get_mut(scene_name) {
-                scene.borrow_mut().render(graphics).await;
-            }
+    pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
+        if let Some(scene_name) = &self.current_scene
+            && let Some(scene) = self.scenes.get_mut(scene_name)
+        {
+            scene.write().render(graphics)
         }
     }
 
@@ -167,7 +179,7 @@ pub fn add_scene_with_input<
 >(
     scene_manager: &mut Manager,
     input_manager: &mut input::Manager,
-    scene: Rc<RefCell<S>>,
+    scene: Rc<RwLock<S>>,
     scene_name: &str,
 ) {
     scene_manager.add(scene_name, scene.clone());

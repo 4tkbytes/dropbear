@@ -5,11 +5,15 @@ mod debug;
 mod editor;
 mod menu;
 mod utils;
+mod spawn;
+mod signal;
 
 use clap::{Arg, Command};
-use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
-
-use dropbear_engine::{WindowConfiguration, scene};
+use dropbear_engine::{scene, WindowConfiguration};
+use std::{fs, path::PathBuf, rc::Rc};
+use std::sync::Arc;
+use parking_lot::RwLock;
+use dropbear_engine::future::FutureQueue;
 
 pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "Eucalyptus",
@@ -114,11 +118,13 @@ async fn main() -> anyhow::Result<()> {
                 max_fps: dropbear_engine::App::NO_FPS_CAP,
                 app_info: APP_INFO,
             };
+            
+            let future_queue = Arc::new(FutureQueue::new());
 
-            let main_menu = Rc::new(RefCell::new(crate::menu::MainMenu::new()));
-            let editor = Rc::new(RefCell::new(crate::editor::Editor::new()));
+            let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
+            let editor = Rc::new(RwLock::new(editor::Editor::new()));
 
-            let _app = dropbear_engine::run_app!(config, |mut scene_manager, mut input_manager| {
+            dropbear_engine::run_app!(config, Some(future_queue), |mut scene_manager, mut input_manager| {
                 scene::add_scene_with_input(
                     &mut scene_manager,
                     &mut input_manager,
@@ -136,8 +142,7 @@ async fn main() -> anyhow::Result<()> {
 
                 (scene_manager, input_manager)
             })
-            .await
-            .unwrap();
+            .await?;
         }
         _ => unreachable!(),
     }
@@ -152,13 +157,11 @@ fn find_eucp_file() -> Result<PathBuf, String> {
     let mut eucp_files = Vec::new();
 
     for entry in entries {
-        if let Ok(entry) = entry {
-            if let Some(file_name) = entry.file_name().to_str() {
-                if file_name.ends_with(".eucp") {
+        if let Ok(entry) = entry
+            && let Some(file_name) = entry.file_name().to_str()
+                && file_name.ends_with(".eucp") {
                     eucp_files.push(entry.path());
                 }
-            }
-        }
     }
 
     match eucp_files.len() {

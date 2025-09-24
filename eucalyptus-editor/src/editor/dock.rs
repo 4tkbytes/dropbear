@@ -4,7 +4,6 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use crate::APP_INFO;
 use crate::editor::component::InspectableComponent;
-use crate::editor::scene::PENDING_SPAWNS;
 use dropbear_engine::{
     entity::Transform,
     lighting::{Light, LightComponent},
@@ -13,17 +12,18 @@ use egui;
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
-use eucalyptus_core::utils::PendingSpawn;
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
-    pub world: Arc<RwLock<World>>,
+    pub world: &'a mut World,
     pub selected_entity: &'a mut Option<hecs::Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
@@ -40,25 +40,23 @@ impl<'a> EditorTabViewer<'a> {
         position: DVec3,
         properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
-        let mut transform = Transform::default();
-        transform.position = position;
+        let transform = Transform { position, ..Default::default() };
         {
-            let mut pending_spawns = PENDING_SPAWNS.lock();
             if let Some(props) = properties {
-                pending_spawns.push(PendingSpawn {
+                push_pending_spawn(PendingSpawn {
                     asset_path: asset.path.clone(),
                     asset_name: asset.name.clone(),
                     transform,
                     properties: props,
-                    handle_id: None,
+                    handle: None,
                 });
             } else {
-                pending_spawns.push(PendingSpawn {
+                push_pending_spawn(PendingSpawn {
                     asset_path: asset.path.clone(),
                     asset_name: asset.name.clone(),
                     transform,
                     properties: ModelProperties::default(),
-                    handle_id: None,
+                    handle: None,
                 });
             }
             Ok(())
@@ -69,7 +67,7 @@ impl<'a> EditorTabViewer<'a> {
 #[derive(Clone, Debug)]
 pub struct DraggedAsset {
     pub name: String,
-    pub path: PathBuf,
+    pub path: ResourceReference,
 }
 
 pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
@@ -117,15 +115,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
         let mut cfg = TABS_GLOBAL.lock();
 
         ui.ctx().input(|i| {
-            if i.pointer.button_pressed(egui::PointerButton::Secondary) {
-                if let Some(pos) = i.pointer.hover_pos() {
-                    if ui.available_rect_before_wrap().contains(pos) {
+            if i.pointer.button_pressed(egui::PointerButton::Secondary)
+                && let Some(pos) = i.pointer.hover_pos()
+                    && ui.available_rect_before_wrap().contains(pos) {
                         cfg.show_context_menu = true;
                         cfg.context_menu_pos = pos;
                         cfg.context_menu_tab = Some(tab.clone());
                     }
-                }
-            }
         });
 
         match tab {
@@ -133,7 +129,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 log_once::debug_once!("Viewport focused");
                 // ------------------- Template for querying active camera -----------------
                 // if let Some(active_camera) = self.active_camera {
-                //     if let Ok(mut q) = self.world.read().query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
+                //     if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
                 //         if let Some((camera, component, follow_target)) = q.get() {
 
                 //         } else {
@@ -194,7 +190,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     let active_cam = self.active_camera.lock();
                     if let Some(active_camera) = *active_cam {
                         {
-                            if let Ok(mut q) = self.world.read().query_one::<(
+                            if let Ok(mut q) = self.world.query_one::<(
                                 &Camera,
                                 &CameraComponent,
                                 Option<&CameraFollowTarget>,
@@ -278,9 +274,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             let mut entity_count = 0;
 
                                             {
-                                                let world_read_guard = self.world.read();
                                                 for (entity_id, (transform, _)) in
-                                                    world_read_guard.query::<(&Transform, &AdoptedEntity)>().iter()
+                                                    self.world.query::<(&Transform, &AdoptedEntity)>().iter()
                                                 {
                                                     entity_count += 1;
                                                     let entity_pos = transform.position;
@@ -317,15 +312,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             if let Some(entity_id) = selected_entity_id {
                                                 *self.selected_entity = Some(entity_id);
                                                 log::debug!("Selected entity: {:?}", entity_id);
+                                            } else if entity_count == 0 {
+                                                log::debug!("No entities in world to select");
                                             } else {
-                                                if entity_count == 0 {
-                                                    log::debug!("No entities in world.read() to select");
-                                                } else {
-                                                    log::debug!(
+                                                log::debug!(
                                                     "No entity hit by ray (checked {} entities)",
                                                     entity_count
                                                 );
-                                                }
                                             }
                                         }
                                     }
@@ -355,8 +348,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let active_cam = self.active_camera.lock();
                 if let Some(active_camera) = *active_cam {
                     let camera_data = {
-                        let world = self.world.read();
-                        if let Ok(mut q) = world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
                             let val = q.get();
                             if let Some(val) = val {
                                 Some(val.0.clone())
@@ -383,13 +375,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         });
                     }
                 }
-                if !matches!(self.viewport_mode, ViewportMode::None) {
-                    if let Some(entity_id) = self.selected_entity {
+                if !matches!(self.viewport_mode, ViewportMode::None)
+                    && let Some(entity_id) = self.selected_entity {
                         {
-                            if let Ok(mut q) = self.world.read()
+                            if let Ok(mut q) = self.world
                                 .query_one::<&mut Transform>(*entity_id)
-                            {
-                                if let Some(transform) = q.get() {
+                                && let Some(transform) = q.get() {
                                     let was_focused = cfg.is_focused;
                                     cfg.is_focused = self.gizmo.is_focused();
 
@@ -406,13 +397,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                     if let Some((_result, new_transforms)) =
                                         self.gizmo.interact(ui, &[gizmo_transform])
-                                    {
-                                        if let Some(new_transform) = new_transforms.first() {
+                                        && let Some(new_transform) = new_transforms.first() {
                                             transform.position = new_transform.translation.into();
                                             transform.rotation = new_transform.rotation.into();
                                             transform.scale = new_transform.scale.into();
                                         }
-                                    }
 
                                     if was_focused && !cfg.is_focused {
                                         let transform_changed = cfg.old_pos.position != transform.position
@@ -421,27 +410,25 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                         if transform_changed {
                                             UndoableAction::push_to_undo(
-                                                &mut self.undo_stack,
+                                                self.undo_stack,
                                                 UndoableAction::Transform(
-                                                    entity_id.clone(),
-                                                    cfg.old_pos.clone(),
+                                                    *entity_id,
+                                                    cfg.old_pos,
                                                 ),
                                             );
                                             log::debug!("Pushed transform action to stack");
                                         }
                                     }
                                 }
-                            }
                         }
                     }
-                }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
                 show_entity_tree(
                     ui,
                     &mut self.nodes,
-                    &mut self.selected_entity,
+                    self.selected_entity,
                     "Model Entity Asset List",
                 );
             }
@@ -520,7 +507,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             ResourceType::Texture => assets.push((
                                                 format!(
                                                     "file://{}",
-                                                    file.path.to_string_lossy().to_string()
+                                                    file.path.to_string_lossy()
                                                 ),
                                                 file.name.clone(),
                                                 file.path.clone(),
@@ -621,13 +608,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             let is_hovered = card_response.hovered() || image_response.hovered() || state.dragged;
                                             let is_d_clicked = card_response.double_clicked() || image_response.double_clicked();
 
-                                            if is_d_clicked {
-                                                if matches!(asset_type, ResourceType::Model) {
+                                            if is_d_clicked
+                                                && matches!(asset_type, ResourceType::Model) {
                                                     let mut spawn_position = DVec3::default();
                                                     {
                                                         let active_cam = self.active_camera.lock();
                                                         if let Some(active_camera) = *active_cam {
-                                                            if let Ok(mut q) = self.world.read().query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                                                            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
                                                                 if let Some((camera, _, _)) = q.get() {
                                                                     spawn_position = camera.eye;
                                                                 } else {
@@ -643,7 +630,23 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
-                                                        path: asset_path.clone(),
+                                                        path: if asset_path.starts_with("resources/") {
+                                                            // Path is already relative from project root, extract the part after "resources/"
+                                                            ResourceReference {
+                                                                ref_type: ResourceReferenceType::File(
+                                                                    asset_path.strip_prefix("resources/")
+                                                                        .unwrap_or(&asset_path)
+                                                                        .to_string_lossy()
+                                                                        .to_string()
+                                                                ),
+                                                            }
+                                                        } else {
+                                                            // Fallback to the original method for absolute paths
+                                                            ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| { 
+                                                                log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
+                                                                Default::default() 
+                                                            })
+                                                        },
                                                         // asset_type: asset_type.clone(),
                                                     };
 
@@ -666,7 +669,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                         }
                                                     }
                                                 }
-                                            }
 
                                             if is_hovered || state.dragged {
                                                 ui.painter().rect_filled(
@@ -698,10 +700,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
                     {
-                        let world = self.world.read();
-                        // Note: Use self.world.read() and query_one instead of self.world.write() and query_one_mut as
-                        // that causes a deadlock
-                            if let Ok(mut q) = world.query_one::<(
+                            if let Ok(mut q) = self.world.query_one::<(
                                 &mut AdoptedEntity,
                                 Option<&mut Transform>,
                                 Option<&ModelProperties>,
@@ -786,28 +785,26 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         );
                                     }
 
-                                    if let Some(t) = cfg.label_last_edit {
-                                        if t.elapsed() >= Duration::from_millis(500) {
-                                            if let Some(ent) = cfg.old_label_entity.take() {
-                                                if let Some(orig) = cfg.label_original.take() {
+                                    if let Some(t) = cfg.label_last_edit
+                                        && t.elapsed() >= Duration::from_millis(500) {
+                                            if let Some(ent) = cfg.old_label_entity.take()
+                                                && let Some(orig) = cfg.label_original.take() {
                                                     UndoableAction::push_to_undo(
-                                                        &mut self.undo_stack,
+                                                        self.undo_stack,
                                                         UndoableAction::Label(ent, orig, EntityType::Entity),
                                                     );
                                                     log::debug!(
                                             "Pushed label change to undo stack after 500ms debounce period"
                                         );
                                                 }
-                                            }
                                             cfg.label_last_edit = None;
                                         }
-                                    }
                                 }
                             } else {
                                 log_once::debug_once!("Unable to query entity inside resource inspector");
                             }
 
-                            if let Ok(mut q) = world
+                            if let Ok(mut q) = self.world
                                 .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
                             {
                                 if let Some((light, transform, props)) = q.get() {
@@ -835,35 +832,32 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut light.label,
                                     );
-                                    if let Some(t) = cfg.label_last_edit {
-                                        if t.elapsed() >= Duration::from_millis(500) {
-                                            if let Some(ent) = cfg.old_label_entity.take() {
-                                                if let Some(orig) = cfg.label_original.take() {
+                                    if let Some(t) = cfg.label_last_edit
+                                        && t.elapsed() >= Duration::from_millis(500) {
+                                            if let Some(ent) = cfg.old_label_entity.take()
+                                                && let Some(orig) = cfg.label_original.take() {
                                                     UndoableAction::push_to_undo(
-                                                        &mut self.undo_stack,
+                                                        self.undo_stack,
                                                         UndoableAction::Label(ent, orig, EntityType::Light),
                                                     );
                                                     log::debug!(
                                             "Pushed label change to undo stack after 500ms debounce period"
                                         );
                                                 }
-                                            }
                                             cfg.label_last_edit = None;
                                         }
-                                    }
                                 }
                             } else {
                                 log_once::debug_once!("Unable to query light inside resource inspector");
                             }
 
                             if let Ok(mut q) =
-                                world.query_one::<(
+                                self.world.query_one::<(
                                     &mut Camera,
                                     &mut CameraComponent,
                                     Option<&mut CameraFollowTarget>,
                                 )>(*entity)
-                            {
-                                if let Some((camera, camera_component, follow_target)) = q.get() {
+                                && let Some((camera, camera_component, follow_target)) = q.get() {
                                     camera.inspect(
                                         entity,
                                         &mut cfg,
@@ -895,18 +889,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.label("Camera Controls:");
                                     let mut active_camera = self.active_camera.lock();
                                     if ui.button("Set as Active Camera").clicked() {
-                                        *active_camera = Some(*entity).into();
+                                        *active_camera = Some(*entity);
                                         log::info!("Set camera '{}' as active", camera.label);
                                     }
 
-                                    if matches!(self.editor_mode, EditorState::Editing) {
-                                        if ui.button("Switch to This Camera").clicked() {
-                                            *active_camera = Some(*entity).into();
+                                    if matches!(self.editor_mode, EditorState::Editing)
+                                        && ui.button("Switch to This Camera").clicked() {
+                                            *active_camera = Some(*entity);
                                             log::info!("Switched to camera '{}'", camera.label);
                                         }
-                                    }
                                 }
-                            }
                     }
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
@@ -966,8 +958,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 })
             });
 
-            if let Some(action) = menu_action {
-                if Some(tab.clone()) == cfg.context_menu_tab {
+            if let Some(action) = menu_action
+                && Some(tab.clone()) == cfg.context_menu_tab {
                     match action {
                         EditorTabMenuAction::ImportResource => {
                             log::debug!("Import Resource clicked");
@@ -1020,26 +1012,22 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             log::debug!("Add Component clicked");
                             if let Some(entity) = self.selected_entity {
                                 {
-                                    if let Ok(mut q) = self.world.read()
+                                    if let Ok(mut q) = self.world
                                         .query_one::<&AdoptedEntity>(*entity)
-                                    {
-                                        if let Some(..) = q.get() {
+                                        && q.get().is_some() {
                                             log::debug!("Queried selected entity, it is an entity");
                                             *self.signal =
                                                 Signal::AddComponent(*entity, EntityType::Entity);
                                         }
-                                    }
                                 }
 
                                 {
-                                    if let Ok(mut q) = self.world.read()
+                                    if let Ok(mut q) = self.world
                                         .query_one::<&Light>(*entity)
-                                    {
-                                        if let Some(..) = q.get() {
+                                        && q.get().is_some() {
                                             log::debug!("Queried selected entity, it is a light");
                                             *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                         }
-                                    }
                                 }
                             } else {
                                 warn!(
@@ -1060,7 +1048,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         EditorTabMenuAction::RemoveComponent => {
                             log::debug!("Remove Component clicked");
                             if let Some(entity) = self.selected_entity {
-                                if let Ok(mut q) = self.world.write()
+                                if let Ok(mut q) = self.world
                                     .query_one::<&ScriptComponent>(*entity)
                                 {
                                     if let Some(script) = q.get() {
@@ -1069,7 +1057,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         );
                                         *self.signal = Signal::RemoveComponent(
                                             *entity,
-                                            ComponentType::Script(script.clone()),
+                                            Box::new(ComponentType::Script(script.clone())),
                                         );
                                     }
                                 } else {
@@ -1089,23 +1077,17 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                     }
                 }
-            }
 
-            if let Some(rect) = popup_rect {
-                if cfg.show_context_menu && Some(tab.clone()) == cfg.context_menu_tab {
-                    if ui
+            if let Some(rect) = popup_rect
+                && cfg.show_context_menu && Some(tab.clone()) == cfg.context_menu_tab
+                    && ui
                         .ctx()
                         .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
-                    {
-                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                            if !rect.contains(pos) {
+                        && let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos())
+                            && !rect.contains(pos) {
                                 cfg.show_context_menu = false;
                                 cfg.context_menu_tab = None;
                             }
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -1128,7 +1110,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                     // copy over to models folder
                     {
                         let project = PROJECT.read();
-                        let models_dir = PathBuf::from(project.project_path.clone())
+                        let models_dir = project.project_path.clone()
                             .join("resources")
                             .join("models");
                         if !models_dir.exists() {
@@ -1146,7 +1128,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                     // copy over to textures folder
                     {
                         let project = PROJECT.read();
-                        let textures_dir = PathBuf::from(project.project_path.clone())
+                        let textures_dir = project.project_path.clone()
                             .join("resources")
                             .join("textures");
                         if !textures_dir.exists() {
@@ -1165,7 +1147,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                     let project = PROJECT.read();
                     // everything else copies over to resources root dir
                     let resources_dir =
-                        PathBuf::from(project.project_path.clone()).join("resources");
+                        project.project_path.clone().join("resources");
                     if !resources_dir.exists() {
                         std::fs::create_dir_all(&resources_dir)?;
                     }
@@ -1180,7 +1162,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
         proj.write_to_all()?;
         Ok(())
     } else {
-        return Err(anyhow::anyhow!("File dialogue returned None"));
+        Err(anyhow::anyhow!("File dialogue returned None"))
     }
 }
 

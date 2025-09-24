@@ -24,6 +24,8 @@ dropbear-engine/src/resources/textures/Autism.png
 .vscode
 docs
 
+dropbear_future-queue/test.log
+
 # gleam
 *.beam
 *.ez

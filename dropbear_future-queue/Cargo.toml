@@ -1,0 +1,18 @@
+[package]
+name = "dropbear_future-queue"
+
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license = "MIT"
+readme = "README.md"
+description = "A queue for polling futures in a synchronous context"
+
+[dependencies]
+ahash = "0.8"
+parking_lot.workspace = true
+tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread", "macros"] }
+tokio-test = "0.4"

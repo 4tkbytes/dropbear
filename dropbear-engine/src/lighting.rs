@@ -109,9 +109,9 @@ impl Display for LightType {
     }
 }
 
-impl Into<u32> for LightType {
-    fn into(self) -> u32 {
-        match self {
+impl From<LightType> for u32 {
+    fn from(val: LightType) -> Self {
+        match val {
             LightType::Directional => 0,
             LightType::Point => 1,
             LightType::Spot => 2,
@@ -316,8 +316,8 @@ impl Light {
         label: Option<&str>,
     ) -> anyhow::Result<LazyLight> {
         let mut result = LazyLight {
-            light_component: light_component,
-            transform: transform,
+            light_component,
+            transform,
             label: label.map(|s| s.to_string()),
             cube_lazy_model: None,
         };
@@ -334,8 +334,8 @@ impl Light {
 
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
-        light: &LightComponent,
-        transform: &Transform,
+        light: LightComponent,
+        transform: Transform,
         label: Option<&str>,
     ) -> Self {
         let forward = DVec3::new(0.0, 0.0, -1.0);
@@ -357,14 +357,14 @@ impl Light {
         let cube_model = Arc::new(Model::load_from_memory(
             graphics.clone(),
             include_bytes!("../../resources/cube.glb").to_vec(),
-            label.clone(),
+            label,
         )
         .await
         .unwrap());
 
-        let label_str = label.clone().unwrap_or("Light").to_string();
+        let label_str = label.unwrap_or("Light").to_string();
 
-        let buffer = graphics.create_uniform(uniform, label.clone());
+        let buffer = graphics.create_uniform(uniform, label);
 
         let layout = graphics
             .device
@@ -379,7 +379,7 @@ impl Light {
                     },
                     count: None,
                 }],
-                label: label.clone(),
+                label,
             });
 
         let bind_group = graphics
@@ -390,7 +390,7 @@ impl Light {
                     binding: 0,
                     resource: buffer.as_entire_binding(),
                 }],
-                label: label.clone(),
+                label,
             });
 
         let instance = Instance::new(
@@ -462,7 +462,7 @@ impl Light {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        &self.buffer.as_ref().unwrap()
+        self.buffer.as_ref().unwrap()
     }
 }
 
@@ -472,6 +472,12 @@ pub struct LightManager {
     light_array_buffer: Option<Buffer>,
     light_array_bind_group: Option<BindGroup>,
     light_array_layout: Option<BindGroupLayout>,
+}
+
+impl Default for LightManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LightManager {
@@ -543,7 +549,7 @@ impl LightManager {
             }
 
             if light_component.enabled && light_index < MAX_LIGHTS {
-                light_array.lights[light_index] = light.uniform().clone();
+                light_array.lights[light_index] = *light.uniform();
                 light_index += 1;
             }
         }
@@ -576,13 +582,13 @@ impl LightManager {
     ) {
         use crate::graphics::Shader;
 
-        let shader = Shader::new(graphics.clone(), shader_contents, label.clone());
+        let shader = Shader::new(graphics.clone(), shader_contents, label);
 
         let pipeline = Self::create_render_pipeline_for_lighting(
             graphics,
             &shader,
             vec![camera.layout(), self.light_array_layout.as_ref().unwrap()],
-            label.clone(),
+            label,
         );
 
         self.pipeline = Some(pipeline);

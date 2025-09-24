@@ -14,15 +14,15 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::window::Window;
-
+use dropbear_future_queue::FutureQueue;
 use crate::{
     State,
     egui_renderer::EguiRenderer,
     model::{self, Vertex},
 };
 
-pub const NO_TEXTURE: &'static [u8] = include_bytes!("../../resources/no-texture.png");
-pub const NO_MODEL: &'static [u8] = include_bytes!("../../resources/error.glb");
+pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/no-texture.png");
+pub const NO_MODEL: &[u8] = include_bytes!("../../resources/error.glb");
 
 pub struct RenderContext<'a> {
     pub shared: Arc<SharedGraphicsContext>,
@@ -40,6 +40,7 @@ pub struct SharedGraphicsContext {
     pub diffuse_sampler: Arc<Sampler>,
     pub screen_size: (f32, f32),
     pub texture_id: Arc<TextureId>,
+    pub future_queue: Arc<FutureQueue>,
 }
 
 pub struct FrameGraphicsContext<'a> {
@@ -101,6 +102,7 @@ impl<'a> RenderContext<'a> {
         }));
         Self {
             shared: Arc::new(SharedGraphicsContext {
+                future_queue: state.future_queue.clone(),
                 device: state.device.clone(),
                 queue: state.queue.clone(),
                 instance: Arc::new(state.instance.clone()),
@@ -193,7 +195,7 @@ impl<'a> RenderContext<'a> {
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.frame.view,
+                    view: self.frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(color),
@@ -220,7 +222,7 @@ impl<'a> RenderContext<'a> {
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.frame.view,
+                    view: self.frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -400,7 +402,7 @@ impl Texture {
         };
 
         let desc = TextureDescriptor {
-            label: label,
+            label,
             size,
             mip_level_count: 1,
             sample_count: 1,

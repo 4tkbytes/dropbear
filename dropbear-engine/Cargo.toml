@@ -9,6 +9,7 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
+dropbear_future-queue = { path = "../dropbear_future-queue" }
 anyhow.workspace = true
 app_dirs2.workspace = true
 bytemuck.workspace = true
@@ -32,8 +33,6 @@ parking_lot.workspace = true
 lazy_static.workspace = true
 gltf.workspace = true
 rayon.workspace = true
-tokio.workspace = true
-async-trait.workspace = true
 backtrace.workspace = true
 os_info.workspace = true
 rustc_version_runtime.workspace = true
@@ -42,8 +41,8 @@ rustc_version_runtime.workspace = true
 rfd.workspace = true
 arboard.workspace = true
 
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = "0.15"
+# [target.'cfg(target_os = "android")'.dependencies]
+# android_logger = "0.15"
 
 [dependencies.image]
 version = "0.25"

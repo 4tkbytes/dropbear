@@ -1,3 +1,5 @@
+//! Camera and components related to cameras. 
+
 use std::sync::Arc;
 
 use glam::{DMat4, DQuat, DVec3, Mat4};
@@ -8,6 +10,7 @@ use wgpu::{
 
 use crate::graphics::SharedGraphicsContext;
 
+/// Matrix that converts OpenGL (from [`glam`]) to [`wgpu`] values
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
@@ -16,10 +19,51 @@ pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.5, 1.0],
 ];
 
+/// The basic values of a Camera.
 #[derive(Default, Debug, Clone)]
 pub struct Camera {
+    /// The name of the camera
     pub label: String,
 
+    /// Eye of camera / Position
+    pub eye: DVec3,
+    /// Target of camera / Looking at
+    pub target: DVec3,
+    /// Up
+    pub up: DVec3,
+    /// Aspect ratio
+    pub aspect: f64,
+    /// FOV of camera
+    pub fov_y: f64,
+    /// Near buffer?
+    pub znear: f64,
+    /// Far buffer?
+    pub zfar: f64,
+    /// Yaw (rotation)
+    pub yaw: f64,
+    /// Pitch (rotation)
+    pub pitch: f64,
+
+    /// Uniform/interface for Rust and the GPU
+    pub uniform: CameraUniform,
+    buffer: Option<Buffer>,
+
+    layout: Option<BindGroupLayout>,
+    bind_group: Option<BindGroup>,
+
+    /// Speed of the camera
+    pub speed: f64,
+    /// Sensitivity of the mouse for the camera
+    pub sensitivity: f64,
+
+    /// View matrix
+    pub view_mat: DMat4,
+    /// Projection Matrix
+    pub proj_mat: DMat4,
+}
+
+/// A simple builder/struct that allows you to build a [`Camera`]
+pub struct CameraBuilder {
     pub eye: DVec3,
     pub target: DVec3,
     pub up: DVec3,
@@ -27,54 +71,34 @@ pub struct Camera {
     pub fov_y: f64,
     pub znear: f64,
     pub zfar: f64,
-    pub yaw: f64,
-    pub pitch: f64,
-
-    pub uniform: CameraUniform,
-    buffer: Option<Buffer>,
-
-    layout: Option<BindGroupLayout>,
-    bind_group: Option<BindGroup>,
-
     pub speed: f64,
     pub sensitivity: f64,
-
-    pub view_mat: DMat4,
-    pub proj_mat: DMat4,
 }
 
 impl Camera {
     /// Creates a new camera
     pub fn new(
         graphics: Arc<SharedGraphicsContext>,
-        eye: DVec3,
-        target: DVec3,
-        up: DVec3,
-        aspect: f64,
-        fov_y: f64,
-        znear: f64,
-        zfar: f64,
-        speed: f64,
-        sensitivity: f64,
+        builder: CameraBuilder,
         label: Option<&str>,
     ) -> Self {
         let uniform = CameraUniform::new();
         let mut camera = Self {
-            eye,
-            target,
-            up,
-            aspect,
-            fov_y,
-            znear,
-            zfar,
+            eye: builder.eye,
+            target: builder.target,
+            up: builder.up,
+            aspect: builder.aspect,
+            fov_y: builder.fov_y,
+            znear: builder.znear,
+            zfar: builder.zfar,
             uniform,
             buffer: None,
             layout: None,
             bind_group: None,
-            speed,
+            speed: builder.speed,
             yaw: 0.0,
             pitch: 0.0,
-            sensitivity,
+            sensitivity: builder.sensitivity,
             label: if let Some(l) = label {
                 l.to_string()
             } else {
@@ -94,19 +118,21 @@ impl Camera {
     pub fn predetermined(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self::new(
             graphics.clone(),
-            DVec3::new(0.0, 1.0, 2.0),
-            DVec3::new(0.0, 0.0, 0.0),
-            DVec3::Y,
-            (graphics.screen_size.0 / graphics.screen_size.1).into(),
-            45.0,
-            0.1,
-            100.0,
-            1.0,
-            0.002,
+            CameraBuilder {
+                eye: DVec3::new(0.0, 1.0, 2.0),
+                target: DVec3::new(0.0, 0.0, 0.0),
+                up: DVec3::Y,
+                aspect: (graphics.screen_size.0 / graphics.screen_size.1).into(),
+                fov_y: 45.0,
+                znear: 0.1,
+                zfar: 100.0,
+                speed: 1.0,
+                sensitivity: 0.002,
+            },
             label,
         )
     }
-
+    
     pub fn rotation(&self) -> DQuat {
         let yaw = DQuat::from_axis_angle(DVec3::Y, self.yaw);
         let pitch = DQuat::from_axis_angle(DVec3::X, self.pitch);
@@ -133,6 +159,7 @@ impl Camera {
         self.eye
     }
 
+    /// Prints out the values of the camera. 
     pub fn debug_camera_state(&self) {
         let camera = self;
         log::debug!("Camera state:");
@@ -154,11 +181,10 @@ impl Camera {
             self.znear,
         );
 
-        self.view_mat = view.clone();
-        self.proj_mat = proj.clone();
+        self.view_mat = view;
+        self.proj_mat = proj;
 
-        let result = DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view;
-        result
+        DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view
     }
 
     pub fn create_bind_group_layout(
@@ -198,7 +224,7 @@ impl Camera {
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.update_view_proj();
         graphics.queue.write_buffer(
-            &self.buffer.as_ref().unwrap(),
+            self.buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[self.uniform]),
         );

@@ -10,7 +10,7 @@ pub mod model;
 pub mod panic;
 pub mod resources;
 pub mod scene;
-pub mod starter;
+pub mod procedural;
 pub mod utils;
 
 use app_dirs2::{AppDataType, AppInfo};
@@ -29,8 +29,8 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
-    u32,
 };
+use bytemuck::Contiguous;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -50,6 +50,8 @@ pub use gilrs;
 use log::LevelFilter;
 pub use wgpu;
 pub use winit;
+pub use dropbear_future_queue as future;
+use dropbear_future_queue::FutureQueue;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -64,23 +66,24 @@ pub struct State {
     pub instance: Instance,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
+    pub future_queue: Arc<FutureQueue>,
 
     pub window: Arc<Window>,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         // create backend
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             // flags: wgpu::InstanceFlags::empty(),
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = instance.create_surface(window.clone())?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -125,7 +128,7 @@ Hardware:
     Driver Info: {}
 =======================================================
 ",
-            info.backend.to_string(),
+            info.backend,
             os_info.architecture(),
             os_info.bitness(),
             os_info.codename(),
@@ -148,7 +151,7 @@ Hardware:
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(TextureFormat::Rgba8Unorm);
-        let config = wgpu::SurfaceConfiguration {
+        let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
@@ -215,6 +218,7 @@ Hardware:
             egui_renderer,
             viewport_texture,
             texture_id: Arc::new(texture_id),
+            future_queue
         };
 
         Ok(result)
@@ -245,7 +249,7 @@ Hardware:
     }
 
     /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
-    async fn render(
+    fn render(
         &mut self,
         scene_manager: &mut scene::Manager,
         previous_dt: f32,
@@ -257,27 +261,27 @@ Hardware:
 
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
-            Err(e) => match e {
+            Err(e) => return match e {
                 SurfaceError::Lost => {
                     log_once::warn_once!("Surface lost, reconfiguring...");
                     self.surface.configure(&self.device, &self.config);
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::Outdated => {
                     log_once::warn_once!("Surface outdated, reconfiguring...");
                     self.surface.configure(&self.device, &self.config);
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::Timeout => {
                     log_once::warn_once!("Surface timeout, skipping frame");
-                    return Ok(());
+                    Ok(())
                 }
                 SurfaceError::OutOfMemory => {
-                    return Err(anyhow::anyhow!("Surface out of memory: {:?}", e));
+                    Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
                 }
                 SurfaceError::Other => {
                     log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                    return Ok(());
+                    Ok(())
                 }
             },
         };
@@ -303,9 +307,8 @@ Hardware:
         let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
 
         scene_manager
-            .update(previous_dt, &mut graphics, event_loop)
-            .await;
-        scene_manager.render(&mut graphics).await;
+            .update(previous_dt, &mut graphics, event_loop);
+        scene_manager.render(&mut graphics);
 
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
@@ -346,8 +349,7 @@ Hardware:
 pub fn get_current_time_as_ns() -> u128 {
     let now = SystemTime::now();
     let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-    let timestamp_ns = duration_since_epoch.as_nanos();
-    timestamp_ns
+    duration_since_epoch.as_nanos()
 }
 
 /// A struct storing the information about the application/game that is using the engine.
@@ -371,25 +373,27 @@ pub struct App {
     target_fps: u32,
     /// The library used for polling controllers, specifically the instance of that.
     gilrs: Gilrs,
-    // /// A task pool used for background async work
-    // runtime: Runtime,
+    /// A queue that polls through futures for asynchronous functions
+    /// 
+    /// Winit doesn't use async, so this is the next best alternative. 
+    future_queue: Arc<FutureQueue>,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
-    fn new(config: WindowConfiguration) -> Self {
+    fn new(config: WindowConfiguration, future_queue: Option<Arc<FutureQueue>>) -> Self {
         let result = Self {
             state: None,
             config: config.clone(),
             scene_manager: scene::Manager::new(),
             input_manager: input::Manager::new(),
-            delta_time: (1.0 / 60.0),
+            delta_time: 1.0 / 60.0,
             next_frame_time: None,
             target_fps: config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
-            // runtime,
+            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
         };
         log::debug!("Created new instance of app");
         result
@@ -397,7 +401,7 @@ impl App {
 
     /// A constant that lets you not have any fps count.
     /// It is just the max value of an unsigned 32 bit number lol.
-    pub const NO_FPS_CAP: u32 = u32::MAX;
+    pub const NO_FPS_CAP: u32 = u32::MAX_VALUE;
 
     /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
     pub fn set_target_fps(&mut self, fps: u32) {
@@ -423,17 +427,17 @@ impl App {
     /// - config: The window configuration, such as the title, and window dimensions.
     /// - app_name: A string to the app name for debugging.
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
+    /// 
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Arc<FutureQueue>>, setup: F) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        tokio::fs::create_dir_all(&log_dir)
-            .await
+        std::fs::create_dir_all(&log_dir)
             .expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
@@ -521,14 +525,11 @@ impl App {
         }
         log::info!("dropbear-engine running...");
         let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
-        match ad {
-            Ok(path) => {log::info!("App data is stored at {}", path.display())},
-            Err(_) => {}
-        };
+        if let Ok(path) = ad {log::info!("App data is stored at {}", path.display())};
         log::debug!("Additional nerdy stuff: {:#?}", rustc_version_runtime::version_meta());
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
-        let mut app = Box::new(App::new(config));
+        let mut app = Box::new(App::new(config, future_queue));
         log::debug!("Configured app with details: {}", app.config);
 
         log::debug!("Running through setup");
@@ -550,10 +551,14 @@ impl App {
 /// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life
 /// easier by not having to guess your package name if it changes).
 ///
-/// See also the docs for a further run down on the parameters of how it is run: [`App::run()`]
+/// # Parameters
+/// * config - [`WindowConfiguration`]: The configuration/settings of the window. 
+/// * queue - [`Option<Throwable<FutureQueue>>`]: An optional value for a [`FutureQueue`]
+/// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
+///   but instead be set as an [`Arc<Mutex<T>>>`]. 
 macro_rules! run_app {
-    ($config:expr, $setup:expr) => {
-        $crate::App::run($config, env!("CARGO_PKG_NAME"), $setup)
+    ($config:expr, $queue:expr, $setup:expr) => {
+        $crate::App::run($config, env!("CARGO_PKG_NAME"), $queue, $setup)
     };
 }
 
@@ -576,7 +581,7 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
-        self.state = Some(block_on(State::new(window)).unwrap());
+        self.state = Some(block_on(State::new(window, self.future_queue.clone())).unwrap());
 
         if let Some(state) = &mut self.state {
             let size = state.window.inner_size();
@@ -609,6 +614,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
+                self.future_queue.poll();
+                
                 let frame_start = Instant::now();
 
                 let active_handlers = self.scene_manager.get_active_input_handlers();
@@ -616,8 +623,7 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update(&mut self.gilrs);
 
-                let render_result =
-                    block_on(state.render(&mut self.scene_manager, self.delta_time, event_loop));
+                let render_result = state.render(&mut self.scene_manager, self.delta_time, event_loop);
 
                 if let Err(e) = render_result {
                     log::error!("Render failed: {:?}", e);
@@ -640,6 +646,7 @@ impl ApplicationHandler for App {
                 }
 
                 state.window.request_redraw();
+                self.future_queue.cleanup();
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -650,8 +657,8 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if code == KeyCode::F11 && key_state.is_pressed() {
-                    if let Some(state) = &self.state {
+                if code == KeyCode::F11 && key_state.is_pressed()
+                    && let Some(state) = &self.state {
                         match self.config.windowed_mode {
                             WindowedModes::Windowed(_, _) => {
                                 if state.window.fullscreen().is_some() {
@@ -686,7 +693,6 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                }
                 self.input_manager
                     .handle_key_input(code, key_state.is_pressed(), event_loop);
             }
@@ -709,7 +715,7 @@ impl ApplicationHandler for App {
 /// The window configuration of the app/game.
 ///
 /// This struct is primitive but has purpose in the way that it sets the initial specs of the window.
-/// Thats all it does. And it can also display. But thats about it.
+/// That's all it does. And it can also display. But that's about it.
 #[derive(Debug, Clone)]
 pub struct WindowConfiguration {
     pub windowed_mode: WindowedModes,

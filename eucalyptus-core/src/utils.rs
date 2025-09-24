@@ -1,7 +1,5 @@
-use dropbear_engine::entity::Transform;
-use std::path::PathBuf;
 
-use crate::states::{ModelProperties, Node};
+use crate::states::Node;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/proto.png");
 
@@ -38,13 +36,4 @@ pub enum ViewportMode {
     None,
     CameraMove,
     Gizmo,
-}
-
-#[derive(Clone, Debug)]
-pub struct PendingSpawn {
-    pub asset_path: PathBuf,
-    pub asset_name: String,
-    pub transform: Transform,
-    pub properties: ModelProperties,
-    pub handle_id: Option<u64>,
 }

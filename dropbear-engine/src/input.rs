@@ -1,6 +1,6 @@
 use gilrs::{Axis, EventType, Gilrs};
+use parking_lot::RwLock;
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
 };
@@ -8,9 +8,9 @@ use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
 
-pub type KeyboardImpl = Rc<RefCell<dyn Keyboard>>;
-pub type MouseImpl = Rc<RefCell<dyn Mouse>>;
-pub type ControllerImpl = Rc<RefCell<dyn Controller>>;
+pub type KeyboardImpl = Rc<RwLock<dyn Keyboard>>;
+pub type MouseImpl = Rc<RwLock<dyn Mouse>>;
+pub type ControllerImpl = Rc<RwLock<dyn Controller>>;
 
 pub trait Keyboard {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop);
@@ -51,6 +51,12 @@ pub struct Manager {
     active_handlers: HashSet<String>,
 }
 
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Manager {
     pub fn new() -> Self {
         Self {
@@ -89,7 +95,7 @@ impl Manager {
                 self.just_pressed_keys.insert(key);
                 for (name, handler) in self.keyboard_handlers.iter_mut() {
                     if self.active_handlers.contains(name) {
-                        handler.borrow_mut().key_down(key, event_loop);
+                        handler.write().key_down(key, event_loop);
                     }
                 }
             }
@@ -99,7 +105,7 @@ impl Manager {
                 self.just_released_keys.insert(key);
                 for (name, handler) in self.keyboard_handlers.iter_mut() {
                     if self.active_handlers.contains(name) {
-                        handler.borrow_mut().key_up(key, event_loop);
+                        handler.write().key_up(key, event_loop);
                     }
                 }
             }
@@ -113,7 +119,7 @@ impl Manager {
                 self.just_pressed_mouse_buttons.insert(button);
                 for (name, handler) in self.mouse_handlers.iter_mut() {
                     if self.active_handlers.contains(name) {
-                        handler.borrow_mut().mouse_down(button);
+                        handler.write().mouse_down(button);
                     }
                 }
             }
@@ -123,7 +129,7 @@ impl Manager {
                 self.just_released_mouse_buttons.insert(button);
                 for (name, handler) in self.mouse_handlers.iter_mut() {
                     if self.active_handlers.contains(name) {
-                        handler.borrow_mut().mouse_up(button);
+                        handler.write().mouse_up(button);
                     }
                 }
             }
@@ -135,7 +141,7 @@ impl Manager {
         self.mouse_position = position;
         for (name, handler) in self.mouse_handlers.iter_mut() {
             if self.active_handlers.contains(name) {
-                handler.borrow_mut().mouse_move(position);
+                handler.write().mouse_move(position);
             }
         }
     }
@@ -185,28 +191,28 @@ impl Manager {
             if self.active_handlers.contains(name) {
                 match event.event {
                     EventType::ButtonPressed(button, _) => {
-                        handler.borrow_mut().button_down(button, event.id);
+                        handler.write().button_down(button, event.id);
                     }
                     EventType::ButtonReleased(button, _) => {
-                        handler.borrow_mut().button_up(button, event.id);
+                        handler.write().button_up(button, event.id);
                     }
                     EventType::AxisChanged(Axis::LeftStickX, x, _) => {
-                        handler.borrow_mut().left_stick_changed(x, 0.0, event.id);
+                        handler.write().left_stick_changed(x, 0.0, event.id);
                     }
                     EventType::AxisChanged(Axis::LeftStickY, y, _) => {
-                        handler.borrow_mut().left_stick_changed(0.0, y, event.id);
+                        handler.write().left_stick_changed(0.0, y, event.id);
                     }
                     EventType::AxisChanged(Axis::RightStickX, x, _) => {
-                        handler.borrow_mut().right_stick_changed(x, 0.0, event.id);
+                        handler.write().right_stick_changed(x, 0.0, event.id);
                     }
                     EventType::AxisChanged(Axis::RightStickY, y, _) => {
-                        handler.borrow_mut().right_stick_changed(0.0, y, event.id);
+                        handler.write().right_stick_changed(0.0, y, event.id);
                     }
                     EventType::Connected => {
-                        handler.borrow_mut().on_connect(event.id);
+                        handler.write().on_connect(event.id);
                     }
                     EventType::Disconnected => {
-                        handler.borrow_mut().on_disconnect(event.id);
+                        handler.write().on_disconnect(event.id);
                     }
                     _ => {}
                 }
@@ -214,7 +220,7 @@ impl Manager {
         }
     }
 
-    pub fn poll_controllers(&mut self, gilrs: &mut gilrs::Gilrs) {
+    pub fn poll_controllers(&mut self, gilrs: &mut Gilrs) {
         while let Some(event) = gilrs.next_event() {
             self.handle_controller_event(event);
         }

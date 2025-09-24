@@ -16,7 +16,7 @@ use std::{mem, ops::Range, path::PathBuf};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-pub const GREY_TEXTURE_BYTES: &'static [u8] = include_bytes!("../../resources/grey.png");
+pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/grey.png");
 
 lazy_static! {
     pub static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());
@@ -87,7 +87,7 @@ pub trait LazyType {
     /// This can be ran after the initial thread loading is completed.
     /// # Parameters
     /// * [`Arc<SharedGraphicsContext>`] - The graphics context. It can be shared between threads
-    /// if required.
+    ///   if required.
     ///
     /// # Returns
     /// * [`Self::T`] - The data type of the item
@@ -366,7 +366,7 @@ impl Model {
             return Ok(cached_model.clone());
         }
 
-        println!(
+        log::trace!(
             "========== Benchmarking speed of loading {:?} ==========",
             label
         );
@@ -416,18 +416,18 @@ impl Model {
 
                 let load_start = Instant::now();
                 let diffuse_image = image::load_from_memory(&image_data).unwrap();
-                println!("Loading image to memory: {:?}", load_start.elapsed());
+                log::trace!("Loading image to memory: {:?}", load_start.elapsed());
 
                 let rgba_start = Instant::now();
                 let diffuse_rgba = diffuse_image.to_rgba8();
-                println!(
+                log::trace!(
                     "Converting diffuse image to rgba8 took {:?}",
                     rgba_start.elapsed()
                 );
 
                 let dimensions = diffuse_image.dimensions();
 
-                println!(
+                log::trace!(
                     "Parallel processing of material '{}' took: {:?}",
                     material_name,
                     material_start.elapsed()
@@ -437,7 +437,7 @@ impl Model {
             })
             .collect();
 
-        println!(
+        log::trace!(
             "Total parallel image processing took: {:?}",
             parallel_start.elapsed()
         );
@@ -456,7 +456,7 @@ impl Model {
                 bind_group,
             });
 
-            println!("Time to create GPU texture: {:?}", start.elapsed());
+            log::trace!("Time to create GPU texture: {:?}", start.elapsed());
         }
 
         for mesh in gltf.meshes() {
@@ -542,10 +542,10 @@ impl Model {
         };
 
         MODEL_CACHE.lock().insert(cache_key, model.clone());
-        println!("==================== DONE ====================");
+        log::trace!("==================== DONE ====================");
         log::debug!("Model cached from memory: {:?}", label);
         log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);
-        println!("==============================================");
+        log::trace!("==============================================");
         Ok(model)
     }
 
@@ -559,12 +559,16 @@ impl Model {
 
         let path_str = path.to_string_lossy().to_string();
 
+        log::debug!("Checking if model exists in cache");
         if let Some(cached_model) = MODEL_CACHE.lock().get(&path_str) {
             log::debug!("Model loaded from cache: {:?}", path_str);
             return Ok(cached_model.clone());
         }
+        log::debug!("Model does not exist in cache, loading memory...");
 
-        let buffer = tokio::fs::read(path).await?;
+        log::debug!("Path of model: {}", path.display());
+
+        let buffer = std::fs::read(path)?;
         let model = Self::load_from_memory(graphics, buffer, label).await?;
 
         MODEL_CACHE.lock().insert(path_str, model.clone());
