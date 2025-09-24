@@ -23,7 +23,7 @@ parking_lot.workspace = true
 ron.workspace = true
 serde.workspace = true
 winit.workspace = true
-zip.workspace = true
+# zip.workspace = true
 tokio.workspace = true
 boa_engine.workspace = true
 rayon.workspace = true
@@ -31,8 +31,8 @@ rayon.workspace = true
 [features]
 editor = []
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
-rfd.workspace = true
+# [target.'cfg(not(target_os = "android"))'.dependencies]
+# rfd.workspace = true
 
 [build-dependencies]
 anyhow = "1.0"

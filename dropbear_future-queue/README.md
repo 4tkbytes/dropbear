@@ -2,42 +2,30 @@
 
 A helper queue for polling futures in single threaded systems such as in winit.
 
-# Example
+## Example
 
 ```rust
-use tokio::runtime::Runtime;
-use tokio::time::sleep;
-use dropbear_future_queue::FutureQueue;
+// create new queue
+let queue = FutureQueue::new();
 
-fn main() {
-    // requires a tokio thread
-    let rt = Runtime::new().unwrap();
-    let _guard = rt.enter();
+// create a new handle to keep for reference
+let handle = queue.push(async move {
+    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+    67 + 41
+});
 
-    // create new queue
-    let queue = FutureQueue::new();
+// check initial status
+assert!(matches!(queue.get_status(&handle), Some(FutureStatus::NotPolled)));
 
-    // create a new handle to keep for reference
-    let handle = queue.push(async move {
-        sleep(1000).await;
-        67 + 41
-    });
+// execute the futures
+queue.poll();
 
-    // assume this is the event loop
-    loop {
-        // executes all the futures in the database
-        queue.poll();
+// wait for the task to do its job (this can be simulated with an update loop)
+tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
 
-        println!("Current status of compututation: {:?}", queue.get_status(&handle));
-
-        // check if it is ready to be taken
-        if let Some(result) = queue.exchange_as::<i32>(&handle) {
-            println!("67 + 41 = {}", result);
-            break;
-        }
-
-        // cleans up any ids not needed anymore.
-        queue.cleanup()
-    }
+// check the result
+if let Some(result) = queue.exchange_as::<i32>(&handle) {
+    println!("67 + 41 = {}", result);
+    assert_eq!(result, 108);
 }
 ```
