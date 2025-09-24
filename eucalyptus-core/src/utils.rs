@@ -1,7 +1,5 @@
-use dropbear_engine::entity::Transform;
-use std::path::PathBuf;
 
-use crate::states::{ModelProperties, Node};
+use crate::states::Node;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/proto.png");
 

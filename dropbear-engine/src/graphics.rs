@@ -14,7 +14,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::window::Window;
-use dropbear_future_queue::{FutureQueue, Throwable};
+use dropbear_future_queue::FutureQueue;
 use crate::{
     State,
     egui_renderer::EguiRenderer,

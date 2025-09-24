@@ -1,20 +1,15 @@
 use std::sync::Arc;
 use egui::{Align2, Image};
-use futures_util::task::SpawnExt;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
-use dropbear_engine::model::Model;
-use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use eucalyptus_core::states::{ModelProperties, SceneEntity, ScriptComponent, Value};
-use eucalyptus_core::{fatal, info, scripting, success, success_without_console, warn, warn_without_console};
+use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
+use eucalyptus_core::{info, scripting, success, success_without_console, warn, warn_without_console};
 use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType};
 use eucalyptus_core::scripting::ScriptAction;
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
-use eucalyptus_core::utils::PROTO_TEXTURE;
 use crate::editor::{ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction};
 
 pub trait SignalController {
@@ -793,6 +788,7 @@ impl SignalController for Editor {
                         let light = Light::new(graphics.clone(), LightComponent::default(), Transform::new(), Some("Default Light"));
                         let handle = graphics.future_queue.push(light);
                         self.alt_pending_spawn_queue.push(handle);
+                        success!("Pushed light to queue");
                     }
                     crate::editor::PendingSpawn2::Plane => {
                         let transform = Transform::new();
@@ -809,14 +805,14 @@ impl SignalController for Editor {
                         props
                             .custom_properties
                             .insert("tiles_z".to_string(), Value::Int(200));
-                        let plane = push_pending_spawn(PendingSpawn {
+                        push_pending_spawn(PendingSpawn {
                             asset_path: ResourceReference::from_reference(ResourceReferenceType::Plane),
                             asset_name: "DefaultPlane".to_string(),
                             transform,
                             properties: props,
                             handle: None,
                         });
-                        // success!("Created new plane");
+                        success!("Pushed plane to queue");
                     }
                     PendingSpawn2::Cube => {
                         let pending = PendingSpawn {
@@ -827,6 +823,7 @@ impl SignalController for Editor {
                             handle: None,
                         };
                         push_pending_spawn(pending);
+                        success!("Pushed cube to queue");
                     }
                     PendingSpawn2::Camera => {
                         let camera = Camera::predetermined(graphics.clone(), None);
@@ -835,7 +832,7 @@ impl SignalController for Editor {
                             self.world
                                 .spawn((camera, component));
                         }
-                        success!("Created new camera");
+                        success!("Pushed camera to queue");
                     }
                 }
                 self.signal = Signal::None;

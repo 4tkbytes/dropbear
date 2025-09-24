@@ -4,10 +4,8 @@ use boa_engine::property::PropertyKey;
 use boa_engine::{Context, JsString, JsValue, Source};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
-use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{collections::HashMap, fs};
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/template.ts");

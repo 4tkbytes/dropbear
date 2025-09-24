@@ -36,13 +36,13 @@ use eucalyptus_core::states::{
 use eucalyptus_core::utils::{ViewportMode};
 use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::World;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::future::{FutureHandle, FutureQueue};
+use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::{RenderContext, Shader};
 use dropbear_engine::model::{ModelId};
 
@@ -958,6 +958,7 @@ fn show_entity_tree(
 pub enum UndoableAction {
     /// A change in transform. The entity + the old transform. Undoing will revert the transform
     Transform(hecs::Entity, Transform),
+    #[allow(dead_code)] // don't know why its considered dead code, todo: check the cause
     /// A spawn of the entity. Undoing will delete the entity
     Spawn(hecs::Entity),
     /// A change of label of the entity. Undoing will revert its label
@@ -1000,13 +1001,11 @@ impl UndoableAction {
                 }
             }
             UndoableAction::Spawn(entity) => {
-                {
-                    if world.despawn(*entity).is_ok() {
-                        log::debug!("Undid spawn by despawning entity {:?}", entity);
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
-                    }
+                if world.despawn(*entity).is_ok() {
+                    log::debug!("Undid spawn by despawning entity {:?}", entity);
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
                 }
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
@@ -1225,6 +1224,9 @@ impl IsWorldLoadedYet {
         self.project_loaded && self.scene_loaded
     }
 
+    // I don't know whether this should be kept or removed, but 
+    // im adding dead code just in case. 
+    #[allow(dead_code)]
     pub fn is_project_ready(&self) -> bool {
         self.project_loaded
     }

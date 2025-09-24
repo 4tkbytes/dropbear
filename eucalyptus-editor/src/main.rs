@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
                 app_info: APP_INFO,
             };
             
-            let mut future_queue = Arc::new(FutureQueue::new());
+            let future_queue = Arc::new(FutureQueue::new());
 
             let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
             let editor = Rc::new(RwLock::new(editor::Editor::new()));

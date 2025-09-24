@@ -1,15 +1,13 @@
 
 use super::*;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
-use dropbear_engine::model::{Model, MODEL_CACHE};
-use dropbear_engine::procedural::plane::PlaneBuilder;
+use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
     entity::{AdoptedEntity, Transform},
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
-use egui::{Align2, Image};
 use eucalyptus_core::camera::PlayerCamera;
 use eucalyptus_core::states::{WorldLoadingStatus};
 use eucalyptus_core::{logging};

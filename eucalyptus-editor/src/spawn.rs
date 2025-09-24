@@ -1,13 +1,12 @@
-use std::sync::{Arc, LazyLock};
-use parking_lot::Mutex;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
-use dropbear_engine::future::{FutureHandle, FutureQueue};
+use std::sync::Arc;
+use dropbear_engine::entity::AdoptedEntity;
+use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::plane::PlaneBuilder;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::ResourceReferenceType;
 pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
-use eucalyptus_core::states::{ModelProperties, Value, PROJECT};
+use eucalyptus_core::states::{Value, PROJECT};
 use eucalyptus_core::utils::PROTO_TEXTURE;
 use crate::editor::Editor;
 

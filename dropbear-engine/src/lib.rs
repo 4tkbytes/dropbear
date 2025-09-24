@@ -30,8 +30,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use std::cell::RefCell;
-use std::rc::Rc;
 use bytemuck::Contiguous;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
@@ -53,7 +51,7 @@ use log::LevelFilter;
 pub use wgpu;
 pub use winit;
 pub use dropbear_future_queue as future;
-use dropbear_future_queue::{FutureQueue, Throwable};
+use dropbear_future_queue::FutureQueue;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
