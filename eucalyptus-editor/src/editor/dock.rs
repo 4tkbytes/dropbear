@@ -9,6 +9,7 @@ use dropbear_engine::{
     lighting::{Light, LightComponent},
 };
 use egui;
+use egui::{CollapsingHeader, Layout};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
@@ -703,7 +704,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if let Ok(mut q) = self.world.query_one::<(
                                 &mut AdoptedEntity,
                                 Option<&mut Transform>,
-                                Option<&ModelProperties>,
+                                Option<&mut ModelProperties>,
                                 Option<&mut ScriptComponent>,
                                 Option<&mut Camera>,
                                 Option<&mut CameraComponent>,
@@ -719,6 +720,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     camera_component,
                                     follow_target,
                                 )) = q.get() {
+                                    // entity
                                     e.inspect(
                                         entity,
                                         &mut cfg,
@@ -727,6 +729,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut String::new(),
                                     );
+                                    // transform
                                     if let Some(t) = transform {
                                         t.inspect(
                                             entity,
@@ -738,65 +741,116 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         );
                                     }
 
-                                    if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
-                                        ui.separator();
-                                        ui.label("Camera Components:");
-                                        camera.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut String::new(),
-                                        );
-                                        camera_component.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut camera.label.clone(),
-                                        );
-
-                                        if let Some(target) = follow_target {
-                                            target.inspect(
-                                                entity,
-                                                &mut cfg,
-                                                ui,
-                                                self.undo_stack,
-                                                self.signal,
-                                                &mut camera.label.clone(),
-                                            );
-                                        }
-
-                                        ui.separator();
-                                        ui.label("Camera Controls:");
-                                        let mut active_camera = self.active_camera.lock();
-                                        if ui.button("Set as Active Camera").clicked() {
-                                            *active_camera = Some(*entity);
-                                            log::info!("Set camera '{}' as active", camera.label);
-                                        }
-
-                                        if matches!(self.editor_mode, EditorState::Editing)
-                                            && ui.button("Switch to This Camera").clicked() {
-                                                *active_camera = Some(*entity);
-                                                log::info!("Switched to camera '{}'", camera.label);
-                                            }
+                                    // properties
+                                    if let Some(props) = _props {
+                                        props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
                                     }
 
-                                    // if let Some(props) = _props {
-                                    //     props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
-                                    // }
+                                    ui.separator();
 
+                                    // camera
+                                    if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                                        ui.group(|ui| {
+                                            CollapsingHeader::new("Camera Components")
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                ui.horizontal(|ui| {
+                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                        if ui.button("❌").clicked() {
+                                                            if let Some(target) = &follow_target {
+                                                                *self.signal = Signal::RemoveComponent(
+                                                                    *entity,
+                                                                    Box::new(ComponentType::Camera(
+                                                                        Box::new(camera.clone()),
+                                                                        camera_component.clone(),
+                                                                        Some((*target).to_owned()),
+                                                                    )),
+                                                                );
+                                                            } else {
+                                                                *self.signal = Signal::RemoveComponent(
+                                                                    *entity,
+                                                                    Box::new(ComponentType::Camera(
+                                                                        Box::new(camera.clone()),
+                                                                        camera_component.clone(),
+                                                                        None,
+                                                                    )),
+                                                                );
+                                                            }
+                                                        }
+                                                    });
+                                                });
+
+                                                camera.inspect(
+                                                    entity,
+                                                    &mut cfg,
+                                                    ui,
+                                                    self.undo_stack,
+                                                    self.signal,
+                                                    &mut String::new(),
+                                                );
+                                                camera_component.inspect(
+                                                    entity,
+                                                    &mut cfg,
+                                                    ui,
+                                                    self.undo_stack,
+                                                    self.signal,
+                                                    &mut camera.label.clone(),
+                                                );
+
+                                                if let Some(target) = follow_target {
+                                                    target.inspect(
+                                                        entity,
+                                                        &mut cfg,
+                                                        ui,
+                                                        self.undo_stack,
+                                                        self.signal,
+                                                        &mut camera.label.clone(),
+                                                    );
+                                                }
+
+                                                ui.separator();
+                                                ui.label("Camera Controls:");
+                                                let mut active_camera = self.active_camera.lock();
+                                                if ui.button("Set as Active Camera").clicked() {
+                                                    *active_camera = Some(*entity);
+                                                    log::info!("Set camera '{}' as active", camera.label);
+                                                }
+
+                                                if matches!(self.editor_mode, EditorState::Editing)
+                                                    && ui.button("Switch to This Camera").clicked() {
+                                                    *active_camera = Some(*entity);
+                                                    log::info!("Switched to camera '{}'", camera.label);
+                                                }
+                                            });
+                                        });
+                                    }
+
+                                    ui.separator();
+
+                                    // scripting
                                     if let Some(script) = script {
-                                        script.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut Arc::make_mut(&mut e.model).label,
-                                        );
+                                        ui.group(|ui| {
+                                            CollapsingHeader::new("Scripting")
+                                                .default_open(true)
+                                                .show(ui, |ui| {
+                                                    ui.horizontal(|ui| {
+                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                            if ui.button("❌").clicked() {
+                                                                *self.signal = Signal::RemoveComponent(*entity, Box::new(ComponentType::Script(script.clone())))
+                                                            }
+                                                        });
+                                                    });
+
+                                                    script.inspect(
+                                                        entity,
+                                                        &mut cfg,
+                                                        ui,
+                                                        self.undo_stack,
+                                                        self.signal,
+                                                        &mut Arc::make_mut(&mut e.model).label,
+                                                    );
+                                                })
+                                        });
                                     }
 
                                     if let Some(t) = cfg.label_last_edit

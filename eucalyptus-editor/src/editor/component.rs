@@ -5,13 +5,14 @@ use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
-use egui::{CollapsingHeader, ComboBox, Ui};
+use egui::{Button, CollapsingHeader, ComboBox, DragValue, Grid, RichText, Slider, TextEdit, Ui, Widget};
 use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
-use eucalyptus_core::states::ScriptComponent;
+use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::Vec3;
 use hecs::Entity;
 use std::time::Instant;
+use egui_extras::{Column, TableBuilder};
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
@@ -24,6 +25,172 @@ pub trait InspectableComponent {
         signal: &mut Signal,
         label: &mut String,
     );
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum ValueType {
+    String,
+    Float,
+    Int,
+    Bool,
+    Vec3,
+}
+
+impl From<Value> for ValueType {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::String(_) => {
+                ValueType::String
+            }
+            Value::Int(_) => {
+                ValueType::Int
+            }
+            Value::Float(_) => {
+                ValueType::Float
+            }
+            Value::Bool(_) => {
+                ValueType::Bool
+            }
+            Value::Vec3(_) => {
+                ValueType::Vec3
+            }
+        }
+    }
+}
+
+impl InspectableComponent for ModelProperties {
+    fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+        CollapsingHeader::new("Custom Properties")
+            .default_open(true)
+            .show(ui, |ui| {
+                Grid::new("properties")
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("Key").heading());
+                        ui.label(RichText::new("Type").heading());
+                        ui.label(RichText::new("Value").heading());
+                        ui.label(RichText::new("Action").heading());
+                        ui.end_row();
+
+                        let mut local_del = (false, String::new());
+                        let mut local_key_change = (false, String::new(), String::new(), 0); // flag, old key, new key, index
+                        for (i, (key, val)) in self.custom_properties.iter_mut().enumerate() {
+                            // key
+                            let mut before_key = key.clone();
+                            ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut before_key));
+
+                            if before_key != *key {
+                                local_key_change = (true, key.clone(), before_key.clone(), i);
+                            }
+
+                            let mut before = ValueType::from(val.clone());
+
+                            // type
+                            ComboBox::from_id_salt(format!("{:?}", val))
+                                .selected_text(format!("{:?}", before))
+                                .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut before, ValueType::String, "String");
+                                ui.selectable_value(&mut before, ValueType::Float, "Float");
+                                ui.selectable_value(&mut before, ValueType::Int, "Int");
+                                ui.selectable_value(&mut before, ValueType::Bool, "Bool");
+                                ui.selectable_value(&mut before, ValueType::Vec3, "Vec3");
+                            });
+
+                            if ValueType::from(val.clone()) != before {
+                                match before {
+                                    ValueType::String => {
+                                        *val = Value::String(String::new());
+                                    }
+                                    ValueType::Float => {
+                                        *val = Value::Float(0.0);
+                                    }
+                                    ValueType::Int => {
+                                        *val = Value::Int(0);
+                                    }
+                                    ValueType::Bool => {
+                                        *val = Value::Bool(false);
+                                    }
+                                    ValueType::Vec3 => {
+                                        *val = Value::Vec3([0.0, 0.0, 0.0])
+                                    }
+                                }
+                            }
+
+                            // value
+                            let speed = {
+                                let shift = ui.input(|i| i.modifiers.shift);
+                                let ctrl_or_cmd = ui.input(|i| {
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        i.modifiers.mac_cmd
+                                    }
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        i.modifiers.ctrl
+                                    }
+                                });
+
+                                if shift {
+                                    0.01
+                                } else if ctrl_or_cmd {
+                                    1.0
+                                } else {
+                                    0.1
+                                }
+                            };
+                            match val {
+                                Value::String(string) => {
+                                    ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(string));
+                                }
+                                Value::Int(int) => {
+                                    ui.add(DragValue::new(int).speed(1));
+                                }
+                                Value::Float(float) => {
+                                    let drag = DragValue::new(float).speed(speed);
+                                    ui.add(drag);
+                                }
+                                Value::Bool(bool) => {
+                                    if ui.button(if *bool {"✅"} else {"❌"}).clicked() {
+                                        *bool = !*bool;
+                                    };
+                                }
+                                Value::Vec3(vec) => {
+                                    ui.horizontal(|ui| {
+                                        ui.add(DragValue::new(&mut vec[0]).speed(speed));
+                                        ui.add(DragValue::new(&mut vec[1]).speed(speed));
+                                        ui.add(DragValue::new(&mut vec[2]).speed(speed));
+                                    });
+                                }
+                            }
+
+                            // action
+                            if ui.button("🗑️").clicked() {
+                                log::debug!("Trashing {}", key);
+                                local_del = (true, key.clone());
+                            };
+                            ui.end_row();
+                        }
+
+                        if local_del.0 {
+                            self.custom_properties.remove(&local_del.1);
+                        }
+
+                        if local_key_change.0 {
+                            let value = self.custom_properties.remove(&local_key_change.1);
+                            if let Some(val) = value {
+                                self.custom_properties.insert(local_key_change.2, val);
+                            } else {
+                                warn!("Cannot change name of key: unable to remove from hashmap")
+                            }
+                        }
+
+                        if ui.button("Add").clicked() {
+                            log::debug!("Inserting new default value");
+                            self.custom_properties.insert(String::new(), Value::default());
+                        };
+                })
+            });
+    }
 }
 
 impl InspectableComponent for Transform {

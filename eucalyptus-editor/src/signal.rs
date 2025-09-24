@@ -232,6 +232,14 @@ impl SignalController for Editor {
                             } else {
                                 warn!("No script component found on entity {:?}", selected_entity);
                             }
+                            match self.world.insert_one(selected_entity, ScriptComponent::default()) {
+                                Ok(_) => {
+                                    log::debug!("Inserted default script component");
+                                }
+                                Err(e) => {
+                                    log::warn!("No such entity is available. Additional info: {}", e);
+                                }
+                            }
                         }
 
                         if success {
@@ -370,6 +378,7 @@ impl SignalController for Editor {
                         }
                     }
                 } else {
+                    self.signal = Signal::None;
                     anyhow::bail!("Unable to build: Player camera not attached to an entity");
                 }
 
@@ -514,7 +523,7 @@ impl SignalController for Editor {
                         }
                         if local_insert_script {
                             if let Err(e) = self.world
-                                .insert_one(entity.clone(), ScriptComponent::default())
+                                .insert_one(*entity, ScriptComponent::default())
                             {
                                 warn!(
                                     "Failed to add scripting component to entity: {}",
@@ -683,6 +692,7 @@ impl SignalController for Editor {
                                     warn!("Failed to remove camera component from entity: {}", e);
                                 }
                             };
+                            self.signal = Signal::None;
                             Ok(())
                         } else {
                             match self.world
@@ -700,8 +710,10 @@ impl SignalController for Editor {
                                 }
                                 Err(e) => {
                                     warn!("Failed to remove script component from entity: {}", e);
+                                    self.signal = Signal::None;
                                 }
                             };
+                            self.signal = Signal::None;
                             Ok(())
                         }
                     }

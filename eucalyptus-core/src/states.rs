@@ -21,6 +21,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
+use egui::{DragValue, Ui};
 use rayon::prelude::*;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
@@ -672,6 +673,25 @@ pub enum Value {
     Vec3([f32; 3]),
 }
 
+impl Default for Value {
+    fn default() -> Self {
+        Self::String(String::new())
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string: String = match self {
+            Value::String(_) => "String".into(),
+            Value::Int(_) => "Int".into(),
+            Value::Float(_) => "Float".into(),
+            Value::Bool(_) => "Bool".into(),
+            Value::Vec3(_) => "Vec3".into(),
+        };
+        write!(f, "{}", string)
+    }
+}
+
 impl ModelProperties {
     pub fn new() -> Self {
         Self {
@@ -685,6 +705,32 @@ impl ModelProperties {
 
     pub fn get_property(&self, key: &str) -> Option<&Value> {
         self.custom_properties.get(key)
+    }
+
+    pub fn show_value_editor(ui: &mut Ui, value: &mut Value) -> bool {
+        match value {
+            Value::String(s) => {
+                ui.text_edit_singleline(s).changed()
+            }
+            Value::Int(i) => {
+                ui.add(egui::Slider::new(i, -1000..=1000).text("")).changed()
+            }
+            Value::Float(f) => {
+                ui.add(egui::Slider::new(f, -100.0..=100.0).text("")).changed()
+            }
+            Value::Bool(b) => {
+                ui.checkbox(b, "").changed()
+            }
+            Value::Vec3(vec) => {
+                let mut changed = false;
+                ui.horizontal(|ui| {
+                    changed |= ui.add(egui::Slider::new(&mut vec[0], -10.0..=10.0).text("X").fixed_decimals(2)).changed();
+                    changed |= ui.add(egui::Slider::new(&mut vec[1], -10.0..=10.0).text("Y").fixed_decimals(2)).changed();
+                    changed |= ui.add(egui::Slider::new(&mut vec[2], -10.0..=10.0).text("Z").fixed_decimals(2)).changed();
+                });
+                changed
+            }
+        }
     }
 }
 
