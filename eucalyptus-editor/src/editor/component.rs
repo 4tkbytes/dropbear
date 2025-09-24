@@ -5,14 +5,13 @@ use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
-use egui::{Button, CollapsingHeader, ComboBox, DragValue, Grid, RichText, Slider, TextEdit, Ui, Widget};
+use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::Vec3;
 use hecs::Entity;
 use std::time::Instant;
-use egui_extras::{Column, TableBuilder};
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
@@ -58,137 +57,148 @@ impl From<Value> for ValueType {
     }
 }
 
+impl From<&mut Value> for ValueType {
+    fn from(value: &mut Value) -> Self {
+        match value {
+            Value::String(_) => ValueType::String,
+            Value::Int(_) => ValueType::Int,
+            Value::Float(_) => ValueType::Float,
+            Value::Bool(_) => ValueType::Bool,
+            Value::Vec3(_) => ValueType::Vec3,
+        }
+    }
+}
+
+
 impl InspectableComponent for ModelProperties {
-    fn inspect(&mut self, _entity: &mut Entity, _cfg: &mut StaticallyKept, ui: &mut Ui, _undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        _entity: &mut Entity,
+        _cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        _undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
             .show(ui, |ui| {
                 Grid::new("properties")
                     .striped(true)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("Key").heading());
-                        ui.label(RichText::new("Type").heading());
-                        ui.label(RichText::new("Value").heading());
-                        ui.label(RichText::new("Action").heading());
+                        ui.label(RichText::new("Key"));
+                        ui.label(RichText::new("Type"));
+                        ui.label(RichText::new("Value"));
+                        ui.label(RichText::new("Action"));
                         ui.end_row();
 
-                        let mut local_del = (false, String::new());
-                        let mut local_key_change = (false, String::new(), String::new(), 0); // flag, old key, new key, index
-                        for (i, (key, val)) in self.custom_properties.iter_mut().enumerate() {
-                            // key
-                            let mut before_key = key.clone();
-                            ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut before_key));
+                        let mut to_delete: Option<String> = None;
+                        let mut to_rename: Option<(String, String)> = None;
 
-                            if before_key != *key {
-                                local_key_change = (true, key.clone(), before_key.clone(), i);
+                        let keys: Vec<String> = self.custom_properties.keys().cloned().collect();
+                        for (i, key) in keys.into_iter().enumerate() {
+                            let val = self.custom_properties.get_mut(&key).unwrap();
+
+                            let mut edited_key = key.clone();
+                            ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
+
+                            if edited_key != key {
+                                to_rename = Some((key.clone(), edited_key));
                             }
 
-                            let mut before = ValueType::from(val.clone());
+                            let current_type = ValueType::from(&mut *val);
+                            let mut selected_type = current_type;
 
-                            // type
-                            ComboBox::from_id_salt(format!("{:?}", val))
-                                .selected_text(format!("{:?}", before))
+                            ComboBox::from_id_salt(format!("type_{}_{}", i, key))
+                                .selected_text(format!("{:?}", selected_type))
                                 .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut before, ValueType::String, "String");
-                                ui.selectable_value(&mut before, ValueType::Float, "Float");
-                                ui.selectable_value(&mut before, ValueType::Int, "Int");
-                                ui.selectable_value(&mut before, ValueType::Bool, "Bool");
-                                ui.selectable_value(&mut before, ValueType::Vec3, "Vec3");
-                            });
-
-                            if ValueType::from(val.clone()) != before {
-                                match before {
-                                    ValueType::String => {
-                                        *val = Value::String(String::new());
-                                    }
-                                    ValueType::Float => {
-                                        *val = Value::Float(0.0);
-                                    }
-                                    ValueType::Int => {
-                                        *val = Value::Int(0);
-                                    }
-                                    ValueType::Bool => {
-                                        *val = Value::Bool(false);
-                                    }
-                                    ValueType::Vec3 => {
-                                        *val = Value::Vec3([0.0, 0.0, 0.0])
-                                    }
-                                }
-                            }
-
-                            // value
-                            let speed = {
-                                let shift = ui.input(|i| i.modifiers.shift);
-                                let ctrl_or_cmd = ui.input(|i| {
-                                    #[cfg(target_os = "macos")]
-                                    {
-                                        i.modifiers.mac_cmd
-                                    }
-                                    #[cfg(not(target_os = "macos"))]
-                                    {
-                                        i.modifiers.ctrl
-                                    }
+                                    ui.selectable_value(&mut selected_type, ValueType::String, "String");
+                                    ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
+                                    ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
+                                    ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
+                                    ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
                                 });
 
-                                if shift {
+                            if selected_type != current_type {
+                                *val = match selected_type {
+                                    ValueType::String => Value::String(String::new()),
+                                    ValueType::Float => Value::Float(0.0),
+                                    ValueType::Int => Value::Int(0),
+                                    ValueType::Bool => Value::Bool(false),
+                                    ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
+                                };
+                            }
+
+                            let speed = {
+                                let input = ui.input(|i| i.modifiers);
+                                if input.shift {
                                     0.01
-                                } else if ctrl_or_cmd {
+                                } else if cfg!(target_os = "macos") && input.mac_cmd || !cfg!(target_os = "macos") && input.ctrl {
                                     1.0
                                 } else {
                                     0.1
                                 }
                             };
+
                             match val {
-                                Value::String(string) => {
-                                    ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(string));
+                                Value::String(s) => {
+                                    ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
                                 }
-                                Value::Int(int) => {
-                                    ui.add(DragValue::new(int).speed(1));
+                                Value::Int(n) => {
+                                    ui.add(DragValue::new(n).speed(1.0));
                                 }
-                                Value::Float(float) => {
-                                    let drag = DragValue::new(float).speed(speed);
-                                    ui.add(drag);
+                                Value::Float(f) => {
+                                    ui.add(DragValue::new(f).speed(speed));
                                 }
-                                Value::Bool(bool) => {
-                                    if ui.button(if *bool {"✅"} else {"❌"}).clicked() {
-                                        *bool = !*bool;
-                                    };
+                                Value::Bool(b) => {
+                                    if ui.button(if *b { "✅" } else { "❌" }).clicked() {
+                                        *b = !*b;
+                                    }
                                 }
-                                Value::Vec3(vec) => {
+                                Value::Vec3(v) => {
                                     ui.horizontal(|ui| {
-                                        ui.add(DragValue::new(&mut vec[0]).speed(speed));
-                                        ui.add(DragValue::new(&mut vec[1]).speed(speed));
-                                        ui.add(DragValue::new(&mut vec[2]).speed(speed));
+                                        ui.add(DragValue::new(&mut v[0]).speed(speed));
+                                        ui.add(DragValue::new(&mut v[1]).speed(speed));
+                                        ui.add(DragValue::new(&mut v[2]).speed(speed));
                                     });
                                 }
                             }
 
-                            // action
                             if ui.button("🗑️").clicked() {
                                 log::debug!("Trashing {}", key);
-                                local_del = (true, key.clone());
-                            };
+                                to_delete = Some(key);
+                            }
+
                             ui.end_row();
                         }
 
-                        if local_del.0 {
-                            self.custom_properties.remove(&local_del.1);
+                        if let Some(key) = to_delete {
+                            self.custom_properties.remove(&key);
                         }
 
-                        if local_key_change.0 {
-                            let value = self.custom_properties.remove(&local_key_change.1);
-                            if let Some(val) = value {
-                                self.custom_properties.insert(local_key_change.2, val);
-                            } else {
-                                warn!("Cannot change name of key: unable to remove from hashmap")
+                        if let Some((old_key, new_key)) = to_rename {
+                            if new_key.is_empty() {
+                                warn!("Skipping rename to empty key");
+                            } else if old_key != new_key {
+                                if let Some(val) = self.custom_properties.remove(&old_key) {
+                                    self.custom_properties.insert(new_key, val);
+                                } else {
+                                    warn!("Failed to rename property: old key not found");
+                                }
                             }
                         }
 
                         if ui.button("Add").clicked() {
                             log::debug!("Inserting new default value");
-                            self.custom_properties.insert(String::new(), Value::default());
-                        };
-                })
+                            let mut new_key = String::from("new_property");
+                            let mut counter = 1;
+                            while self.custom_properties.contains_key(&new_key) {
+                                new_key = format!("new_property_{}", counter);
+                                counter += 1;
+                            }
+                            self.custom_properties.insert(new_key, Value::default());
+                        }
+                    });
             });
     }
 }
@@ -203,7 +213,7 @@ impl InspectableComponent for Transform {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             CollapsingHeader::new("Transform")
                 .default_open(true)
                 .show(ui, |ui| {
@@ -577,7 +587,7 @@ impl InspectableComponent for ScriptComponent {
     ) {
         let script_loc = self.path.to_str().unwrap_or("").to_string();
 
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             CollapsingHeader::new("Scripting")
                 .default_open(true)
                 .show(ui, |ui| {
@@ -675,7 +685,7 @@ impl InspectableComponent for AdoptedEntity {
         _label: &mut String,
     ) {
         // label
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
 
@@ -720,7 +730,7 @@ impl InspectableComponent for Light {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
 
@@ -765,91 +775,93 @@ impl InspectableComponent for LightComponent {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        ui.group(|ui| {
-            ui.horizontal(|ui| {
-                ComboBox::new("light_type", "Light Type")
-                    // .width(ui.available_width())
-                    .selected_text(self.light_type.to_string())
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.light_type,
-                            LightType::Directional,
-                            "Directional",
-                        );
-                        ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
-                        ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
-                    });
-            });
-
-            // let is_dir = matches!(self.light_type, LightType::Directional);
-            let is_point = matches!(self.light_type, LightType::Point);
-            let is_spot = matches!(self.light_type, LightType::Spot);
-
-            // colour
-            ui.separator();
-            let mut colour = self.colour.clone().as_vec3().to_array();
-            ui.horizontal(|ui| {
-                ui.label("Colour");
-                egui::color_picker::color_edit_button_rgb(ui, &mut colour)
-            });
-            self.colour = Vec3::from_array(colour).as_dvec3();
-
-            // intensity
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Intensity");
-                ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0));
-            });
-
-            // enabled and visible
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.enabled, "Enabled");
-                ui.checkbox(&mut self.visible, "Visible");
-            });
-
-            if is_spot || is_point {
-                // attenuation
-                ui.separator();
+        ui.vertical(|ui| {
+            CollapsingHeader::new("Component").show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ComboBox::new("Range", "Range")
+                    ComboBox::new("light_type", "Light Type")
                         // .width(ui.available_width())
-                        .selected_text(format!("Range {}", self.attenuation.range))
+                        .selected_text(self.light_type.to_string())
                         .show_ui(ui, |ui| {
-                            for (preset, label) in ATTENUATION_PRESETS {
-                                ui.selectable_value(&mut self.attenuation, *preset, *label);
-                            }
+                            ui.selectable_value(
+                                &mut self.light_type,
+                                LightType::Directional,
+                                "Directional",
+                            );
+                            ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
+                            ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
                         });
                 });
-            }
 
-            if is_spot {
-                // cutoff angles
+                // let is_dir = matches!(self.light_type, LightType::Directional);
+                let is_point = matches!(self.light_type, LightType::Point);
+                let is_spot = matches!(self.light_type, LightType::Spot);
+
+                // colour
+                ui.separator();
+                let mut colour = self.colour.clone().as_vec3().to_array();
                 ui.horizontal(|ui| {
-                    ui.add(
-                        egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
-                            .text("Inner")
-                            .suffix("°")
-                            .step_by(0.1),
-                    );
+                    ui.label("Colour");
+                    egui::color_picker::color_edit_button_rgb(ui, &mut colour)
+                });
+                self.colour = Vec3::from_array(colour).as_dvec3();
+
+                // intensity
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("Intensity");
+                    ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0));
                 });
 
+                // enabled and visible
+                ui.separator();
                 ui.horizontal(|ui| {
-                    ui.add(
-                        egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
-                            .text("Outer")
-                            .suffix("°")
-                            .step_by(0.1),
-                    );
+                    ui.checkbox(&mut self.enabled, "Enabled");
+                    ui.checkbox(&mut self.visible, "Visible");
                 });
 
-                if self.outer_cutoff_angle <= self.cutoff_angle {
-                    self.outer_cutoff_angle = self.cutoff_angle + 1.0;
+                if is_spot || is_point {
+                    // attenuation
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ComboBox::new("Range", "Range")
+                            // .width(ui.available_width())
+                            .selected_text(format!("Range {}", self.attenuation.range))
+                            .show_ui(ui, |ui| {
+                                for (preset, label) in ATTENUATION_PRESETS {
+                                    ui.selectable_value(&mut self.attenuation, *preset, *label);
+                                }
+                            });
+                    });
                 }
 
-                let cone_softness = self.outer_cutoff_angle - self.cutoff_angle;
-                ui.label(format!("Soft edge: {:.1}°", cone_softness));
-            }
+                if is_spot {
+                    // cutoff angles
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
+                                .text("Inner")
+                                .suffix("°")
+                                .step_by(0.1),
+                        );
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
+                                .text("Outer")
+                                .suffix("°")
+                                .step_by(0.1),
+                        );
+                    });
+
+                    if self.outer_cutoff_angle <= self.cutoff_angle {
+                        self.outer_cutoff_angle = self.cutoff_angle + 1.0;
+                    }
+
+                    let cone_softness = self.outer_cutoff_angle - self.cutoff_angle;
+                    ui.label(format!("Soft edge: {:.1}°", cone_softness));
+                }
+            });
         });
     }
 }

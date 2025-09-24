@@ -250,9 +250,9 @@ impl Mouse for Editor {
                     && let Ok(mut q) = self.world.query_one::<(
                         &mut Camera,
                         &CameraComponent,
-                        Option<&CameraFollowTarget>,
+                        // Option<&CameraFollowTarget>,
                     )>(active_camera)
-                        && let Some((camera, _, _)) = q.get() {
+                        && let Some((camera, _)) = q.get() {
                             camera.track_mouse_delta(dx, dy);
                         }
             }
@@ -285,10 +285,10 @@ impl Mouse for Editor {
                         if let Ok(mut q) = self.world.query_one::<(
                             &mut Camera,
                             &CameraComponent,
-                            Option<&CameraFollowTarget>,
+                            // Option<&CameraFollowTarget>,
                         )>(active_camera)
                         {
-                            if let Some((camera, _, _)) = q.get() {
+                            if let Some((camera, _)) = q.get() {
                                 camera.track_mouse_delta(dx, dy);
                             }
                         } 

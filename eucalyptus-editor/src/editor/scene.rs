@@ -8,7 +8,6 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
-use eucalyptus_core::camera::PlayerCamera;
 use eucalyptus_core::states::{WorldLoadingStatus};
 use eucalyptus_core::{logging};
 use hecs::Entity;
@@ -57,11 +56,10 @@ impl Scene for Editor {
                 self.world = loaded_world;
                 self.is_world_loaded.mark_project_loaded();
                 
-                if let Some(dock_state_shared) = &self.dock_state_shared {
-                    if let Some(loaded_dock_state) = dock_state_shared.try_lock() {
-                        self.dock_state = loaded_dock_state.clone();
-                        log::info!("Dock state updated from loaded config");
-                    }
+                if let Some(dock_state_shared) = &self.dock_state_shared &&
+                let Some(loaded_dock_state) = dock_state_shared.try_lock() {
+                    self.dock_state = loaded_dock_state.clone();
+                    log::info!("Dock state updated from loaded config");
                 }
                 
                 log::info!("World received");
@@ -149,66 +147,28 @@ impl Scene for Editor {
         if self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove)
         // && self.is_using_debug_camera()
         {
-            let movement_keys: std::collections::HashSet<KeyCode> = self
-                .input_state
-                .pressed_keys
-                .iter()
-                .filter(|&&key| {
-                    matches!(
-                        key,
-                        KeyCode::KeyW
-                            | KeyCode::KeyA
-                            | KeyCode::KeyS
-                            | KeyCode::KeyD
-                            | KeyCode::Space
-                            | KeyCode::ShiftLeft
-                    )
-                })
-                .copied()
-                .collect();
-
             let active_cam = self.active_camera.lock();
-            if let Some(active_camera) = *active_cam {
-                if let Ok(mut query) = self.world
+            if let Some(active_camera) = *active_cam &&
+                let Ok(mut query) = self.world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
-                    && let Some((camera, component)) = query.get() {
-                        match component.camera_type {
-                            CameraType::Debug => {
-                                DebugCamera::handle_keyboard_input(camera, &movement_keys);
-                                DebugCamera::handle_mouse_input(
-                                    camera,
-                                    component,
-                                    self.input_state.mouse_delta,
-                                );
-                            }
-                            CameraType::Player => {
-                                PlayerCamera::handle_keyboard_input(camera, &movement_keys);
-                                PlayerCamera::handle_mouse_input(
-                                    camera,
-                                    component,
-                                    self.input_state.mouse_delta,
-                                );
-                            }
-                            CameraType::Normal => {
-                                DebugCamera::handle_keyboard_input(camera, &movement_keys);
-                                DebugCamera::handle_mouse_input(
-                                    camera,
-                                    component,
-                                    self.input_state.mouse_delta,
-                                );
-                            }
-                        }
+                    &&
+                let Some((camera, _)) = query.get()
+            {
+                for key in &self.input_state.pressed_keys {
+                    match key {
+                        KeyCode::KeyW => camera.move_forwards(),
+                        KeyCode::KeyA => camera.move_left(),
+                        KeyCode::KeyD => camera.move_right(),
+                        KeyCode::KeyS => camera.move_back(),
+                        KeyCode::ShiftLeft => camera.move_down(),
+                        KeyCode::Space => camera.move_up(),
+                        _ => {}
                     }
-            }
-
-        }
-
-        match self.run_signal(graphics.shared.clone()) {
-            Ok(_) => {}
-            Err(e) => {
-                fatal!("{}", e);
+                }
             }
         }
+
+        let _ = self.run_signal(graphics.shared.clone());
 
         let current_size = graphics.shared.viewport_texture.size;
         self.size = current_size;
@@ -217,56 +177,52 @@ impl Scene for Editor {
 
         {
             let active_cam = self.active_camera.lock();
-            if let Some(active_camera) = *active_cam {
-                if let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera)
-                    && let Some(camera) = query.get() {
-                        camera.aspect = new_aspect;
-                    }
+            if let Some(active_camera) = *active_cam 
+            && let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera)
+            && let Some(camera) = query.get() {
+                camera.aspect = new_aspect;
             }
-
         }
 
-        let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
-            self.world
-                .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
-                .iter()
-                .filter_map(|(entity_id, (_, _, follow_target))| {
-                    follow_target.map(|target| {
-                        (
-                            entity_id,
-                            target.follow_target.clone(),
-                            target.offset.as_vec3()
-                        )
-                    })
-                })
-                .collect()
-        };
+        // let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
+        //     self.world
+        //         .query::<(&Camera, &CameraComponent)>()
+        //         .iter()
+        //         .filter_map(|(entity_id, (_, _))| {
+        //             follow_target.map(|target| {
+        //                 (
+        //                     entity_id,
+        //                     target.follow_target.clone(),
+        //                     target.offset.as_vec3()
+        //                 )
+        //             })
+        //         })
+        //         .collect()
+        // };
 
 
-        for (camera_entity, target_label, offset) in camera_follow_data {
-            let target_position = {
-                self.world
-                    .query::<(&AdoptedEntity, &Transform)>()
-                    .iter()
-                    .find_map(|(_, (adopted, transform))| {
-                        if adopted.model.label == target_label {
-                            Some(transform.position)
-                        } else {
-                            None
-                        }
-                    })
-            };
-
-
-            if let Some(pos) = target_position {
-                if let Ok(mut query) = self.world.query_one::<&mut Camera>(camera_entity)
-                    && let Some(camera) = query.get() {
-                        camera.eye = pos + offset.as_dvec3();
-                        camera.target = pos;
-                    }
-            }
-
-        }
+        // for (camera_entity, target_label, offset) in camera_follow_data {
+        //     let target_position = {
+        //         self.world
+        //             .query::<(&AdoptedEntity, &Transform)>()
+        //             .iter()
+        //             .find_map(|(_, (adopted, transform))| {
+        //                 if adopted.model.label == target_label {
+        //                     Some(transform.position)
+        //                 } else {
+        //                     None
+        //                 }
+        //             })
+        //     };
+        // 
+        // 
+        //     if let Some(pos) = target_position 
+        //         && let Ok(mut query) = self.world.query_one::<&mut Camera>(camera_entity)
+        //         && let Some(camera) = query.get() {
+        //             camera.eye = pos + offset.as_dvec3();
+        //             camera.target = pos;
+        //         }
+        // }
 
         {
             for (_entity_id, (camera, component)) in self.world

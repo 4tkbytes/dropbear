@@ -9,7 +9,7 @@ use dropbear_engine::{
     lighting::{Light, LightComponent},
 };
 use egui;
-use egui::{CollapsingHeader, Layout};
+use egui::{CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
@@ -97,8 +97,6 @@ pub struct StaticallyKept {
 
     pub(crate) transform_in_progress: bool,
 }
-
-impl StaticallyKept {}
 
 impl<'a> TabViewer for EditorTabViewer<'a> {
     type Tab = EditorTab;
@@ -194,10 +192,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if let Ok(mut q) = self.world.query_one::<(
                                 &Camera,
                                 &CameraComponent,
-                                Option<&CameraFollowTarget>,
+                                // Option<&CameraFollowTarget>,
                             )>(active_camera)
                             {
-                                if let Some((camera, _, _)) = q.get() {
+                                if let Some((camera, _)) = q.get() {
                                     if let Some(click_pos) =
                                         ui.ctx().input(|i| i.pointer.interact_pos())
                                     {
@@ -349,12 +347,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let active_cam = self.active_camera.lock();
                 if let Some(active_camera) = *active_cam {
                     let camera_data = {
-                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
+                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent)>(active_camera) {
                             let val = q.get();
                             if let Some(val) = val {
                                 Some(val.0.clone())
                             } else {
                                 log::warn!("Queried camera but unable to get value");
+
                                 None
                             }
                         } else {
@@ -615,8 +614,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     {
                                                         let active_cam = self.active_camera.lock();
                                                         if let Some(active_camera) = *active_cam {
-                                                            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(active_camera) {
-                                                                if let Some((camera, _, _)) = q.get() {
+                                                            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent)>(active_camera) {
+                                                                if let Some((camera, _)) = q.get() {
                                                                     spawn_position = camera.eye;
                                                                 } else {
                                                                     log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
@@ -632,7 +631,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
                                                         path: if asset_path.starts_with("resources/") {
-                                                            // Path is already relative from project root, extract the part after "resources/"
                                                             ResourceReference {
                                                                 ref_type: ResourceReferenceType::File(
                                                                     asset_path.strip_prefix("resources/")
@@ -642,13 +640,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                                 ),
                                                             }
                                                         } else {
-                                                            // Fallback to the original method for absolute paths
-                                                            ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| { 
+                                                            ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| {
                                                                 log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
                                                                 Default::default() 
                                                             })
                                                         },
-                                                        // asset_type: asset_type.clone(),
                                                     };
 
                                                     match self.spawn_entity_at_pos(&asset, spawn_position, None) {
@@ -700,234 +696,83 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
+                    if let Ok(mut q) = self.world.query_one::<(
+                        &mut AdoptedEntity,
+                        Option<&mut Transform>,
+                        Option<&mut ModelProperties>,
+                        Option<&mut ScriptComponent>,
+                        Option<&mut Camera>,
+                        Option<&mut CameraComponent>,
+                        // Option<&mut CameraFollowTarget>,
+                    )>(*entity)
                     {
-                            if let Ok(mut q) = self.world.query_one::<(
-                                &mut AdoptedEntity,
-                                Option<&mut Transform>,
-                                Option<&mut ModelProperties>,
-                                Option<&mut ScriptComponent>,
-                                Option<&mut Camera>,
-                                Option<&mut CameraComponent>,
-                                Option<&mut CameraFollowTarget>,
-                            )>(*entity)
-                            {
-                                if let Some((
-                                    e,
-                                    transform,
-                                    _props,
-                                    script,
-                                    camera,
-                                    camera_component,
-                                    follow_target,
-                                )) = q.get() {
-                                    // entity
-                                    e.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut String::new(),
-                                    );
-                                    // transform
-                                    if let Some(t) = transform {
-                                        t.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut Arc::make_mut(&mut e.model).label,
-                                        );
-                                    }
-
-                                    // properties
-                                    if let Some(props) = _props {
-                                        props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
-                                    }
-
-                                    ui.separator();
-
-                                    // camera
-                                    if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
-                                        ui.group(|ui| {
-                                            CollapsingHeader::new("Camera Components")
-                                            .default_open(true)
-                                            .show(ui, |ui| {
-                                                ui.horizontal(|ui| {
-                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                        if ui.button("❌").clicked() {
-                                                            if let Some(target) = &follow_target {
-                                                                *self.signal = Signal::RemoveComponent(
-                                                                    *entity,
-                                                                    Box::new(ComponentType::Camera(
-                                                                        Box::new(camera.clone()),
-                                                                        camera_component.clone(),
-                                                                        Some((*target).to_owned()),
-                                                                    )),
-                                                                );
-                                                            } else {
-                                                                *self.signal = Signal::RemoveComponent(
-                                                                    *entity,
-                                                                    Box::new(ComponentType::Camera(
-                                                                        Box::new(camera.clone()),
-                                                                        camera_component.clone(),
-                                                                        None,
-                                                                    )),
-                                                                );
-                                                            }
-                                                        }
-                                                    });
-                                                });
-
-                                                camera.inspect(
-                                                    entity,
-                                                    &mut cfg,
-                                                    ui,
-                                                    self.undo_stack,
-                                                    self.signal,
-                                                    &mut String::new(),
-                                                );
-                                                camera_component.inspect(
-                                                    entity,
-                                                    &mut cfg,
-                                                    ui,
-                                                    self.undo_stack,
-                                                    self.signal,
-                                                    &mut camera.label.clone(),
-                                                );
-
-                                                if let Some(target) = follow_target {
-                                                    target.inspect(
-                                                        entity,
-                                                        &mut cfg,
-                                                        ui,
-                                                        self.undo_stack,
-                                                        self.signal,
-                                                        &mut camera.label.clone(),
-                                                    );
-                                                }
-
-                                                ui.separator();
-                                                ui.label("Camera Controls:");
-                                                let mut active_camera = self.active_camera.lock();
-                                                if ui.button("Set as Active Camera").clicked() {
-                                                    *active_camera = Some(*entity);
-                                                    log::info!("Set camera '{}' as active", camera.label);
-                                                }
-
-                                                if matches!(self.editor_mode, EditorState::Editing)
-                                                    && ui.button("Switch to This Camera").clicked() {
-                                                    *active_camera = Some(*entity);
-                                                    log::info!("Switched to camera '{}'", camera.label);
-                                                }
-                                            });
-                                        });
-                                    }
-
-                                    ui.separator();
-
-                                    // scripting
-                                    if let Some(script) = script {
-                                        ui.group(|ui| {
-                                            CollapsingHeader::new("Scripting")
-                                                .default_open(true)
-                                                .show(ui, |ui| {
-                                                    ui.horizontal(|ui| {
-                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                            if ui.button("❌").clicked() {
-                                                                *self.signal = Signal::RemoveComponent(*entity, Box::new(ComponentType::Script(script.clone())))
-                                                            }
-                                                        });
-                                                    });
-
-                                                    script.inspect(
-                                                        entity,
-                                                        &mut cfg,
-                                                        ui,
-                                                        self.undo_stack,
-                                                        self.signal,
-                                                        &mut Arc::make_mut(&mut e.model).label,
-                                                    );
-                                                })
-                                        });
-                                    }
-
-                                    if let Some(t) = cfg.label_last_edit
-                                        && t.elapsed() >= Duration::from_millis(500) {
-                                            if let Some(ent) = cfg.old_label_entity.take()
-                                                && let Some(orig) = cfg.label_original.take() {
-                                                    UndoableAction::push_to_undo(
-                                                        self.undo_stack,
-                                                        UndoableAction::Label(ent, orig, EntityType::Entity),
-                                                    );
-                                                    log::debug!(
-                                            "Pushed label change to undo stack after 500ms debounce period"
-                                        );
-                                                }
-                                            cfg.label_last_edit = None;
-                                        }
-                                }
-                            } else {
-                                log_once::debug_once!("Unable to query entity inside resource inspector");
+                        if let Some((
+                            e,
+                            transform,
+                            _props,
+                            script,
+                            camera,
+                            camera_component,
+                            // follow_target,
+                        )) = q.get() {
+                            // entity
+                            e.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut String::new(),
+                            );
+                            // transform
+                            if let Some(t) = transform {
+                                t.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut Arc::make_mut(&mut e.model).label,
+                                );
                             }
 
-                            if let Ok(mut q) = self.world
-                                .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
-                            {
-                                if let Some((light, transform, props)) = q.get() {
-                                    light.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut String::new(),
-                                    );
-                                    transform.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut light.label,
-                                    );
-                                    props.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut light.label,
-                                    );
-                                    if let Some(t) = cfg.label_last_edit
-                                        && t.elapsed() >= Duration::from_millis(500) {
-                                            if let Some(ent) = cfg.old_label_entity.take()
-                                                && let Some(orig) = cfg.label_original.take() {
-                                                    UndoableAction::push_to_undo(
-                                                        self.undo_stack,
-                                                        UndoableAction::Label(ent, orig, EntityType::Light),
-                                                    );
-                                                    log::debug!(
-                                            "Pushed label change to undo stack after 500ms debounce period"
-                                        );
-                                                }
-                                            cfg.label_last_edit = None;
-                                        }
-                                }
-                            } else {
-                                log_once::debug_once!("Unable to query light inside resource inspector");
+                            // properties
+                            if let Some(props) = _props {
+                                props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
                             }
 
-                            if let Ok(mut q) =
-                                self.world.query_one::<(
-                                    &mut Camera,
-                                    &mut CameraComponent,
-                                    Option<&mut CameraFollowTarget>,
-                                )>(*entity)
-                                && let Some((camera, camera_component, follow_target)) = q.get() 
-                                // Only handle standalone cameras (those without AdoptedEntity)
-                                && self.world.get::<&AdoptedEntity>(*entity).is_err() {
+                            // camera
+                            if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                                ui.separator();
+                                CollapsingHeader::new("Camera Components")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.button("Remove Component ❌").clicked() {
+                                                // if let Some(target) = &follow_target {
+                                                //     *self.signal = Signal::RemoveComponent(
+                                                //         *entity,
+                                                //         Box::new(ComponentType::Camera(
+                                                //             Box::new(camera.clone()),
+                                                //             camera_component.clone(),
+                                                //             Some((*target).to_owned()),
+                                                //         )),
+                                                //     );
+                                                // } else {
+                                                    *self.signal = Signal::RemoveComponent(
+                                                        *entity,
+                                                        Box::new(ComponentType::Camera(
+                                                            Box::new(camera.clone()),
+                                                            camera_component.clone(),
+                                                            // None,
+                                                        )),
+                                                    );
+                                                // }
+                                            }
+                                        });
+                                    });
+
                                     camera.inspect(
                                         entity,
                                         &mut cfg,
@@ -936,6 +781,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut String::new(),
                                     );
+                                    camera_component.camera_type = CameraType::Player; // it will always be a player if attached to an entity, never normal
                                     camera_component.inspect(
                                         entity,
                                         &mut cfg,
@@ -944,32 +790,233 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut camera.label.clone(),
                                     );
-                                    if let Some(target) = follow_target {
-                                        target.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut camera.label.clone(),
-                                        );
-                                    }
+
+                                    // if let Some(target) = follow_target {
+                                    //     target.inspect(
+                                    //         entity,
+                                    //         &mut cfg,
+                                    //         ui,
+                                    //         self.undo_stack,
+                                    //         self.signal,
+                                    //         &mut camera.label.clone(),
+                                    //     );
+                                    // }
 
                                     ui.separator();
                                     ui.label("Camera Controls:");
                                     let mut active_camera = self.active_camera.lock();
-                                    if ui.button("Set as Active Camera").clicked() {
-                                        *active_camera = Some(*entity);
-                                        log::info!("Set camera '{}' as active", camera.label);
+
+                                    if *active_camera == Some(*entity) {
+                                        ui.label("Status: Currently viewing through camera");
+                                    } else {
+                                        ui.label("Status: Not viewing through this camera");
                                     }
 
-                                    if matches!(self.editor_mode, EditorState::Editing)
-                                        && ui.button("Switch to This Camera").clicked() {
-                                            *active_camera = Some(*entity);
-                                            log::info!("Switched to camera '{}'", camera.label);
+                                    if ui.button("Set as active camera").clicked() {
+                                        *active_camera = Some(*entity);
+                                        log::info!("Currently viewing from camera angle '{}'", camera.label);
+                                    }
+
+                                    if camera_component.starting_camera {
+                                        if ui.button("Stop making camera initial").clicked() {
+                                            log::debug!("'Stop making camera initial' button clicked");
+                                            camera_component.starting_camera = false;
+                                            success!("Removed {} from starting camera", camera.label);
                                         }
+                                    } else {
+                                        #[allow(clippy::collapsible_else_if)] // I don't even know why the fuck clippy wants to flag this...
+                                        if ui.button("Set as initial camera").clicked() {
+                                            log::debug!("'Set as initial camera' button clicked");
+                                            if matches!(camera_component.camera_type, CameraType::Debug) {
+                                                warn!("Cannot set any cameras of type 'Debug' to initial camera");
+                                            } else {
+                                                success!("Set {} at the starting camera. When you start your game, \
+                                                expect to see through this camera!", camera.label);
+                                                camera_component.starting_camera = true;
+                                            }
+                                        }
+                                    }
+
+                                    // if ui.button("Create offset").clicked() {
+                                    //     local_insert_follow_target = Some(*entity);
+                                    // }
+                                });
+                            }
+
+                            // scripting
+                            if let Some(script) = script {
+                                ui.separator();
+                                ui.horizontal(|ui| {
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        if ui.button("Remove Component ❌").clicked() {
+                                            *self.signal = Signal::RemoveComponent(*entity, Box::new(ComponentType::Script(script.clone())))
+                                        }
+                                    });
+                                });
+
+                                script.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut Arc::make_mut(&mut e.model).label,
+                                );
+                            }
+
+                            if let Some(t) = cfg.label_last_edit
+                                && t.elapsed() >= Duration::from_millis(500) {
+                                    if let Some(ent) = cfg.old_label_entity.take()
+                                        && let Some(orig) = cfg.label_original.take() {
+                                            UndoableAction::push_to_undo(
+                                                self.undo_stack,
+                                                UndoableAction::Label(ent, orig, EntityType::Entity),
+                                            );
+                                            log::debug!(
+                                    "Pushed label change to undo stack after 500ms debounce period"
+                                );
+                                        }
+                                    cfg.label_last_edit = None;
                                 }
+                        }
+                    } else {
+                        log_once::debug_once!("Unable to query entity inside resource inspector");
                     }
+
+                    // if let Some(e) = local_insert_follow_target {
+                    //     match self.world.insert_one(e, CameraFollowTarget::default()) {
+                    //         Ok(_) => {
+                    //             success!("Added CameraFollowTarget");
+                    //         }
+                    //         Err(e) => {
+                    //             warn!("Unable to add CameraFollowTarget: {}", e);
+                    //         }
+                    //     }
+                    // }
+
+                    // lighting system
+                    if let Ok(mut q) = self.world
+                        .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
+                    {
+                        if let Some((light, transform, props)) = q.get() {
+                            light.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut String::new(),
+                            );
+                            transform.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut light.label,
+                            );
+                            props.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut light.label,
+                            );
+                            if let Some(t) = cfg.label_last_edit
+                                && t.elapsed() >= Duration::from_millis(500) {
+                                    if let Some(ent) = cfg.old_label_entity.take()
+                                        && let Some(orig) = cfg.label_original.take() {
+                                            UndoableAction::push_to_undo(
+                                                self.undo_stack,
+                                                UndoableAction::Label(ent, orig, EntityType::Light),
+                                            );
+                                            log::debug!(
+                                    "Pushed label change to undo stack after 500ms debounce period"
+                                );
+                                        }
+                                    cfg.label_last_edit = None;
+                                }
+                        }
+                    } else {
+                        log_once::debug_once!("Unable to query light inside resource inspector");
+                    }
+
+                    // camera
+                    if let Ok(mut q) =
+                        self.world.query_one::<(
+                            &mut Camera,
+                            &mut CameraComponent,
+                            // Option<&mut CameraFollowTarget>,
+                        )>(*entity)
+                        && let Some((camera, camera_component)) = q.get()
+                        && self.world.get::<&AdoptedEntity>(*entity).is_err() {
+                        ui.vertical(|ui| {
+                            camera.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut String::new(),
+                            );
+                            camera_component.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut camera.label.clone(),
+                            );
+                            // if let Some(target) = follow_target {
+                            //     target.inspect(
+                            //         entity,
+                            //         &mut cfg,
+                            //         ui,
+                            //         self.undo_stack,
+                            //         self.signal,
+                            //         &mut camera.label.clone(),
+                            //     );
+                            // }
+
+                            ui.separator();
+
+                            let mut active_camera = self.active_camera.lock();
+
+                            ui.label("Camera Controls:");
+                            if *active_camera == Some(*entity) {
+                                ui.label("Status: Currently viewing through camera");
+                            } else {
+                                ui.label("Status: Not viewing through this camera");
+                            }
+
+                            if ui.button("Set as active camera").clicked() {
+                                *active_camera = Some(*entity);
+                                log::info!("Currently viewing from camera angle '{}'", camera.label);
+                            }
+
+                            if camera_component.starting_camera {
+                                if ui.button("Stop making camera initial").clicked() {
+                                    log::debug!("'Stop making camera initial' button clicked");
+                                    success!("Removed {} from starting camera", camera.label);
+                                    camera_component.starting_camera = false;
+                                }
+                            } else {
+                                #[allow(clippy::collapsible_else_if)]
+                                if ui.button("Set as initial camera").clicked() {
+                                    log::debug!("'Set as initial camera' button clicked");
+                                    if matches!(camera_component.camera_type, CameraType::Debug) {
+                                        info!("Cannot set any cameras of type 'Debug' to initial camera");
+                                    } else {
+                                        success!("Set {} at the starting camera. When you start your game, \
+                                                expect to see through this camera!", camera.label);
+                                        camera_component.starting_camera = true;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                ui.separator();
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
                 }

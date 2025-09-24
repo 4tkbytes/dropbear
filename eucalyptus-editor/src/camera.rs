@@ -2,9 +2,10 @@ use crate::editor::component::InspectableComponent;
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::camera::Camera;
 use egui::{CollapsingHeader, Ui};
-use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType};
+use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
 use hecs::Entity;
 use std::time::Instant;
+use eucalyptus_core::success;
 
 impl InspectableComponent for Camera {
     fn inspect(
@@ -16,8 +17,7 @@ impl InspectableComponent for Camera {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        let _ = _signal;
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             CollapsingHeader::new("Camera")
                 .default_open(true)
                 .show(ui, |ui| {
@@ -91,37 +91,56 @@ impl InspectableComponent for CameraComponent {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        ui.group(|ui| {
+        ui.vertical(|ui| {
             CollapsingHeader::new("Camera Component")
                 .default_open(true)
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Type:");
-                        egui::ComboBox::from_label("")
-                            .selected_text(format!("{:?}", self.camera_type))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.camera_type,
-                                    CameraType::Normal,
-                                    "Normal",
-                                );
-                                if !matches!(self.camera_type, CameraType::Player) {
+                    // removing this because it is set based on the entity hierarchy
+                    // ui.horizontal(|ui| {
+                    //     ui.label("Type:");
+                    //     egui::ComboBox::from_label("")
+                    //         .selected_text(format!("{:?}", self.camera_type))
+                    //         .show_ui(ui, |ui| {
+                    //             ui.selectable_value(
+                    //                 &mut self.camera_type,
+                    //                 CameraType::Normal,
+                    //                 "Normal",
+                    //             );
+                    //             if !matches!(self.camera_type, CameraType::Player) {
+                    //                 ui.selectable_value(
+                    //                     &mut self.camera_type,
+                    //                     CameraType::Debug,
+                    //                     "Debug",
+                    //                 );
+                    //             } else {
+                    //                 ui.add_enabled(false, egui::Button::new("Debug"));
+                    //                 ui.label("Debug not available for player cameras");
+                    //             }
+                    //             ui.selectable_value(
+                    //                 &mut self.camera_type,
+                    //                 CameraType::Player,
+                    //                 "Player",
+                    //             );
+                    //         });
+                    // });
+
+                    if !matches!(self.camera_type, CameraType::Player) {
+                        egui::ComboBox::from_id_salt("i aint r kelly the way i take the piss ; \
+                        but im mj coz my shots don't miss")
+                                .selected_text(format!("{:?}", self.camera_type))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut self.camera_type,
+                                        CameraType::Normal,
+                                        "Normal",
+                                    );
                                     ui.selectable_value(
                                         &mut self.camera_type,
                                         CameraType::Debug,
                                         "Debug",
                                     );
-                                } else {
-                                    ui.add_enabled(false, egui::Button::new("Debug"));
-                                    ui.label("Debug not available for player cameras");
-                                }
-                                ui.selectable_value(
-                                    &mut self.camera_type,
-                                    CameraType::Player,
-                                    "Player",
-                                );
-                            });
-                    });
+                                });
+                    }
 
                     ui.horizontal(|ui| {
                         ui.label("Speed:");
@@ -146,61 +165,62 @@ impl InspectableComponent for CameraComponent {
                         ui.add(egui::Slider::new(&mut self.fov_y, 10.0..=120.0).suffix("°"));
                     });
 
-                    if matches!(self.camera_type, CameraType::Player) {
-                        ui.separator();
-                        ui.label("Player Camera Controls:");
-                        if ui.button("Set as Active Camera").clicked() {
-                            // This would need to be implemented via signal
-                            log::info!("Set player camera as active (not implemented)");
-                        }
-                    }
+                    // if matches!(self.camera_type, CameraType::Player) {
+                    //     ui.separator();
+                    //     ui.label("Player Camera Controls:");
+                    //     if ui.button("Set as Active Camera").clicked() {
+                    //         *signal = Signal::CameraAction(CameraAction::SetInitialCamera);
+                    //         log::info!("Set player camera as active (not implemented)");
+                    //     }
+                    // }
                 });
         });
     }
 }
 
-impl InspectableComponent for CameraFollowTarget {
-    fn inspect(
-        &mut self,
-        _entity: &mut Entity,
-        _cfg: &mut StaticallyKept,
-        ui: &mut Ui,
-        _undo_stack: &mut Vec<UndoableAction>,
-        signal: &mut Signal,
-        _label: &mut String,
-    ) {
-        ui.group(|ui| {
-            CollapsingHeader::new("Camera Follow Target")
-                .default_open(true)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Target Entity:");
-                        ui.text_edit_singleline(&mut self.follow_target);
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Offset:");
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("X:");
-                        ui.add(egui::DragValue::new(&mut self.offset.x).speed(0.1));
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Y:");
-                        ui.add(egui::DragValue::new(&mut self.offset.y).speed(0.1));
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Z:");
-                        ui.add(egui::DragValue::new(&mut self.offset.z).speed(0.1));
-                    });
-
-                    if ui.button("Clear Target").clicked() {
-                        *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
-                    }
-                });
-        });
-    }
-}
+// impl InspectableComponent for CameraFollowTarget {
+//     fn inspect(
+//         &mut self,
+//         entity: &mut Entity,
+//         _cfg: &mut StaticallyKept,
+//         ui: &mut Ui,
+//         _undo_stack: &mut Vec<UndoableAction>,
+//         signal: &mut Signal,
+//         _label: &mut String,
+//     ) {
+//         ui.vertical(|ui| {
+//             CollapsingHeader::new("Camera Follow Target")
+//                 .default_open(true)
+//                 .show(ui, |ui| {
+//                     ui.horizontal(|ui| {
+//                         ui.label("Offset:");
+//                     });
+// 
+//                     ui.horizontal(|ui| {
+//                         ui.label("X:");
+//                         ui.add(egui::DragValue::new(&mut self.offset.x).speed(0.1));
+//                     });
+// 
+//                     ui.horizontal(|ui| {
+//                         ui.label("Y:");
+//                         ui.add(egui::DragValue::new(&mut self.offset.y).speed(0.1));
+//                     });
+// 
+//                     ui.horizontal(|ui| {
+//                         ui.label("Z:");
+//                         ui.add(egui::DragValue::new(&mut self.offset.z).speed(0.1));
+//                     });
+//                     ui.horizontal(|ui| {
+//                         if ui.button("Set current position as offset").clicked() {
+//                             success!("Set current position as offset");
+//                             *signal = Signal::CameraAction(CameraAction::SetCurrentPositionAsOffset(*entity))
+//                         }
+//                         if ui.button("Clear Target").clicked() {
+//                             success!("Removed camera offset");
+//                             *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
+//                         }
+//                     });
+//                 });
+//         });
+//     }
+// }

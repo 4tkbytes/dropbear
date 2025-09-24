@@ -10,6 +10,7 @@ pub struct CameraComponent {
     pub sensitivity: f64,
     pub fov_y: f64,
     pub camera_type: CameraType,
+    pub starting_camera: bool,
 }
 
 impl Default for CameraComponent {
@@ -25,6 +26,7 @@ impl CameraComponent {
             sensitivity: 0.002,
             fov_y: 60.0,
             camera_type: CameraType::Normal,
+            starting_camera: false,
         }
     }
 
@@ -84,37 +86,13 @@ impl DebugCamera {
             ..CameraComponent::new()
         }
     }
-
-    pub fn handle_keyboard_input(camera: &mut Camera, pressed_keys: &HashSet<KeyCode>) {
-        for key in pressed_keys {
-            match key {
-                KeyCode::KeyW => camera.move_forwards(),
-                KeyCode::KeyA => camera.move_left(),
-                KeyCode::KeyD => camera.move_right(),
-                KeyCode::KeyS => camera.move_back(),
-                KeyCode::ShiftLeft => camera.move_down(),
-                KeyCode::Space => camera.move_up(),
-                _ => {}
-            }
-        }
-    }
-
-    pub fn handle_mouse_input(
-        camera: &mut Camera,
-        component: &CameraComponent,
-        mouse_delta: Option<(f64, f64)>,
-    ) {
-        if let Some((dx, dy)) = mouse_delta {
-            camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
-        }
-    }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct CameraFollowTarget {
-    pub follow_target: String,
-    pub offset: DVec3,
-}
+// #[derive(Debug, Default, Clone)]
+// pub struct CameraFollowTarget {
+//     pub follow_target: String,
+//     pub offset: DVec3,
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CameraType {
@@ -133,4 +111,5 @@ impl Default for CameraType {
 pub enum CameraAction {
     SetPlayerTarget { entity: hecs::Entity, offset: DVec3 },
     ClearPlayerTarget,
+    SetCurrentPositionAsOffset(hecs::Entity),
 }

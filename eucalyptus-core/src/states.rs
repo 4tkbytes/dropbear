@@ -1,5 +1,5 @@
 use crate::camera::DebugCamera;
-use crate::camera::{CameraComponent, CameraFollowTarget, CameraType};
+use crate::camera::{CameraComponent, CameraType};
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
 use dropbear_engine::camera::{Camera, CameraBuilder};
@@ -21,7 +21,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
-use egui::{DragValue, Ui};
+use egui::Ui;
 use rayon::prelude::*;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
@@ -596,8 +596,10 @@ pub struct CameraConfig {
     pub speed: f32,
     pub sensitivity: f32,
 
-    pub follow_target_entity_label: Option<String>,
-    pub follow_offset: Option<[f64; 3]>,
+    // pub follow_target_entity_label: Option<String>,
+    // pub follow_offset: Option<[f64; 3]>,
+    
+    pub starting_camera: bool,
 }
 
 impl Default for CameraConfig {
@@ -611,12 +613,13 @@ impl Default for CameraConfig {
             fov: 45.0,
             near: 0.1,
             far: 100.0,
-            follow_target_entity_label: None,
-            follow_offset: None,
+            // follow_target_entity_label: None,
+            // follow_offset: None,
             label: String::new(),
             camera_type: CameraType::Normal,
             speed: default.speed as f32,
             sensitivity: default.sensitivity as f32,
+            starting_camera: false,
         }
     }
 }
@@ -625,7 +628,7 @@ impl CameraConfig {
     pub fn from_ecs_camera(
         camera: &Camera,
         component: &CameraComponent,
-        follow_target: Option<&CameraFollowTarget>,
+        // follow_target: Option<&CameraFollowTarget>,
     ) -> Self {
         Self {
             position: camera.position().to_array(),
@@ -639,8 +642,9 @@ impl CameraConfig {
             far: camera.zfar as f32,
             speed: component.speed as f32,
             sensitivity: component.sensitivity as f32,
-            follow_target_entity_label: follow_target.map(|target| target.follow_target.clone()),
-            follow_offset: follow_target.map(|target| target.offset.to_array()),
+            // follow_target_entity_label: follow_target.map(|target| target.follow_target.clone()),
+            // follow_offset: follow_target.map(|target| target.offset.to_array()),
+            starting_camera: component.starting_camera,
         }
     }
 }
@@ -883,6 +887,7 @@ impl SceneConfig {
                             sensitivity: camera_config.sensitivity as f64,
                             fov_y: camera_config.fov as f64,
                             camera_type: camera_config.camera_type,
+                            starting_camera: camera_config.starting_camera,
                         };
 
                         if let Some(script_config) = &entity_config.script {
@@ -890,31 +895,31 @@ impl SceneConfig {
                                 name: script_config.name.clone(),
                                 path: script_config.path.clone(),
                             };
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
-                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            // if let (Some(target_label), Some(offset)) = (
+                            //     &camera_config.follow_target_entity_label,
+                            //     &camera_config.follow_offset,
+                            // ) {
+                            //     let follow_target = CameraFollowTarget {
+                            //         follow_target: target_label.clone(),
+                            //         offset: DVec3::from_array(*offset),
+                            //     };
+                            //     world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            // } else {
+                            // }
+                            world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
                         } else {
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
-                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            // if let (Some(target_label), Some(offset)) = (
+                            //     &camera_config.follow_target_entity_label,
+                            //     &camera_config.follow_offset,
+                            // ) {
+                            //     let follow_target = CameraFollowTarget {
+                            //         follow_target: target_label.clone(),
+                            //         offset: DVec3::from_array(*offset),
+                            //     };
+                            //     world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            // } else {
+                            // }
+                            world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
                         }
                     } else {
                         if let Some(script_config) = &entity_config.script {
@@ -967,6 +972,7 @@ impl SceneConfig {
                             sensitivity: camera_config.sensitivity as f64,
                             fov_y: camera_config.fov as f64,
                             camera_type: camera_config.camera_type,
+                            starting_camera: camera_config.starting_camera,
                         };
 
                         if let Some(script_config) = &entity_config.script {
@@ -974,31 +980,20 @@ impl SceneConfig {
                                 name: script_config.name.clone(),
                                 path: script_config.path.clone(),
                             };
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
-                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            // if let (Some(target_label), Some(offset)) = (
+                            //     &camera_config.follow_target_entity_label,
+                            //     &camera_config.follow_offset,
+                            // ) {
+                            //     let follow_target = CameraFollowTarget {
+                            //         follow_target: target_label.clone(),
+                            //         offset: DVec3::from_array(*offset),
+                            //     };
+                            //     world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            // } else {
+                            // }
+                            world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
                         } else {
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
-                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
                         }
                     } else {
                         // Entity without camera components
@@ -1090,6 +1085,7 @@ impl SceneConfig {
                             sensitivity: camera_config.sensitivity as f64,
                             fov_y: camera_config.fov as f64,
                             camera_type: camera_config.camera_type,
+                            starting_camera: camera_config.starting_camera,
                         };
 
                         if let Some(script_config) = &entity_config.script {
@@ -1097,31 +1093,31 @@ impl SceneConfig {
                                 name: script_config.name.clone(),
                                 path: script_config.path.clone(),
                             };
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
+                            // if let (Some(target_label), Some(offset)) = (
+                            //     &camera_config.follow_target_entity_label,
+                            //     &camera_config.follow_offset,
+                            // ) {
+                            //     let follow_target = CameraFollowTarget {
+                            //         follow_target: target_label.clone(),
+                            //         offset: DVec3::from_array(*offset),
+                            //     };
+                            //     world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            // } else {
                                 world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            // }
                         } else {
-                            if let (Some(target_label), Some(offset)) = (
-                                &camera_config.follow_target_entity_label,
-                                &camera_config.follow_offset,
-                            ) {
-                                let follow_target = CameraFollowTarget {
-                                    follow_target: target_label.clone(),
-                                    offset: DVec3::from_array(*offset),
-                                };
-                                world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            } else {
+                            // if let (Some(target_label), Some(offset)) = (
+                            //     &camera_config.follow_target_entity_label,
+                            //     &camera_config.follow_offset,
+                            // ) {
+                            //     let follow_target = CameraFollowTarget {
+                            //         follow_target: target_label.clone(),
+                            //         offset: DVec3::from_array(*offset),
+                            //     };
+                            //     world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            // } else {
                                 world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component))
-                            }
+                            // }
                         }
                     } else {
                         // Entity without camera components
@@ -1204,20 +1200,21 @@ impl SceneConfig {
                 sensitivity: camera_config.sensitivity as f64,
                 fov_y: camera_config.fov as f64,
                 camera_type: camera_config.camera_type,
+                starting_camera: camera_config.starting_camera,
             };
 
-            if let (Some(target_label), Some(offset)) = (
-                &camera_config.follow_target_entity_label,
-                &camera_config.follow_offset,
-            ) {
-                let follow_target = CameraFollowTarget {
-                    follow_target: target_label.clone(),
-                    offset: DVec3::from_array(*offset),
-                };
-                { world.spawn((camera, component, follow_target)); }
-            } else {
+            // if let (Some(target_label), Some(offset)) = (
+            //     &camera_config.follow_target_entity_label,
+            //     &camera_config.follow_offset,
+            // ) {
+            //     let follow_target = CameraFollowTarget {
+            //         follow_target: target_label.clone(),
+            //         offset: DVec3::from_array(*offset),
+            //     };
+            //     { world.spawn((camera, component, follow_target)); }
+            // } else {
                 { world.spawn((camera, component)); }
-            }
+            // }
         }
 
         {

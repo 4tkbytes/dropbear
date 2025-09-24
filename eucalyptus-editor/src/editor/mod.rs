@@ -25,7 +25,7 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{camera::{
-    CameraAction, CameraComponent, CameraFollowTarget, CameraType, DebugCamera,
+    CameraAction, CameraComponent, CameraType, DebugCamera,
 }, states::WorldLoadingStatus};
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
@@ -223,9 +223,9 @@ impl Editor {
         {
             let transform = *transform.unwrap_or(&Transform::default());
 
-            let camera_config = if let Ok(mut camera_query) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(id) {
-                if let Some((camera, component, follow_target)) = camera_query.get() {
-                    Some(CameraConfig::from_ecs_camera(camera, component, follow_target))
+            let camera_config = if let Ok(mut camera_query) = self.world.query_one::<(&Camera, &CameraComponent)>(id) {
+                if let Some((camera, component)) = camera_query.get() {
+                    Some(CameraConfig::from_ecs_camera(camera, component))
                 } else {
                     None
                 }
@@ -268,13 +268,13 @@ impl Editor {
             log::debug!("Pushed light into lights: {}", light.cube_model.label);
         }
 
-        for (id, (camera, component, follow_target)) in self
+        for (id, (camera, component)) in self
             .world
-            .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
+            .query::<(&Camera, &CameraComponent)>()
             .iter()
         {
             if self.world.get::<&AdoptedEntity>(id).is_err() {
-                let camera_config = CameraConfig::from_ecs_camera(camera, component, follow_target);
+                let camera_config = CameraConfig::from_ecs_camera(camera, component);
                 scene.cameras.push(camera_config);
                 log::debug!("Pushed standalone camera into cameras: {}", camera.label);
             }
@@ -676,43 +676,43 @@ impl Editor {
                 }
             }
 
-            for (entity_id, original_camera, original_component, original_follow_target) in
-                &backup.camera_data
-            {
-                if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
-                    *camera = original_camera.clone();
-                }
-
-                if let Ok(mut component) = self.world.get::<&mut CameraComponent>(*entity_id) {
-                    *component = original_component.clone();
-                }
-
-                let has_follow_target = self.world.get::<&CameraFollowTarget>(*entity_id).is_ok();
-                match (has_follow_target, original_follow_target) {
-                    (true, Some(original)) => {
-                        if let Ok(mut follow_target) =
-                            self.world.get::<&mut CameraFollowTarget>(*entity_id)
-                        {
-                            *follow_target = original.clone();
-                        }
-                    }
-                    (true, None) => {
-                        {
-                            let _ = self.world
-                                .remove_one::<CameraFollowTarget>(*entity_id);
-                        }
-                    }
-                    (false, Some(original)) => {
-                        {
-                            let _ = self.world
-                                .insert_one(*entity_id, original.clone());
-                        }
-                    }
-                    (false, None) => {
-                        // No change needed
-                    }
-                }
-            }
+            // for (entity_id, original_camera, original_component, original_follow_target) in
+            //     &backup.camera_data
+            // {
+            //     if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
+            //         *camera = original_camera.clone();
+            //     }
+            // 
+            //     if let Ok(mut component) = self.world.get::<&mut CameraComponent>(*entity_id) {
+            //         *component = original_component.clone();
+            //     }
+            // 
+            //     let has_follow_target = self.world.get::<&CameraFollowTarget>(*entity_id).is_ok();
+            //     match (has_follow_target, original_follow_target) {
+            //         (true, Some(original)) => {
+            //             // if let Ok(mut follow_target) =
+            //             //     self.world.get::<&mut CameraFollowTarget>(*entity_id)
+            //             // {
+            //             //     *follow_target = original.clone();
+            //             // }
+            //         }
+            //         (true, None) => {
+            //             // {
+            //             //     let _ = self.world
+            //             //         .remove_one::<CameraFollowTarget>(*entity_id);
+            //             // }
+            //         }
+            //         (false, Some(original)) => {
+            //             {
+            //                 let _ = self.world
+            //                     .insert_one(*entity_id, original.clone());
+            //             }
+            //         }
+            //         (false, None) => {
+            //             // No change needed
+            //         }
+            //     }
+            // }
 
             log::info!("Restored scene from play mode backup");
 
@@ -741,16 +741,16 @@ impl Editor {
 
         let mut camera_data = Vec::new();
 
-        for (entity_id, (camera, component, follow_target)) in self
+        for (entity_id, (camera, component)) in self
             .world
-            .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
+            .query::<(&Camera, &CameraComponent)>()
             .iter()
         {
             camera_data.push((
                 entity_id,
                 camera.clone(),
                 component.clone(),
-                follow_target.cloned(),
+                // follow_target.cloned(),
             ));
         }
 
@@ -795,7 +795,7 @@ impl Editor {
             .query::<(&Camera, &CameraComponent)>()
             .iter()
             .find_map(|(e, (_cam, comp))| {
-                if matches!(comp.camera_type, CameraType::Player) {
+                if comp.starting_camera {
                     Some(e)
                 } else {
                     None
@@ -838,11 +838,11 @@ impl Editor {
         if let Some(active_camera) = *self.active_camera.lock() {
             if let Ok(mut q) = self
                 .world
-                .query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(
+                .query_one::<(&Camera, &CameraComponent)>(
                     active_camera,
                 )
             {
-                if let Some((camera, _component, _follow_target)) = q.get() {
+                if let Some((camera, _component)) = q.get() {
                     let pipeline = graphics.create_render_pipline(
                         &shader,
                         vec![
@@ -1101,15 +1101,15 @@ impl UndoableAction {
                     ComponentType::Script(component) => {
                         world.insert_one(*entity, component.clone())?;
                     }
-                    ComponentType::Camera(camera, component, follow) => {
-                        if let Some(f) = follow {
-                            {
-                                world
-                                    .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
-                            }
-                        } else {
+                    ComponentType::Camera(camera, component) => {
+                        // if let Some(f) = follow {
+                        //     {
+                        //         world
+                        //             .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
+                        //     }
+                        // } else {
                             world.insert(*entity, (camera.clone(), component.clone()))?;
-                        }
+                        // }
                     }
                 }
                 Ok(())
@@ -1187,7 +1187,7 @@ pub enum Signal {
 // todo: deal with the Camera and create an implementation
 pub enum ComponentType {
     Script(ScriptComponent),
-    Camera(Box<Camera>, CameraComponent, Option<CameraFollowTarget>),
+    Camera(Box<Camera>, CameraComponent),
 }
 
 #[derive(Clone)]
@@ -1202,7 +1202,7 @@ pub struct PlayModeBackup {
         hecs::Entity,
         Camera,
         CameraComponent,
-        Option<CameraFollowTarget>,
+        // Option<CameraFollowTarget>,
     )>,
 }
 

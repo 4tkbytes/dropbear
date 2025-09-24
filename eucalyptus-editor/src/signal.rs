@@ -6,8 +6,8 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
-use eucalyptus_core::{info, scripting, success, success_without_console, warn, warn_without_console};
-use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraFollowTarget, CameraType};
+use eucalyptus_core::{fatal, info, scripting, success, success_without_console, warn, warn_without_console};
+use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
 use eucalyptus_core::scripting::ScriptAction;
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 use crate::editor::{ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction};
@@ -66,7 +66,8 @@ impl SignalController for Editor {
                             }
                             Err(e) => {
                                 self.signal = Signal::None;
-                                anyhow::bail!("Failed to delete entity: {}", e);
+                                fatal!("Failed to delete entity: {}", e);
+                                Err(anyhow::anyhow!(e))
                             }
                         }
                     }
@@ -125,9 +126,10 @@ impl SignalController for Editor {
                                         }
                                         Err(e) => {
                                             self.signal = Signal::None;
-                                            anyhow::bail!("Failed to attach script to entity {:?}: {}",
+                                            fatal!("Failed to attach script to entity {:?}: {}",
                                                 selected_entity,
                                                 e);
+                                            return Err(anyhow::anyhow!(e));
                                         }
                                     }
                                 }
@@ -150,11 +152,11 @@ impl SignalController for Editor {
                                 );
                             }
                             Err(e) => {
-                                anyhow::bail!("Move failed: {}", e);
+                                fatal!("Move failed: {}", e);
                             }
                         }
                     } else {
-                        anyhow::bail!("AttachScript requested but no entity is selected");
+                        fatal!("AttachScript requested but no entity is selected");
                     }
 
                     self.signal = Signal::None;
@@ -190,7 +192,8 @@ impl SignalController for Editor {
                                 }
                                 Err(e) => {
                                     self.signal = Signal::None;
-                                    anyhow::bail!("Failed to attach new script: {}", e);
+                                    fatal!("Failed to attach new script: {}", e);
+                                    return Err(anyhow::anyhow!(e));
                                 }
                             }
                         }
@@ -295,16 +298,21 @@ impl SignalController for Editor {
                 }
             },
             Signal::Play => {
+                if matches!(self.editor_state, EditorState::Playing) {
+                    fatal!("Unable to play: already in playing mode");
+                    self.signal = Signal::None;
+                    return Err(anyhow::anyhow!("Unable to play: already in playing mode"));
+                }
                 let has_player_camera_target = self
                     .world
-                    .query::<(&Camera, &CameraComponent, &CameraFollowTarget)>()
+                    .query::<(&Camera, &CameraComponent)>()
                     .iter()
-                    .any(|(_, (_, comp, _))| matches!(comp.camera_type, CameraType::Player));
+                    .any(|(_, (_, comp))| comp.starting_camera);
 
                 if has_player_camera_target {
                     if let Err(e) = self.create_backup() {
                         self.signal = Signal::None;
-                        anyhow::bail!("Failed to create play mode backup: {}", e);
+                        fatal!("Failed to create play mode backup: {}", e);
                     }
 
                     self.editor_state = EditorState::Playing;
@@ -332,11 +340,12 @@ impl SignalController for Editor {
                             Ok(val) => val,
                             Err(e) => {
                                 self.signal = Signal::None;
-                                anyhow::bail!(
+                                fatal!(
                                     "Unable to read script {} to bytes because {}",
                                     &script.path.display(),
                                     e
                                 );
+                                return Err(anyhow::anyhow!(e));
                             }
                         };
 
@@ -373,13 +382,13 @@ impl SignalController for Editor {
                             Err(e) => {
                                 // todo: proper error menu
                                 self.signal = Signal::StopPlaying;
-                                anyhow::bail!("Failed to load script '{}': {}", script.name, e);
+                                fatal!("Failed to load script '{}': {}", script.name, e);
                             }
                         }
                     }
                 } else {
                     self.signal = Signal::None;
-                    anyhow::bail!("Unable to build: Player camera not attached to an entity");
+                    fatal!("Unable to build: No initial camera set");
                 }
 
                 self.signal = Signal::None;
@@ -407,64 +416,23 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::CameraAction(action) => match action {
-                CameraAction::SetPlayerTarget { entity, offset } => {
-                    let player_camera = self
-                        .world
-                        .query::<(&Camera, &CameraComponent)>()
-                        .iter()
-                        .find_map(|(e, (_, comp))| {
-                            if matches!(comp.camera_type, CameraType::Player) {
-                                Some(e)
-                            } else {
-                                None
-                            }
-                        });
-
-                    if let Some(camera_entity) = player_camera {
-                        let mut follow_target = (false, CameraFollowTarget::default());
-                        if let Ok(mut query) = self.world
-                            .query_one::<&AdoptedEntity>(*entity)
-                            && let Some(adopted) = query.get() {
-                            follow_target = (
-                                true,
-                                CameraFollowTarget {
-                                    follow_target: adopted.model.label.to_string(),
-                                    offset: *offset,
-                                },
-                            );
-                        }
-
-                        {
-                            if follow_target.0 {
-                                let _ = self.world
-                                    .insert_one(camera_entity, follow_target);
-                                info!("Set player camera target to entity {:?}", entity);
-                            }
-                        }
-                    }
+                CameraAction::SetPlayerTarget { .. } => {
+                    log::warn!("Deprecated: CameraAction::SetPlayerTarget");
                     self.signal = Signal::None;
                     Ok(())
                 }
                 CameraAction::ClearPlayerTarget => {
-                    let player_camera = self
-                        .world
-                        .query::<(&Camera, &CameraComponent)>()
-                        .iter()
-                        .find_map(|(e, (_, comp))| {
-                            if matches!(comp.camera_type, CameraType::Player) {
-                                Some(e)
-                            } else {
-                                None
-                            }
-                        });
-
-                    if let Some(camera_entity) = player_camera {
-                        {
-                            let _ = self.world
-                                .remove_one::<CameraFollowTarget>(camera_entity);
-                        }
-                    }
-                    info!("Cleared player camera target");
+                    log::warn!("Deprecated: CameraAction::ClearPlayerTarget");
+                    self.signal = Signal::None;
+                    Ok(())
+                }
+                CameraAction::SetCurrentPositionAsOffset(_) => {
+                    // if let Ok((camera, target)) = self.world.query_one_mut::<(&Camera, &mut CameraFollowTarget)>(*entity) {
+                    //     target.offset = camera.target
+                    // } else {
+                    //     warn!("Unable to query camera to set current camera position to offset");
+                    // }
+                    log::warn!("Deprecated: CameraAction::SetCurrentPositionAsOffset");
                     self.signal = Signal::None;
                     Ok(())
                 }
@@ -575,14 +543,16 @@ impl SignalController for Editor {
                                                 .clicked()
                                             {
                                                 log::debug!(
-                                            "Adding scripting component to light [{}]",
-                                            light.label
-                                        );
+                                                    "Adding scripting component to light [{}]",
+                                                    light.label
+                                                );
+
+                                                log::warn!("Its not really added, it's just a dummy button. To be implemented...");
 
                                                 success!(
-                                            "Added the scripting component to light [{}]",
-                                            light.label
-                                        );
+                                                    "Added the scripting component to light [{}]",
+                                                    light.label
+                                                );
                                                 self.signal = Signal::None;
                                             }
                                         });
@@ -665,57 +635,27 @@ impl SignalController for Editor {
                         self.signal = Signal::None;
                         Ok(())
                     }
-                    ComponentType::Camera(_, _, follow) => {
-                        if follow.is_some() {
-                            match self.world.remove::<(
-                                Camera,
-                                CameraComponent,
-                                CameraFollowTarget,
-                            )>(
-                                *entity
-                            ) {
-                                Ok(component) => {
-                                    success!("Removed camera component from entity {:?}", entity);
-                                    UndoableAction::push_to_undo(
-                                        &mut self.undo_stack,
-                                        UndoableAction::RemoveComponent(
-                                            *entity,
-                                            Box::new(ComponentType::Camera(
-                                                Box::new(component.0),
-                                                component.1,
-                                                Some(component.2),
-                                            )),
-                                        ),
-                                    );
-                                }
-                                Err(e) => {
-                                    warn!("Failed to remove camera component from entity: {}", e);
-                                }
-                            };
-                            self.signal = Signal::None;
-                            Ok(())
-                        } else {
-                            match self.world
-                                .remove::<(Camera, CameraComponent)>(*entity)
-                            {
-                                Ok(component) => {
-                                    success!("Removed camera component from entity {:?}", entity);
-                                    UndoableAction::push_to_undo(
-                                        &mut self.undo_stack,
-                                        UndoableAction::RemoveComponent(
-                                            *entity,
-                                            Box::new(ComponentType::Camera(Box::new(component.0), component.1, None)),
-                                        ),
-                                    );
-                                }
-                                Err(e) => {
-                                    warn!("Failed to remove script component from entity: {}", e);
-                                    self.signal = Signal::None;
-                                }
-                            };
-                            self.signal = Signal::None;
-                            Ok(())
-                        }
+                    ComponentType::Camera(_, _) => {
+                        match self.world
+                            .remove::<(Camera, CameraComponent)>(*entity)
+                        {
+                            Ok(component) => {
+                                success!("Removed camera component from entity {:?}", entity);
+                                UndoableAction::push_to_undo(
+                                    &mut self.undo_stack,
+                                    UndoableAction::RemoveComponent(
+                                        *entity,
+                                        Box::new(ComponentType::Camera(Box::new(component.0), component.1)),
+                                    ),
+                                );
+                            }
+                            Err(e) => {
+                                warn!("Failed to remove script component from entity: {}", e);
+                                self.signal = Signal::None;
+                            }
+                        };
+                        self.signal = Signal::None;
+                        Ok(())
                     }
                 }},
             Signal::CreateEntity => {

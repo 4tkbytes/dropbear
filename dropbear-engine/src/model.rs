@@ -569,7 +569,8 @@ impl Model {
         log::debug!("Path of model: {}", path.display());
 
         let buffer = std::fs::read(path)?;
-        let model = Self::load_from_memory(graphics, buffer, label).await?;
+        let mut model = Self::load_from_memory(graphics, buffer, label).await?;
+        model.path = ResourceReference::from_path(path)?;
 
         MODEL_CACHE.lock().insert(path_str, model.clone());
         log::debug!("Model cached and loaded: {:?}", file_name);
