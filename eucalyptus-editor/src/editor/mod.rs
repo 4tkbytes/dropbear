@@ -223,12 +223,23 @@ impl Editor {
         {
             let transform = *transform.unwrap_or(&Transform::default());
 
+            let camera_config = if let Ok(mut camera_query) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(id) {
+                if let Some((camera, component, follow_target)) = camera_query.get() {
+                    Some(CameraConfig::from_ecs_camera(camera, component, follow_target))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             let scene_entity = SceneEntity {
                 model_path: adopted.model.path.clone(),
                 label: adopted.model.label.clone(),
                 transform,
                 properties: properties.clone(),
                 script: script.cloned(),
+                camera: camera_config,
                 entity_id: Some(id),
             };
 
@@ -257,14 +268,16 @@ impl Editor {
             log::debug!("Pushed light into lights: {}", light.cube_model.label);
         }
 
-        for (_id, (camera, component, follow_target)) in self
+        for (id, (camera, component, follow_target)) in self
             .world
             .query::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>()
             .iter()
         {
-            let camera_config = CameraConfig::from_ecs_camera(camera, component, follow_target);
-            scene.cameras.push(camera_config);
-            log::debug!("Pushed camera into cameras: {}", camera.label);
+            if self.world.get::<&AdoptedEntity>(id).is_err() {
+                let camera_config = CameraConfig::from_ecs_camera(camera, component, follow_target);
+                scene.cameras.push(camera_config);
+                log::debug!("Pushed standalone camera into cameras: {}", camera.label);
+            }
         }
 
         log::info!(
@@ -523,6 +536,7 @@ impl Editor {
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
+                                        camera: None,
                                         entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);

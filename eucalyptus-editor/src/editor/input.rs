@@ -125,6 +125,7 @@ impl Keyboard for Editor {
                                     properties: props.clone(),
                                     script: None,
                                     entity_id: None,
+                                    camera: None,
                                 };
                                 self.signal = Signal::Copy(s_entity);
 

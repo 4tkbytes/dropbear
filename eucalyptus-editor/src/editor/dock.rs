@@ -768,6 +768,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                 &mut camera.label.clone(),
                                             );
                                         }
+
+                                        ui.separator();
+                                        ui.label("Camera Controls:");
+                                        let mut active_camera = self.active_camera.lock();
+                                        if ui.button("Set as Active Camera").clicked() {
+                                            *active_camera = Some(*entity);
+                                            log::info!("Set camera '{}' as active", camera.label);
+                                        }
+
+                                        if matches!(self.editor_mode, EditorState::Editing)
+                                            && ui.button("Switch to This Camera").clicked() {
+                                                *active_camera = Some(*entity);
+                                                log::info!("Switched to camera '{}'", camera.label);
+                                            }
                                     }
 
                                     // if let Some(props) = _props {
@@ -857,7 +871,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     &mut CameraComponent,
                                     Option<&mut CameraFollowTarget>,
                                 )>(*entity)
-                                && let Some((camera, camera_component, follow_target)) = q.get() {
+                                && let Some((camera, camera_component, follow_target)) = q.get() 
+                                // Only handle standalone cameras (those without AdoptedEntity)
+                                && self.world.get::<&AdoptedEntity>(*entity).is_err() {
                                     camera.inspect(
                                         entity,
                                         &mut cfg,

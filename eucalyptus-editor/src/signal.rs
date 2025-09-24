@@ -501,18 +501,7 @@ impl SignalController for Editor {
                                             label
                                         );
 
-                                            let has_camera = self.world
-                                                .query_one::<(&Camera, &CameraComponent)>(*entity)
-                                                .is_ok();
-
-                                            if has_camera {
-                                                warn!(
-                                                "Entity [{}] already has a camera component",
-                                                label
-                                            );
-                                            } else {
-                                                local_insert_camera = (true, label.clone());
-                                            }
+                                            local_insert_camera = (true, label.clone());
                                             local_signal = Some(Signal::None);
                                         }
                                     });

@@ -477,26 +477,37 @@ impl EntityNode {
             .iter()
         {
             let name = adopted.model.label.clone();
+            let mut children = vec![
+                EntityNode::Entity {
+                    id,
+                    name: name.clone(),
+                },
+                EntityNode::Script {
+                    name: script.name.clone(),
+                    path: script.path.clone(),
+                },
+            ];
 
-            // grouped entity (entity and script)
+            // Check if this entity also has camera components
+            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
+                if let Some((camera, component)) = camera_query.get() {
+                    children.push(EntityNode::Camera {
+                        id,
+                        name: camera.label.clone(),
+                        camera_type: component.camera_type,
+                    });
+                }
+            }
+
             nodes.push(EntityNode::Group {
                 name: name.clone(),
-                children: vec![
-                    EntityNode::Entity {
-                        id,
-                        name: name.clone(),
-                    },
-                    EntityNode::Script {
-                        name: script.name.clone(),
-                        path: script.path.clone(),
-                    },
-                ],
+                children,
                 collapsed: false,
             });
             handled.insert(id);
         }
 
-        // single entity
+        // Handle single entities (and potentially cameras)
         for (id, (_, adopted)) in world
             .query::<(
                 &dropbear_engine::entity::Transform,
@@ -509,7 +520,33 @@ impl EntityNode {
             }
             let name = adopted.model.label.clone();
 
-            nodes.push(EntityNode::Entity { id, name });
+            // Check if this entity has camera components
+            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
+                if let Some((camera, component)) = camera_query.get() {
+                    // Create a group with the entity and its camera component
+                    nodes.push(EntityNode::Group {
+                        name: name.clone(),
+                        children: vec![
+                            EntityNode::Entity {
+                                id,
+                                name: name.clone(),
+                            },
+                            EntityNode::Camera {
+                                id,
+                                name: camera.label.clone(),
+                                camera_type: component.camera_type,
+                            },
+                        ],
+                        collapsed: false,
+                    });
+                } else {
+                    // Regular entity without camera components
+                    nodes.push(EntityNode::Entity { id, name });
+                }
+            } else {
+                // Regular entity without camera components
+                nodes.push(EntityNode::Entity { id, name });
+            }
         }
 
         // lights
@@ -527,6 +564,7 @@ impl EntityNode {
             handled.insert(id);
         }
 
+        // Handle standalone cameras (cameras without AdoptedEntity - like viewport cameras)
         for (entity, (camera, component)) in world.query::<(&Camera, &CameraComponent)>().iter() {
             if world.get::<&AdoptedEntity>(entity).is_err() {
                 nodes.push(EntityNode::Camera {
@@ -613,6 +651,7 @@ pub struct SceneEntity {
     pub transform: Transform,
     pub properties: ModelProperties,
     pub script: Option<ScriptComponent>,
+    pub camera: Option<CameraConfig>,
 
     #[serde(skip)]
     #[allow(dead_code)]
@@ -776,15 +815,72 @@ impl SceneConfig {
                             .await;
                     let transform = entity_config.transform;
 
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
+                    let _entity = if let Some(camera_config) = &entity_config.camera {
+                        let camera = Camera::new(
+                            graphics.clone(),
+                            CameraBuilder {
+                                eye: DVec3::from_array(camera_config.position),
+                                target: DVec3::from_array(camera_config.target),
+                                up: DVec3::from_array(camera_config.up),
+                                aspect: camera_config.aspect,
+                                fov_y: camera_config.fov as f64,
+                                znear: camera_config.near as f64,
+                                zfar: camera_config.far as f64,
+                                speed: camera_config.speed as f64,
+                                sensitivity: camera_config.sensitivity as f64,
+                            },
+                            Some(&camera_config.label),
+                        );
+
+                        let camera_component = CameraComponent {
+                            speed: camera_config.speed as f64,
+                            sensitivity: camera_config.sensitivity as f64,
+                            fov_y: camera_config.fov as f64,
+                            camera_type: camera_config.camera_type,
                         };
-                        { world.spawn((adopted, transform, script, entity_config.properties.clone())); }
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        } else {
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        }
                     } else {
-                        { world.spawn((adopted, transform, entity_config.properties.clone())); }
-                    }
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            world.spawn((adopted, transform, script, entity_config.properties.clone()))
+                        } else {
+                            world.spawn((adopted, transform, entity_config.properties.clone()))
+                        }
+                    };
 
                     Ok(())
                 }
@@ -802,15 +898,74 @@ impl SceneConfig {
 
                     let transform = entity_config.transform;
 
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
+                    let _entity = if let Some(camera_config) = &entity_config.camera {
+                        // Entity has camera components
+                        let camera = Camera::new(
+                            graphics.clone(),
+                            CameraBuilder {
+                                eye: DVec3::from_array(camera_config.position),
+                                target: DVec3::from_array(camera_config.target),
+                                up: DVec3::from_array(camera_config.up),
+                                aspect: camera_config.aspect,
+                                fov_y: camera_config.fov as f64,
+                                znear: camera_config.near as f64,
+                                zfar: camera_config.far as f64,
+                                speed: camera_config.speed as f64,
+                                sensitivity: camera_config.sensitivity as f64,
+                            },
+                            Some(&camera_config.label),
+                        );
+
+                        let camera_component = CameraComponent {
+                            speed: camera_config.speed as f64,
+                            sensitivity: camera_config.sensitivity as f64,
+                            fov_y: camera_config.fov as f64,
+                            camera_type: camera_config.camera_type,
                         };
-                        { world.spawn((adopted, transform, script, entity_config.properties.clone())); }
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        } else {
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        }
                     } else {
-                        { world.spawn((adopted, transform, entity_config.properties.clone())); }
-                    }
+                        // Entity without camera components
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            world.spawn((adopted, transform, script, entity_config.properties.clone()))
+                        } else {
+                            world.spawn((adopted, transform, entity_config.properties.clone()))
+                        }
+                    };
 
                     Ok(())
                 }
@@ -866,15 +1021,74 @@ impl SceneConfig {
 
                     let transform = entity_config.transform;
 
-                    if let Some(script_config) = &entity_config.script {
-                        let script = ScriptComponent {
-                            name: script_config.name.clone(),
-                            path: script_config.path.clone(),
+                    let _entity = if let Some(camera_config) = &entity_config.camera {
+                        // Entity has camera components
+                        let camera = Camera::new(
+                            graphics.clone(),
+                            CameraBuilder {
+                                eye: DVec3::from_array(camera_config.position),
+                                target: DVec3::from_array(camera_config.target),
+                                up: DVec3::from_array(camera_config.up),
+                                aspect: camera_config.aspect,
+                                fov_y: camera_config.fov as f64,
+                                znear: camera_config.near as f64,
+                                zfar: camera_config.far as f64,
+                                speed: camera_config.speed as f64,
+                                sensitivity: camera_config.sensitivity as f64,
+                            },
+                            Some(&camera_config.label),
+                        );
+
+                        let camera_component = CameraComponent {
+                            speed: camera_config.speed as f64,
+                            sensitivity: camera_config.sensitivity as f64,
+                            fov_y: camera_config.fov as f64,
+                            camera_type: camera_config.camera_type,
                         };
-                        { world.spawn((plane, transform, script, entity_config.properties.clone())); }
+
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        } else {
+                            if let (Some(target_label), Some(offset)) = (
+                                &camera_config.follow_target_entity_label,
+                                &camera_config.follow_offset,
+                            ) {
+                                let follow_target = CameraFollowTarget {
+                                    follow_target: target_label.clone(),
+                                    offset: DVec3::from_array(*offset),
+                                };
+                                world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
+                            } else {
+                                world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component))
+                            }
+                        }
                     } else {
-                        { world.spawn((plane, transform, entity_config.properties.clone())); }
-                    }
+                        // Entity without camera components
+                        if let Some(script_config) = &entity_config.script {
+                            let script = ScriptComponent {
+                                name: script_config.name.clone(),
+                                path: script_config.path.clone(),
+                            };
+                            world.spawn((plane, transform, script, entity_config.properties.clone()))
+                        } else {
+                            world.spawn((plane, transform, entity_config.properties.clone()))
+                        }
+                    };
 
                     Ok(())
                 }
