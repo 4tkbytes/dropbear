@@ -328,80 +328,90 @@ impl Default for FutureQueue {
     }
 }
 
-#[tokio::test]
-async fn test_future_queue() {
-    let queue = FutureQueue::new();
-    log("Created new queue");
+#[test]
+fn test_future_queue() {
+    tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap()
+    .block_on(async {
+        let queue = FutureQueue::new();
+        log("Created new queue");
 
-    let handle = queue.push(async move {
-        log("Inside the pushed future - starting work");
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        log("Inside the pushed future - work completed");
-        67 + 41
+        let handle = queue.push(async move {
+            log("Inside the pushed future - starting work");
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            log("Inside the pushed future - work completed");
+            67 + 41
+        });
+        log("Created new handle");
+
+        queue.poll();
+        log("Initial poll completed");
+
+        let mut attempts = 0;
+        let max_attempts = 100;
+        let start_time = std::time::Instant::now();
+
+        loop {
+            attempts += 1;
+            log(format!("Attempt {}: Checking for result", attempts));
+            log(format!("Time since start: {} ms", start_time.elapsed().as_millis()));
+
+            if let Some(result) = queue.exchange(&handle) {
+                let result = result.downcast::<i32>().unwrap();
+                log(format!("Success! 67 + 41 = {}", result));
+                assert_eq!(*result, 108);
+                break;
+            }
+
+            if attempts >= max_attempts {
+                log("Max attempts reached - test failed");
+                panic!("Future never completed");
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        }
+
+        log("Test completed successfully");
     });
-    log("Created new handle");
-
-    queue.poll();
-    log("Initial poll completed");
-
-    let mut attempts = 0;
-    let max_attempts = 100;
-    let start_time = std::time::Instant::now();
-
-    loop {
-        attempts += 1;
-        log(format!("Attempt {}: Checking for result", attempts));
-        log(format!("Time since start: {} ms", start_time.elapsed().as_millis()));
-
-        if let Some(result) = queue.exchange(&handle) {
-            let result = result.downcast::<i32>().unwrap();
-            log(format!("Success! 67 + 41 = {}", result));
-            assert_eq!(*result, 108);
-            break;
-        }
-
-        if attempts >= max_attempts {
-            log("Max attempts reached - test failed");
-            panic!("Future never completed");
-        }
-
-        // Give the tokio runtime time to run the spawned futures
-        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-    }
-
-    log("Test completed successfully");
 }
 
-#[tokio::test]
-async fn test_exchange_owned_as() {
-    let queue = FutureQueue::new();
+// #[tokio::test]
+#[test]
+fn test_exchange_owned_as() {
+    tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap()
+    .block_on(async {
+        let queue = FutureQueue::new();
 
-    let handle = queue.push(async move {
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        67 + 41
+        let handle = queue.push(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            67 + 41
+        });
+
+        queue.poll();
+
+        let mut attempts = 0;
+        let max_attempts = 100;
+
+        loop {
+            attempts += 1;
+
+            if let Some(result) = queue.exchange_owned_as::<i32>(&handle) {
+                assert_eq!(result, 108);
+                break;
+            }
+
+            if attempts >= max_attempts {
+                panic!("Future never completed");
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        }
+
+        assert!(queue.exchange_owned_as::<i32>(&handle).is_none());
     });
-
-    queue.poll();
-
-    // Wait for completion
-    let mut attempts = 0;
-    let max_attempts = 100;
-
-    loop {
-        attempts += 1;
-
-        if let Some(result) = queue.exchange_owned_as::<i32>(&handle) {
-            assert_eq!(result, 108);
-            break;
-        }
-
-        if attempts >= max_attempts {
-            panic!("Future never completed");
-        }
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-    }
-
-    // Verify that calling exchange_owned_as again returns None (since result was consumed)
-    assert!(queue.exchange_owned_as::<i32>(&handle).is_none());
 }
