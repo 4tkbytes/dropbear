@@ -101,6 +101,8 @@ pub struct Editor {
     world_load_handle: Option<FutureHandle>,
     pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
     world_receiver: Option<oneshot::Receiver<hecs::World>>,
+    
+    dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
 }
 
 impl Editor {
@@ -174,6 +176,7 @@ impl Editor {
             world_load_handle: None,
             alt_pending_spawn_queue: vec![],
             world_receiver: None,
+            dock_state_shared: None,
         }
     }
 

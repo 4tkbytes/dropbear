@@ -31,16 +31,20 @@ impl Scene for Editor {
         let graphics_shared = graphics.shared.clone();
         let active_camera_clone = self.active_camera.clone();
         let project_path_clone = self.project_path.clone();
-        let dock_state_clone = Arc::new(Mutex::new(self.dock_state.clone()));
+        
+        let dock_state_shared = Arc::new(Mutex::new(self.dock_state.clone()));
+        let dock_state_for_loading = dock_state_shared.clone();
 
         let handle = graphics.shared.future_queue.push(async move {
             let mut temp_world = World::new();
-            if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), &mut temp_world, Some(tx2), active_camera_clone, project_path_clone, dock_state_clone).await {
+            if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), &mut temp_world, Some(tx2), active_camera_clone, project_path_clone, dock_state_for_loading).await {
                 log::error!("Failed to load project config: {}", e);
             }
         });
 
         self.world_load_handle = Some(handle);
+        
+        self.dock_state_shared = Some(dock_state_shared);
 
         self.window = Some(graphics.shared.window.clone());
         self.is_world_loaded.mark_scene_loaded();
@@ -52,6 +56,14 @@ impl Scene for Editor {
             if let Ok(loaded_world) = receiver.try_recv() {
                 self.world = loaded_world;
                 self.is_world_loaded.mark_project_loaded();
+                
+                if let Some(dock_state_shared) = &self.dock_state_shared {
+                    if let Some(loaded_dock_state) = dock_state_shared.try_lock() {
+                        self.dock_state = loaded_dock_state.clone();
+                        log::info!("Dock state updated from loaded config");
+                    }
+                }
+                
                 log::info!("World received");
             } else {
                 self.world_receiver = Some(receiver);
