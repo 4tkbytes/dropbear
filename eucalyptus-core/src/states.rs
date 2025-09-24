@@ -375,7 +375,7 @@ impl SourceConfig {
     }
 }
 
-fn collect_nodes(dir: impl AsRef<Path>, _project_path: impl AsRef<Path>, exclude_list: &[&str]) -> Vec<Node> {
+fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_list: &[&str]) -> Vec<Node> {
     let mut nodes = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -392,7 +392,7 @@ fn collect_nodes(dir: impl AsRef<Path>, _project_path: impl AsRef<Path>, exclude
             }
 
             if entry_path.is_dir() {
-                let folder_nodes = collect_nodes(&entry_path, _project_path.as_ref(), exclude_list);
+                let folder_nodes = collect_nodes(&entry_path, project_path.as_ref(), exclude_list);
                 nodes.push(Node::Folder(Folder {
                     name,
                     path: entry_path.clone(),
@@ -415,9 +415,15 @@ fn collect_nodes(dir: impl AsRef<Path>, _project_path: impl AsRef<Path>, exclude
                     Some(ResourceType::Unknown)
                 };
 
+                // Store relative path from the project root instead of absolute path
+                let relative_path = entry_path
+                    .strip_prefix(project_path.as_ref())
+                    .unwrap_or(&entry_path)
+                    .to_path_buf();
+
                 nodes.push(Node::File(File {
                     name,
-                    path: entry_path.clone(),
+                    path: relative_path,
                     resource_type,
                 }));
             }

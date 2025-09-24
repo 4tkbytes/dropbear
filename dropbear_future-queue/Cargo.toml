@@ -15,4 +15,5 @@ tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread"] }
 anyhow = "1.0.100"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "rt-multi-thread", "macros"] }
+tokio-test = "0.4"

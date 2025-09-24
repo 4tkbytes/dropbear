@@ -6,39 +6,32 @@
 //!
 //! # Example
 //! ```rust
-//! use tokio::runtime::Runtime;
-//! use tokio::time::sleep;
-//! use dropbear_future_queue::FutureQueue;
+//! use dropbear_future_queue::{FutureQueue, FutureStatus};
 //!
-//! // requires a tokio thread
-//! let rt = Runtime::new().unwrap();
-//! let _guard = rt.enter();
-//!
+//! # tokio_test::block_on(async {
 //! // create new queue
 //! let queue = FutureQueue::new();
 //!
 //! // create a new handle to keep for reference
 //! let handle = queue.push(async move {
-//!     sleep(1000).await;
+//!     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 //!     67 + 41
 //! });
 //!
-//! // assume this is the event loop
-//! loop {
-//!     // executes all the futures in the database
-//!     queue.poll();
+//! // Check initial status
+//! assert!(matches!(queue.get_status(&handle), Some(FutureStatus::NotPolled)));
 //!
-//!     println!("Current status of compututation: {:?}", queue.get_status(&handle));
+//! // execute the futures
+//! queue.poll();
 //!
-//!     // check if it is ready to be taken
-//!     if let Some(result) = queue.exchange_as::<i32>(&handle) {
-//!         println!("67 + 41 = {}", result);
-//!         break;
-//!     }
+//! // Wait a bit for completion and check result
+//! tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
 //!
-//!     // cleans up any ids not needed anymore.
-//!     queue.cleanup()
+//! if let Some(result) = queue.exchange_as::<i32>(&handle) {
+//!     println!("67 + 41 = {}", result);
+//!     assert_eq!(result, 108);
 //! }
+//! # });
 //! ```
 
 use std::any::Any;
@@ -66,7 +59,7 @@ pub type FutureStorage = Arc<Mutex<VecDeque<(FutureHandle, BoxFuture<()>)>>>;
 pub type Throwable<T> = Rc<RefCell<T>>;
 
 /// A status showing the future, used by the [`ResultReceiver`] and [`ResultSender`]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FutureStatus {
     NotPolled,
     CurrentlyPolling,
@@ -81,8 +74,9 @@ pub struct FutureHandle {
 
 /// Internal storage per handle — separate from FutureHandle
 struct HandleEntry {
-    receiver: ResultReceiver,
+    receiver: Option<ResultReceiver>,
     status: FutureStatus,
+    cached_result: Option<AnyResult>,
 }
 
 /// A queue for polling futures. It is stored in here until [`FutureQueue::poll`] is run.
@@ -121,13 +115,12 @@ impl FutureQueue {
         let (sender, receiver) = oneshot::channel::<AnyResult>();
 
         let entry = HandleEntry {
-            receiver,
+            receiver: Some(receiver),
             status: FutureStatus::NotPolled,
+            cached_result: None,
         };
 
         self.handle_registry.lock().insert(id, entry);
-
-        let registry_clone = self.handle_registry.clone();
 
         let wrapped_future: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(async move {
             log("Starting future execution");
@@ -137,11 +130,8 @@ impl FutureQueue {
 
             let _ = sender.send(boxed_result);
 
-            let mut registry = registry_clone.lock();
-            if let Some(entry) = registry.get_mut(&id) {
-                entry.status = FutureStatus::Completed;
-                log("Updated status to completed");
-            }
+            // Don't update status here - let the exchange method handle it
+            log("Result sent via channel");
         });
 
         self.queued.lock().push_back((id, wrapped_future));
@@ -189,31 +179,82 @@ impl FutureQueue {
     /// Exchanges the future for the result.
     ///
     /// When the handle is not successful, it will return nothing. When the handle is successful,
-    /// it will return the result and drop the handle, removing the usage of it.
+    /// it will return the result. The result is cached and can be retrieved multiple times.
     pub fn exchange(&self, handle: &FutureHandle) -> Option<AnyResult> {
         let mut registry = self.handle_registry.lock();
         if let Some(entry) = registry.get_mut(handle) {
             match &entry.status {
                 FutureStatus::Completed => {
-                    log("FutureStatus::Completed - result already consumed or not stored");
-                    None
+                    log("FutureStatus::Completed - returning cached result");
+                    entry.cached_result.clone()
                 }
                 _ => {
                     log("Future not completed yet, checking receiver");
-                    match entry.receiver.try_recv() {
-                        Ok(result) => {
-                            log("Received result from channel");
-                            entry.status = FutureStatus::Completed;
-                            Some(result)
+                    if let Some(receiver) = entry.receiver.as_mut() {
+                        match receiver.try_recv() {
+                            Ok(result) => {
+                                log("Received result from channel");
+                                entry.status = FutureStatus::Completed;
+                                entry.cached_result = Some(result.clone());
+                                entry.receiver = None; // Remove receiver as it's no longer needed
+                                Some(result)
+                            }
+                            Err(oneshot::error::TryRecvError::Empty) => {
+                                log("Channel is empty - future still running");
+                                None
+                            }
+                            Err(oneshot::error::TryRecvError::Closed) => {
+                                log("Channel is closed - future may have panicked");
+                                None
+                            }
                         }
-                        Err(oneshot::error::TryRecvError::Empty) => {
-                            log("Channel is empty - future still running");
-                            None
+                    } else {
+                        log("No receiver available");
+                        None
+                    }
+                }
+            }
+        } else {
+            log("Handle not found in registry");
+            None
+        }
+    }
+
+    /// Exchanges the future for the result, taking ownership and consuming the cached result.
+    ///
+    /// When the handle is not successful, it will return nothing. When the handle is successful,
+    /// it will return the result and remove it from the cache, allowing Arc::try_unwrap to succeed.
+    /// This method can only be called once per completed future.
+    pub fn exchange_owned(&self, handle: &FutureHandle) -> Option<AnyResult> {
+        let mut registry = self.handle_registry.lock();
+        if let Some(entry) = registry.get_mut(handle) {
+            match &entry.status {
+                FutureStatus::Completed => {
+                    log("FutureStatus::Completed - taking ownership of cached result");
+                    entry.cached_result.take()
+                }
+                _ => {
+                    log("Future not completed yet, checking receiver");
+                    if let Some(receiver) = entry.receiver.as_mut() {
+                        match receiver.try_recv() {
+                            Ok(result) => {
+                                log("Received result from channel");
+                                entry.status = FutureStatus::Completed;
+                                entry.receiver = None; // Remove receiver as it's no longer needed
+                                Some(result)
+                            }
+                            Err(oneshot::error::TryRecvError::Empty) => {
+                                log("Channel is empty - future still running");
+                                None
+                            }
+                            Err(oneshot::error::TryRecvError::Closed) => {
+                                log("Channel is closed - future may have panicked");
+                                None
+                            }
                         }
-                        Err(oneshot::error::TryRecvError::Closed) => {
-                            log("Channel is closed - future may have panicked");
-                            None
-                        }
+                    } else {
+                        log("No receiver available");
+                        None
                     }
                 }
             }
@@ -226,6 +267,15 @@ impl FutureQueue {
     /// Exchanges the handle and safely downcasts it into a specific type.
     pub fn exchange_as<T: Any + Send + Sync + 'static>(&self, handle: &FutureHandle) -> Option<T> {
         self.exchange(handle)?
+            .downcast::<T>()
+            .ok()
+            .and_then(|arc| Arc::try_unwrap(arc).ok())
+    }
+
+    /// Exchanges the handle taking ownership and safely downcasts it into a specific type.
+    /// This method consumes the cached result, allowing Arc::try_unwrap to succeed.
+    pub fn exchange_owned_as<T: Any + Send + Sync + 'static>(&self, handle: &FutureHandle) -> Option<T> {
+        self.exchange_owned(handle)?
             .downcast::<T>()
             .ok()
             .and_then(|arc| Arc::try_unwrap(arc).ok())
@@ -278,11 +328,8 @@ impl Default for FutureQueue {
     }
 }
 
-#[test]
-fn test_future_queue() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let _guard = rt.enter();
-
+#[tokio::test]
+async fn test_future_queue() {
     let queue = FutureQueue::new();
     log("Created new queue");
 
@@ -299,13 +346,12 @@ fn test_future_queue() {
 
     let mut attempts = 0;
     let max_attempts = 100;
-    let elapsed = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
 
     loop {
-        let now = std::time::Instant::now();
         attempts += 1;
         log(format!("Attempt {}: Checking for result", attempts));
-        log(format!("Time since last attempt: {} ms", elapsed.elapsed().as_millis() - now.elapsed().as_millis()));
+        log(format!("Time since start: {} ms", start_time.elapsed().as_millis()));
 
         if let Some(result) = queue.exchange(&handle) {
             let result = result.downcast::<i32>().unwrap();
@@ -318,7 +364,44 @@ fn test_future_queue() {
             log("Max attempts reached - test failed");
             panic!("Future never completed");
         }
+
+        // Give the tokio runtime time to run the spawned futures
+        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
     }
 
     log("Test completed successfully");
+}
+
+#[tokio::test]
+async fn test_exchange_owned_as() {
+    let queue = FutureQueue::new();
+
+    let handle = queue.push(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        67 + 41
+    });
+
+    queue.poll();
+
+    // Wait for completion
+    let mut attempts = 0;
+    let max_attempts = 100;
+
+    loop {
+        attempts += 1;
+
+        if let Some(result) = queue.exchange_owned_as::<i32>(&handle) {
+            assert_eq!(result, 108);
+            break;
+        }
+
+        if attempts >= max_attempts {
+            panic!("Future never completed");
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+    }
+
+    // Verify that calling exchange_owned_as again returns None (since result was consumed)
+    assert!(queue.exchange_owned_as::<i32>(&handle).is_none());
 }

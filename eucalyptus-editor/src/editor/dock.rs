@@ -15,7 +15,7 @@ use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
-use dropbear_engine::utils::ResourceReference;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 
 pub struct EditorTabViewer<'a> {
@@ -630,7 +630,23 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
-                                                        path: ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|e| { fatal!("Unable to fetch asset from path"); return Default::default(); }),
+                                                        path: if asset_path.starts_with("resources/") {
+                                                            // Path is already relative from project root, extract the part after "resources/"
+                                                            ResourceReference {
+                                                                ref_type: ResourceReferenceType::File(
+                                                                    asset_path.strip_prefix("resources/")
+                                                                        .unwrap_or(&asset_path)
+                                                                        .to_string_lossy()
+                                                                        .to_string()
+                                                                ),
+                                                            }
+                                                        } else {
+                                                            // Fallback to the original method for absolute paths
+                                                            ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| { 
+                                                                log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
+                                                                Default::default() 
+                                                            })
+                                                        },
                                                         // asset_type: asset_type.clone(),
                                                     };
 

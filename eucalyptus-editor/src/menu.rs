@@ -167,7 +167,7 @@ impl Scene for MainMenu {
     fn render(&mut self, graphics: &mut RenderContext) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
-            if let Some(result) = graphics.shared.future_queue.exchange_as::<anyhow::Result<()>>(handle) {
+            if let Some(result) = graphics.shared.future_queue.exchange_owned_as::<anyhow::Result<()>>(handle) {
                 self.project_creation_handle = None;
 
                 if result.is_ok() {

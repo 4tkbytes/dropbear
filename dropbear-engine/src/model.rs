@@ -566,6 +566,8 @@ impl Model {
         }
         log::debug!("Model does not exist in cache, loading memory...");
 
+        log::debug!("Path of model: {}", path.display());
+
         let buffer = std::fs::read(path)?;
         let model = Self::load_from_memory(graphics, buffer, label).await?;
 

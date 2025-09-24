@@ -37,7 +37,7 @@ impl PendingSpawnController for Editor {
                                 let _guard = PROJECT.read();
                                 _guard.project_path.clone()
                             };
-                            let resource = path.join(file);
+                            let resource = path.join("resources").join(file);
                             AdoptedEntity::new(graphics_clone, resource, Some(&asset_name)).await
                         }
                         ResourceReferenceType::Bytes(bytes) => {
@@ -87,7 +87,7 @@ impl PendingSpawnController for Editor {
 
             if let Some(handle) = &spawn.handle {
                 log_once::debug_once!("Handle located");
-                if let Some(result) = queue.exchange(handle) {
+                if let Some(result) = queue.exchange_owned(handle) {
                     log_once::debug_once!("Loading done, located result");
                     if let Ok(r) = result
                         .downcast::<anyhow::Result<AdoptedEntity>>() {
