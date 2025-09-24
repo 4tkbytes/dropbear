@@ -281,7 +281,7 @@ impl Mouse for Editor {
                     let dy = position.y - center.y;
 
                     if let Some(active_camera) = *self.active_camera.lock() {
-                        if let Ok(mut q) = self.world.read().query_one::<(
+                        if let Ok(mut q) = self.world.query_one::<(
                             &mut Camera,
                             &CameraComponent,
                             Option<&CameraFollowTarget>,
