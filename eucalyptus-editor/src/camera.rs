@@ -2,10 +2,9 @@ use crate::editor::component::InspectableComponent;
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::camera::Camera;
 use egui::{CollapsingHeader, Ui};
-use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
+use eucalyptus_core::camera::{CameraComponent, CameraType};
 use hecs::Entity;
 use std::time::Instant;
-use eucalyptus_core::success;
 
 impl InspectableComponent for Camera {
     fn inspect(

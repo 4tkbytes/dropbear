@@ -14,7 +14,7 @@ use std::{
 
 use crate::camera::UndoableCameraAction;
 use crate::debug;
-use crate::{build::build, debug::DependencyInstaller};
+use crate::{build::build};
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
@@ -85,8 +85,6 @@ pub struct Editor {
     pub(crate) input_state: InputState,
 
     // channels
-    /// A channel for installing dependencies.
-    dep_installer: DependencyInstaller,
     /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
     progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
     /// Unused: A threadsafe Unbounded Sender
@@ -168,7 +166,6 @@ impl Editor {
             input_state: InputState::new(),
             light_manager: LightManager::new(),
             active_camera: Arc::new(Mutex::new(None)),
-            dep_installer: DependencyInstaller::default(),
             _progress_rx: None,
             progress_tx: None,
             is_world_loaded: IsWorldLoadedYet::new(),
@@ -590,7 +587,7 @@ impl Editor {
                 {
                     let cfg = PROJECT.read();
                     if cfg.editor_settings.is_debug_menu_shown {
-                        debug::show_menu_bar(ui, &mut self.signal, &mut self.dep_installer);
+                        debug::show_menu_bar(ui, &mut self.signal);
                     }
                 }
             });
@@ -1172,6 +1169,8 @@ pub enum Signal {
     Delete,
     Undo,
     ScriptAction(ScriptAction),
+    #[allow(dead_code)]
+    // not actions required because follow target is set through scripting. 
     CameraAction(CameraAction),
     Play,
     StopPlaying,

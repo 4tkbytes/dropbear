@@ -10,7 +10,6 @@ use dropbear_engine::{
 };
 use eucalyptus_core::states::{WorldLoadingStatus};
 use eucalyptus_core::{logging};
-use hecs::Entity;
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;
@@ -261,12 +260,6 @@ impl Scene for Editor {
                 &self.world,
             );
         }
-
-        if self.dep_installer.is_installing {
-            self.dep_installer
-                .show_installation_window(&graphics.shared.get_egui_context());
-        }
-        self.dep_installer.update_progress();
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {

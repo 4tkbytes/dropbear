@@ -14,7 +14,7 @@ use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
 use git2::Repository;
 use log::{self, debug};
-use rfd::FileDialog; // ← Sync version — no async needed
+use rfd::FileDialog;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
@@ -44,8 +44,7 @@ pub struct MainMenu {
     progress: f32,
     progress_message: String,
 
-    // ❌ REMOVED: file_dialog: Option<FutureHandle>,
-    project_creation_handle: Option<FutureHandle>, // ← Keep — project creation is async
+    project_creation_handle: Option<FutureHandle>,
 
     toast: Toasts,
     is_in_file_dialogue: bool,
@@ -78,8 +77,9 @@ impl MainMenu {
         let handle = queue.push(async move {
             let mut errors = Vec::new();
             let folders = [
-                ("git", 0.1, "Initializing git repository..."),
+                ("git", 0.1, "Initialising git repository..."),
                 ("src", 0.2, "Creating src folder..."),
+                ("swift", 0.25, "Initialising Swift project"),
                 ("resources/models", 0.3, "Creating models folder..."),
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
@@ -114,6 +114,14 @@ impl MainMenu {
                             let _ = config.write_to_all();
                             let mut global = PROJECT.write();
                             *global = config;
+                            Ok(())
+                        }
+                        "swift" => {
+                            let package_template = include_str!("../../resources/Build.swift");
+                            let package_template = package_template.replace("skibidi_toilet_goon_maxx", &project_name);
+                            // do not ask my why i chose skibidi_toilet_goon_maxx, it was just the first word i came up with. 
+                            std::fs::write(path.join("Package.swift"), package_template)?;
+
                             Ok(())
                         }
                         _ => {
