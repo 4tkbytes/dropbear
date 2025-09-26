@@ -1,4 +1,6 @@
 public class Input {
+    
+
     public func isKeyPressed(_ key: Key) -> Bool {
         // add checking here
         return false;

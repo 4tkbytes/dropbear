@@ -1,7 +1,5 @@
 use crate::input::InputState;
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
-use boa_engine::property::PropertyKey;
-use boa_engine::{Context, JsString, JsValue, Source};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use std::path::PathBuf;
@@ -82,14 +80,12 @@ impl DropbearScriptingAPIContext {
 }
 
 pub struct ScriptManager {
-    compiled_scripts: HashMap<String, String>,
     script_context: DropbearScriptingAPIContext,
 }
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
         let result = Self {
-            compiled_scripts: HashMap::new(),
             script_context: DropbearScriptingAPIContext::new(),
         };
 
@@ -102,8 +98,7 @@ impl ScriptManager {
         script_name: &String,
         script_content: String,
     ) -> anyhow::Result<String> {
-        self.compiled_scripts
-            .insert(script_name.clone(), script_content);
+        
         log::debug!("Loaded script [{}]", script_name);
         Ok(script_name.clone())
     }
@@ -117,42 +112,7 @@ impl ScriptManager {
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
-        if let Some(script_source) = self.compiled_scripts.get(script_name) {
-            self.script_context
-                .set_context(entity_id, world, input_state);
-
-            let mut context = Context::default();
-            self.expose(&mut context);
-
-            context
-                .eval(Source::from_bytes(script_source.clone().as_bytes()))
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-            let load = context
-                .global_object()
-                .get(
-                    PropertyKey::String(JsString::from_str("load")?),
-                    &mut context,
-                )
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-            if load.is_callable() {
-                let _ = load
-                    .as_callable()
-                    .unwrap()
-                    .call(&JsValue::undefined(), &[], &mut context);
-            } else {
-                log::warn!(
-                    "Unable to call load in script {}: Load is not a callable function",
-                    script_name
-                )
-            }
-
-            self.script_context.clear_context();
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Script '{}' not found", script_name))
-        }
+        Ok(())
     }
 
     pub fn update_entity_script(
@@ -165,52 +125,8 @@ impl ScriptManager {
     ) -> anyhow::Result<()> {
         log_once::debug_once!("Update entity script name: {}", script_name);
 
-        if let Some(module) = self.compiled_scripts.get(script_name).cloned() {
-            self.script_context
-                .set_context(entity_id, world, input_state);
-
-            let mut context = Context::default();
-            self.expose(&mut context);
-
-            context
-                .eval(Source::from_bytes(module.as_bytes()))
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-            let update = context
-                .global_object()
-                .get(
-                    PropertyKey::String(JsString::from_str("update")?),
-                    &mut context,
-                )
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-            if update.is_callable() {
-                let dt_val = JsValue::from(dt);
-                let _ = update.as_callable().unwrap().call(
-                    &JsValue::undefined(),
-                    &[dt_val],
-                    &mut context,
-                );
-            } else {
-                log::warn!(
-                    "Unable to call update in script {}: Update is not a callable function",
-                    script_name
-                )
-            }
-
-            self.script_context.clear_context();
-            return Ok(());
-        } else {
-            log_once::error_once!(
-                "Unable to fetch compiled scripts for entity {:?}. Script Name: {}",
-                entity_id,
-                script_name
-            );
-        }
         Ok(())
     }
-
-    pub fn expose(&self, _context: &mut Context) {}
 }
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {

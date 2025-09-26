@@ -9,7 +9,7 @@ let package = Package(
     products: [
         .library(
             name: "skibidi_toilet_goon_maxx",
-            type: .dynamic, // required as it produces one .dll file
+            type: .dynamic, // required as it will be linked to the final executable
             targets: ["skibidi_toilet_goon_maxx"]
         ),
     ],
