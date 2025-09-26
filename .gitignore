@@ -28,3 +28,4 @@ dropbear_future-queue/test.log
 
 */.build/*
 .build/*
+*.resolved

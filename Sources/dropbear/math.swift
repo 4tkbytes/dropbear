@@ -21,7 +21,8 @@ enum Math {
         var z: T
 
         /// Initialises a new Vector3
-        /// - Parameters:
+        /// 
+        /// # Parameters:
         ///   - x: A value of type T
         ///   - y: A value of type T
         ///   - z: A value of type T
@@ -31,8 +32,8 @@ enum Math {
             self.z = z
         }
 
-        /// Creates a new Vector3 of type T with all values set to zero. 
-        /// - Returns: Vector3 of type T
+        /// Creates a new Vector3 of type `T` with all values set to zero. 
+        /// - Returns: Vector3 of type `T`
         static func zero() -> Vector3<T> {
             return Vector3(x: 0, y: 0, z: 0)
         }

@@ -1,6 +1,7 @@
 // swift-tools-version: 6.2
 
 import PackageDescription
+import CompilerPluginSupport
 
 let package = Package(
     name: "dropbear",
@@ -12,11 +13,19 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // .package(url: "https://github.com/nicklockwood/VectorMath", from: "0.4.0")
+        .package(url: "https://github.com/swiftlang/swift-syntax", from: "602.0.0")
     ],
     targets: [
+        .macro(
+            name: "dropbear_macro",
+            dependencies: [
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
+            ]
+        ),
         .target(
-            name: "dropbear"
+            name: "dropbear",
+            dependencies: ["dropbear_macro"]
         ),
         .testTarget(
             name: "dropbearTests",

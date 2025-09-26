@@ -1,8 +1,9 @@
 // example testing module, do not use in production
 
-class Player: RunnableScript {
+@ScriptEntry
+class Player: BaseScript {
     override func onLoad() {
-        print("I have risen")
+        print("Player script loaded")
         // let current_scene = dropbear.getCurrentScene()
         // let player = current_scene?.getEntity("player")
         if dropbear.getInput().isKeyPressed(Key.W) {
@@ -11,6 +12,6 @@ class Player: RunnableScript {
     }
 
     override func onUpdate(dt: Float) {
-        print("I am currently awake")
+        print("Player is running: \(dt)")
     }
 }
