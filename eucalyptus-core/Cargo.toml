@@ -23,9 +23,9 @@ parking_lot.workspace = true
 ron.workspace = true
 serde.workspace = true
 winit.workspace = true
-# zip.workspace = true
 tokio.workspace = true
 rayon.workspace = true
+libloading.workspace = true
 
 [features]
 editor = []

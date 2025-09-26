@@ -21,8 +21,8 @@ use crate::{
     model::{self, Vertex},
 };
 
-pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/no-texture.png");
-pub const NO_MODEL: &[u8] = include_bytes!("../../resources/error.glb");
+pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
+pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");
 
 pub struct RenderContext<'a> {
     pub shared: Arc<SharedGraphicsContext>,

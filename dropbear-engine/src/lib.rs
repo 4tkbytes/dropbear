@@ -526,7 +526,8 @@ impl App {
         log::info!("dropbear-engine running...");
         let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
         if let Ok(path) = ad {log::info!("App data is stored at {}", path.display())};
-        log::debug!("Additional nerdy stuff: {:#?}", rustc_version_runtime::version_meta());
+        #[cfg(debug_assertions)]
+        log::debug!("Additional nerdy build stuff: {:?}", rustc_version_runtime::version_meta());
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
         let mut app = Box::new(App::new(config, future_queue));

@@ -36,9 +36,6 @@ walkdir.workspace = true
 zip.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
-flate2.workspace = true
-tar.workspace = true
-futures-util.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

@@ -586,7 +586,7 @@ impl SignalController for Editor {
                                             egui_extras::install_image_loaders(ui.ctx());
                                             ui.add(Image::from_bytes(
                                                 "bytes://theres_nothing.jpg",
-                                                include_bytes!("../../resources/theres_nothing.jpg"),
+                                                include_bytes!("../../resources/textures/theres_nothing.jpg"),
                                             ));
                                             ui.label("Theres nothing...");
                                             // scripting could be planned???
@@ -757,7 +757,7 @@ impl SignalController for Editor {
                     }
                     PendingSpawn2::Cube => {
                         let pending = PendingSpawn {
-                            asset_path: ResourceReference::from_bytes(include_bytes!("../../resources/cube.glb")),
+                            asset_path: ResourceReference::from_bytes(include_bytes!("../../resources/models/cube.glb")),
                             asset_name: "Default Cube".to_string(),
                             transform: Default::default(),
                             properties: Default::default(),

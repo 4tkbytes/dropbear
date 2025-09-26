@@ -16,7 +16,7 @@ use std::{mem, ops::Range, path::PathBuf};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/grey.png");
+pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/textures/grey.png");
 
 lazy_static! {
     pub static ref MODEL_CACHE: Mutex<HashMap<String, Model>> = Mutex::new(HashMap::new());

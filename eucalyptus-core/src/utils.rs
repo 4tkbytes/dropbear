@@ -1,7 +1,7 @@
 
 use crate::states::Node;
 
-pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/proto.png");
+pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where

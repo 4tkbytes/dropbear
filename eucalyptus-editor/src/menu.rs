@@ -117,7 +117,7 @@ impl MainMenu {
                             Ok(())
                         }
                         "swift" => {
-                            let package_template = include_str!("../../resources/Build.swift");
+                            let package_template = include_str!("../../resources/scripting/swift/Build.swift");
                             let package_template = package_template.replace("skibidi_toilet_goon_maxx", &project_name);
                             // do not ask my why i chose skibidi_toilet_goon_maxx, it was just the first word i came up with. 
                             std::fs::write(path.join("Package.swift"), package_template)?;
