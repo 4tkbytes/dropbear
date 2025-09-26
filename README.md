@@ -1,6 +1,6 @@
 # dropbear
 
-dropbear is a game engine used to create games, made in `Rust` and scripted with `Swift`.
+dropbear is a game engine used to create games, made in Rust and scripted with the Swift Language.
 
 It's name is a double entendre, with it being the nickname of koalas but also fits in nicely with the theme of rust utilising memory management with "drops".
 
