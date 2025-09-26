@@ -3,10 +3,11 @@ use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::{collections::HashMap, fs};
+use std::env::current_exe;
+use libloading::{library_filename, Library};
 
-pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/template.ts");
+pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/swift/sample.swift");
 
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
@@ -81,14 +82,20 @@ impl DropbearScriptingAPIContext {
 
 pub struct ScriptManager {
     script_context: DropbearScriptingAPIContext,
+    library: Library,
 }
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
+        let lib_path: PathBuf = Self::look_for_potential_library()?;
+        let library = unsafe { Library::new(lib_path.clone())? };
+
         let result = Self {
+            library,
             script_context: DropbearScriptingAPIContext::new(),
         };
 
+        log::info!("Loaded {} from {}", library_filename("dropbear").display(), lib_path.display());
         log::debug!("Initialised ScriptManager");
         Ok(result)
     }
@@ -99,7 +106,7 @@ impl ScriptManager {
         script_content: String,
     ) -> anyhow::Result<String> {
         
-        log::debug!("Loaded script [{}]", script_name);
+        log::debug!("Loaded library [{}]", script_name);
         Ok(script_name.clone())
     }
 
@@ -126,6 +133,40 @@ impl ScriptManager {
         log_once::debug_once!("Update entity script name: {}", script_name);
 
         Ok(())
+    }
+
+    fn look_for_potential_library() -> anyhow::Result<PathBuf> {
+        // look for project path if editor feature is available
+        let root_path = {
+            #[cfg(feature = "editor")]
+            {
+                let _guard = PROJECT.read();
+                _guard.project_path.clone()
+            }
+
+            #[cfg(not(feature = "editor"))]
+            {
+                std::env::current_exe()?.parent().unwrap().to_path_buf()
+            }
+        };
+
+        let lib_file_name = library_filename("dropbear");
+
+        let potential_paths = vec![
+            root_path.join(lib_file_name.clone()), // when packaged for shipping
+            // cant think of any other spots
+            // root_path.parent().unwrap().parent().unwrap().join("").join(lib_file_name.clone()), // during production of editor/engine
+            current_exe()?.parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf().join(".build").join("debug").join(lib_file_name.clone()),
+
+        ];
+
+        for path in potential_paths {
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+
+        anyhow::bail!("Unable to locate path for the dropbear dynamic library");
     }
 }
 

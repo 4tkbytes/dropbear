@@ -1,7 +1,21 @@
 use std::fs::{self, File};
 use std::io::Cursor;
+use std::process::Command;
 
 fn main() -> anyhow::Result<()> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--short=6", "HEAD"])
+        .output()
+        .expect("Failed to execute git");
+
+    let git_hash = String::from_utf8(output.stdout).expect("Invalid UTF-8 in git output");
+    let git_hash = git_hash.trim();
+
+    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/refs/heads");
+
     // todo: move this into the "setup" process
     let repo_zip_url = "https://github.com/4tkbytes/dropbear/archive/refs/heads/main.zip";
     let response = reqwest::blocking::get(repo_zip_url)

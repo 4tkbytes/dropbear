@@ -323,7 +323,7 @@ impl Light {
         };
         if result.cube_lazy_model.is_none() {
             let lazy_model = Model::lazy_load(
-                include_bytes!("../../resources/cube.glb").to_vec(),
+                include_bytes!("../../resources/models/cube.glb").to_vec(),
                 result.label.as_deref(),
             )
             .await?;
@@ -356,7 +356,7 @@ impl Light {
 
         let cube_model = Arc::new(Model::load_from_memory(
             graphics.clone(),
-            include_bytes!("../../resources/cube.glb").to_vec(),
+            include_bytes!("../../resources/models/cube.glb").to_vec(),
             label,
         )
         .await

@@ -104,7 +104,7 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn new() -> Self {
+    pub fn new() -> anyhow::Result<Self> {
         let tabs = vec![EditorTab::Viewport];
         let mut dock_state = DockState::new(tabs);
 
@@ -139,7 +139,7 @@ impl Editor {
             }
         });
 
-        Self {
+        Ok(Self {
             scene_command: SceneCommand::None,
             dock_state,
             texture_id: None,
@@ -159,7 +159,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new().unwrap(),
+            script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,
@@ -174,7 +174,7 @@ impl Editor {
             alt_pending_spawn_queue: vec![],
             world_receiver: None,
             dock_state_shared: None,
-        }
+        })
     }
 
     fn double_key_pressed(&mut self, key: KeyCode) -> bool {

@@ -11,6 +11,7 @@ mod signal;
 use clap::{Arg, Command};
 use dropbear_engine::{scene, WindowConfiguration};
 use std::{fs, path::PathBuf, rc::Rc};
+use std::panic::catch_unwind;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use dropbear_engine::future::FutureQueue;
@@ -28,6 +29,8 @@ async fn main() -> anyhow::Result<()> {
  to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
  to use with dependencies or create your own game on Desktop. Sorry :("
     );
+
+    dropbear_engine::panic::set_hook();
     let matches = Command::new("eucalyptus-editor")
         .about("A visual game editor")
         .version(env!("CARGO_PKG_VERSION"))
@@ -137,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
         }
         None => {
             let config = WindowConfiguration {
-                title: "Eucalyptus, built with dropbear".into(),
+                title: format!("Eucalyptus, built with dropbear | Version {} on commit {}", env!("CARGO_PKG_VERSION"), env!("GIT_HASH")),
                 windowed_mode: dropbear_engine::WindowedModes::Maximised,
                 max_fps: dropbear_engine::App::NO_FPS_CAP,
                 app_info: APP_INFO,
@@ -146,7 +149,7 @@ async fn main() -> anyhow::Result<()> {
             let future_queue = Arc::new(FutureQueue::new());
 
             let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
-            let editor = Rc::new(RwLock::new(editor::Editor::new()));
+            let editor = Rc::new(RwLock::new(editor::Editor::new().unwrap_or_else(|e| panic!("Unable to initialise Eucalyptus Editor: {}", e))));
 
             dropbear_engine::run_app!(config, Some(future_queue), |mut scene_manager, mut input_manager| {
                 scene::add_scene_with_input(
