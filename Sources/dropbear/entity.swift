@@ -1,3 +1,7 @@
 public class Entity {
-    // todo: work on
+    let id: Int
+
+    init() {
+        self.id = 0
+    }
 }

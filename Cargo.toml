@@ -19,6 +19,7 @@ bytemuck = { version = "1.23", features = ["derive"] }
 chrono = "0.4"
 clap = "4.5"
 colored = "3.0"
+crossbeam-channel = "0.5"
 dropbear-engine = { path = "dropbear-engine" }
 egui = "0.32"
 egui-toast-fork = "0.18"

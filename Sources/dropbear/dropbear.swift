@@ -81,6 +81,26 @@ open class BaseScript: RunnableScript {
     }
 }
 
+
+// todo
+public func getCurrentScene() -> Scene! {
+    if true /* check if script is attached to scene */ {
+        Scene()
+    } else {
+        nil
+    }
+}
+
+// todo
+public func getAttachedEntity() -> Entity {
+    Entity()
+}
+
+// todo
+public func getScene() -> Scene {
+    Scene()
+}
+
 /// A macro for a class of a script that can be used with any entity (when added).  
 /// 
 /// Let's say that you have an entity of a player. You want to get movement for
@@ -112,24 +132,5 @@ public macro ScriptEntry() = #externalMacro(module: "dropbear_macro", type: "Scr
 public macro Script(entity: String) = #externalMacro(module: "dropbear_macro", type: "ScriptMacro")
 
 public func getInput() -> Input {
-    Input()
-}
-
-// todo
-public func getCurrentScene() -> Scene! {
-    if true /* check if script is attached to scene */ {
-        Scene()
-    } else {
-        nil
-    }
-}
-
-// todo
-public func getAttachedEntity() -> Entity {
-    Entity()
-}
-
-// todo
-public func getScene() -> Scene {
-    Scene()
+    
 }
