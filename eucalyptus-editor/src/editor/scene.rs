@@ -143,6 +143,16 @@ impl Scene for Editor {
             }
         }
 
+        // Process socket requests from Swift clients
+        if let Some(ref mut socket_receiver) = self.socket_receiver {
+            eucalyptus_core::socket::SocketRequestHandler::process_requests(
+                socket_receiver,
+                &mut self.world,
+                &self.input_state,
+                dt,
+            );
+        }
+
         if self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove)
         // && self.is_using_debug_camera()
         {

@@ -1,6 +1,7 @@
 import Foundation
 
-/// Input system for the Dropbear engine with socket communication
+/// Input system for handling keyboard and mouse input
+/// Provides methods to query key states and mouse position/movement
 public class Input {
     /// Reference to the socket client for communication
     private let socketClient: SocketClient
@@ -377,6 +378,6 @@ extension Key: CustomStringConvertible {
 
 extension Input: CustomStringConvertible {
     public var description: String {
-        return "Input(cached keys: \(keyStateCache.count))"
+        return "Input(system)"
     }
 }

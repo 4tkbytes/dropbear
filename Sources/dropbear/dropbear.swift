@@ -19,7 +19,7 @@ public protocol RunnableScript: AnyObject {
     /// - Parameter dt: Deltatime/the time it takes for the previous frame to render as a `Float`
     func onUpdate(dt: Float)
 
-    /// Run the script (called by engine)
+    /// Internal: Run the script (called by engine)
     func run()
 }
 
@@ -63,21 +63,78 @@ public class ScriptRegistry {
     }
 }
 
-/// Base implementation of RunnableScript with default run() behavior
+import Foundation
+
+/// Base class for all scripts - handles engine connection automatically
 open class BaseScript: RunnableScript {
-    public required init() {}
+    private var _engine: DropbearEngine?
+    private var setupTask: Task<Void, Never>?
     
-    open func onLoad() {
-        // Override in subclasses
+    /// Access to the connected engine
+    public var engine: DropbearEngine? {
+        return _engine
     }
     
-    open func onUpdate(dt: Float) {
-        // Override in subclasses
+    /// Safe engine access with auto-connection
+    public func withEngine<T>(_ operation: @Sendable (DropbearEngine) async throws -> T) async rethrows -> T? {
+        guard let engine = await ensureEngineConnected() else {
+            print("⚠️ Engine connection failed")
+            return nil
+        }
+        
+        return try await operation(engine)
     }
     
-    public func run() {
+    required public init() {
+        // Start engine setup immediately but don't block
+        setupTask = Task {
+            _ = await ensureEngineConnected()
+        }
+    }
+    
+    /// Override these methods in your script
+    open func onLoad() {}
+    
+    open func onUpdate(dt: Float) {}
+    
+    /// Internal engine connection management
+    private func ensureEngineConnected() async -> DropbearEngine? {
+        if let engine = _engine {
+            return engine
+        }
+        
+        do {
+            let newEngine = DropbearEngine()
+            try await newEngine.connect()
+            _engine = newEngine
+            print("🔧 Engine connected successfully")
+            return newEngine
+        } catch {
+            print("❌ Failed to connect to engine: \(error)")
+            return nil
+        }
+    }
+    
+    /// Run the script (called by the script system)
+    public func run() async {
+        // Wait for engine setup to complete
+        await setupTask?.value
+        
+        // Call user's onLoad method
         onLoad()
-        // Engine will call onUpdate in its loop
+        
+        // Game loop simulation (in real game, this would be called by the engine)
+        var lastTime = Date()
+        while true {
+            let currentTime = Date()
+            let deltaTime = Float(currentTime.timeIntervalSince(lastTime))
+            lastTime = currentTime
+            
+            onUpdate(dt: deltaTime)
+            
+            // Don't overwhelm the CPU
+            try? await Task.sleep(nanoseconds: 16_666_667) // ~60fps
+        }
     }
 }
 
@@ -92,7 +149,7 @@ open class BaseScript: RunnableScript {
 /// you can use the `@Script(name: /*Entity Label*/)` to lock that class to run only on
 /// that entity, improving production as you won't have to constantly rewrite scripts. 
 @attached(member, names: named(init))
-public macro ScriptEntry() = #externalMacro(module: "dropbear_macro", type: "ScriptEntryMacro")
+public macro Script() = #externalMacro(module: "dropbear_macro", type: "ScriptEntryMacro")
 
 /// A macro for a class of a script that can be used by a **specific** entity. 
 /// 
@@ -112,24 +169,29 @@ public macro ScriptEntry() = #externalMacro(module: "dropbear_macro", type: "Scr
 public macro Script(entity: String) = #externalMacro(module: "dropbear_macro", type: "ScriptMacro")
 
 public func getInput() -> Input {
-    Input()
+    // For now, create a dummy socket client - this should be improved
+    let socketClient = SocketClient()
+    return Input(socketClient: socketClient)
 }
 
 // todo
-public func getCurrentScene() -> Scene! {
+public func getCurrentScene() -> Scene? {
     if true /* check if script is attached to scene */ {
-        Scene()
+        let socketClient = SocketClient()
+        return Scene(socketClient: socketClient)
     } else {
-        nil
+        return nil
     }
 }
 
 // todo
 public func getAttachedEntity() -> Entity {
-    Entity()
+    let socketClient = SocketClient()
+    return Entity(id: 0, socketClient: socketClient, label: "dummy")
 }
 
 // todo
 public func getScene() -> Scene {
-    Scene()
+    let socketClient = SocketClient()
+    return Scene(socketClient: socketClient)
 }

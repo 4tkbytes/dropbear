@@ -101,6 +101,9 @@ pub struct Editor {
     world_receiver: Option<oneshot::Receiver<hecs::World>>,
     
     dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
+
+    // Socket system for Swift communication
+    socket_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<eucalyptus_core::socket::SocketRequest>>,
 }
 
 impl Editor {
@@ -139,6 +142,14 @@ impl Editor {
             }
         });
 
+        // Initialize socket server for Swift communication
+        let (socket_server, socket_receiver) = eucalyptus_core::socket::SocketServer::new(eucalyptus_core::socket::DEFAULT_PORT);
+        
+        // Start the socket server in the background
+        if let Err(e) = socket_server.start() {
+            log::error!("Failed to start socket server: {}", e);
+        }
+
         Ok(Self {
             scene_command: SceneCommand::None,
             dock_state,
@@ -174,6 +185,7 @@ impl Editor {
             alt_pending_spawn_queue: vec![],
             world_receiver: None,
             dock_state_shared: None,
+            socket_receiver: Some(socket_receiver),
         })
     }
 

@@ -1,6 +1,7 @@
 import Foundation
 
-/// Represents a scene in the Dropbear engine with communication via sockets
+/// Scene management for game objects and entities
+/// Provides methods to create, query, and manipulate entities within the scene
 public class Scene {
     /// Reference to the socket client for communication
     private let socketClient: SocketClient
@@ -306,6 +307,6 @@ public enum SceneError: Error, LocalizedError {
 
 extension Scene: CustomStringConvertible {
     public var description: String {
-        return "Scene(entities: \(cachedEntities.count) cached)"
+        return "Scene(system)"
     }
 }

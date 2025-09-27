@@ -2,7 +2,7 @@
 
 import dropbear
 
-@ScriptEntry
+@Script
 class ChangeMyName: BaseScript {
     override func onLoad() {
         print("It's alive! It's alive! It's alive, it's alive, IT'S ALIVE!")
