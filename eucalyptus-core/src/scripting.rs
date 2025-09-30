@@ -13,28 +13,6 @@ use serde::{Deserialize, Serialize};
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/swift/sample.swift");
 
-#[derive(Debug, Clone)]
-pub enum ScriptCommand {
-    /// Allows you to set a Transform value to a specific entity.
-    ///
-    /// # API Usage
-    /// ```swift
-    /// let player = dropbear.getAttachedEntity() // fetches entity information
-    ///
-    /// player.translate(Vector3(x: 1.0))
-    /// player.setPosition(player.getTransform().position + Vector3(x: 1.0))
-    /// player.rotateX(angle: 95.radians)
-    /// player.scale(Vector3(x: 1.4, y: 1.5, z: 0.8))
-    /// player.setTransform(Transform(position: Vector3.zero(), rotation: Quaternion.identity(), scale: Vector3.zero())
-    /// ```
-    SetTransform {
-        entity: Entity,
-        position: Option<Vec3>,
-        rotation: Option<Quat>,
-        scale: Option<Vec3>,
-    }
-}
-
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
     pub current_entity: Option<Entity>,
@@ -43,8 +21,6 @@ pub struct DropbearScriptingAPIContext {
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
-
-    command_sender: Option<crossbeam_channel::Sender<ScriptCommand>>,
 }
 
 impl Default for DropbearScriptingAPIContext {
@@ -61,7 +37,6 @@ impl DropbearScriptingAPIContext {
             current_input: None,
             persistent_data: HashMap::new(),
             frame_data: HashMap::new(),
-            command_sender: None,
         }
     }
 
@@ -111,20 +86,20 @@ impl DropbearScriptingAPIContext {
 
 pub struct ScriptManager {
     script_context: DropbearScriptingAPIContext,
-    library: Library,
+    // library: Library,
 }
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        let lib_path: PathBuf = Self::look_for_potential_library()?;
-        let library = unsafe { Library::new(lib_path.clone())? };
+        // let lib_path: PathBuf = Self::look_for_potential_library()?;
+        // let library = unsafe { Library::new(lib_path.clone())? };
 
         let result = Self {
-            library,
+            // library,
             script_context: DropbearScriptingAPIContext::new(),
         };
 
-        log::info!("Loaded {} from {}", library_filename("dropbear").display(), lib_path.display());
+        // log::info!("Loaded {} from {}", library_filename("dropbear").display(), lib_path.display());
         log::debug!("Initialised ScriptManager");
         Ok(result)
     }
@@ -151,14 +126,6 @@ impl ScriptManager {
         Ok(())
     }
 
-    fn process_commands(&mut self) {
-
-    }
-
-    fn populate(&self) {
-
-    }
-
     pub fn update_entity_script(
         &mut self,
         entity_id: hecs::Entity,
@@ -170,40 +137,6 @@ impl ScriptManager {
         log_once::debug_once!("Update entity script name: {}", script_name);
 
         Ok(())
-    }
-
-    fn look_for_potential_library() -> anyhow::Result<PathBuf> {
-        // look for project path if editor feature is available
-        let root_path = {
-            #[cfg(feature = "editor")]
-            {
-                let _guard = PROJECT.read();
-                _guard.project_path.clone()
-            }
-
-            #[cfg(not(feature = "editor"))]
-            {
-                std::env::current_exe()?.parent().unwrap().to_path_buf()
-            }
-        };
-
-        let lib_file_name = library_filename("dropbear");
-
-        let potential_paths = vec![
-            root_path.join(lib_file_name.clone()), // when packaged for shipping
-            // cant think of any other spots
-            // root_path.parent().unwrap().parent().unwrap().join("").join(lib_file_name.clone()), // during production of editor/engine
-            current_exe()?.parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf().join(".build").join("debug").join(lib_file_name.clone()),
-
-        ];
-
-        for path in potential_paths {
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-
-        anyhow::bail!("Unable to locate path for the dropbear dynamic library");
     }
 }
 
