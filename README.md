@@ -1,6 +1,6 @@
 # dropbear
 
-dropbear is a game engine used to create games, made in Rust and scripted with the Swift Language.
+dropbear is a game engine used to create games, made in Rust and scripted with the Kotlin Language.
 
 It's name is a double entendre, with it being the nickname of koalas but also fits in nicely with the theme of rust utilising memory management with "drops".
 
@@ -26,7 +26,7 @@ With Unix systems (macOS not tested), you will have to download a couple depende
 
 <!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
 
-#### Dependencies
+### Dependencies
 
 ```bash
 # ubuntu
@@ -37,25 +37,21 @@ sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp
 
 ```
 
-#### Swift
-
-If you are using the Eucalyptus editor and are planning on scripting, you will have to download the Swift language. Don't fret, the Swift language is available to all major operating systems _(not only macOS to contrary belief)_, and can be easily downloaded here: [https://www.swift.org/install](https://www.swift.org/install)
-
-After downloading the requirements, you are free to build it using cargo.
-
-#### Engine Build
+### Engine Build
 
 ```bash
 git clone git@github.com:4tkbytes/dropbear
 cd dropbear
 
-# ensure submodules are checked-out
-git submodule init
-git submodule update
-
-# this will build all the projects in the workspace, including eucalyptus and redback.
+# this will build all the projects in the workspace
 cargo build
 ```
+
+[//]: # (# ensure submodules are checked-out)
+
+[//]: # (git submodule init)
+
+[//]: # (git submodule update)
 
 ### Prebuilt
 
@@ -65,7 +61,10 @@ If you do not want to build it locally, you are able to download the latest acti
 
 ## Usage
 
-Despite the dropbear-engine (and other components) being made in Rust, the editor has chosen the scripting language of choice to be `Swift`.
+Despite the dropbear-engine (and other components) being made in Rust, the editor has chosen the scripting language of choice to be `Kotlin`
+because of previous experience and that Kotlin is more multiplatform than Swift. 
+
+Java is possible (as the JVM runs the script), however it is not officially supported and Kotlin is recommended. . 
 
 API documentation and articles are available at (todo)
 

@@ -2,7 +2,6 @@ use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
-use serde::{Deserialize, Serialize};
 use winit::{event::MouseButton, keyboard::KeyCode};
 
 #[derive(Clone)]

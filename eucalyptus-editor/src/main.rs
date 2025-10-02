@@ -11,7 +11,6 @@ mod signal;
 use clap::{Arg, Command};
 use dropbear_engine::{scene, WindowConfiguration};
 use std::{fs, path::PathBuf, rc::Rc};
-use std::panic::catch_unwind;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use dropbear_engine::future::FutureQueue;
