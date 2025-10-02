@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 use crate::scripting::java::JavaContext;
 
-pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/swift/sample.swift");
+pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
 #[derive(Clone)]
 pub struct DropbearScriptingAPIContext {
@@ -81,9 +81,21 @@ impl DropbearScriptingAPIContext {
     }
 }
 
+/// A message from Kotlin that gets sent to Rust
+pub enum KotlinMessage {
+
+}
+
+/// A message from Rust that gets sent to Kotlin
+pub enum RustMessage {
+
+}
+
 pub struct ScriptManager {
     script_context: DropbearScriptingAPIContext,
     java: JavaContext,
+    from_kotlin: crossbeam_channel::Receiver<KotlinMessage>,
+    to_kotlin: crossbeam_channel::Sender<RustMessage>,
 }
 
 impl ScriptManager {

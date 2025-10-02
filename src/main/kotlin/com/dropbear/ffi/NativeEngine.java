@@ -13,5 +13,10 @@ public class NativeEngine {
      * @return The {@link Transform} component if the entity exists, null if not.
      */
     public native Transform getTransformOfEntity(String label);
+
+    /**
+     * Fetches the label of the entity this script is currently attached to.
+     * @return The label of the attached entity or null if its not attached
+     */
     public native String getLabelOfAttachedEntity();
 }

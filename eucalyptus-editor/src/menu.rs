@@ -79,7 +79,7 @@ impl MainMenu {
             let folders = [
                 ("git", 0.1, "Initialising git repository..."),
                 ("src", 0.2, "Creating src folder..."),
-                ("swift", 0.25, "Initialising Swift project"),
+                // ("swift", 0.25, "Initialising Swift project"),
                 ("resources/models", 0.3, "Creating models folder..."),
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
@@ -116,14 +116,14 @@ impl MainMenu {
                             *global = config;
                             Ok(())
                         }
-                        "swift" => {
-                            let package_template = include_str!("../../resources/scripting/swift/Build.swift");
-                            let package_template = package_template.replace("skibidi_toilet_goon_maxx", &project_name);
-                            // do not ask my why i chose skibidi_toilet_goon_maxx, it was just the first word i came up with. 
-                            std::fs::write(path.join("Package.swift"), package_template)?;
-
-                            Ok(())
-                        }
+                        // "swift" => {
+                        //     let package_template = include_str!("../../resources/scripting/swift/Build.swift");
+                        //     let package_template = package_template.replace("skibidi_toilet_goon_maxx", &project_name);
+                        //     // do not ask my why i chose skibidi_toilet_goon_maxx, it was just the first word i came up with. 
+                        //     std::fs::write(path.join("Package.swift"), package_template)?;
+                        // 
+                        //     Ok(())
+                        // }
                         _ => {
                             if !full_path.exists() {
                                 fs::create_dir_all(&full_path)
