@@ -1,15 +1,12 @@
+mod java;
+
 use crate::input::InputState;
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
-use std::env::current_exe;
-use glam::{Quat, Vec3};
-use libloading::{library_filename, Library};
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+use crate::scripting::java::JavaContext;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/swift/sample.swift");
 
@@ -86,7 +83,7 @@ impl DropbearScriptingAPIContext {
 
 pub struct ScriptManager {
     script_context: DropbearScriptingAPIContext,
-    // library: Library,
+    java: JavaContext,
 }
 
 impl ScriptManager {
@@ -95,11 +92,10 @@ impl ScriptManager {
         // let library = unsafe { Library::new(lib_path.clone())? };
 
         let result = Self {
-            // library,
+            java: JavaContext::new()?,
             script_context: DropbearScriptingAPIContext::new(),
         };
 
-        // log::info!("Loaded {} from {}", library_filename("dropbear").display(), lib_path.display());
         log::debug!("Initialised ScriptManager");
         Ok(result)
     }
