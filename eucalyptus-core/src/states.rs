@@ -1353,6 +1353,7 @@ pub enum EditorTab {
     ResourceInspector, // left side,
     ModelEntityList,   // right side,
     Viewport,          // middle,
+    KotlinREPL,        // bottom side - new REPL tab
 }
 
 /// An enum that describes the status of loading the world.

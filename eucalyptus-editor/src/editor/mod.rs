@@ -1,6 +1,7 @@
 pub mod component;
 pub mod dock;
 pub mod input;
+pub mod repl;
 pub mod scene;
 
 pub(crate) use crate::editor::dock::*;
@@ -113,7 +114,7 @@ impl Editor {
             surface.split_right(NodeIndex::root(), 0.25, vec![EditorTab::ModelEntityList]);
         let [_old, _] =
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
-        let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
+        let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer, EditorTab::KotlinREPL]);
 
         // this shit doesn't work :(
         // nvm it works
@@ -582,6 +583,9 @@ impl Editor {
                     }
                     if ui_window.button("Open Viewport").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
+                    }
+                    if ui_window.button("Open Kotlin REPL").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::KotlinREPL);
                     }
                 });
                 {

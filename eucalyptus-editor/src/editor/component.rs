@@ -594,7 +594,7 @@ impl InspectableComponent for ScriptComponent {
                     ui.horizontal(|ui| {
                         if ui.button("Browse").clicked()
                             && let Some(script_file) = rfd::FileDialog::new()
-                                .add_filter("Typescript", &["ts"])
+                                .add_filter("Kotlin", &["kt"])
                                 .pick_file()
                             {
                                 let script_name = script_file
@@ -610,8 +610,8 @@ impl InspectableComponent for ScriptComponent {
 
                         if ui.button("New").clicked()
                             && let Some(script_path) = rfd::FileDialog::new()
-                                .add_filter("TypeScript", &["ts"])
-                                .set_file_name(format!("{}_script.ts", label))
+                                .add_filter("Kotlin", &["kt"])
+                                .set_file_name(format!("{}_script.kt", label))
                                 .save_file()
                             {
                                 match std::fs::write(&script_path, TEMPLATE_SCRIPT) {

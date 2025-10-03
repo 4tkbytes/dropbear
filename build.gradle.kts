@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "2.1.21"
+//    kotlin("multiplatform") version "2.1.21"
 }
 
 group = "com.dropbear"

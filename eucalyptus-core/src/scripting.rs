@@ -83,19 +83,18 @@ impl DropbearScriptingAPIContext {
 
 /// A message from Kotlin that gets sent to Rust
 pub enum KotlinMessage {
-
+    
 }
 
 /// A message from Rust that gets sent to Kotlin
 pub enum RustMessage {
-
+    Ping
 }
 
 pub struct ScriptManager {
+    #[allow(dead_code)]
     script_context: DropbearScriptingAPIContext,
     java: JavaContext,
-    from_kotlin: crossbeam_channel::Receiver<KotlinMessage>,
-    to_kotlin: crossbeam_channel::Sender<RustMessage>,
 }
 
 impl ScriptManager {
@@ -115,7 +114,7 @@ impl ScriptManager {
     pub fn load_script(
         &mut self,
         script_name: &String,
-        script_content: String,
+        _script_content: String,
     ) -> anyhow::Result<String> {
         
         log::debug!("Loaded library [{}]", script_name);
@@ -131,6 +130,20 @@ impl ScriptManager {
     ) -> anyhow::Result<()> {
         log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
+        // Update the script context
+        java::update_script_context(
+            entity_id,
+            world,
+            input_state.mouse_pos,
+            &input_state.pressed_keys.iter().copied().collect::<Vec<_>>()
+        );
+
+        // Try to load and initialize the script
+        if let Ok(script_instance) = self.java.load_script_class(script_name) {
+            self.java.call_script_load(script_instance)?;
+            log::info!("Initialized script {} for entity {:?}", script_name, entity_id);
+        }
+
         Ok(())
     }
 
@@ -140,9 +153,25 @@ impl ScriptManager {
         script_name: &str,
         world: &mut World,
         input_state: &InputState,
-        dt: f32,
+        _dt: f32,
     ) -> anyhow::Result<()> {
         log_once::debug_once!("Update entity script name: {}", script_name);
+
+        // Update the script context before calling script
+        java::update_script_context(
+            entity_id,
+            world,
+            input_state.mouse_pos,
+            &input_state.pressed_keys.iter().copied().collect::<Vec<_>>()
+        );
+
+        // Call the update method on the script
+        if let Ok(script_instance) = self.java.load_script_class(script_name) {
+            self.java.call_script_update(script_instance)?;
+        }
+
+        // Sync changes back to world
+        java::sync_transform_to_world(world);
 
         Ok(())
     }
