@@ -1,0 +1,1 @@
+//! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate

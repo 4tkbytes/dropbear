@@ -1,4 +1,5 @@
-mod java;
+mod kmp;
+mod jni;
 
 use crate::input::InputState;
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
@@ -6,15 +7,17 @@ use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
-use crate::scripting::java::JavaContext;
+use std::sync::LazyLock;
+use crate::ptr::SafePointer;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
-#[derive(Clone)]
+static CONTEXT: LazyLock<DropbearScriptingAPIContext> = LazyLock::new(|| DropbearScriptingAPIContext::new());
+
 pub struct DropbearScriptingAPIContext {
     pub current_entity: Option<Entity>,
     // fyi: im pretty sure this is safe because I can just null with [`Option::None`]
-    current_world: Option<*const World>,
+    current_world: Option<SafePointer<World>>,
     pub current_input: Option<InputState>,
     pub persistent_data: HashMap<String, Value>,
     pub frame_data: HashMap<String, Value>,
@@ -39,7 +42,7 @@ impl DropbearScriptingAPIContext {
 
     pub fn set_context(&mut self, entity: Entity, world: &mut World, input: &InputState) {
         self.current_entity = Some(entity);
-        self.current_world = Some(world as *mut World);
+        self.current_world = Some(SafePointer::new(world));
         self.current_input = Some(input.clone());
     }
 
@@ -81,70 +84,41 @@ impl DropbearScriptingAPIContext {
     }
 }
 
-/// A message from Kotlin that gets sent to Rust
-pub enum KotlinMessage {
-
-}
-
-/// A message from Rust that gets sent to Kotlin
-pub enum RustMessage {
-
-}
-
-pub struct ScriptManager {
-    script_context: DropbearScriptingAPIContext,
-    java: JavaContext,
-    from_kotlin: crossbeam_channel::Receiver<KotlinMessage>,
-    to_kotlin: crossbeam_channel::Sender<RustMessage>,
-}
+pub struct ScriptManager;
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        // let lib_path: PathBuf = Self::look_for_potential_library()?;
-        // let library = unsafe { Library::new(lib_path.clone())? };
-
-        let result = Self {
-            java: JavaContext::new()?,
-            script_context: DropbearScriptingAPIContext::new(),
-        };
-
-        log::debug!("Initialised ScriptManager");
-        Ok(result)
+        Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 
     pub fn load_script(
         &mut self,
-        script_name: &String,
-        script_content: String,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<()> {
         
-        log::debug!("Loaded library [{}]", script_name);
-        Ok(script_name.clone())
+        Ok(())
     }
 
     pub fn init_entity_script(
         &mut self,
         entity_id: hecs::Entity,
-        script_name: &str,
+        tags: &Vec<String>,
         world: &mut World,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
-        log_once::debug_once!("init_entity_script: {} for {:?}", script_name, entity_id);
 
-        Ok(())
+        Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 
     pub fn update_entity_script(
         &mut self,
         entity_id: hecs::Entity,
-        script_name: &str,
+        tags: &Vec<String>,
         world: &mut World,
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
-        log_once::debug_once!("Update entity script name: {}", script_name);
 
-        Ok(())
+        Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 }
 
@@ -236,8 +210,7 @@ pub fn convert_entity_to_group(
 
             let script_node = if let Ok(script) = world.get::<&ScriptComponent>(entity_id) {
                 Some(EntityNode::Script {
-                    name: script.name.clone(),
-                    path: script.path.clone(),
+                    tags: script.tags.clone(),
                 })
             } else {
                 None
@@ -280,15 +253,15 @@ pub fn attach_script_to_entity(
     Ok(())
 }
 
-pub enum ScriptAction {
-    AttachScript {
-        script_path: PathBuf,
-        script_name: String,
-    },
-    CreateAndAttachScript {
-        script_path: PathBuf,
-        script_name: String,
-    },
-    RemoveScript,
-    EditScript,
-}
+// pub enum ScriptAction {
+//     AttachScript {
+//         script_path: PathBuf,
+//         script_name: String,
+//     },
+//     CreateAndAttachScript {
+//         script_path: PathBuf,
+//         script_name: String,
+//     },
+//     RemoveScript,
+//     EditScript,
+// }

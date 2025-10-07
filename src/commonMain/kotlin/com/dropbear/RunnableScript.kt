@@ -3,8 +3,7 @@ package com.dropbear
 /**
  * The basic interface that all classes implement for the class to be run.
  */
-interface RunnableScript {
-    var engine: DropbearEngine
+sealed class RunnableScript {
     /**
      * A function that is run once during the lifetime of the entity.
      *
@@ -12,10 +11,10 @@ interface RunnableScript {
      *
      * ALl classes that implement RunnableScript need to implement the load function.
      */
-    fun load()
+    abstract fun load()
 
     /**
      * A function that is run every frame during the lifetime of the entity.
      */
-    fun update()
+    abstract fun update()
 }

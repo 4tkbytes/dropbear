@@ -1,0 +1,7 @@
+headers = dropbear.h
+headerFilter = dropbear.h
+package = com.dropbear.ffi.native
+
+---
+
+long long dropbear_get_entity(const char* param);

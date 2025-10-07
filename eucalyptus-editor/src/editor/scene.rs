@@ -106,18 +106,11 @@ impl Scene for Editor {
                     .iter()
                 {
                     log_once::debug_once!(
-                        "Script Entity -> id: {:?}, component: {:?}",
+                        "Script Entity -> id: {:?}, tags: {:?}",
                         entity_id,
-                        script
+                        script.tags
                     );
-                    script.name = script
-                        .path
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string();
-                    script_entities.push((entity_id, script.name.clone()));
+                    script_entities.push((entity_id, script.tags.clone()));
                 }
             }
 
@@ -134,8 +127,7 @@ impl Scene for Editor {
                     dt,
                 ) {
                     log_once::warn_once!(
-                        "Failed to update script '{}' for entity {:?}: {}",
-                        script_name,
+                        "Failed to update script for entity {:?}: {}",
                         entity_id,
                         e
                     );

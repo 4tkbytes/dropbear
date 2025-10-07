@@ -17,5 +17,7 @@ pub(crate) fn show_menu_bar(
             log::info!("Show Entities Loaded under Debug Menu is clicked");
             *signal = Signal::LogEntities;
         }
+
+        
     });
 }

@@ -6,7 +6,6 @@ use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
-use eucalyptus_core::scripting::{ScriptAction, TEMPLATE_SCRIPT};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::Vec3;
@@ -585,70 +584,30 @@ impl InspectableComponent for ScriptComponent {
         signal: &mut Signal,
         label: &mut String,
     ) {
-        let script_loc = self.path.to_str().unwrap_or("").to_string();
-
         ui.vertical(|ui| {
             CollapsingHeader::new("Scripting")
                 .default_open(true)
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if ui.button("Browse").clicked()
-                            && let Some(script_file) = rfd::FileDialog::new()
-                                .add_filter("Typescript", &["ts"])
-                                .pick_file()
-                            {
-                                let script_name = script_file
-                                    .file_stem()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                                    .to_string();
-                                *signal = Signal::ScriptAction(ScriptAction::AttachScript {
-                                    script_path: script_file,
-                                    script_name,
+                    CollapsingHeader::new("Tags")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let mut local_del: Option<usize> = None;
+                            for (i, tag) in self.tags.iter_mut().enumerate() {
+                                let current_width = ui.available_width();
+                                ui.horizontal(|ui| {
+                                    ui.add_sized([current_width*70.0/100.0, 20.0], TextEdit::singleline(tag));
+                                    if ui.button("🗑️").clicked() {
+                                        local_del = Some(i);
+                                    }
                                 });
                             }
-
-                        if ui.button("New").clicked()
-                            && let Some(script_path) = rfd::FileDialog::new()
-                                .add_filter("TypeScript", &["ts"])
-                                .set_file_name(format!("{}_script.ts", label))
-                                .save_file()
-                            {
-                                match std::fs::write(&script_path, TEMPLATE_SCRIPT) {
-                                    Ok(_) => {
-                                        let script_name = script_path
-                                            .file_stem()
-                                            .unwrap_or_default()
-                                            .to_string_lossy()
-                                            .to_string();
-                                        *signal = Signal::ScriptAction(ScriptAction::CreateAndAttachScript {
-                                            script_path,
-                                            script_name,
-                                        });
-                                    },
-                                    Err(e) => {
-                                        warn!("Failed to create script file: {}", e);
-                                    },
-                                }
+                            if let Some(i) = local_del {
+                                self.tags.remove(i);
                             }
-                    });
-
-                    ui.separator();
-
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Script Location:");
-                        ui.label(script_loc);
-                    });
-
-                    if ui.button("Remove").clicked() {
-                        *signal = Signal::ScriptAction(ScriptAction::RemoveScript);
-                    }
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if ui.button("Edit Script").clicked() {
-                            *signal = Signal::ScriptAction(ScriptAction::EditScript);
-                        }
-                    });
+                            if ui.button("➕ Add").clicked() {
+                                self.tags.push(String::new())
+                            }
+                        });
                 });
         });
     }

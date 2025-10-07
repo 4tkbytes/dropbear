@@ -8,7 +8,6 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, scripting, success, success_without_console, warn, warn_without_console};
 use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
-use eucalyptus_core::scripting::ScriptAction;
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 use crate::editor::{ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction};
 
@@ -93,210 +92,210 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::ScriptAction(action) => match action {
-                ScriptAction::AttachScript {
-                    script_path,
-                    script_name,
-                } => {
-                    if let Some(selected_entity) = self.selected_entity {
-                        match scripting::move_script_to_src(script_path) {
-                            Ok(moved_path) => {
-                                let new_script = ScriptComponent {
-                                    name: script_name.clone(),
-                                    path: moved_path.clone(),
-                                };
-
-                                let replaced = {
-                                    if let Ok(mut sc) = self.world.get::<&mut ScriptComponent>(selected_entity) {
-                                        sc.name = new_script.name.clone();
-                                        sc.path = new_script.path.clone();
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                };
-
-                                if !replaced {
-                                    match scripting::attach_script_to_entity(
-                                        &mut self.world,
-                                        selected_entity,
-                                        new_script.clone(),
-                                    ) {
-                                        Ok(_) => {
-                                        }
-                                        Err(e) => {
-                                            self.signal = Signal::None;
-                                            fatal!("Failed to attach script to entity {:?}: {}",
-                                                selected_entity,
-                                                e);
-                                            return Err(anyhow::anyhow!(e));
-                                        }
-                                    }
-                                }
-
-                                {
-                                    if let Err(e) = scripting::convert_entity_to_group(
-                                        &mut self.world,
-                                        selected_entity,
-                                    ) {
-                                        log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
-                                    }
-                                }
-
-                                success!(
-                                    "{} script '{}' at {} to entity {:?}",
-                                    if replaced { "Reattached" } else { "Attached" },
-                                    script_name,
-                                    moved_path.display(),
-                                    selected_entity
-                                );
-                            }
-                            Err(e) => {
-                                fatal!("Move failed: {}", e);
-                            }
-                        }
-                    } else {
-                        fatal!("AttachScript requested but no entity is selected");
-                    }
-
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                ScriptAction::CreateAndAttachScript {
-                    script_path,
-                    script_name,
-                } => {
-                    if let Some(selected_entity) = self.selected_entity {
-                        let new_script = ScriptComponent {
-                            name: script_name.clone(),
-                            path: script_path.clone(),
-                        };
-
-                        let replaced = {
-                            if let Ok(mut sc) = self.world.get::<&mut ScriptComponent>(selected_entity) {
-                                sc.name = new_script.name.clone();
-                                sc.path = new_script.path.clone();
-                                true
-                            } else {
-                                false
-                            }
-                        };
-
-                        if !replaced {
-                            match scripting::attach_script_to_entity(
-                                &mut self.world,
-                                selected_entity,
-                                new_script.clone(),
-                            ) {
-                                Ok(_) => {
-                                }
-                                Err(e) => {
-                                    self.signal = Signal::None;
-                                    fatal!("Failed to attach new script: {}", e);
-                                    return Err(anyhow::anyhow!(e));
-                                }
-                            }
-                        }
-
-                        {
-                            if let Err(e) = scripting::convert_entity_to_group(
-                                &mut self.world,
-                                selected_entity,
-                            ) {
-                                log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
-                            }
-                        }
-
-                        success!(
-                            "{} new script '{}' at {} to entity {:?}",
-                            if replaced { "Replaced" } else { "Attached" },
-                            script_name,
-                            script_path.display(),
-                            selected_entity
-                        );
-                    } else {
-                        warn_without_console!("No selected entity to attach new script");
-                        log::warn!("CreateAndAttachScript requested but no entity is selected");
-                    }
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                ScriptAction::RemoveScript => {
-                    if let Some(selected_entity) = self.selected_entity {
-                        let mut success = false;
-                        let mut comp = ScriptComponent::default();
-                        {
-                            if let Ok(script) = self.world
-                                .remove_one::<ScriptComponent>(selected_entity)
-                            {
-                                success!("Removed script from entity {:?}", selected_entity);
-                                success = true;
-                                comp = script.clone();
-                            } else {
-                                warn!("No script component found on entity {:?}", selected_entity);
-                            }
-                            match self.world.insert_one(selected_entity, ScriptComponent::default()) {
-                                Ok(_) => {
-                                    log::debug!("Inserted default script component");
-                                }
-                                Err(e) => {
-                                    log::warn!("No such entity is available. Additional info: {}", e);
-                                }
-                            }
-                        }
-
-                        if success {
-                            if let Err(e) = scripting::convert_entity_to_group(
-                                &mut self.world,
-                                selected_entity,
-                            ) {
-                                log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
-                            }
-                            log::debug!("Pushing remove component to undo stack");
-                            UndoableAction::push_to_undo(
-                                &mut self.undo_stack,
-                                UndoableAction::RemoveComponent(
-                                    selected_entity,
-                                    Box::new(ComponentType::Script(comp)),
-                                ),
-                            );
-                        }
-                    } else {
-                        warn!("No entity selected to remove script from");
-                    }
-
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                ScriptAction::EditScript => {
-                    if let Some(selected_entity) = self.selected_entity {
-                        let script_opt = {
-                            if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity) {
-                                q.get().cloned()
-                            } else {
-                                None
-                            }
-                        };
-
-                        if let Some(script) = script_opt {
-                            match open::that(script.path.clone()) {
-                                Ok(()) => {
-                                    success!("Opened {}", script.name)
-                                }
-                                Err(e) => {
-                                    warn!("Error while opening {}: {}", script.name, e);
-                                }
-                            }
-                        } else {
-                            warn!("No script component found on entity {:?}", selected_entity);
-                        }
-                    } else {
-                        warn!("No entity selected to edit script");
-                    }
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-            },
+            // Signal::ScriptAction(action) => match action {
+            //     ScriptAction::AttachScript {
+            //         script_path,
+            //         script_name,
+            //     } => {
+            //         if let Some(selected_entity) = self.selected_entity {
+            //             match scripting::move_script_to_src(script_path) {
+            //                 Ok(moved_path) => {
+            //                     let new_script = ScriptComponent {
+            //                         name: script_name.clone(),
+            //                         path: moved_path.clone(),
+            //                     };
+            // 
+            //                     let replaced = {
+            //                         if let Ok(mut sc) = self.world.get::<&mut ScriptComponent>(selected_entity) {
+            //                             sc.name = new_script.name.clone();
+            //                             sc.path = new_script.path.clone();
+            //                             true
+            //                         } else {
+            //                             false
+            //                         }
+            //                     };
+            // 
+            //                     if !replaced {
+            //                         match scripting::attach_script_to_entity(
+            //                             &mut self.world,
+            //                             selected_entity,
+            //                             new_script.clone(),
+            //                         ) {
+            //                             Ok(_) => {
+            //                             }
+            //                             Err(e) => {
+            //                                 self.signal = Signal::None;
+            //                                 fatal!("Failed to attach script to entity {:?}: {}",
+            //                                     selected_entity,
+            //                                     e);
+            //                                 return Err(anyhow::anyhow!(e));
+            //                             }
+            //                         }
+            //                     }
+            // 
+            //                     {
+            //                         if let Err(e) = scripting::convert_entity_to_group(
+            //                             &mut self.world,
+            //                             selected_entity,
+            //                         ) {
+            //                             log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+            //                         }
+            //                     }
+            // 
+            //                     success!(
+            //                         "{} script '{}' at {} to entity {:?}",
+            //                         if replaced { "Reattached" } else { "Attached" },
+            //                         script_name,
+            //                         moved_path.display(),
+            //                         selected_entity
+            //                     );
+            //                 }
+            //                 Err(e) => {
+            //                     fatal!("Move failed: {}", e);
+            //                 }
+            //             }
+            //         } else {
+            //             fatal!("AttachScript requested but no entity is selected");
+            //         }
+            // 
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            //     ScriptAction::CreateAndAttachScript {
+            //         script_path,
+            //         script_name,
+            //     } => {
+            //         if let Some(selected_entity) = self.selected_entity {
+            //             let new_script = ScriptComponent {
+            //                 name: script_name.clone(),
+            //                 path: script_path.clone(),
+            //             };
+            // 
+            //             let replaced = {
+            //                 if let Ok(mut sc) = self.world.get::<&mut ScriptComponent>(selected_entity) {
+            //                     sc.name = new_script.name.clone();
+            //                     sc.path = new_script.path.clone();
+            //                     true
+            //                 } else {
+            //                     false
+            //                 }
+            //             };
+            // 
+            //             if !replaced {
+            //                 match scripting::attach_script_to_entity(
+            //                     &mut self.world,
+            //                     selected_entity,
+            //                     new_script.clone(),
+            //                 ) {
+            //                     Ok(_) => {
+            //                     }
+            //                     Err(e) => {
+            //                         self.signal = Signal::None;
+            //                         fatal!("Failed to attach new script: {}", e);
+            //                         return Err(anyhow::anyhow!(e));
+            //                     }
+            //                 }
+            //             }
+            // 
+            //             {
+            //                 if let Err(e) = scripting::convert_entity_to_group(
+            //                     &mut self.world,
+            //                     selected_entity,
+            //                 ) {
+            //                     log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+            //                 }
+            //             }
+            // 
+            //             success!(
+            //                 "{} new script '{}' at {} to entity {:?}",
+            //                 if replaced { "Replaced" } else { "Attached" },
+            //                 script_name,
+            //                 script_path.display(),
+            //                 selected_entity
+            //             );
+            //         } else {
+            //             warn_without_console!("No selected entity to attach new script");
+            //             log::warn!("CreateAndAttachScript requested but no entity is selected");
+            //         }
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            //     ScriptAction::RemoveScript => {
+            //         if let Some(selected_entity) = self.selected_entity {
+            //             let mut success = false;
+            //             let mut comp = ScriptComponent::default();
+            //             {
+            //                 if let Ok(script) = self.world
+            //                     .remove_one::<ScriptComponent>(selected_entity)
+            //                 {
+            //                     success!("Removed script from entity {:?}", selected_entity);
+            //                     success = true;
+            //                     comp = script.clone();
+            //                 } else {
+            //                     warn!("No script component found on entity {:?}", selected_entity);
+            //                 }
+            //                 match self.world.insert_one(selected_entity, ScriptComponent::default()) {
+            //                     Ok(_) => {
+            //                         log::debug!("Inserted default script component");
+            //                     }
+            //                     Err(e) => {
+            //                         log::warn!("No such entity is available. Additional info: {}", e);
+            //                     }
+            //                 }
+            //             }
+            // 
+            //             if success {
+            //                 if let Err(e) = scripting::convert_entity_to_group(
+            //                     &mut self.world,
+            //                     selected_entity,
+            //                 ) {
+            //                     log::warn!("convert_entity_to_group failed (non-fatal): {}", e);
+            //                 }
+            //                 log::debug!("Pushing remove component to undo stack");
+            //                 UndoableAction::push_to_undo(
+            //                     &mut self.undo_stack,
+            //                     UndoableAction::RemoveComponent(
+            //                         selected_entity,
+            //                         Box::new(ComponentType::Script(comp)),
+            //                     ),
+            //                 );
+            //             }
+            //         } else {
+            //             warn!("No entity selected to remove script from");
+            //         }
+            // 
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            //     ScriptAction::EditScript => {
+            //         if let Some(selected_entity) = self.selected_entity {
+            //             let script_opt = {
+            //                 if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(selected_entity) {
+            //                     q.get().cloned()
+            //                 } else {
+            //                     None
+            //                 }
+            //             };
+            // 
+            //             if let Some(script) = script_opt {
+            //                 match open::that(script.path.clone()) {
+            //                     Ok(()) => {
+            //                         success!("Opened {}", script.name)
+            //                     }
+            //                     Err(e) => {
+            //                         warn!("Error while opening {}: {}", script.name, e);
+            //                     }
+            //                 }
+            //             } else {
+            //                 warn!("No script component found on entity {:?}", selected_entity);
+            //             }
+            //         } else {
+            //             warn!("No entity selected to edit script");
+            //         }
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            // },
             Signal::Play => {
                 if matches!(self.editor_state, EditorState::Playing) {
                     fatal!("Unable to play: already in playing mode");
@@ -331,43 +330,21 @@ impl SignalController for Editor {
 
                     for (entity_id, script) in script_entities {
                         log::debug!(
-                            "Initialising entity script [{}] from path: {}",
-                            script.name,
-                            script.path.display()
+                            "Initialising entity script for entity {:?} with tags: {:?}",
+                            entity_id,
+                            script.tags
                         );
 
-                        let bytes = match std::fs::read_to_string(&script.path) {
-                            Ok(val) => val,
-                            Err(e) => {
-                                self.signal = Signal::None;
-                                fatal!(
-                                    "Unable to read script {} to bytes because {}",
-                                    &script.path.display(),
-                                    e
-                                );
-                                return Err(anyhow::anyhow!(e));
-                            }
-                        };
-
-                        match self.script_manager.load_script(
-                            &script
-                                .path
-                                .file_name()
-                                .unwrap()
-                                .to_string_lossy()
-                                .to_string(),
-                            bytes,
-                        ) {
-                            Ok(script_name) => {
+                        match self.script_manager.load_script() {
+                            Ok(_) => {
                                 if let Err(e) = self.script_manager.init_entity_script(
                                     entity_id,
-                                    &script_name,
+                                    &script.tags,
                                     &mut self.world,
                                     &self.input_state,
                                 ) {
                                     log::warn!(
-                                        "Failed to initialise script '{}' for entity {:?}: {}",
-                                        script.name,
+                                        "Failed to initialise script for entity {:?}: {}",
                                         entity_id,
                                         e
                                     );
@@ -382,7 +359,7 @@ impl SignalController for Editor {
                             Err(e) => {
                                 // todo: proper error menu
                                 self.signal = Signal::StopPlaying;
-                                fatal!("Failed to load script '{}': {}", script.name, e);
+                                fatal!("Failed to load script for {:?} with tags {:?} because {}", entity_id, script.tags, e);
                             }
                         }
                     }
@@ -415,28 +392,28 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::CameraAction(action) => match action {
-                CameraAction::SetPlayerTarget { .. } => {
-                    log::warn!("Deprecated: CameraAction::SetPlayerTarget");
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                CameraAction::ClearPlayerTarget => {
-                    log::warn!("Deprecated: CameraAction::ClearPlayerTarget");
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                CameraAction::SetCurrentPositionAsOffset(_) => {
-                    // if let Ok((camera, target)) = self.world.query_one_mut::<(&Camera, &mut CameraFollowTarget)>(*entity) {
-                    //     target.offset = camera.target
-                    // } else {
-                    //     warn!("Unable to query camera to set current camera position to offset");
-                    // }
-                    log::warn!("Deprecated: CameraAction::SetCurrentPositionAsOffset");
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-            },
+            // Signal::CameraAction(action) => match action {
+            //     CameraAction::SetPlayerTarget { .. } => {
+            //         log::warn!("Deprecated: CameraAction::SetPlayerTarget");
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            //     CameraAction::ClearPlayerTarget => {
+            //         log::warn!("Deprecated: CameraAction::ClearPlayerTarget");
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            //     CameraAction::SetCurrentPositionAsOffset(_) => {
+            //         // if let Ok((camera, target)) = self.world.query_one_mut::<(&Camera, &mut CameraFollowTarget)>(*entity) {
+            //         //     target.offset = camera.target
+            //         // } else {
+            //         //     warn!("Unable to query camera to set current camera position to offset");
+            //         // }
+            //         log::warn!("Deprecated: CameraAction::SetCurrentPositionAsOffset");
+            //         self.signal = Signal::None;
+            //         Ok(())
+            //     }
+            // },
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {

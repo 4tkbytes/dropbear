@@ -28,7 +28,7 @@ use eucalyptus_core::{camera::{
     CameraAction, CameraComponent, CameraType, DebugCamera,
 }, states::WorldLoadingStatus};
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
+use eucalyptus_core::scripting::{ScriptManager};
 use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
@@ -899,12 +899,12 @@ fn show_entity_tree(
                     }
                 });
             }
-            EntityNode::Script { name, path: _ } => {
+            EntityNode::Script { tags } => {
                 ui.horizontal(|ui| {
                     handle.ui(ui, |ui| {
                         ui.label("📜");
                     });
-                    ui.label(name.to_string());
+                    ui.label("Script");
                 });
             }
             EntityNode::Group {
@@ -1168,10 +1168,9 @@ pub enum Signal {
     Paste(SceneEntity),
     Delete,
     Undo,
-    ScriptAction(ScriptAction),
-    #[allow(dead_code)]
+    // ScriptAction(ScriptAction),
     // not actions required because follow target is set through scripting. 
-    CameraAction(CameraAction),
+    // CameraAction(CameraAction),
     Play,
     StopPlaying,
     AddComponent(hecs::Entity, EntityType),
