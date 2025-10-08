@@ -48,7 +48,7 @@ use dropbear_engine::model::{ModelId};
 
 pub struct Editor {
     scene_command: SceneCommand,
-    pub world: World,
+    pub world: Box<World>,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -149,7 +149,7 @@ impl Editor {
             is_viewport_focused: false,
             // is_cursor_locked: false,
             window: None,
-            world: World::new(),
+            world: Box::new(World::new()),
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),

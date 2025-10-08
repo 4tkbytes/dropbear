@@ -6,6 +6,9 @@ license-file.workspace = true
 repository.workspace = true
 readme = "README.md"
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 anyhow.workspace = true
 bincode.workspace = true

@@ -52,3 +52,7 @@ Cargo.lock
 *.pdb
 
 .idea/
+
+src/*.dll
+src/*.dylib
+src/*.so

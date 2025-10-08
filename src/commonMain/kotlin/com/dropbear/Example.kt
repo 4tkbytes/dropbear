@@ -9,7 +9,15 @@ fun playerMovement(engine: DropbearEngine, entityId: EntityId, deltaTime: Double
 }
 
 class Player: System {
-    override fun update(engine: DropbearEngine, entityId: EntityId, deltaTime: Float) {
+    override fun load(engine: DropbearEngine) {
+        TODO("Not yet implemented")
+    }
+
+    override fun update(engine: DropbearEngine, deltaTime: Float) {
+        TODO("Not yet implemented")
+    }
+
+    override fun destroy(engine: DropbearEngine) {
         TODO("Not yet implemented")
     }
 }
@@ -24,3 +32,5 @@ class Metadata : ProjectScriptingMetadata {
         )
     }
 }
+
+fun getProjectScriptMetadata(): ProjectScriptingMetadata = Metadata()

@@ -17,7 +17,7 @@ import com.dropbear.math.Vector3D
  * To edit any values part of the entity, take a look at the functions provided
  * by [EntityRef], which will require a reference to [DropbearEngine] to push the commands.
  */
-class EntityRef(val id: EntityId = EntityId(-1)) {
+class EntityRef(val id: EntityId = EntityId(0u)) {
     /**
      * Sets the position of the entity by a Vector
      */

@@ -1,5 +1,7 @@
 package com.dropbear
 
-fun interface System {
-    fun update(engine: DropbearEngine, current_entity: EntityId, deltaTime: Float)
+interface System {
+    fun load(engine: DropbearEngine)
+    fun update(engine: DropbearEngine, deltaTime: Float)
+    fun destroy(engine: DropbearEngine)
 }

@@ -29,12 +29,11 @@ kotlin {
         compilations.getByName("main") {
             cinterops {
                 val dropbear by creating {
-                    defFile(project.file("src/nativeInterop/cinterop/dropbear.def"))
-                    includeDirs.headerFilterOnly(project.file("src/nativeInterop/cinterop"))
+                    defFile(project.file("src/dropbear.def"))
+                    includeDirs.headerFilterOnly(project.file("headers"))
                 }
             }
         }
-
         binaries {
             sharedLib {
                 baseName = "dropbear"
@@ -43,6 +42,11 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            dependencies {
+                implementation("co.touchlab:kermit:2.0.4")
+            }
+        }
         nativeMain {
             dependencies {
                 implementation(libs.kotlinxSerializationJson)

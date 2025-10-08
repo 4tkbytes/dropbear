@@ -12,83 +12,12 @@ use crate::ptr::SafePointer;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
-static CONTEXT: LazyLock<DropbearScriptingAPIContext> = LazyLock::new(|| DropbearScriptingAPIContext::new());
-
-pub struct DropbearScriptingAPIContext {
-    pub current_entity: Option<Entity>,
-    // fyi: im pretty sure this is safe because I can just null with [`Option::None`]
-    current_world: Option<SafePointer<World>>,
-    pub current_input: Option<InputState>,
-    pub persistent_data: HashMap<String, Value>,
-    pub frame_data: HashMap<String, Value>,
-}
-
-impl Default for DropbearScriptingAPIContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl DropbearScriptingAPIContext {
-    pub fn new() -> Self {
-        Self {
-            current_entity: None,
-            current_world: None,
-            current_input: None,
-            persistent_data: HashMap::new(),
-            frame_data: HashMap::new(),
-        }
-    }
-
-    pub fn set_context(&mut self, entity: Entity, world: &mut World, input: &InputState) {
-        self.current_entity = Some(entity);
-        self.current_world = Some(SafePointer::new(world));
-        self.current_input = Some(input.clone());
-    }
-
-    pub fn clear_context(&mut self) {
-        self.current_entity = None;
-        self.current_world = None;
-        self.current_input = None;
-        self.frame_data.clear();
-    }
-
-    pub fn get_current_entity(&self) -> Option<Entity> {
-        self.current_entity
-    }
-
-    pub fn get_input(&self) -> Option<&InputState> {
-        self.current_input.as_ref()
-    }
-
-    pub fn set_persistent_data(&mut self, key: String, value: Value) {
-        self.persistent_data.insert(key, value);
-    }
-
-    pub fn get_persistent_data(&self, key: &str) -> Option<&Value> {
-        self.persistent_data.get(key)
-    }
-
-    pub fn set_frame_data(&mut self, key: String, value: Value) {
-        self.frame_data.insert(key, value);
-    }
-
-    pub fn get_frame_data(&self, key: &str) -> Option<&Value> {
-        self.frame_data.get(key)
-    }
-
-    pub fn cleanup_entity_data(&mut self, entity: Entity) {
-        let entity_prefix = format!("entity_{:?}_", entity);
-        self.persistent_data
-            .retain(|k, _| !k.starts_with(&entity_prefix));
-    }
-}
-
 pub struct ScriptManager;
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        Err(anyhow::anyhow!("it aint ready yet bozo"))
+        Ok(Self)
+        // Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 
     pub fn load_script(
@@ -101,7 +30,7 @@ impl ScriptManager {
     pub fn init_entity_script(
         &mut self,
         entity_id: hecs::Entity,
-        tags: &Vec<String>,
+        tags: Vec<String>,
         world: &mut World,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
@@ -112,7 +41,7 @@ impl ScriptManager {
     pub fn update_entity_script(
         &mut self,
         entity_id: hecs::Entity,
-        tags: &Vec<String>,
+        tags: Vec<String>,
         world: &mut World,
         input_state: &InputState,
         dt: f32,

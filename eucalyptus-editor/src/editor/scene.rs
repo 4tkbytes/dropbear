@@ -52,7 +52,7 @@ impl Scene for Editor {
         if let Some(mut receiver) = self.world_receiver.take() {
             self.show_project_loading_window(&graphics.shared.get_egui_context());
             if let Ok(loaded_world) = receiver.try_recv() {
-                self.world = loaded_world;
+                self.world = Box::new(loaded_world);
                 self.is_world_loaded.mark_project_loaded();
                 
                 if let Some(dock_state_shared) = &self.dock_state_shared &&
@@ -121,7 +121,7 @@ impl Scene for Editor {
             for (entity_id, script_name) in script_entities {
                 if let Err(e) = self.script_manager.update_entity_script(
                     entity_id,
-                    &script_name,
+                    script_name.clone(),
                     &mut self.world,
                     &self.input_state,
                     dt,
@@ -174,46 +174,6 @@ impl Scene for Editor {
                 camera.aspect = new_aspect;
             }
         }
-
-        // let camera_follow_data: Vec<(Entity, String, glam::Vec3)> = {
-        //     self.world
-        //         .query::<(&Camera, &CameraComponent)>()
-        //         .iter()
-        //         .filter_map(|(entity_id, (_, _))| {
-        //             follow_target.map(|target| {
-        //                 (
-        //                     entity_id,
-        //                     target.follow_target.clone(),
-        //                     target.offset.as_vec3()
-        //                 )
-        //             })
-        //         })
-        //         .collect()
-        // };
-
-
-        // for (camera_entity, target_label, offset) in camera_follow_data {
-        //     let target_position = {
-        //         self.world
-        //             .query::<(&AdoptedEntity, &Transform)>()
-        //             .iter()
-        //             .find_map(|(_, (adopted, transform))| {
-        //                 if adopted.model.label == target_label {
-        //                     Some(transform.position)
-        //                 } else {
-        //                     None
-        //                 }
-        //             })
-        //     };
-        // 
-        // 
-        //     if let Some(pos) = target_position 
-        //         && let Ok(mut query) = self.world.query_one::<&mut Camera>(camera_entity)
-        //         && let Some(camera) = query.get() {
-        //             camera.eye = pos + offset.as_dvec3();
-        //             camera.target = pos;
-        //         }
-        // }
 
         {
             for (_entity_id, (camera, component)) in self.world

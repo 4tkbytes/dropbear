@@ -26,18 +26,17 @@ With Unix systems (macOS not tested), you will have to download a couple depende
 
 <!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
 
-### Dependencies
 
 ```bash
 # ubuntu
 sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-utils
 
 # i use arch btw
-sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp
+sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp jdk21-openjdk
 
 ```
 
-### Engine Build
+Then run this to build the project
 
 ```bash
 git clone git@github.com:4tkbytes/dropbear
@@ -45,6 +44,7 @@ cd dropbear
 
 # this will build all the projects in the workspace
 cargo build
+./gradlew build
 ```
 
 [//]: # (# ensure submodules are checked-out)
@@ -64,7 +64,14 @@ If you do not want to build it locally, you are able to download the latest acti
 Despite the dropbear-engine (and other components) being made in Rust, the editor has chosen the scripting language of choice to be `Kotlin`
 because of previous experience and that Kotlin is more multiplatform than Swift. 
 
-Java is possible (as the JVM runs the script), however it is not officially supported and Kotlin is recommended. . 
+The dropbear engine uses Kotlin Multiplatform, which allows the cooked up product to be compatible with all platforms 
+KMP can support, which includes mobile, WASM and desktop. Because the editor is only available on desktop, the JVM is 
+used to evaluate the scripts as it allows for hot-reloading (not made yet). 
+
+It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. If you are a normal joe, 
+then just use the standard IntelliJ IDEA. 
+
+## Documentation
 
 API documentation and articles are available at (todo)
 
@@ -77,11 +84,11 @@ API documentation and articles are available at (todo)
 
 <sup>1</sup> Will never be implemented; not intended for that platform.
 
-<sup>2</sup>  Made some progress on implementing, but currently a WIP.
+<sup>2</sup> Made some progress on implementing, but currently a WIP.
 
 ## Contributions
 
-Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
+Yeah, yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
 
 # Licensing
 
