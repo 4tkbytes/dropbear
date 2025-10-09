@@ -121,11 +121,10 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     dependsOn("compileKotlinJvm")
 }
 
-val dotenv = io.github.cdimascio.dotenv.dotenv()
-
 publishing {
     repositories {
         maven {
+            val dotenv = io.github.cdimascio.dotenv.dotenv()
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
             credentials {
