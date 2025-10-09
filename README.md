@@ -23,14 +23,14 @@ If you might have not realised, all the crates/projects names are after Australi
 
 To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
 
-With Unix systems (macOS not tested), you will have to download a couple dependencies if building locally:
+With Unix systems (macOS not tested), you will have to download a couple of dependencies if building locally:
 
 <!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
 
 
 ```bash
 # ubuntu
-sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-utils
+sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-utils openjdk-21-jdk
 
 # i use arch btw
 sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp jdk21-openjdk
@@ -54,6 +54,12 @@ cargo build
 [//]: # (git submodule init)
 
 [//]: # (git submodule update)
+
+> [!TIP]
+> During the development of your game, you should download JetBrains IntelliJ (for kotlin) for the best support. 
+> 
+> For a development build of the eucalyptus editor, it is recommended that you use JetBrains IntelliJ (for jvm) and 
+> JetBrains RustRover (for rust)
 
 ### Prebuilt
 

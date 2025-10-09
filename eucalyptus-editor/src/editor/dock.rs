@@ -74,6 +74,10 @@ pub struct DraggedAsset {
 pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
     LazyLock::new(|| Mutex::new(StaticallyKept::default()));
 
+// Separate static for REPL to avoid deadlocks
+pub static KOTLIN_REPL: LazyLock<Mutex<Option<crate::editor::repl::KotlinREPL>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 /// Variables kept statically.
 ///
 /// The entire module (including the tab viewer) due to it
@@ -107,6 +111,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ModelEntityList => "Model/Entity List".into(),
             EditorTab::AssetViewer => "Asset Viewer".into(),
             EditorTab::ResourceInspector => "Resource Inspector".into(),
+            EditorTab::KotlinREPL => "Kotlin REPL".into(),
         }
     }
 
@@ -1024,6 +1029,17 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
                 }
             }
+            EditorTab::KotlinREPL => {
+                // Use separate static to avoid deadlock with TABS_GLOBAL
+                let mut repl_lock = KOTLIN_REPL.lock();
+                if repl_lock.is_none() {
+                    *repl_lock = Some(crate::editor::repl::KotlinREPL::new());
+                }
+                
+                if let Some(repl) = repl_lock.as_mut() {
+                    repl.ui(ui);
+                }
+            }
         }
 
         let mut menu_action: Option<EditorTabMenuAction> = None;
@@ -1073,6 +1089,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if ui.selectable_label(false, "Viewport Option").clicked() {
                                 menu_action = Some(EditorTabMenuAction::ViewportOption);
                             }
+                        }
+                        EditorTab::KotlinREPL => {
+                            // No context menu actions for REPL tab yet
                         }
                     }
                 })
