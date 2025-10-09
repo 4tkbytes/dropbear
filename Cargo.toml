@@ -6,7 +6,7 @@ package.repository = "https://github.com/4tkbytes/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
-members = [ "dropbear-engine", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor"]
+members = [ "dropbear-engine", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta"]
 # members = ["dropbear-engine", "eucalyptus-core", "eucalyptus-editor", "redback-runtime"]
 
 
@@ -61,6 +61,8 @@ gltf = "1"
 os_info = "3.12"
 rustc_version_runtime = "0.3"
 jni = { version = "0.21", features = ["invocation"] }
+tree-sitter = "0.22"
+tree-sitter-kotlin = "0.3.8"
 
 [workspace.dependencies.image]
 version = "0.25"

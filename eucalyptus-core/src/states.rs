@@ -242,11 +242,26 @@ pub enum Node {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct File {
-    pub name: String,
-    pub path: PathBuf,
-    pub resource_type: Option<ResourceType>,
+pub enum File {
+    #[default]
+    Unknown,
+    ResourceFile {
+        name: String,
+        path: PathBuf,
+        resource_type: ResourceType,
+    },
+    SourceFile {
+        name: String,
+        path: PathBuf,
+    },
 }
+
+// #[derive(Default, Debug, Serialize, Deserialize, Clone)]
+// pub struct File {
+//     pub name: String,
+//     pub path: PathBuf,
+//     pub resource_type: Option<ResourceType>,
+// }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Folder {
@@ -259,6 +274,8 @@ pub struct Folder {
 #[derive(Debug, Serialize, Deserialize, Clone, Hash)]
 pub enum ResourceType {
     Unknown,
+    Config,
+    Script,
     Model,
     Thumbnail,
     Texture,
@@ -273,6 +290,8 @@ impl Display for ResourceType {
             ResourceType::Texture => "texture",
             ResourceType::Shader => "shader",
             ResourceType::Thumbnail => "thumbnail",
+            ResourceType::Script => "script",
+            ResourceType::Config => "eucalyptus project config"
         };
         write!(f, "{}", str)
     }
@@ -406,13 +425,17 @@ fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_
                     .unwrap_or_default();
 
                 let resource_type = if parent_folder.contains("model") {
-                    Some(ResourceType::Model)
+                    ResourceType::Model
                 } else if parent_folder.contains("texture") {
-                    Some(ResourceType::Texture)
+                    ResourceType::Texture
                 } else if parent_folder.contains("shader") {
-                    Some(ResourceType::Shader)
+                    ResourceType::Shader
+                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase()) == Some("kt".to_string()) {
+                    ResourceType::Script
+                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase().contains("eu")).unwrap_or_default() {
+                    ResourceType::Config
                 } else {
-                    Some(ResourceType::Unknown)
+                    ResourceType::Unknown
                 };
 
                 // Store relative path from the project root instead of absolute path
@@ -421,7 +444,7 @@ fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_
                     .unwrap_or(&entry_path)
                     .to_path_buf();
 
-                nodes.push(Node::File(File {
+                nodes.push(Node::File(File::ResourceFile {
                     name,
                     path: relative_path,
                     resource_type,
@@ -439,8 +462,7 @@ pub enum EntityNode {
         name: String,
     },
     Script {
-        name: String,
-        path: PathBuf,
+        tags: Vec<String>
     },
     Light {
         id: hecs::Entity,
@@ -460,8 +482,7 @@ pub enum EntityNode {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ScriptComponent {
-    pub name: String,
-    pub path: PathBuf,
+    pub tags: Vec<String>
 }
 
 impl EntityNode {
@@ -484,8 +505,7 @@ impl EntityNode {
                     name: name.clone(),
                 },
                 EntityNode::Script {
-                    name: script.name.clone(),
-                    path: script.path.clone(),
+                    tags: script.tags.clone(),
                 },
             ];
 
@@ -892,8 +912,7 @@ impl SceneConfig {
 
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
                             // if let (Some(target_label), Some(offset)) = (
                             //     &camera_config.follow_target_entity_label,
@@ -924,8 +943,7 @@ impl SceneConfig {
                     } else {
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
                             world.spawn((adopted, transform, script, entity_config.properties.clone()))
                         } else {
@@ -977,20 +995,8 @@ impl SceneConfig {
 
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
-                            // if let (Some(target_label), Some(offset)) = (
-                            //     &camera_config.follow_target_entity_label,
-                            //     &camera_config.follow_offset,
-                            // ) {
-                            //     let follow_target = CameraFollowTarget {
-                            //         follow_target: target_label.clone(),
-                            //         offset: DVec3::from_array(*offset),
-                            //     };
-                            //     world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            // } else {
-                            // }
                             world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
                         } else {
                             world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
@@ -999,8 +1005,7 @@ impl SceneConfig {
                         // Entity without camera components
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
                             world.spawn((adopted, transform, script, entity_config.properties.clone()))
                         } else {
@@ -1090,8 +1095,7 @@ impl SceneConfig {
 
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
                             // if let (Some(target_label), Some(offset)) = (
                             //     &camera_config.follow_target_entity_label,
@@ -1123,8 +1127,7 @@ impl SceneConfig {
                         // Entity without camera components
                         if let Some(script_config) = &entity_config.script {
                             let script = ScriptComponent {
-                                name: script_config.name.clone(),
-                                path: script_config.path.clone(),
+                                tags: script_config.tags.clone(),
                             };
                             world.spawn((plane, transform, script, entity_config.properties.clone()))
                         } else {

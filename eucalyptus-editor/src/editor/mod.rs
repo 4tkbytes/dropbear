@@ -29,7 +29,7 @@ use eucalyptus_core::{camera::{
     CameraAction, CameraComponent, CameraType, DebugCamera,
 }, states::WorldLoadingStatus};
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::scripting::{ScriptAction, ScriptManager};
+use eucalyptus_core::scripting::{ScriptManager};
 use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
@@ -49,7 +49,7 @@ use dropbear_engine::model::{ModelId};
 
 pub struct Editor {
     scene_command: SceneCommand,
-    pub world: World,
+    pub world: Box<World>,
     dock_state: DockState<EditorTab>,
     texture_id: Option<egui::TextureId>,
     size: Extent3d,
@@ -150,7 +150,7 @@ impl Editor {
             is_viewport_focused: false,
             // is_cursor_locked: false,
             window: None,
-            world: World::new(),
+            world: Box::new(World::new()),
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),
@@ -903,12 +903,12 @@ fn show_entity_tree(
                     }
                 });
             }
-            EntityNode::Script { name, path: _ } => {
+            EntityNode::Script { tags } => {
                 ui.horizontal(|ui| {
                     handle.ui(ui, |ui| {
                         ui.label("📜");
                     });
-                    ui.label(name.to_string());
+                    ui.label("Script");
                 });
             }
             EntityNode::Group {
@@ -1172,10 +1172,9 @@ pub enum Signal {
     Paste(SceneEntity),
     Delete,
     Undo,
-    ScriptAction(ScriptAction),
-    #[allow(dead_code)]
+    // ScriptAction(ScriptAction),
     // not actions required because follow target is set through scripting. 
-    CameraAction(CameraAction),
+    // CameraAction(CameraAction),
     Play,
     StopPlaying,
     AddComponent(hecs::Entity, EntityType),

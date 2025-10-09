@@ -15,6 +15,7 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ### Related Projects
 
+- [magna-carta](https://github.com/4tkbytes/dropbear/tree/main/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching. 
 - [dropbear_future-queue](https://github.com/4tkbytes/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
 - [model_to_image](https://github.com/4tkbytes/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasteriser. _(very crude but usable)_
 
@@ -26,7 +27,6 @@ With Unix systems (macOS not tested), you will have to download a couple of depe
 
 <!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
 
-### Dependencies
 
 ```bash
 # ubuntu
@@ -37,7 +37,7 @@ sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp jdk
 
 ```
 
-### Engine Build
+Then run this to build the project
 
 ```bash
 git clone git@github.com:4tkbytes/dropbear
@@ -45,6 +45,8 @@ cd dropbear
 
 # this will build all the projects in the workspace
 cargo build
+# ensure that rust is built before gradlew as rust produces a cdylib which gradlew needs to link to
+./gradlew build
 ```
 
 [//]: # (# ensure submodules are checked-out)
@@ -70,7 +72,14 @@ If you do not want to build it locally, you are able to download the latest acti
 Despite the dropbear-engine (and other components) being made in Rust, the editor has chosen the scripting language of choice to be `Kotlin`
 because of previous experience and that Kotlin is more multiplatform than Swift. 
 
-Java is possible (as the JVM runs the script), however it is not officially supported and Kotlin is recommended. . 
+The dropbear engine uses Kotlin Multiplatform, which allows the cooked up product to be compatible with all platforms 
+KMP can support, which includes mobile, WASM and desktop. Because the editor is only available on desktop, the JVM is 
+used to evaluate the scripts as it allows for hot-reloading (not made yet). 
+
+It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. If you are a normal joe, 
+then just use the standard IntelliJ IDEA. 
+
+## Documentation
 
 API documentation and articles are available at (todo)
 
@@ -83,11 +92,11 @@ API documentation and articles are available at (todo)
 
 <sup>1</sup> Will never be implemented; not intended for that platform.
 
-<sup>2</sup>  Made some progress on implementing, but currently a WIP.
+<sup>2</sup> Made some progress on implementing, but currently a WIP.
 
 ## Contributions
 
-Yeah yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
+Yeah, yeah, go ahead and contribute. Make sure it works, and its not spam, and any tests pass.
 
 # Licensing
 
