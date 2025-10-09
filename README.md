@@ -56,10 +56,8 @@ cargo build
 [//]: # (git submodule update)
 
 > [!TIP]
-> During the development of your game, you should download JetBrains IntelliJ (for kotlin) for the best support. 
-> 
-> For a development build of the eucalyptus editor, it is recommended that you use JetBrains IntelliJ (for jvm) and 
-> JetBrains RustRover (for rust)
+> It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. If you are a normal joe,
+> then just use the standard IntelliJ IDEA.
 
 ### Prebuilt
 
@@ -74,10 +72,7 @@ because of previous experience and that Kotlin is more multiplatform than Swift.
 
 The dropbear engine uses Kotlin Multiplatform, which allows the cooked up product to be compatible with all platforms 
 KMP can support, which includes mobile, WASM and desktop. Because the editor is only available on desktop, the JVM is 
-used to evaluate the scripts as it allows for hot-reloading (not made yet). 
-
-It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. If you are a normal joe, 
-then just use the standard IntelliJ IDEA. 
+used to evaluate the scripts as it allows for hot-reloading (not made yet).
 
 ## Documentation
 
