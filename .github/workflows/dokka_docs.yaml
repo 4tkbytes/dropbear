@@ -27,6 +27,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Stop GitHub from bothering me about .env
+        run: touch .env
+
       - name: Generate documentation
         run: ./gradlew dokkaHtml
 
