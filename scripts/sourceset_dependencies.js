@@ -1,0 +1,1 @@
+sourceset_dependencies='{":/commonMain":[],":/jvmMain":[":/commonMain"],":/linuxMain":[":/nativeMain"],":/nativeLibMain":[":/linuxMain"],":/nativeMain":[":/commonMain"]}'

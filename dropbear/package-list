@@ -1,0 +1,60 @@
+$dokka.format:html-v1
+$dokka.linkExtension:html
+$dokka.location:com.dropbear.ffi////PointingToDeclaration/dropbear/com.dropbear.ffi/index.html
+$dokka.location:com.dropbear.ffi/JNINative///PointingToDeclaration/dropbear/com.dropbear.ffi/-j-n-i-native/index.html
+$dokka.location:com.dropbear.ffi/JNINative/JNINative/#/PointingToDeclaration/dropbear/com.dropbear.ffi/-j-n-i-native/-j-n-i-native.html
+$dokka.location:com.dropbear.ffi/JNINative/getEntity/#long#java.lang.String/PointingToDeclaration/dropbear/com.dropbear.ffi/-j-n-i-native/get-entity.html
+$dokka.location:com.dropbear.ffi/NativeEngine///PointingToDeclaration/dropbear/com.dropbear.ffi/-native-engine/index.html
+$dokka.location:com.dropbear.ffi/NativeEngine/NativeEngine/#/PointingToDeclaration/dropbear/com.dropbear.ffi/-native-engine/-native-engine.html
+$dokka.location:com.dropbear.ffi/NativeEngine/getEntity/#kotlin.String/PointingToDeclaration/dropbear/com.dropbear.ffi/-native-engine/get-entity.html
+$dokka.location:com.dropbear.ffi/NativeEngine/init/#[Error type: Unresolved type for COpaquePointer]?/PointingToDeclaration/dropbear/com.dropbear.ffi/-native-engine/init.html
+$dokka.location:com.dropbear.ffi/NativeEngine/init/#kotlin.ULong/PointingToDeclaration/dropbear/com.dropbear.ffi/-native-engine/init.html
+$dokka.location:com.dropbear.math////PointingToDeclaration/dropbear/com.dropbear.math/index.html
+$dokka.location:com.dropbear.math/Quaternion.Companion///PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/-companion/index.html
+$dokka.location:com.dropbear.math/Quaternion.Companion/identity/#/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/-companion/identity.html
+$dokka.location:com.dropbear.math/Quaternion///PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/index.html
+$dokka.location:com.dropbear.math/Quaternion/Quaternion/#TypeParam(bounds=[kotlin.Number])#TypeParam(bounds=[kotlin.Number])#TypeParam(bounds=[kotlin.Number])#TypeParam(bounds=[kotlin.Number])/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/-quaternion.html
+$dokka.location:com.dropbear.math/Quaternion/w/#/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/w.html
+$dokka.location:com.dropbear.math/Quaternion/x/#/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/x.html
+$dokka.location:com.dropbear.math/Quaternion/y/#/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/y.html
+$dokka.location:com.dropbear.math/Quaternion/z/#/PointingToDeclaration/dropbear/com.dropbear.math/-quaternion/z.html
+$dokka.location:com.dropbear.math/QuaternionD///PointingToDeclaration/dropbear/com.dropbear.math/-quaternion-d/index.html
+$dokka.location:com.dropbear.math/Vector3.Companion///PointingToDeclaration/dropbear/com.dropbear.math/-vector3/-companion/index.html
+$dokka.location:com.dropbear.math/Vector3.Companion/uniform/#TypeParam(bounds=[kotlin.Number])/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/-companion/uniform.html
+$dokka.location:com.dropbear.math/Vector3.Companion/zero/#/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/-companion/zero.html
+$dokka.location:com.dropbear.math/Vector3///PointingToDeclaration/dropbear/com.dropbear.math/-vector3/index.html
+$dokka.location:com.dropbear.math/Vector3/Vector3/#TypeParam(bounds=[kotlin.Number])#TypeParam(bounds=[kotlin.Number])#TypeParam(bounds=[kotlin.Number])/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/-vector3.html
+$dokka.location:com.dropbear.math/Vector3/asDoubleVector/#/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/as-double-vector.html
+$dokka.location:com.dropbear.math/Vector3/x/#/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/x.html
+$dokka.location:com.dropbear.math/Vector3/y/#/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/y.html
+$dokka.location:com.dropbear.math/Vector3/z/#/PointingToDeclaration/dropbear/com.dropbear.math/-vector3/z.html
+$dokka.location:com.dropbear.math/Vector3D///PointingToDeclaration/dropbear/com.dropbear.math/-vector3-d/index.html
+$dokka.location:com.dropbear////PointingToDeclaration/dropbear/com.dropbear/index.html
+$dokka.location:com.dropbear/DropbearEngine///PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/index.html
+$dokka.location:com.dropbear/DropbearEngine/DropbearEngine/#com.dropbear.ffi.NativeEngine#com.dropbear.EntityRef?/PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/-dropbear-engine.html
+$dokka.location:com.dropbear/DropbearEngine/currentEntity/#/PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/current-entity.html
+$dokka.location:com.dropbear/DropbearEngine/getEntity/#kotlin.String/PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/get-entity.html
+$dokka.location:com.dropbear/DropbearEngine/init/#/PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/init.html
+$dokka.location:com.dropbear/DropbearEngine/native/#/PointingToDeclaration/dropbear/com.dropbear/-dropbear-engine/native.html
+$dokka.location:com.dropbear/EntityId///PointingToDeclaration/dropbear/com.dropbear/-entity-id/index.html
+$dokka.location:com.dropbear/EntityId/EntityId/#kotlin.ULong/PointingToDeclaration/dropbear/com.dropbear/-entity-id/-entity-id.html
+$dokka.location:com.dropbear/EntityId/id/#/PointingToDeclaration/dropbear/com.dropbear/-entity-id/id.html
+$dokka.location:com.dropbear/EntityRef///PointingToDeclaration/dropbear/com.dropbear/-entity-ref/index.html
+$dokka.location:com.dropbear/EntityRef/EntityRef/#com.dropbear.EntityId/PointingToDeclaration/dropbear/com.dropbear/-entity-ref/-entity-ref.html
+$dokka.location:com.dropbear/EntityRef/id/#/PointingToDeclaration/dropbear/com.dropbear/-entity-ref/id.html
+$dokka.location:com.dropbear/EntityRef/setPosition/#com.dropbear.math.Vector3[kotlin.Double]#com.dropbear.DropbearEngine/PointingToDeclaration/dropbear/com.dropbear/-entity-ref/set-position.html
+$dokka.location:com.dropbear/ProjectScriptingMetadata///PointingToDeclaration/dropbear/com.dropbear/-project-scripting-metadata/index.html
+$dokka.location:com.dropbear/ProjectScriptingMetadata/getScripts/#/PointingToDeclaration/dropbear/com.dropbear/-project-scripting-metadata/get-scripts.html
+$dokka.location:com.dropbear/Runnable///PointingToDeclaration/dropbear/com.dropbear/-runnable/index.html
+$dokka.location:com.dropbear/Runnable/tags/#/PointingToDeclaration/dropbear/com.dropbear/-runnable/tags.html
+$dokka.location:com.dropbear/ScriptRegistration///PointingToDeclaration/dropbear/com.dropbear/-script-registration/index.html
+$dokka.location:com.dropbear/ScriptRegistration/ScriptRegistration/#kotlin.collections.List[kotlin.String]#com.dropbear.System/PointingToDeclaration/dropbear/com.dropbear/-script-registration/-script-registration.html
+$dokka.location:com.dropbear/ScriptRegistration/script/#/PointingToDeclaration/dropbear/com.dropbear/-script-registration/script.html
+$dokka.location:com.dropbear/ScriptRegistration/tags/#/PointingToDeclaration/dropbear/com.dropbear/-script-registration/tags.html
+$dokka.location:com.dropbear/System///PointingToDeclaration/dropbear/com.dropbear/-system/index.html
+$dokka.location:com.dropbear/System/destroy/#com.dropbear.DropbearEngine/PointingToDeclaration/dropbear/com.dropbear/-system/destroy.html
+$dokka.location:com.dropbear/System/load/#com.dropbear.DropbearEngine/PointingToDeclaration/dropbear/com.dropbear/-system/load.html
+$dokka.location:com.dropbear/System/update/#com.dropbear.DropbearEngine#kotlin.Float/PointingToDeclaration/dropbear/com.dropbear/-system/update.html
+com.dropbear
+com.dropbear.ffi
+com.dropbear.math
