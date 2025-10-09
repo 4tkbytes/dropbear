@@ -2,6 +2,8 @@ use std::{
     fs,
     path::PathBuf,
 };
+use std::io::Cursor;
+use std::path::Path;
 use std::sync::Arc;
 use anyhow::anyhow;
 use dropbear_engine::{
@@ -12,9 +14,11 @@ use dropbear_engine::{
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
+use flate2::read::GzDecoder;
 use git2::Repository;
 use log::{self, debug};
 use rfd::FileDialog;
+use tar::Archive;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
@@ -36,6 +40,7 @@ pub struct MainMenu {
     scene_command: SceneCommand,
     show_new_project: bool,
     project_name: String,
+    project_domain: String,
     project_path: Option<PathBuf>,
     project_error: Option<Vec<String>>,
 
@@ -78,8 +83,7 @@ impl MainMenu {
             let mut errors = Vec::new();
             let folders = [
                 ("git", 0.1, "Initialising git repository..."),
-                ("src", 0.2, "Creating src folder..."),
-                // ("swift", 0.25, "Initialising Swift project"),
+                ("gradle", 0.2, "Unpacking gradle template..."),
                 ("resources/models", 0.3, "Creating models folder..."),
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
@@ -97,6 +101,7 @@ impl MainMenu {
                     let full_path = path.join(folder);
                     let result: anyhow::Result<()> = match folder {
                         "git" => {
+                            log::debug!("Initialising git repository");
                             match Repository::init(path) {
                                 Ok(_) => Ok(()),
                                 Err(e) => {
@@ -110,21 +115,48 @@ impl MainMenu {
                             }
                         }
                         "src2" => {
+                            log::debug!("Generating project config");
                             let mut config = ProjectConfig::new(project_name.clone(), path);
                             let _ = config.write_to_all();
                             let mut global = PROJECT.write();
                             *global = config;
                             Ok(())
                         }
-                        // "swift" => {
-                        //     let package_template = include_str!("../../resources/scripting/swift/Build.swift");
-                        //     let package_template = package_template.replace("skibidi_toilet_goon_maxx", &project_name);
-                        //     // do not ask my why i chose skibidi_toilet_goon_maxx, it was just the first word i came up with. 
-                        //     std::fs::write(path.join("Package.swift"), package_template)?;
-                        // 
-                        //     Ok(())
-                        // }
+                        "gradle" => {
+                            log::debug!("Unpacking gradle template");
+                            let gradle_template = include_bytes!("../../resources/templates/gradle_template.tar.gz");
+
+                            let temp_extract_dir = path.join("temp_extract_dir");
+
+                            let cursor = Cursor::new(gradle_template);
+                            let gz_decoder = GzDecoder::new(cursor);
+                            let mut archive = Archive::new(gz_decoder);
+                            archive.unpack(&temp_extract_dir)?;
+
+                            let temp_path = Path::new(&temp_extract_dir);
+                            let mut entries = fs::read_dir(temp_path)?;
+                            let top_dir = entries.next().ok_or("No entries found in archive").map_err(|e| anyhow::anyhow!(e))??;
+
+                            if !top_dir.file_type()?.is_dir() {
+                                return Err(anyhow::anyhow!("Top-level entry is not a directory"));
+                            }
+
+                            let top_dir_path = top_dir.path();
+                            println!("Found top-level directory: {:?}", top_dir_path);
+
+                            fs::create_dir_all(path)?;
+                            for entry in fs::read_dir(top_dir_path)? {
+                                let entry = entry?;
+                                let dest_path = Path::new(path).join(entry.file_name());
+                                fs::rename(entry.path(), dest_path)?;
+                            }
+
+                            fs::remove_dir_all(&temp_extract_dir)?;
+
+                            Ok(())
+                        }
                         _ => {
+                            log::debug!("Creating folder: {:?}", full_path);
                             if !full_path.exists() {
                                 fs::create_dir_all(&full_path)
                                     .map_err(|e| anyhow::anyhow!(e))
@@ -144,12 +176,12 @@ impl MainMenu {
 
                 let _ = progress_tx.send(ProjectProgress::Step {
                     progress: 1.0,
-                    message: "Finalizing project...".to_string(),
+                    message: "Finalising project...".to_string(),
                 });
 
                 if errors.is_empty() {
                     let _ = progress_tx.send(ProjectProgress::Done);
-                    Ok(()) // Success
+                    Ok(())
                 } else {
                     Err(anyhow!("Project creation failed with {} errors", errors.len()))
                 }
@@ -178,31 +210,30 @@ impl Scene for MainMenu {
             if let Some(result) = graphics.shared.future_queue.exchange_owned_as::<anyhow::Result<()>>(handle) {
                 self.project_creation_handle = None;
 
-                if result.is_ok() {
+                if let Err(e) = result {
+                    log::error!("Project creation failed: {e}");
+                    self.project_error.get_or_insert_with(Vec::new).push(e.to_string());
+                } else {
                     log::info!("Project created successfully!");
                     self.show_new_project = false;
                     self.show_progress = false;
                     self.scene_command = SceneCommand::SwitchScene("editor".to_string());
-                } else {
-                    log::error!("Project creation failed");
                 }
             }
         }
         
-        #[allow(clippy::collapsible_if)]
-        if let Some(rx) = self.project_progress_rx.as_ref() {
-            if let Ok(true) = rx.has_changed() {
-                let progress = rx.borrow().clone();
-                match progress {
-                    ProjectProgress::Step { progress, message } => {
-                        self.progress = progress;
-                        self.progress_message = message;
-                    }
-                    ProjectProgress::Error(err) => {
-                        self.project_error.get_or_insert_with(Vec::new).push(err);
-                    }
-                    ProjectProgress::Done => {}
+        if let Some(rx) = self.project_progress_rx.as_ref()
+            && let Ok(true) = rx.has_changed() {
+            let progress = rx.borrow().clone();
+            match progress {
+                ProjectProgress::Step { progress, message } => {
+                    self.progress = progress;
+                    self.progress_message = message;
                 }
+                ProjectProgress::Error(err) => {
+                    self.project_error.get_or_insert_with(Vec::new).push(err);
+                }
+                ProjectProgress::Done => {}
             }
         }
 
@@ -309,8 +340,15 @@ impl Scene for MainMenu {
             .show(&egui_ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Project Name:");
+                    ui.label("MyGame");
                     ui.add_space(5.0);
                     ui.text_edit_singleline(&mut self.project_name);
+                    ui.add_space(5.0);
+
+                    ui.heading("Project Domain:");
+                    ui.label("com.example");
+                    ui.add_space(5.0);
+                    ui.text_edit_singleline(&mut self.project_domain);
                     ui.add_space(10.0);
 
                     ui.heading("Project Location:");
