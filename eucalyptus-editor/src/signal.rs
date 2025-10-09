@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use egui::{Align2, Image};
+use hecs::Entity;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -8,6 +10,7 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, scripting, success, success_without_console, warn, warn_without_console};
 use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
+use eucalyptus_core::scripting::ScriptTarget;
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 use crate::editor::{ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction};
 
@@ -125,38 +128,43 @@ impl SignalController for Editor {
                         }
                     }
 
+                    let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
                     for (entity_id, script) in script_entities {
+                        for tag in script.tags {
+                            if etag.contains_key(&tag) {
+                                etag.get_mut(&tag).unwrap().push(entity_id);
+                            } else {
+                                etag.insert(tag.clone(), vec![entity_id]);
+                            }
+                        }
+                    }
+
+                    let etag_clone = etag.clone();
+
+                    // todo: get the library name working
+                    if let Err(e) = self.script_manager.init_script(etag_clone, ScriptTarget::None) {
+                        fatal!("Failed to ready script manager interface because {}", e);
+                        self.signal = Signal::StopPlaying;
+                        return Err(anyhow::anyhow!(e));
+                    }
+
+                    for (tag, entities) in &etag {
                         log::debug!(
-                            "Initialising entity script for entity {:?} with tags: {:?}",
-                            entity_id,
-                            script.tags
+                            "Initialising script for tag {:?} with entities: {:?}",
+                            tag,
+                            entities
                         );
 
-                        match self.script_manager.load_script() {
-                            Ok(_) => {
-                                if let Err(e) = self.script_manager.init_entity_script(
-                                    entity_id,
-                                    script.tags.clone(),
-                                    &mut self.world,
-                                    &self.input_state,
-                                ) {
-                                    log::warn!(
-                                        "Failed to initialise script for entity {:?}: {}",
-                                        entity_id,
-                                        e
-                                    );
-                                    self.signal = Signal::StopPlaying;
-                                } else {
-                                    success_without_console!(
+                        for e in entities {
+                            if let Err(e) = self.script_manager.load_script(*e, tag.clone(), &mut self.world, &self.input_state) {
+                                fatal!("Failed to initialise script for tag {:?} because {}", tag, e);
+                                self.signal = Signal::StopPlaying;
+                                return Err(anyhow::anyhow!(e));
+                            } else {
+                                success_without_console!(
                                         "You are in play mode now! Press Escape to exit"
                                     );
-                                    log::info!("You are in play mode now! Press Escape to exit");
-                                }
-                            }
-                            Err(e) => {
-                                // todo: proper error menu
-                                self.signal = Signal::StopPlaying;
-                                fatal!("Failed to load script for {:?} with tags {:?} because {}", entity_id, script.tags, e);
+                                log::info!("You are in play mode now! Press Escape to exit");
                             }
                         }
                     }
@@ -454,18 +462,18 @@ impl SignalController for Editor {
             Signal::LogEntities => {
                 log::debug!("====================");
                 let mut counter = 0;
-                for entity in self.world.iter() {
-                    if let Some(entity) = entity.get::<&AdoptedEntity>() {
-                        log::info!("Model: {:?}", entity.model.label);
+                for e in self.world.iter() {
+                    if let Some(entity) = e.get::<&AdoptedEntity>() {
+                        log::info!("Model: {:?} with u32 id: {:?}", entity.model.label, e.entity().id());
                         log::info!("  |-> Using model: {:?}", entity.model.id);
                     }
 
-                    if let Some(entity) = entity.get::<&Light>() {
+                    if let Some(entity) = e.get::<&Light>() {
                         log::info!("Light: {:?}", entity.cube_model.label);
                         log::info!("  |-> Using model: {:?}", entity.cube_model.id);
                     }
 
-                    if entity.get::<&Camera>().is_some() {
+                    if e.get::<&Camera>().is_some() {
                         log::info!("Camera");
                     }
                     counter += 1;

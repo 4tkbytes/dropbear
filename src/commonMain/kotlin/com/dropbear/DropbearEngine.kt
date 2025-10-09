@@ -1,13 +1,11 @@
 package com.dropbear
 
 import com.dropbear.ffi.NativeEngine
-import getProjectScriptMetadata
 
-class DropbearEngine(val native: NativeEngine) {
+class DropbearEngine(val native: NativeEngine, val currentEntity: EntityRef? = null) {
     private val globalScripts = mutableListOf<System>()
 
     fun init() {
-        val scriptRegistration = getProjectScriptMetadata()
     }
 
     fun getEntity(label: String): Result<EntityRef> {

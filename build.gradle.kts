@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
+    `maven-publish`
+    id("org.jetbrains.dokka") version "2.0.0"
 }
 
 group = "com.dropbear"
@@ -8,6 +10,15 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("io.github.cdimascio:dotenv-kotlin:6.4.1")
+    }
 }
 
 kotlin {
@@ -23,6 +34,27 @@ kotlin {
         hostOs == "Linux" && !isArm64 -> linuxX64("nativeLib")
         isMingwX64 -> mingwX64("nativeLib")
         else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
+    }
+
+    val libName = when {
+        hostOs == "Mac OS X" -> "libeucalyptus_core.dylib"
+        hostOs == "Linux" -> "libeucalyptus_core.so"
+        isMingwX64 -> "eucalyptus_core.dll"
+        else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
+    }
+
+    if (file("${project.rootDir}/target/debug/$libName").exists()) {
+        println("Debug library exists")
+//        "${project.rootDir}/target/debug/$libName"
+    } else if (file("${project.rootDir}/target/release/$libName").exists()) {
+        println("Release library exists")
+//        "${project.rootDir}/target/debug/$libName"
+    } else if (file("${project.rootDir}/libs/$libName").exists()) {
+        println("Local library exists")
+//        "${project.rootDir}/libs/$libName"
+    } else {
+        throw GradleException("libeucalyptus_core.so does not exist. This is a local build, so most likely you haven't built the rust library yet. \n" +
+                "Try running cargo build")
     }
 
     nativeTarget.apply {
@@ -44,7 +76,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                implementation("co.touchlab:kermit:2.0.4")
+                api("co.touchlab:kermit:2.0.4")
             }
         }
         nativeMain {
@@ -87,4 +119,29 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     }
 
     dependsOn("compileKotlinJvm")
+}
+
+val dotenv = io.github.cdimascio.dotenv.dotenv()
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
+            credentials {
+                username = dotenv["GITHUB_USERNAME"]
+                password = dotenv["GITHUB_TOKEN"]
+            }
+        }
+    }
+
+    publications {
+        create<MavenPublication>("release") {
+            groupId = group as String?
+            artifactId = rootProject.name
+            version = version
+
+            from(components["kotlin"])
+        }
+    }
 }

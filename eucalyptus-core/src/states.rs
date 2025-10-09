@@ -242,11 +242,26 @@ pub enum Node {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct File {
-    pub name: String,
-    pub path: PathBuf,
-    pub resource_type: Option<ResourceType>,
+pub enum File {
+    #[default]
+    Unknown,
+    ResourceFile {
+        name: String,
+        path: PathBuf,
+        resource_type: ResourceType,
+    },
+    SourceFile {
+        name: String,
+        path: PathBuf,
+    },
 }
+
+// #[derive(Default, Debug, Serialize, Deserialize, Clone)]
+// pub struct File {
+//     pub name: String,
+//     pub path: PathBuf,
+//     pub resource_type: Option<ResourceType>,
+// }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Folder {
@@ -259,6 +274,8 @@ pub struct Folder {
 #[derive(Debug, Serialize, Deserialize, Clone, Hash)]
 pub enum ResourceType {
     Unknown,
+    Config,
+    Script,
     Model,
     Thumbnail,
     Texture,
@@ -273,6 +290,8 @@ impl Display for ResourceType {
             ResourceType::Texture => "texture",
             ResourceType::Shader => "shader",
             ResourceType::Thumbnail => "thumbnail",
+            ResourceType::Script => "script",
+            ResourceType::Config => "eucalyptus project config"
         };
         write!(f, "{}", str)
     }
@@ -406,13 +425,17 @@ fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_
                     .unwrap_or_default();
 
                 let resource_type = if parent_folder.contains("model") {
-                    Some(ResourceType::Model)
+                    ResourceType::Model
                 } else if parent_folder.contains("texture") {
-                    Some(ResourceType::Texture)
+                    ResourceType::Texture
                 } else if parent_folder.contains("shader") {
-                    Some(ResourceType::Shader)
+                    ResourceType::Shader
+                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase()) == Some("kt".to_string()) {
+                    ResourceType::Script
+                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase().contains("eu")).unwrap_or_default() {
+                    ResourceType::Config
                 } else {
-                    Some(ResourceType::Unknown)
+                    ResourceType::Unknown
                 };
 
                 // Store relative path from the project root instead of absolute path
@@ -421,7 +444,7 @@ fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_
                     .unwrap_or(&entry_path)
                     .to_path_buf();
 
-                nodes.push(Node::File(File {
+                nodes.push(Node::File(File::ResourceFile {
                     name,
                     path: relative_path,
                     resource_type,

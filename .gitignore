@@ -53,6 +53,6 @@ Cargo.lock
 
 .idea/
 
-src/*.dll
-src/*.dylib
-src/*.so
+libs/
+
+.env

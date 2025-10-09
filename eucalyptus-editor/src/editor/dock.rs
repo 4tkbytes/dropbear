@@ -12,7 +12,7 @@ use egui;
 use egui::{CollapsingHeader};
 use egui_dock_fork::TabViewer;
 use egui_extras;
-use eucalyptus_core::states::{Node, RESOURCES, ResourceType};
+use eucalyptus_core::states::{Node, RESOURCES, ResourceType, File};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
@@ -448,91 +448,94 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         for node in res {
                             match node {
                                 Node::File(file) => {
-                                    if !logged.contains(&file.name) {
-                                        logged.insert(file.name.clone());
-                                        log::debug!(
-                                            "Adding image for {} of type {}",
-                                            file.name,
-                                            file.resource_type.as_ref().unwrap()
-                                        );
-                                    }
-                                    if let Some(ref res_type) = file.resource_type {
-                                        match res_type {
-                                            ResourceType::Model => {
-                                                let ad_dir = app_dirs2::get_app_root(
-                                                    app_dirs2::AppDataType::UserData,
-                                                    &APP_INFO,
-                                                )
-                                                .unwrap();
-
-                                                let model_thumbnail =
-                                                    ad_dir.join(format!("{}.png", file.name));
-
-                                                if !model_thumbnail.exists() {
-                                                    // gen image
-                                                    log::debug!(
-                                                        "Model thumbnail [{}] does not exist, generating one now",
-                                                        file.name
-                                                    );
-                                                    let mut model = match model_to_image::ModelToImageBuilder::new(&file.path)
-                                                    .with_size((600, 600))
-                                                    .build() {
-                                                        Ok(v) => v,
-                                                        Err(e) => panic!("Error occurred while loading file from path: {}", e),
-                                                    };
-                                                    if let Err(e) =
-                                                        model.render().unwrap().write_to(Some(
-                                                            &ad_dir
-                                                                .join(format!("{}.png", file.name)),
-                                                        ))
-                                                    {
-                                                        log::error!(
-                                                            "Failed to write model thumbnail for {}: {}",
-                                                            file.name,
-                                                            e
-                                                        );
-                                                    }
-                                                }
-
-                                                let image_uri =
-                                                    model_thumbnail.to_string_lossy().to_string();
-
-                                                assets.push((
-                                                    format!("file://{}", image_uri),
-                                                    file.name.clone(),
-                                                    file.path.clone(),
-                                                    res_type.clone(),
-                                                ))
+                                    match file {
+                                        File::Unknown => {}
+                                        File::ResourceFile { name, path, resource_type } => {
+                                            if !logged.contains(name) {
+                                                logged.insert(name.clone());
+                                                log::debug!(
+                                                    "Adding image for {} of type {}",
+                                                    name,
+                                                    resource_type
+                                                );
                                             }
-                                            ResourceType::Texture => assets.push((
-                                                format!(
-                                                    "file://{}",
-                                                    file.path.to_string_lossy()
-                                                ),
-                                                file.name.clone(),
-                                                file.path.clone(),
-                                                res_type.clone(),
-                                            )),
-                                            _ => {
-                                                if file
-                                                    .path
-                                                    .clone()
-                                                    .extension()
-                                                    .unwrap()
-                                                    .to_str()
-                                                    .unwrap()
-                                                    .contains("euc")
-                                                {
-                                                    continue;
+                                            match resource_type {
+                                                ResourceType::Model => {
+                                                    let ad_dir = app_dirs2::get_app_root(
+                                                        app_dirs2::AppDataType::UserData,
+                                                        &APP_INFO,
+                                                    )
+                                                        .unwrap();
+
+                                                    let model_thumbnail =
+                                                        ad_dir.join(format!("{}.png", name));
+
+                                                    if !model_thumbnail.exists() {
+                                                        // gen image
+                                                        log::debug!(
+                                                    "Model thumbnail [{}] does not exist, generating one now",
+                                                    name
+                                                );
+                                                        let mut model = match model_to_image::ModelToImageBuilder::new(&path)
+                                                            .with_size((600, 600))
+                                                            .build() {
+                                                            Ok(v) => v,
+                                                            Err(e) => panic!("Error occurred while loading file from path: {}", e),
+                                                        };
+                                                        if let Err(e) =
+                                                            model.render().unwrap().write_to(Some(
+                                                                &ad_dir
+                                                                    .join(format!("{}.png", name)),
+                                                            ))
+                                                        {
+                                                            log::error!(
+                                                        "Failed to write model thumbnail for {}: {}",
+                                                        name,
+                                                        e
+                                                    );
+                                                        }
+                                                    }
+
+                                                    let image_uri =
+                                                        model_thumbnail.to_string_lossy().to_string();
+
+                                                    assets.push((
+                                                        format!("file://{}", image_uri),
+                                                        name.clone(),
+                                                        path.clone(),
+                                                        resource_type.clone(),
+                                                    ))
                                                 }
-                                                assets.push((
-                                                    "NO_TEXTURE".into(),
-                                                    file.name.clone(),
-                                                    file.path.clone(),
-                                                    res_type.clone(),
-                                                ))
+                                                ResourceType::Texture => assets.push((
+                                                    format!(
+                                                        "file://{}",
+                                                        path.to_string_lossy()
+                                                    ),
+                                                    name.clone(),
+                                                    path.clone(),
+                                                    resource_type.clone(),
+                                                )),
+                                                _ => {
+                                                    if path
+                                                        .clone()
+                                                        .extension()
+                                                        .unwrap()
+                                                        .to_str()
+                                                        .unwrap()
+                                                        .contains("euc")
+                                                    {
+                                                        continue;
+                                                    }
+                                                    assets.push((
+                                                        "NO_TEXTURE".into(),
+                                                        name.clone(),
+                                                        path.clone(),
+                                                        resource_type.clone(),
+                                                    ))
+                                                }
                                             }
                                         }
+                                        File::SourceFile { .. } => {}
                                     }
                                 }
                                 Node::Folder(folder) => {

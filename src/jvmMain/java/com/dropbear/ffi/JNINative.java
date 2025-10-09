@@ -1,5 +1,9 @@
 package com.dropbear.ffi;
 
 public class JNINative {
-    public native long getEntity(long handle, String label);
+    static {
+        System.loadLibrary("eucalyptus_core");
+    }
+
+    public static native long getEntity(long handle, String label);
 }

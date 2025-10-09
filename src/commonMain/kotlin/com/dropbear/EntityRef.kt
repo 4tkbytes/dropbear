@@ -18,8 +18,5 @@ import com.dropbear.math.Vector3D
  * by [EntityRef], which will require a reference to [DropbearEngine] to push the commands.
  */
 class EntityRef(val id: EntityId = EntityId(0u)) {
-    /**
-     * Sets the position of the entity by a Vector
-     */
     fun setPosition(position: Vector3D, engine: DropbearEngine) {}
 }

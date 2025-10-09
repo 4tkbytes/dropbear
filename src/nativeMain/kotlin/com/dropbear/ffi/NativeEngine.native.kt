@@ -4,23 +4,32 @@
 package com.dropbear.ffi
 
 import co.touchlab.kermit.Logger
+import com.dropbear.ffi.generated.dropbear_get_entity
 import kotlinx.cinterop.*
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
-    private var worldHandle: ULong = 0u
+    private var worldHandle: COpaquePointer? = null
 
-    actual fun init(handle: ULong) {
+    fun init(handle: COpaquePointer?) {
         this.worldHandle = handle
-        if (this.worldHandle == 0uL) {
+        if (this.worldHandle == null) {
             Logger.i("NativeEngine: Error - Invalid world handle received!")
-            return
         } else {
-            Logger.i("NativeEngine: Initialized with world handle: ${this.worldHandle}")
+            Logger.i("NativeEngine: Initialized with world handle")
         }
     }
 
     actual fun getEntity(label: String): ULong? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outEntity = alloc<ULongVar>()
+            val result = dropbear_get_entity(
+                label = label,
+                world_ptr = world.reinterpret(),
+                out_entity = outEntity.ptr
+            )
+            return if (result == 0) outEntity.value else null
+        }
     }
 }

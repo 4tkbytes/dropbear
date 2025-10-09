@@ -1,47 +1,92 @@
-mod kmp;
-mod jni;
+pub mod kmp;
+pub mod jni;
 
 use crate::input::InputState;
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs};
-use std::sync::LazyLock;
-use crate::ptr::SafePointer;
+use std::ffi::OsString;
+use std::sync::{Arc, LazyLock};
+use libloading::Library;
+use crate::scripting::jni::JavaContext;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
-pub struct ScriptManager;
+#[derive(Default)]
+pub enum ScriptTarget {
+    #[default]
+    None,
+    JVM { library_path: PathBuf },
+    Native { library_path: PathBuf },
+}
+
+pub struct ScriptManager {
+    jvm: Option<JavaContext>,
+    library: Option<Library>,
+    script_target: ScriptTarget,
+    entity_tag_database: HashMap<String, Vec<Entity>>,
+}
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        Ok(Self)
-        // Err(anyhow::anyhow!("it aint ready yet bozo"))
+        Ok(Self {
+            jvm: None,
+            library: None,
+            script_target: Default::default(),
+            entity_tag_database: HashMap::new(),
+        })
+    }
+
+    pub fn init_script(
+        &mut self,
+        entity_tag_database: HashMap<String, Vec<Entity>>,
+        target: ScriptTarget,
+    ) -> anyhow::Result<()> {
+        self.entity_tag_database = entity_tag_database;
+
+        match target {
+            ScriptTarget::JVM { library_path } => {
+                let jvm = JavaContext::new(library_path)?;
+                self.jvm = Some(jvm);
+            }
+            ScriptTarget::Native { library_path } => {
+                let library = unsafe {
+                    Library::new(library_path)?
+                };
+
+                self.library = Some(library);
+            }
+            _ => {
+                anyhow::bail!("Invalid script target, must be either JVM or Native");
+            }
+        }
+
+        Ok(())
     }
 
     pub fn load_script(
         &mut self,
-    ) -> anyhow::Result<()> {
-        
-        Ok(())
-    }
-
-    pub fn init_entity_script(
-        &mut self,
         entity_id: hecs::Entity,
-        tags: Vec<String>,
+        tag: String,
         world: &mut World,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
 
+        #[cfg(feature = "jvm")]
+        {
+            if let Some(jvm) = &mut self.jvm {
+                jvm.init(world)?;
+            }
+        }
+
         Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 
-    pub fn update_entity_script(
+    pub fn update_script(
         &mut self,
         entity_id: hecs::Entity,
-        tags: Vec<String>,
         world: &mut World,
         input_state: &InputState,
         dt: f32,

@@ -119,9 +119,8 @@ impl Scene for Editor {
             }
 
             for (entity_id, script_name) in script_entities {
-                if let Err(e) = self.script_manager.update_entity_script(
+                if let Err(e) = self.script_manager.update_script(
                     entity_id,
-                    script_name.clone(),
                     &mut self.world,
                     &self.input_state,
                     dt,
