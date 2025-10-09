@@ -53,7 +53,7 @@ kotlin {
         println("Local library exists")
 //        "${project.rootDir}/libs/$libName"
     } else {
-        throw GradleException("libeucalyptus_core.so does not exist. This is a local build, so most likely you haven't built the rust library yet. \n" +
+        println("libeucalyptus_core.so does not exist. This is a local build, so most likely you haven't built the rust library yet. \n" +
                 "Try running cargo build")
     }
 
