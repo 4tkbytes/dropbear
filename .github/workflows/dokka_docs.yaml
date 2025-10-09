@@ -31,7 +31,7 @@ jobs:
         run: touch .env
 
       - name: Generate documentation
-        run: ./gradlew dokkaHtml
+        run: ./gradlew dokkaGenerate
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
