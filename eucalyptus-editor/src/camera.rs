@@ -124,21 +124,19 @@ impl InspectableComponent for CameraComponent {
                     // });
 
                     if !matches!(self.camera_type, CameraType::Player) {
-                        egui::ComboBox::from_id_salt("i aint r kelly the way i take the piss ; \
-                        but im mj coz my shots don't miss")
-                                .selected_text(format!("{:?}", self.camera_type))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.camera_type,
-                                        CameraType::Normal,
-                                        "Normal",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.camera_type,
-                                        CameraType::Debug,
-                                        "Debug",
-                                    );
-                                });
+                        egui::ComboBox::from_id_salt(
+                            "i aint r kelly the way i take the piss ; \
+                        but im mj coz my shots don't miss",
+                        )
+                        .selected_text(format!("{:?}", self.camera_type))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.camera_type,
+                                CameraType::Normal,
+                                "Normal",
+                            );
+                            ui.selectable_value(&mut self.camera_type, CameraType::Debug, "Debug");
+                        });
                     }
 
                     ui.horizontal(|ui| {
@@ -194,17 +192,17 @@ impl InspectableComponent for CameraComponent {
 //                     ui.horizontal(|ui| {
 //                         ui.label("Offset:");
 //                     });
-// 
+//
 //                     ui.horizontal(|ui| {
 //                         ui.label("X:");
 //                         ui.add(egui::DragValue::new(&mut self.offset.x).speed(0.1));
 //                     });
-// 
+//
 //                     ui.horizontal(|ui| {
 //                         ui.label("Y:");
 //                         ui.add(egui::DragValue::new(&mut self.offset.y).speed(0.1));
 //                     });
-// 
+//
 //                     ui.horizontal(|ui| {
 //                         ui.label("Z:");
 //                         ui.add(egui::DragValue::new(&mut self.offset.z).speed(0.1));

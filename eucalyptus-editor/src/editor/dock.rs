@@ -4,20 +4,20 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use crate::APP_INFO;
 use crate::editor::component::InspectableComponent;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_engine::{
     entity::Transform,
     lighting::{Light, LightComponent},
 };
 use egui;
-use egui::{CollapsingHeader};
+use egui::CollapsingHeader;
 use egui_dock_fork::TabViewer;
 use egui_extras;
-use eucalyptus_core::states::{Node, RESOURCES, ResourceType, File};
+use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
+use eucalyptus_core::states::{File, Node, RESOURCES, ResourceType};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -41,7 +41,10 @@ impl<'a> EditorTabViewer<'a> {
         position: DVec3,
         properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
-        let transform = Transform { position, ..Default::default() };
+        let transform = Transform {
+            position,
+            ..Default::default()
+        };
         {
             if let Some(props) = properties {
                 push_pending_spawn(PendingSpawn {
@@ -121,11 +124,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
         ui.ctx().input(|i| {
             if i.pointer.button_pressed(egui::PointerButton::Secondary)
                 && let Some(pos) = i.pointer.hover_pos()
-                    && ui.available_rect_before_wrap().contains(pos) {
-                        cfg.show_context_menu = true;
-                        cfg.context_menu_pos = pos;
-                        cfg.context_menu_tab = Some(tab.clone());
-                    }
+                && ui.available_rect_before_wrap().contains(pos)
+            {
+                cfg.show_context_menu = true;
+                cfg.context_menu_pos = pos;
+                cfg.context_menu_tab = Some(tab.clone());
+            }
         });
 
         match tab {
@@ -194,11 +198,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     let active_cam = self.active_camera.lock();
                     if let Some(active_camera) = *active_cam {
                         {
-                            if let Ok(mut q) = self.world.query_one::<(
-                                &Camera,
-                                &CameraComponent,
-                                // Option<&CameraFollowTarget>,
-                            )>(active_camera)
+                            if let Ok(mut q) =
+                                self.world.query_one::<(
+                                    &Camera,
+                                    &CameraComponent,
+                                    // Option<&CameraFollowTarget>,
+                                )>(active_camera)
                             {
                                 if let Some((camera, _)) = q.get() {
                                     if let Some(click_pos) =
@@ -207,8 +212,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         let viewport_rect = image_response.rect;
                                         let local_pos = click_pos - viewport_rect.min;
 
-                                        let ndc_x = (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
-                                        let ndc_y = 1.0 - (2.0 * local_pos.y / viewport_rect.height());
+                                        let ndc_x =
+                                            (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
+                                        let ndc_y =
+                                            1.0 - (2.0 * local_pos.y / viewport_rect.height());
 
                                         let view_matrix = glam::DMat4::look_at_lh(
                                             camera.eye,
@@ -253,22 +260,26 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             return;
                                         }
 
-                                        let ray_start = ray_start_world.truncate() / ray_start_world.w;
+                                        let ray_start =
+                                            ray_start_world.truncate() / ray_start_world.w;
                                         let ray_end = ray_end_world.truncate() / ray_end_world.w;
 
                                         if !ray_start.is_finite() || !ray_end.is_finite() {
                                             log::error!(
-                                            "Invalid ray points - start: {:?}, end: {:?}",
-                                            ray_start,
-                                            ray_end
-                                        );
+                                                "Invalid ray points - start: {:?}, end: {:?}",
+                                                ray_start,
+                                                ray_end
+                                            );
                                             return;
                                         }
 
                                         let ray_direction = (ray_end - ray_start).normalize();
 
                                         if !ray_direction.is_finite() {
-                                            log::error!("Invalid ray direction: {:?}", ray_direction);
+                                            log::error!(
+                                                "Invalid ray direction: {:?}",
+                                                ray_direction
+                                            );
                                             return;
                                         }
 
@@ -278,12 +289,15 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             let mut entity_count = 0;
 
                                             {
-                                                for (entity_id, (transform, _)) in
-                                                    self.world.query::<(&Transform, &AdoptedEntity)>().iter()
+                                                for (entity_id, (transform, _)) in self
+                                                    .world
+                                                    .query::<(&Transform, &AdoptedEntity)>()
+                                                    .iter()
                                                 {
                                                     entity_count += 1;
                                                     let entity_pos = transform.position;
-                                                    let sphere_radius = transform.scale.max_element() * 1.5;
+                                                    let sphere_radius =
+                                                        transform.scale.max_element() * 1.5;
                                                     let to_sphere = entity_pos - ray_start;
                                                     let projection = to_sphere.dot(ray_direction);
                                                     if projection > 0.0 {
@@ -292,14 +306,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                         let distance_to_sphere =
                                                             (closest_point - entity_pos).length();
                                                         if distance_to_sphere <= sphere_radius {
-                                                            let discriminant = sphere_radius * sphere_radius
-                                                                - distance_to_sphere * distance_to_sphere;
+                                                            let discriminant = sphere_radius
+                                                                * sphere_radius
+                                                                - distance_to_sphere
+                                                                    * distance_to_sphere;
                                                             if discriminant >= 0.0 {
                                                                 let intersection_distance =
-                                                                    projection - discriminant.sqrt();
-                                                                if intersection_distance < closest_distance {
-                                                                    closest_distance = intersection_distance;
-                                                                    selected_entity_id = Some(entity_id);
+                                                                    projection
+                                                                        - discriminant.sqrt();
+                                                                if intersection_distance
+                                                                    < closest_distance
+                                                                {
+                                                                    closest_distance =
+                                                                        intersection_distance;
+                                                                    selected_entity_id =
+                                                                        Some(entity_id);
                                                                 }
                                                             }
                                                         }
@@ -328,15 +349,15 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     }
                                 } else {
                                     log_once::warn_once!(
-                                    "Unable to fetch the query result of camera: {:?}",
-                                    active_camera
-                                )
+                                        "Unable to fetch the query result of camera: {:?}",
+                                        active_camera
+                                    )
                                 }
                             } else {
                                 log_once::warn_once!(
-                                "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
-                                active_camera
-                            );
+                                    "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
+                                    active_camera
+                                );
                             }
                         }
                     } else {
@@ -352,7 +373,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let active_cam = self.active_camera.lock();
                 if let Some(active_camera) = *active_cam {
                     let camera_data = {
-                        if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent)>(active_camera) {
+                        if let Ok(mut q) = self
+                            .world
+                            .query_one::<(&Camera, &CameraComponent)>(active_camera)
+                        {
                             let val = q.get();
                             if let Some(val) = val {
                                 Some(val.0.clone())
@@ -381,52 +405,51 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     }
                 }
                 if !matches!(self.viewport_mode, ViewportMode::None)
-                    && let Some(entity_id) = self.selected_entity {
+                    && let Some(entity_id) = self.selected_entity
+                {
+                    {
+                        if let Ok(mut q) = self.world.query_one::<&mut Transform>(*entity_id)
+                            && let Some(transform) = q.get()
                         {
-                            if let Ok(mut q) = self.world
-                                .query_one::<&mut Transform>(*entity_id)
-                                && let Some(transform) = q.get() {
-                                    let was_focused = cfg.is_focused;
-                                    cfg.is_focused = self.gizmo.is_focused();
+                            let was_focused = cfg.is_focused;
+                            cfg.is_focused = self.gizmo.is_focused();
 
-                                    if cfg.is_focused && !was_focused {
-                                        cfg.old_pos = *transform;
-                                    }
+                            if cfg.is_focused && !was_focused {
+                                cfg.old_pos = *transform;
+                            }
 
-                                    let gizmo_transform =
+                            let gizmo_transform =
                                         transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
                                             transform.scale,
                                             transform.rotation,
                                             transform.position,
                                         );
 
-                                    if let Some((_result, new_transforms)) =
-                                        self.gizmo.interact(ui, &[gizmo_transform])
-                                        && let Some(new_transform) = new_transforms.first() {
-                                            transform.position = new_transform.translation.into();
-                                            transform.rotation = new_transform.rotation.into();
-                                            transform.scale = new_transform.scale.into();
-                                        }
+                            if let Some((_result, new_transforms)) =
+                                self.gizmo.interact(ui, &[gizmo_transform])
+                                && let Some(new_transform) = new_transforms.first()
+                            {
+                                transform.position = new_transform.translation.into();
+                                transform.rotation = new_transform.rotation.into();
+                                transform.scale = new_transform.scale.into();
+                            }
 
-                                    if was_focused && !cfg.is_focused {
-                                        let transform_changed = cfg.old_pos.position != transform.position
-                                            || cfg.old_pos.rotation != transform.rotation
-                                            || cfg.old_pos.scale != transform.scale;
+                            if was_focused && !cfg.is_focused {
+                                let transform_changed = cfg.old_pos.position != transform.position
+                                    || cfg.old_pos.rotation != transform.rotation
+                                    || cfg.old_pos.scale != transform.scale;
 
-                                        if transform_changed {
-                                            UndoableAction::push_to_undo(
-                                                self.undo_stack,
-                                                UndoableAction::Transform(
-                                                    *entity_id,
-                                                    cfg.old_pos,
-                                                ),
-                                            );
-                                            log::debug!("Pushed transform action to stack");
-                                        }
-                                    }
+                                if transform_changed {
+                                    UndoableAction::push_to_undo(
+                                        self.undo_stack,
+                                        UndoableAction::Transform(*entity_id, cfg.old_pos),
+                                    );
+                                    log::debug!("Pushed transform action to stack");
                                 }
+                            }
                         }
                     }
+                }
             }
             EditorTab::ModelEntityList => {
                 ui.label("Model/Entity List");
@@ -455,7 +478,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 Node::File(file) => {
                                     match file {
                                         File::Unknown => {}
-                                        File::ResourceFile { name, path, resource_type } => {
+                                        File::ResourceFile {
+                                            name,
+                                            path,
+                                            resource_type,
+                                        } => {
                                             if !logged.contains(name) {
                                                 logged.insert(name.clone());
                                                 log::debug!(
@@ -470,7 +497,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                         app_dirs2::AppDataType::UserData,
                                                         &APP_INFO,
                                                     )
-                                                        .unwrap();
+                                                    .unwrap();
 
                                                     let model_thumbnail =
                                                         ad_dir.join(format!("{}.png", name));
@@ -478,10 +505,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     if !model_thumbnail.exists() {
                                                         // gen image
                                                         log::debug!(
-                                                    "Model thumbnail [{}] does not exist, generating one now",
-                                                    name
-                                                );
-                                                        let mut model = match model_to_image::ModelToImageBuilder::new(&path)
+                                                            "Model thumbnail [{}] does not exist, generating one now",
+                                                            name
+                                                        );
+                                                        let mut model = match model_to_image::ModelToImageBuilder::new(path)
                                                             .with_size((600, 600))
                                                             .build() {
                                                             Ok(v) => v,
@@ -494,15 +521,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             ))
                                                         {
                                                             log::error!(
-                                                        "Failed to write model thumbnail for {}: {}",
-                                                        name,
-                                                        e
-                                                    );
+                                                                "Failed to write model thumbnail for {}: {}",
+                                                                name,
+                                                                e
+                                                            );
                                                         }
                                                     }
 
-                                                    let image_uri =
-                                                        model_thumbnail.to_string_lossy().to_string();
+                                                    let image_uri = model_thumbnail
+                                                        .to_string_lossy()
+                                                        .to_string();
 
                                                     assets.push((
                                                         format!("file://{}", image_uri),
@@ -512,10 +540,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     ))
                                                 }
                                                 ResourceType::Texture => assets.push((
-                                                    format!(
-                                                        "file://{}",
-                                                        path.to_string_lossy()
-                                                    ),
+                                                    format!("file://{}", path.to_string_lossy()),
                                                     name.clone(),
                                                     path.clone(),
                                                     resource_type.clone(),
@@ -642,7 +667,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             ResourceReference {
                                                                 ref_type: ResourceReferenceType::File(
                                                                     asset_path.strip_prefix("resources/")
-                                                                        .unwrap_or(&asset_path)
+                                                                        .unwrap_or(asset_path)
                                                                         .to_string_lossy()
                                                                         .to_string()
                                                                 ),
@@ -722,7 +747,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             camera,
                             camera_component,
                             // follow_target,
-                        )) = q.get() {
+                        )) = q.get()
+                        {
                             // entity
                             e.inspect(
                                 entity,
@@ -746,11 +772,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             // properties
                             if let Some(props) = _props {
-                                props.inspect(entity, &mut cfg, ui, self.undo_stack, self.signal, &mut Arc::make_mut(&mut e.model).label);
+                                props.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut Arc::make_mut(&mut e.model).label,
+                                );
                             }
 
                             // camera
-                            if let (Some(camera), Some(camera_component)) = (camera, camera_component) {
+                            if let (Some(camera), Some(camera_component)) =
+                                (camera, camera_component)
+                            {
                                 ui.separator();
                                 CollapsingHeader::new("Camera Components")
                                 .default_open(true)
@@ -855,11 +890,17 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if let Some(script) = script {
                                 ui.separator();
                                 ui.horizontal(|ui| {
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if ui.button("Remove Component ❌").clicked() {
-                                            *self.signal = Signal::RemoveComponent(*entity, Box::new(ComponentType::Script(script.clone())))
-                                        }
-                                    });
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Remove Component ❌").clicked() {
+                                                *self.signal = Signal::RemoveComponent(
+                                                    *entity,
+                                                    Box::new(ComponentType::Script(script.clone())),
+                                                )
+                                            }
+                                        },
+                                    );
                                 });
 
                                 script.inspect(
@@ -873,19 +914,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             if let Some(t) = cfg.label_last_edit
-                                && t.elapsed() >= Duration::from_millis(500) {
-                                    if let Some(ent) = cfg.old_label_entity.take()
-                                        && let Some(orig) = cfg.label_original.take() {
-                                            UndoableAction::push_to_undo(
-                                                self.undo_stack,
-                                                UndoableAction::Label(ent, orig, EntityType::Entity),
-                                            );
-                                            log::debug!(
-                                    "Pushed label change to undo stack after 500ms debounce period"
-                                );
-                                        }
-                                    cfg.label_last_edit = None;
+                                && t.elapsed() >= Duration::from_millis(500)
+                            {
+                                if let Some(ent) = cfg.old_label_entity.take()
+                                    && let Some(orig) = cfg.label_original.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        self.undo_stack,
+                                        UndoableAction::Label(ent, orig, EntityType::Entity),
+                                    );
+                                    log::debug!(
+                                        "Pushed label change to undo stack after 500ms debounce period"
+                                    );
                                 }
+                                cfg.label_last_edit = None;
+                            }
                         }
                     } else {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
@@ -903,7 +946,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     // }
 
                     // lighting system
-                    if let Ok(mut q) = self.world
+                    if let Ok(mut q) = self
+                        .world
                         .query_one::<(&mut Light, &mut Transform, &mut LightComponent)>(*entity)
                     {
                         if let Some((light, transform, props)) = q.get() {
@@ -932,33 +976,35 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 &mut light.label,
                             );
                             if let Some(t) = cfg.label_last_edit
-                                && t.elapsed() >= Duration::from_millis(500) {
-                                    if let Some(ent) = cfg.old_label_entity.take()
-                                        && let Some(orig) = cfg.label_original.take() {
-                                            UndoableAction::push_to_undo(
-                                                self.undo_stack,
-                                                UndoableAction::Label(ent, orig, EntityType::Light),
-                                            );
-                                            log::debug!(
-                                    "Pushed label change to undo stack after 500ms debounce period"
-                                );
-                                        }
-                                    cfg.label_last_edit = None;
+                                && t.elapsed() >= Duration::from_millis(500)
+                            {
+                                if let Some(ent) = cfg.old_label_entity.take()
+                                    && let Some(orig) = cfg.label_original.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        self.undo_stack,
+                                        UndoableAction::Label(ent, orig, EntityType::Light),
+                                    );
+                                    log::debug!(
+                                        "Pushed label change to undo stack after 500ms debounce period"
+                                    );
                                 }
+                                cfg.label_last_edit = None;
+                            }
                         }
                     } else {
                         log_once::debug_once!("Unable to query light inside resource inspector");
                     }
 
                     // camera
-                    if let Ok(mut q) =
-                        self.world.query_one::<(
-                            &mut Camera,
-                            &mut CameraComponent,
-                            // Option<&mut CameraFollowTarget>,
-                        )>(*entity)
+                    if let Ok(mut q) = self.world.query_one::<(
+                        &mut Camera,
+                        &mut CameraComponent,
+                        // Option<&mut CameraFollowTarget>,
+                    )>(*entity)
                         && let Some((camera, camera_component)) = q.get()
-                        && self.world.get::<&AdoptedEntity>(*entity).is_err() {
+                        && self.world.get::<&AdoptedEntity>(*entity).is_err()
+                    {
                         ui.vertical(|ui| {
                             camera.inspect(
                                 entity,
@@ -1024,7 +1070,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
                         });
                     }
-                ui.separator();
+                    ui.separator();
                 } else {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
                 }
@@ -1035,7 +1081,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if repl_lock.is_none() {
                     *repl_lock = Some(crate::editor::repl::KotlinREPL::new());
                 }
-                
+
                 if let Some(repl) = repl_lock.as_mut() {
                     repl.ui(ui);
                 }
@@ -1098,135 +1144,134 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             });
 
             if let Some(action) = menu_action
-                && Some(tab.clone()) == cfg.context_menu_tab {
-                    match action {
-                        EditorTabMenuAction::ImportResource => {
-                            log::debug!("Import Resource clicked");
+                && Some(tab.clone()) == cfg.context_menu_tab
+            {
+                match action {
+                    EditorTabMenuAction::ImportResource => {
+                        log::debug!("Import Resource clicked");
 
-                            match import_object() {
-                                Ok(_) => {
-                                    success!("Resource(s) imported successfully!");
+                        match import_object() {
+                            Ok(_) => {
+                                success!("Resource(s) imported successfully!");
+                            }
+                            Err(e) => {
+                                warn!("Failed to import resource(s): {e}");
+                            }
+                        }
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::RefreshAssets => {
+                        log::debug!("Refresh assets clicked");
+                        {
+                            let mut res = RESOURCES.write();
+                            match res.update_mem() {
+                                Ok(res_cfg) => {
+                                    *res = res_cfg;
+                                    success!("Assets refreshed successfully!");
                                 }
                                 Err(e) => {
-                                    warn!("Failed to import resource(s): {e}");
+                                    fatal!("Failed to refresh assets: {}", e);
                                 }
                             }
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
                         }
-                        EditorTabMenuAction::RefreshAssets => {
-                            log::debug!("Refresh assets clicked");
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::AddEntity => {
+                        log::debug!("Add Entity clicked");
+                        *self.signal = Signal::CreateEntity;
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::DeleteEntity => {
+                        log::debug!("Delete Entity clicked");
+                        *self.signal = Signal::Delete;
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::AddComponent => {
+                        log::debug!("Add Component clicked");
+                        if let Some(entity) = self.selected_entity {
                             {
-                                let mut res = RESOURCES.write();
-                                match res.update_mem() {
-                                    Ok(res_cfg) => {
-                                        *res = res_cfg;
-                                        success!("Assets refreshed successfully!");
-                                    }
-                                    Err(e) => {
-                                        fatal!("Failed to refresh assets: {}", e);
-                                    }
+                                if let Ok(mut q) = self.world.query_one::<&AdoptedEntity>(*entity)
+                                    && q.get().is_some()
+                                {
+                                    log::debug!("Queried selected entity, it is an entity");
+                                    *self.signal =
+                                        Signal::AddComponent(*entity, EntityType::Entity);
                                 }
                             }
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
-                        }
-                        EditorTabMenuAction::AddEntity => {
-                            log::debug!("Add Entity clicked");
-                            *self.signal = Signal::CreateEntity;
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
-                        }
-                        EditorTabMenuAction::DeleteEntity => {
-                            log::debug!("Delete Entity clicked");
-                            *self.signal = Signal::Delete;
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
-                        }
-                        EditorTabMenuAction::AddComponent => {
-                            log::debug!("Add Component clicked");
-                            if let Some(entity) = self.selected_entity {
-                                {
-                                    if let Ok(mut q) = self.world
-                                        .query_one::<&AdoptedEntity>(*entity)
-                                        && q.get().is_some() {
-                                            log::debug!("Queried selected entity, it is an entity");
-                                            *self.signal =
-                                                Signal::AddComponent(*entity, EntityType::Entity);
-                                        }
-                                }
 
+                            {
+                                if let Ok(mut q) = self.world.query_one::<&Light>(*entity)
+                                    && q.get().is_some()
                                 {
-                                    if let Ok(mut q) = self.world
-                                        .query_one::<&Light>(*entity)
-                                        && q.get().is_some() {
-                                            log::debug!("Queried selected entity, it is a light");
-                                            *self.signal = Signal::AddComponent(*entity, EntityType::Light);
-                                        }
+                                    log::debug!("Queried selected entity, it is a light");
+                                    *self.signal = Signal::AddComponent(*entity, EntityType::Light);
                                 }
-                            } else {
-                                warn!(
-                                    "What are you adding a component to? Theres no entity selected..."
-                                );
                             }
+                        } else {
+                            warn!(
+                                "What are you adding a component to? Theres no entity selected..."
+                            );
+                        }
 
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
-                        }
-                        EditorTabMenuAction::ViewportOption => {
-                            log::debug!("Viewport Option clicked");
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
-                        }
-                        EditorTabMenuAction::RemoveComponent => {
-                            log::debug!("Remove Component clicked");
-                            if let Some(entity) = self.selected_entity {
-                                if let Ok(mut q) = self.world
-                                    .query_one::<&ScriptComponent>(*entity)
-                                {
-                                    if let Some(script) = q.get() {
-                                        log::debug!(
-                                            "Queried selected entity, it has a script component"
-                                        );
-                                        *self.signal = Signal::RemoveComponent(
-                                            *entity,
-                                            Box::new(ComponentType::Script(script.clone())),
-                                        );
-                                    }
-                                } else {
-                                    warn!(
-                                        "Selected entity does not have a script component to remove"
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::ViewportOption => {
+                        log::debug!("Viewport Option clicked");
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
+                    }
+                    EditorTabMenuAction::RemoveComponent => {
+                        log::debug!("Remove Component clicked");
+                        if let Some(entity) = self.selected_entity {
+                            if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(*entity) {
+                                if let Some(script) = q.get() {
+                                    log::debug!(
+                                        "Queried selected entity, it has a script component"
+                                    );
+                                    *self.signal = Signal::RemoveComponent(
+                                        *entity,
+                                        Box::new(ComponentType::Script(script.clone())),
                                     );
                                 }
                             } else {
-                                panic!(
-                                    "Paradoxical error: Cannot remove a component when its not selected..."
-                                );
+                                warn!("Selected entity does not have a script component to remove");
                             }
-
-                            cfg.show_context_menu = false;
-                            cfg.context_menu_tab = None;
-                            return;
+                        } else {
+                            panic!(
+                                "Paradoxical error: Cannot remove a component when its not selected..."
+                            );
                         }
+
+                        cfg.show_context_menu = false;
+                        cfg.context_menu_tab = None;
+                        return;
                     }
                 }
+            }
 
             if let Some(rect) = popup_rect
-                && cfg.show_context_menu && Some(tab.clone()) == cfg.context_menu_tab
-                    && ui
-                        .ctx()
-                        .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
-                        && let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos())
-                            && !rect.contains(pos) {
-                                cfg.show_context_menu = false;
-                                cfg.context_menu_tab = None;
-                            }
+                && cfg.show_context_menu
+                && Some(tab.clone()) == cfg.context_menu_tab
+                && ui
+                    .ctx()
+                    .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
+                && let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos())
+                && !rect.contains(pos)
+            {
+                cfg.show_context_menu = false;
+                cfg.context_menu_tab = None;
+            }
         }
     }
 }
@@ -1249,7 +1294,9 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                     // copy over to models folder
                     {
                         let project = PROJECT.read();
-                        let models_dir = project.project_path.clone()
+                        let models_dir = project
+                            .project_path
+                            .clone()
                             .join("resources")
                             .join("models");
                         if !models_dir.exists() {
@@ -1267,7 +1314,9 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                     // copy over to textures folder
                     {
                         let project = PROJECT.read();
-                        let textures_dir = project.project_path.clone()
+                        let textures_dir = project
+                            .project_path
+                            .clone()
                             .join("resources")
                             .join("textures");
                         if !textures_dir.exists() {
@@ -1285,8 +1334,7 @@ pub(crate) fn import_object() -> anyhow::Result<()> {
                 {
                     let project = PROJECT.read();
                     // everything else copies over to resources root dir
-                    let resources_dir =
-                        project.project_path.clone().join("resources");
+                    let resources_dir = project.project_path.clone().join("resources");
                     if !resources_dir.exists() {
                         std::fs::create_dir_all(&resources_dir)?;
                     }

@@ -1,6 +1,5 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
-use std::sync::Arc;
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
@@ -10,6 +9,7 @@ use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::Vec3;
 use hecs::Entity;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
@@ -37,21 +37,11 @@ pub enum ValueType {
 impl From<Value> for ValueType {
     fn from(value: Value) -> Self {
         match value {
-            Value::String(_) => {
-                ValueType::String
-            }
-            Value::Int(_) => {
-                ValueType::Int
-            }
-            Value::Float(_) => {
-                ValueType::Float
-            }
-            Value::Bool(_) => {
-                ValueType::Bool
-            }
-            Value::Vec3(_) => {
-                ValueType::Vec3
-            }
+            Value::String(_) => ValueType::String,
+            Value::Int(_) => ValueType::Int,
+            Value::Float(_) => ValueType::Float,
+            Value::Bool(_) => ValueType::Bool,
+            Value::Vec3(_) => ValueType::Vec3,
         }
     }
 }
@@ -68,7 +58,6 @@ impl From<&mut Value> for ValueType {
     }
 }
 
-
 impl InspectableComponent for ModelProperties {
     fn inspect(
         &mut self,
@@ -82,122 +71,126 @@ impl InspectableComponent for ModelProperties {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
             .show(ui, |ui| {
-                Grid::new("properties")
-                    .striped(true)
-                    .show(ui, |ui| {
-                        ui.label(RichText::new("Key"));
-                        ui.label(RichText::new("Type"));
-                        ui.label(RichText::new("Value"));
-                        ui.label(RichText::new("Action"));
-                        ui.end_row();
+                Grid::new("properties").striped(true).show(ui, |ui| {
+                    ui.label(RichText::new("Key"));
+                    ui.label(RichText::new("Type"));
+                    ui.label(RichText::new("Value"));
+                    ui.label(RichText::new("Action"));
+                    ui.end_row();
 
-                        let mut to_delete: Option<String> = None;
-                        let mut to_rename: Option<(String, String)> = None;
+                    let mut to_delete: Option<String> = None;
+                    let mut to_rename: Option<(String, String)> = None;
 
-                        let keys: Vec<String> = self.custom_properties.keys().cloned().collect();
-                        for (i, key) in keys.into_iter().enumerate() {
-                            let val = self.custom_properties.get_mut(&key).unwrap();
+                    let keys: Vec<String> = self.custom_properties.keys().cloned().collect();
+                    for (i, key) in keys.into_iter().enumerate() {
+                        let val = self.custom_properties.get_mut(&key).unwrap();
 
-                            let mut edited_key = key.clone();
-                            ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
+                        let mut edited_key = key.clone();
+                        ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
 
-                            if edited_key != key {
-                                to_rename = Some((key.clone(), edited_key));
-                            }
+                        if edited_key != key {
+                            to_rename = Some((key.clone(), edited_key));
+                        }
 
-                            let current_type = ValueType::from(&mut *val);
-                            let mut selected_type = current_type;
+                        let current_type = ValueType::from(&mut *val);
+                        let mut selected_type = current_type;
 
-                            ComboBox::from_id_salt(format!("type_{}_{}", i, key))
-                                .selected_text(format!("{:?}", selected_type))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut selected_type, ValueType::String, "String");
-                                    ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
-                                    ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
-                                    ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
-                                    ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
-                                });
+                        ComboBox::from_id_salt(format!("type_{}_{}", i, key))
+                            .selected_text(format!("{:?}", selected_type))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut selected_type,
+                                    ValueType::String,
+                                    "String",
+                                );
+                                ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
+                                ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
+                                ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
+                                ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
+                            });
 
-                            if selected_type != current_type {
-                                *val = match selected_type {
-                                    ValueType::String => Value::String(String::new()),
-                                    ValueType::Float => Value::Float(0.0),
-                                    ValueType::Int => Value::Int(0),
-                                    ValueType::Bool => Value::Bool(false),
-                                    ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
-                                };
-                            }
-
-                            let speed = {
-                                let input = ui.input(|i| i.modifiers);
-                                if input.shift {
-                                    0.01
-                                } else if cfg!(target_os = "macos") && input.mac_cmd || !cfg!(target_os = "macos") && input.ctrl {
-                                    1.0
-                                } else {
-                                    0.1
-                                }
+                        if selected_type != current_type {
+                            *val = match selected_type {
+                                ValueType::String => Value::String(String::new()),
+                                ValueType::Float => Value::Float(0.0),
+                                ValueType::Int => Value::Int(0),
+                                ValueType::Bool => Value::Bool(false),
+                                ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
                             };
-
-                            match val {
-                                Value::String(s) => {
-                                    ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
-                                }
-                                Value::Int(n) => {
-                                    ui.add(DragValue::new(n).speed(1.0));
-                                }
-                                Value::Float(f) => {
-                                    ui.add(DragValue::new(f).speed(speed));
-                                }
-                                Value::Bool(b) => {
-                                    if ui.button(if *b { "✅" } else { "❌" }).clicked() {
-                                        *b = !*b;
-                                    }
-                                }
-                                Value::Vec3(v) => {
-                                    ui.horizontal(|ui| {
-                                        ui.add(DragValue::new(&mut v[0]).speed(speed));
-                                        ui.add(DragValue::new(&mut v[1]).speed(speed));
-                                        ui.add(DragValue::new(&mut v[2]).speed(speed));
-                                    });
-                                }
-                            }
-
-                            if ui.button("🗑️").clicked() {
-                                log::debug!("Trashing {}", key);
-                                to_delete = Some(key);
-                            }
-
-                            ui.end_row();
                         }
 
-                        if let Some(key) = to_delete {
-                            self.custom_properties.remove(&key);
-                        }
+                        let speed = {
+                            let input = ui.input(|i| i.modifiers);
+                            if input.shift {
+                                0.01
+                            } else if cfg!(target_os = "macos") && input.mac_cmd
+                                || !cfg!(target_os = "macos") && input.ctrl
+                            {
+                                1.0
+                            } else {
+                                0.1
+                            }
+                        };
 
-                        if let Some((old_key, new_key)) = to_rename {
-                            if new_key.is_empty() {
-                                warn!("Skipping rename to empty key");
-                            } else if old_key != new_key {
-                                if let Some(val) = self.custom_properties.remove(&old_key) {
-                                    self.custom_properties.insert(new_key, val);
-                                } else {
-                                    warn!("Failed to rename property: old key not found");
+                        match val {
+                            Value::String(s) => {
+                                ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
+                            }
+                            Value::Int(n) => {
+                                ui.add(DragValue::new(n).speed(1.0));
+                            }
+                            Value::Float(f) => {
+                                ui.add(DragValue::new(f).speed(speed));
+                            }
+                            Value::Bool(b) => {
+                                if ui.button(if *b { "✅" } else { "❌" }).clicked() {
+                                    *b = !*b;
                                 }
+                            }
+                            Value::Vec3(v) => {
+                                ui.horizontal(|ui| {
+                                    ui.add(DragValue::new(&mut v[0]).speed(speed));
+                                    ui.add(DragValue::new(&mut v[1]).speed(speed));
+                                    ui.add(DragValue::new(&mut v[2]).speed(speed));
+                                });
                             }
                         }
 
-                        if ui.button("Add").clicked() {
-                            log::debug!("Inserting new default value");
-                            let mut new_key = String::from("new_property");
-                            let mut counter = 1;
-                            while self.custom_properties.contains_key(&new_key) {
-                                new_key = format!("new_property_{}", counter);
-                                counter += 1;
-                            }
-                            self.custom_properties.insert(new_key, Value::default());
+                        if ui.button("🗑️").clicked() {
+                            log::debug!("Trashing {}", key);
+                            to_delete = Some(key);
                         }
-                    });
+
+                        ui.end_row();
+                    }
+
+                    if let Some(key) = to_delete {
+                        self.custom_properties.remove(&key);
+                    }
+
+                    if let Some((old_key, new_key)) = to_rename {
+                        if new_key.is_empty() {
+                            warn!("Skipping rename to empty key");
+                        } else if old_key != new_key {
+                            if let Some(val) = self.custom_properties.remove(&old_key) {
+                                self.custom_properties.insert(new_key, val);
+                            } else {
+                                warn!("Failed to rename property: old key not found");
+                            }
+                        }
+                    }
+
+                    if ui.button("Add").clicked() {
+                        log::debug!("Inserting new default value");
+                        let mut new_key = String::from("new_property");
+                        let mut counter = 1;
+                        while self.custom_properties.contains_key(&new_key) {
+                            new_key = format!("new_property_{}", counter);
+                            counter += 1;
+                        }
+                        self.custom_properties.insert(new_key, Value::default());
+                    }
+                });
             });
     }
 }
@@ -236,13 +229,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed X transform change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed X transform change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -262,13 +256,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Y transform change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Y transform change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -289,13 +284,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Z transform change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Z transform change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -342,13 +338,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed X rotation change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed X rotation change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -382,13 +379,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Y rotation change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Y rotation change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -422,13 +420,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Z rotation change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Z rotation change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -484,13 +483,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed X scale change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed X scale change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -515,13 +515,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Y scale change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Y scale change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -546,13 +547,14 @@ impl InspectableComponent for Transform {
 
                         if response.drag_stopped() && cfg.transform_in_progress {
                             if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take() {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Z scale change to undo stack");
-                                }
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Z scale change to undo stack");
+                            }
                             cfg.transform_in_progress = false;
                         }
                     });
@@ -595,7 +597,10 @@ impl InspectableComponent for ScriptComponent {
                             for (i, tag) in self.tags.iter_mut().enumerate() {
                                 let current_width = ui.available_width();
                                 ui.horizontal(|ui| {
-                                    ui.add_sized([current_width*70.0/100.0, 20.0], TextEdit::singleline(tag));
+                                    ui.add_sized(
+                                        [current_width * 70.0 / 100.0, 20.0],
+                                        TextEdit::singleline(tag),
+                                    );
                                     if ui.button("🗑️").clicked() {
                                         local_del = Some(i);
                                     }

@@ -10,10 +10,10 @@ use parking_lot::Mutex;
 // };
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
-use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
 pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/textures/grey.png");
@@ -147,7 +147,6 @@ impl LazyType for LazyModel {
 
         let mut meshes = Vec::new();
         for mesh_data in &self.parsed_data.mesh_data {
-
             for v in &mesh_data.vertices {
                 let _ = v.position.iter().map(|v| (*v as i32).hash(&mut hasher));
                 let _ = v.tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));

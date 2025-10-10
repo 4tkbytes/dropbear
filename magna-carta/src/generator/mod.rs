@@ -1,14 +1,18 @@
-use std::path::Path;
 use crate::ScriptManifest;
+use std::path::Path;
 
-pub mod native;
 pub mod jvm;
+pub mod native;
 
 #[allow(dead_code)]
 pub trait Generator {
     fn generate(&self, manifest: &ScriptManifest) -> anyhow::Result<String>;
 
-    fn write_to_file(&self, manifest: &ScriptManifest, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    fn write_to_file(
+        &self,
+        manifest: &ScriptManifest,
+        path: impl AsRef<Path>,
+    ) -> anyhow::Result<()> {
         let content = self.generate(manifest)?;
         std::fs::write(path, content)?;
         Ok(())
@@ -18,10 +22,10 @@ pub trait Generator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use crate::ManifestItem;
     use crate::generator::jvm::KotlinJVMGenerator;
     use crate::generator::native::KotlinNativeGenerator;
-    use crate::ManifestItem;
+    use std::path::PathBuf;
 
     #[test]
     fn test_native_generator() {

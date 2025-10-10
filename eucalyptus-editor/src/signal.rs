@@ -1,18 +1,20 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use egui::{Align2, Image};
-use hecs::Entity;
+use crate::editor::{
+    ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction,
+};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
-use eucalyptus_core::{fatal, info, scripting, success, success_without_console, warn, warn_without_console};
-use eucalyptus_core::camera::{CameraAction, CameraComponent, CameraType};
+use egui::{Align2, Image};
+use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::ScriptTarget;
-use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
-use crate::editor::{ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction};
+use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
+use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
+use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
+use hecs::Entity;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -27,10 +29,10 @@ impl SignalController for Editor {
 
         match &self.signal {
             Signal::None => {
-                // returns absolutely nothing because no signal is set. 
+                // returns absolutely nothing because no signal is set.
                 Ok::<(), anyhow::Error>(())
             }
-            Signal::Copy(_) => {Ok(())}
+            Signal::Copy(_) => Ok(()),
             Signal::Paste(scene_entity) => {
                 let spawn = PendingSpawn {
                     asset_path: scene_entity.model_path.clone(),
@@ -42,20 +44,19 @@ impl SignalController for Editor {
                 push_pending_spawn(spawn);
                 self.signal = Signal::Copy(scene_entity.clone());
                 Ok(())
-            },
+            }
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
-                    let is_viewport_cam = if let Ok(mut q) = self.world
-                        .query_one::<&CameraComponent>(*sel_e)
-                    {
-                        if let Some(c) = q.get() {
-                            matches!(c.camera_type, CameraType::Debug)
+                    let is_viewport_cam =
+                        if let Ok(mut q) = self.world.query_one::<&CameraComponent>(*sel_e) {
+                            if let Some(c) = q.get() {
+                                matches!(c.camera_type, CameraType::Debug)
+                            } else {
+                                false
+                            }
                         } else {
                             false
-                        }
-                    } else {
-                        false
-                    };
+                        };
                     if is_viewport_cam {
                         warn!("You can't delete the viewport camera");
                         self.signal = Signal::None;
@@ -120,10 +121,7 @@ impl SignalController for Editor {
 
                     let mut script_entities = Vec::new();
                     {
-                        for (entity_id, script) in self.world
-                            .query::<&ScriptComponent>()
-                            .iter()
-                        {
+                        for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
                             script_entities.push((entity_id, script.clone()));
                         }
                     }
@@ -142,7 +140,10 @@ impl SignalController for Editor {
                     let etag_clone = etag.clone();
 
                     // todo: get the library name working
-                    if let Err(e) = self.script_manager.init_script(etag_clone, ScriptTarget::None) {
+                    if let Err(e) = self
+                        .script_manager
+                        .init_script(etag_clone, ScriptTarget::None)
+                    {
                         fatal!("Failed to ready script manager interface because {}", e);
                         self.signal = Signal::StopPlaying;
                         return Err(anyhow::anyhow!(e));
@@ -156,14 +157,23 @@ impl SignalController for Editor {
                         );
 
                         for e in entities {
-                            if let Err(e) = self.script_manager.load_script(*e, tag.clone(), &mut self.world, &self.input_state) {
-                                fatal!("Failed to initialise script for tag {:?} because {}", tag, e);
+                            if let Err(e) = self.script_manager.load_script(
+                                *e,
+                                tag.clone(),
+                                &mut self.world,
+                                &self.input_state,
+                            ) {
+                                fatal!(
+                                    "Failed to initialise script for tag {:?} because {}",
+                                    tag,
+                                    e
+                                );
                                 self.signal = Signal::StopPlaying;
                                 return Err(anyhow::anyhow!(e));
                             } else {
                                 success_without_console!(
-                                        "You are in play mode now! Press Escape to exit"
-                                    );
+                                    "You are in play mode now! Press Escape to exit"
+                                );
                                 log::info!("You are in play mode now! Press Escape to exit");
                             }
                         }
@@ -200,9 +210,7 @@ impl SignalController for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(mut q) = self.world
-                            .query_one::<&AdoptedEntity>(*entity)
-                        {
+                        if let Ok(mut q) = self.world.query_one::<&AdoptedEntity>(*entity) {
                             if let Some(e) = q.get() {
                                 let label = e.model.label.clone();
                                 egui::Window::new(format!("Add component for {}", label))
@@ -220,9 +228,9 @@ impl SignalController for Editor {
                                             .clicked()
                                         {
                                             log::debug!(
-                                            "Adding scripting component to entity [{}]",
-                                            label
-                                        );
+                                                "Adding scripting component to entity [{}]",
+                                                label
+                                            );
                                             local_insert_script = true;
                                             local_signal = Some(Signal::None);
                                         }
@@ -234,15 +242,14 @@ impl SignalController for Editor {
                                             .clicked()
                                         {
                                             log::debug!(
-                                            "Adding camera component to entity [{}]",
-                                            label
-                                        );
+                                                "Adding camera component to entity [{}]",
+                                                label
+                                            );
 
                                             local_insert_camera = (true, label.clone());
                                             local_signal = Some(Signal::None);
                                         }
                                     });
-
                             }
                         } else {
                             log_once::warn_once!(
@@ -250,13 +257,10 @@ impl SignalController for Editor {
                             );
                         }
                         if local_insert_script {
-                            if let Err(e) = self.world
-                                .insert_one(*entity, ScriptComponent::default())
+                            if let Err(e) =
+                                self.world.insert_one(*entity, ScriptComponent::default())
                             {
-                                warn!(
-                                    "Failed to add scripting component to entity: {}",
-                                    e
-                                );
+                                warn!("Failed to add scripting component to entity: {}", e);
                             } else {
                                 success!("Added the scripting component");
                             }
@@ -268,13 +272,8 @@ impl SignalController for Editor {
                                 Some(&format!("{} Camera", local_insert_camera.1)),
                             );
                             let component = CameraComponent::new();
-                            if let Err(e) = self.world
-                                .insert(*entity, (camera, component))
-                            {
-                                warn!(
-                                    "Failed to add camera component to entity: {}",
-                                    e
-                                );
+                            if let Err(e) = self.world.insert(*entity, (camera, component)) {
+                                warn!("Failed to add camera component to entity: {}", e);
                             } else {
                                 success!("Added the camera component");
                             }
@@ -282,13 +281,10 @@ impl SignalController for Editor {
                         Ok(())
                     }
                     EntityType::Light => {
-                        {
-                            if let Ok(mut q) = self.world
-                                .query_one::<&Light>(*entity)
-                            {
-                                if let Some(light) = q.get() {
-                                    let mut show = true;
-                                    egui::Window::new(format!("Add component for {}", light.label))
+                        if let Ok(mut q) = self.world.query_one::<&Light>(*entity) {
+                            if let Some(light) = q.get() {
+                                let mut show = true;
+                                egui::Window::new(format!("Add component for {}", light.label))
                                         .scroll([false, true])
                                         .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                                         .enabled(true)
@@ -316,23 +312,22 @@ impl SignalController for Editor {
                                                 self.signal = Signal::None;
                                             }
                                         });
-                                    if !show {
-                                        self.signal = Signal::None;
-                                    }
+                                if !show {
+                                    self.signal = Signal::None;
                                 }
-                                Ok(())
-                            } else {
-                                log_once::warn_once!(
-                                    "Failed to add component to light: no light component found"
-                                );
-                                Ok(())
                             }
+                            Ok(())
+                        } else {
+                            log_once::warn_once!(
+                                "Failed to add component to light: no light component found"
+                            );
+                            Ok(())
                         }
                     }
                     EntityType::Camera => {
                         {
-                            if let Ok(mut q) = self.world
-                                .query_one::<(&Camera, &CameraComponent)>(*entity)
+                            if let Ok(mut q) =
+                                self.world.query_one::<(&Camera, &CameraComponent)>(*entity)
                             {
                                 if let Some((cam, _comp)) = q.get() {
                                     let mut show = true;
@@ -346,7 +341,9 @@ impl SignalController for Editor {
                                             egui_extras::install_image_loaders(ui.ctx());
                                             ui.add(Image::from_bytes(
                                                 "bytes://theres_nothing.jpg",
-                                                include_bytes!("../../resources/textures/theres_nothing.jpg"),
+                                                include_bytes!(
+                                                    "../../resources/textures/theres_nothing.jpg"
+                                                ),
                                             ));
                                             ui.label("Theres nothing...");
                                             // scripting could be planned???
@@ -372,52 +369,50 @@ impl SignalController for Editor {
                     }
                 }
             }
-            Signal::RemoveComponent(entity, c_type) =>
-                {match &**c_type {
-                    ComponentType::Script(_) => {
-                        match self.world
-                            .remove_one::<ScriptComponent>(*entity)
-                        {
-                            Ok(component) => {
-                                success!("Removed script component from entity {:?}", entity);
-                                UndoableAction::push_to_undo(
-                                    &mut self.undo_stack,
-                                    UndoableAction::RemoveComponent(
-                                        *entity,
-                                        Box::new(ComponentType::Script(component)),
-                                    ),
-                                );
-                            }
-                            Err(e) => {
-                                warn!("Failed to remove script component from entity: {}", e);
-                            }
-                        };
-                        self.signal = Signal::None;
-                        Ok(())
-                    }
-                    ComponentType::Camera(_, _) => {
-                        match self.world
-                            .remove::<(Camera, CameraComponent)>(*entity)
-                        {
-                            Ok(component) => {
-                                success!("Removed camera component from entity {:?}", entity);
-                                UndoableAction::push_to_undo(
-                                    &mut self.undo_stack,
-                                    UndoableAction::RemoveComponent(
-                                        *entity,
-                                        Box::new(ComponentType::Camera(Box::new(component.0), component.1)),
-                                    ),
-                                );
-                            }
-                            Err(e) => {
-                                warn!("Failed to remove script component from entity: {}", e);
-                                self.signal = Signal::None;
-                            }
-                        };
-                        self.signal = Signal::None;
-                        Ok(())
-                    }
-                }},
+            Signal::RemoveComponent(entity, c_type) => match &**c_type {
+                ComponentType::Script(_) => {
+                    match self.world.remove_one::<ScriptComponent>(*entity) {
+                        Ok(component) => {
+                            success!("Removed script component from entity {:?}", entity);
+                            UndoableAction::push_to_undo(
+                                &mut self.undo_stack,
+                                UndoableAction::RemoveComponent(
+                                    *entity,
+                                    Box::new(ComponentType::Script(component)),
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            warn!("Failed to remove script component from entity: {}", e);
+                        }
+                    };
+                    self.signal = Signal::None;
+                    Ok(())
+                }
+                ComponentType::Camera(_, _) => {
+                    match self.world.remove::<(Camera, CameraComponent)>(*entity) {
+                        Ok(component) => {
+                            success!("Removed camera component from entity {:?}", entity);
+                            UndoableAction::push_to_undo(
+                                &mut self.undo_stack,
+                                UndoableAction::RemoveComponent(
+                                    *entity,
+                                    Box::new(ComponentType::Camera(
+                                        Box::new(component.0),
+                                        component.1,
+                                    )),
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            warn!("Failed to remove script component from entity: {}", e);
+                            self.signal = Signal::None;
+                        }
+                    };
+                    self.signal = Signal::None;
+                    Ok(())
+                }
+            },
             Signal::CreateEntity => {
                 let mut show = true;
                 egui::Window::new("Add Entity")
@@ -464,7 +459,11 @@ impl SignalController for Editor {
                 let mut counter = 0;
                 for e in self.world.iter() {
                     if let Some(entity) = e.get::<&AdoptedEntity>() {
-                        log::info!("Model: {:?} with u32 id: {:?}", entity.model.label, e.entity().id());
+                        log::info!(
+                            "Model: {:?} with u32 id: {:?}",
+                            entity.model.label,
+                            e.entity().id()
+                        );
                         log::info!("  |-> Using model: {:?}", entity.model.id);
                     }
 
@@ -486,7 +485,12 @@ impl SignalController for Editor {
             Signal::Spawn(entity_type) => {
                 match entity_type {
                     crate::editor::PendingSpawn2::Light => {
-                        let light = Light::new(graphics.clone(), LightComponent::default(), Transform::new(), Some("Default Light"));
+                        let light = Light::new(
+                            graphics.clone(),
+                            LightComponent::default(),
+                            Transform::new(),
+                            Some("Default Light"),
+                        );
                         let handle = graphics.future_queue.push(light);
                         self.alt_pending_spawn_queue.push(handle);
                         success!("Pushed light to queue");
@@ -507,7 +511,9 @@ impl SignalController for Editor {
                             .custom_properties
                             .insert("tiles_z".to_string(), Value::Int(200));
                         push_pending_spawn(PendingSpawn {
-                            asset_path: ResourceReference::from_reference(ResourceReferenceType::Plane),
+                            asset_path: ResourceReference::from_reference(
+                                ResourceReferenceType::Plane,
+                            ),
                             asset_name: "DefaultPlane".to_string(),
                             transform,
                             properties: props,
@@ -517,7 +523,9 @@ impl SignalController for Editor {
                     }
                     PendingSpawn2::Cube => {
                         let pending = PendingSpawn {
-                            asset_path: ResourceReference::from_bytes(include_bytes!("../../resources/models/cube.glb")),
+                            asset_path: ResourceReference::from_bytes(include_bytes!(
+                                "../../resources/models/cube.glb"
+                            )),
                             asset_name: "Default Cube".to_string(),
                             transform: Default::default(),
                             properties: Default::default(),
@@ -530,8 +538,7 @@ impl SignalController for Editor {
                         let camera = Camera::predetermined(graphics.clone(), None);
                         let component = CameraComponent::new();
                         {
-                            self.world
-                                .spawn((camera, component));
+                            self.world.spawn((camera, component));
                         }
                         success!("Pushed camera to queue");
                     }

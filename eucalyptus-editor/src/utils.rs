@@ -50,9 +50,9 @@ pub fn show_new_project_window<F>(
                         .set_title("Save Project")
                         .set_file_name(project_name.clone())
                         .pick_folder()
-                    {
-                        *project_path = Some(path);
-                    }
+                {
+                    *project_path = Some(path);
+                }
 
                 let can_create = project_path.is_some() && !project_name.is_empty();
                 if ui

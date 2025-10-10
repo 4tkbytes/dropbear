@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs, path::PathBuf, process::Command};
-use std::path::Path;
 use clap::ArgMatches;
+use std::path::Path;
+use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 use zip::write::SimpleFileOptions;
 
 use eucalyptus_core::states::{ProjectConfig, RuntimeData, SCENES, SOURCE};
@@ -285,7 +285,10 @@ fn copy_system_libraries(output_dir: impl AsRef<Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_zip_package(source_dir: impl AsRef<Path>, zip_path: impl AsRef<Path>) -> anyhow::Result<()> {
+fn create_zip_package(
+    source_dir: impl AsRef<Path>,
+    zip_path: impl AsRef<Path>,
+) -> anyhow::Result<()> {
     let file = fs::File::create(zip_path.as_ref())?;
     let mut zip = zip::ZipWriter::new(file);
 
@@ -361,12 +364,13 @@ pub fn build(
             let entry = entry?;
             let path = entry.path();
             if let Some(ext) = path.extension()
-                && ext == "rhai" {
-                    let name = path.file_name().unwrap().to_string_lossy().to_string();
-                    let contents = fs::read_to_string(&path)?;
-                    println!(" > Copied script info from [{}]", name);
-                    scripts.insert(name, contents);
-                }
+                && ext == "rhai"
+            {
+                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                let contents = fs::read_to_string(&path)?;
+                println!(" > Copied script info from [{}]", name);
+                scripts.insert(name, contents);
+            }
         }
     }
 
@@ -468,10 +472,10 @@ fn check_assimp_availability() -> bool {
             }
         }
 
-        if let Ok(output) = Command::new("where").arg("assimp.dll").output() {
-            if output.status.success() {
-                return true;
-            }
+        if let Ok(output) = Command::new("where").arg("assimp.dll").output()
+            && output.status.success()
+        {
+            return true;
         }
     }
 
@@ -495,19 +499,21 @@ fn check_assimp_availability() -> bool {
         if let Ok(output) = Command::new("pkg-config")
             .args(["--exists", "assimp"])
             .output()
-            && output.status.success() {
-                return true;
-            }
+            && output.status.success()
+        {
+            return true;
+        }
 
         #[cfg(target_os = "linux")]
         {
             if let Ok(output) = Command::new("ldconfig").args(["-p"]).output()
-                && output.status.success() {
-                    let output_str = String::from_utf8_lossy(&output.stdout);
-                    if output_str.contains("libassimp") {
-                        return true;
-                    }
+                && output.status.success()
+            {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                if output_str.contains("libassimp") {
+                    return true;
                 }
+            }
         }
     }
 

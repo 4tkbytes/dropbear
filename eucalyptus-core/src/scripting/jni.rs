@@ -1,14 +1,14 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
+use dropbear_engine::entity::AdoptedEntity;
+use hecs::World;
+use jni::objects::{GlobalRef, JClass, JString, JValue};
+use jni::sys::jlong;
+use jni::sys::jobject;
+use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use std::path::Path;
 use std::sync::Arc;
-use hecs::World;
-use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
-use jni::objects::{GlobalRef, JClass, JString, JValue};
-use jni::sys::jobject;
-use jni::sys::jlong;
-use dropbear_engine::entity::AdoptedEntity;
 
 pub struct JavaContext {
     jvm: Arc<JavaVM>,
@@ -33,36 +33,36 @@ impl JavaContext {
     }
 
     pub fn init(&mut self, world: &World) -> anyhow::Result<()> {
-            let mut env = self.jvm.attach_current_thread()?;
+        let mut env = self.jvm.attach_current_thread()?;
 
-            // create native engine first
-            let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
-            let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
+        // create native engine first
+        let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
+        let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
 
-            let world_ptr = world as *const World;
+        let world_ptr = world as *const World;
 
-            let world_handle = world_ptr as jlong;
-            env.call_method(
-                &native_engine_obj,
-                "init",
-                "(J)V",
-                &[JValue::Long(world_handle)],
-            )?;
+        let world_handle = world_ptr as jlong;
+        env.call_method(
+            &native_engine_obj,
+            "init",
+            "(J)V",
+            &[JValue::Long(world_handle)],
+        )?;
 
-            // create dropbear engine after
-            let dropbear_class: JClass = env.find_class("com/dropbear/DropbearEngine")?;
-            let dropbear_obj = env.new_object(
-                dropbear_class,
-                "(Lcom/dropbear/ffi/NativeEngine;)V",
-                &[JValue::Object(&native_engine_obj)],
-            )?;
+        // create dropbear engine after
+        let dropbear_class: JClass = env.find_class("com/dropbear/DropbearEngine")?;
+        let dropbear_obj = env.new_object(
+            dropbear_class,
+            "(Lcom/dropbear/ffi/NativeEngine;)V",
+            &[JValue::Object(&native_engine_obj)],
+        )?;
 
-            let global_ref = env.new_global_ref(dropbear_obj)?;
+        let global_ref = env.new_global_ref(dropbear_obj)?;
 
         self.dropbear_engine_class = Some(global_ref);
 
         if let Some(global_ref) = &self.dropbear_engine_class {
-            env.call_method(&global_ref, "init", "()V", &[])?;
+            env.call_method(global_ref, "init", "()V", &[])?;
         }
 
         Ok(())
@@ -72,7 +72,12 @@ impl JavaContext {
 #[unsafe(no_mangle)]
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 // (JNIEnv *, jobject, jlong, jstring);
-pub fn Java_com_dropbear_ffi_JNINative_getEntity(env: &mut JNIEnv, _obj: jobject, world_handle: jlong, label: JString) -> jlong {
+pub fn Java_com_dropbear_ffi_JNINative_getEntity(
+    env: &mut JNIEnv,
+    _obj: jobject,
+    world_handle: jlong,
+    label: JString,
+) -> jlong {
     let label = env.get_string(&label).unwrap();
     let world = world_handle as *mut World;
 
@@ -82,7 +87,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(env: &mut JNIEnv, _obj: jobject
 
     for (id, entity) in world.query::<&AdoptedEntity>().iter() {
         if entity.model.label == rust_label {
-            return jlong::from(id.id())
+            return jlong::from(id.id());
         }
     }
     jlong::from(-1)

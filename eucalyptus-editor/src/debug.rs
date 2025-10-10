@@ -3,10 +3,7 @@
 use crate::editor::Signal;
 use egui::Ui;
 
-pub(crate) fn show_menu_bar(
-    ui: &mut Ui,
-    signal: &mut Signal,
-) {
+pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
     ui.menu_button("Debug", |ui_debug| {
         if ui_debug.button("Panic").clicked() {
             log::warn!("Panic caused on purpose from Menu Button Click");
@@ -17,7 +14,5 @@ pub(crate) fn show_menu_bar(
             log::info!("Show Entities Loaded under Debug Menu is clicked");
             *signal = Signal::LogEntities;
         }
-
-        
     });
 }

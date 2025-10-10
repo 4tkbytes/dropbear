@@ -16,9 +16,7 @@ impl Default for ScriptManifest {
 
 impl ScriptManifest {
     pub fn new() -> Self {
-        Self {
-            items: Vec::new(),
-        }
+        Self { items: Vec::new() }
     }
 
     pub fn add_item(&mut self, item: ManifestItem) {
@@ -51,12 +49,7 @@ pub struct ManifestItem {
 }
 
 impl ManifestItem {
-    pub fn new(
-        fqcn: String,
-        simple_name: String,
-        tags: Vec<String>,
-        file_path: PathBuf,
-    ) -> Self {
+    pub fn new(fqcn: String, simple_name: String, tags: Vec<String>, file_path: PathBuf) -> Self {
         Self {
             fqcn,
             simple_name,
@@ -116,12 +109,7 @@ impl KotlinProcessor {
                 format!("{}.{}", package, class_name)
             };
 
-            return Ok(Some(ManifestItem::new(
-                fqcn,
-                class_name,
-                tags,
-                file_path,
-            )));
+            return Ok(Some(ManifestItem::new(fqcn, class_name, tags, file_path)));
         }
 
         Ok(None)
@@ -143,7 +131,9 @@ impl KotlinProcessor {
         let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&query, root_node, source.as_bytes());
 
-        if let Some(match_) = matches.next() && let Some(capture) = match_.captures.first() {
+        if let Some(match_) = matches.next()
+            && let Some(capture) = match_.captures.first()
+        {
             let package_node = capture.node;
             let package_text = package_node.utf8_text(source.as_bytes())?;
 
@@ -201,30 +191,40 @@ impl KotlinProcessor {
                 let text = capture.node.utf8_text(source.as_bytes())?;
 
                 // case 1 (no brackets)
-                if let Some(idx) = annotation_name_idx && capture.index == idx && text == "Runnable" {
+                if let Some(idx) = annotation_name_idx
+                    && capture.index == idx
+                    && text == "Runnable"
+                {
                     found_runnable = true;
                 }
 
                 // case 2 (with brackets)
-                if let Some(idx) = annotation_name2_idx && capture.index == idx && text == "Runnable" {
+                if let Some(idx) = annotation_name2_idx
+                    && capture.index == idx
+                    && text == "Runnable"
+                {
                     found_runnable = true;
                 }
 
                 // class names
-                if let Some(idx) = class_name_idx && capture.index == idx {
+                if let Some(idx) = class_name_idx
+                    && capture.index == idx
+                {
                     class_name = text.to_string();
                 }
 
-                if let Some(idx) = class_name2_idx && capture.index == idx {
+                if let Some(idx) = class_name2_idx
+                    && capture.index == idx
+                {
                     class_name = text.to_string();
                 }
-
 
                 // case 2 value args
-                if let Some(idx) = value_args_idx && capture.index == idx {
+                if let Some(idx) = value_args_idx
+                    && capture.index == idx
+                {
                     value_args_node = Some(capture.node);
                 }
-
             }
 
             if found_runnable && !class_name.is_empty() {
@@ -260,13 +260,13 @@ impl KotlinProcessor {
                         if !clean_tag.is_empty() {
                             tags.push(clean_tag);
                         }
-                    }
-                    else if child.kind() == "collection_literal" {
+                    } else if child.kind() == "collection_literal" {
                         let mut collection_cursor = child.walk();
                         for collection_item in child.children(&mut collection_cursor) {
                             if collection_item.kind() == "string_literal" {
                                 let text = collection_item.utf8_text(source.as_bytes())?;
-                                let clean_tag = text.trim_matches(|c| c == '"' || c == '\'').to_string();
+                                let clean_tag =
+                                    text.trim_matches(|c| c == '"' || c == '\'').to_string();
                                 if !clean_tag.is_empty() {
                                     tags.push(clean_tag);
                                 }
@@ -312,7 +312,10 @@ class Player: System {
 
         let mut processor = KotlinProcessor::new().unwrap();
         let result = processor
-            .process_file(source, PathBuf::from("src/main/kotlin/com/dropbear/Player.kt"))
+            .process_file(
+                source,
+                PathBuf::from("src/main/kotlin/com/dropbear/Player.kt"),
+            )
             .unwrap();
 
         assert!(result.is_some());

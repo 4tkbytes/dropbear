@@ -4,16 +4,16 @@ mod camera;
 mod debug;
 mod editor;
 mod menu;
-mod utils;
-mod spawn;
 mod signal;
+mod spawn;
+mod utils;
 
 use clap::{Arg, Command};
-use dropbear_engine::{scene, WindowConfiguration};
-use std::{fs, path::PathBuf, rc::Rc};
-use std::sync::Arc;
-use parking_lot::RwLock;
 use dropbear_engine::future::FutureQueue;
+use dropbear_engine::{WindowConfiguration, scene};
+use parking_lot::RwLock;
+use std::sync::Arc;
+use std::{fs, path::PathBuf, rc::Rc};
 
 pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "Eucalyptus",
@@ -133,41 +133,52 @@ async fn main() -> anyhow::Result<()> {
                     }
                 },
             };
-            
+
             println!("\"Compile\" command not implemented yet");
             // crate::build::compile(project_path).await?;
         }
         None => {
             let config = WindowConfiguration {
-                title: format!("Eucalyptus, built with dropbear | Version {} on commit {}", env!("CARGO_PKG_VERSION"), env!("GIT_HASH")),
+                title: format!(
+                    "Eucalyptus, built with dropbear | Version {} on commit {}",
+                    env!("CARGO_PKG_VERSION"),
+                    env!("GIT_HASH")
+                ),
                 windowed_mode: dropbear_engine::WindowedModes::Maximised,
                 max_fps: dropbear_engine::App::NO_FPS_CAP,
                 app_info: APP_INFO,
             };
-            
+
             let future_queue = Arc::new(FutureQueue::new());
 
             let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
-            let editor = Rc::new(RwLock::new(editor::Editor::new().unwrap_or_else(|e| panic!("Unable to initialise Eucalyptus Editor: {}", e))));
+            let editor =
+                Rc::new(RwLock::new(editor::Editor::new().unwrap_or_else(|e| {
+                    panic!("Unable to initialise Eucalyptus Editor: {}", e)
+                })));
 
-            dropbear_engine::run_app!(config, Some(future_queue), |mut scene_manager, mut input_manager| {
-                scene::add_scene_with_input(
-                    &mut scene_manager,
-                    &mut input_manager,
-                    main_menu,
-                    "main_menu",
-                );
-                scene::add_scene_with_input(
-                    &mut scene_manager,
-                    &mut input_manager,
-                    editor,
-                    "editor",
-                );
+            dropbear_engine::run_app!(
+                config,
+                Some(future_queue),
+                |mut scene_manager, mut input_manager| {
+                    scene::add_scene_with_input(
+                        &mut scene_manager,
+                        &mut input_manager,
+                        main_menu,
+                        "main_menu",
+                    );
+                    scene::add_scene_with_input(
+                        &mut scene_manager,
+                        &mut input_manager,
+                        editor,
+                        "editor",
+                    );
 
-                scene_manager.switch("main_menu");
+                    scene_manager.switch("main_menu");
 
-                (scene_manager, input_manager)
-            })
+                    (scene_manager, input_manager)
+                }
+            )
             .await?;
         }
         _ => unreachable!(),
@@ -185,9 +196,10 @@ fn find_eucp_file() -> Result<PathBuf, String> {
     for entry in entries {
         if let Ok(entry) = entry
             && let Some(file_name) = entry.file_name().to_str()
-                && file_name.ends_with(".eucp") {
-                    eucp_files.push(entry.path());
-                }
+            && file_name.ends_with(".eucp")
+        {
+            eucp_files.push(entry.path());
+        }
     }
 
     match eucp_files.len() {

@@ -8,12 +8,13 @@ pub mod input;
 pub mod lighting;
 pub mod model;
 pub mod panic;
+pub mod procedural;
 pub mod resources;
 pub mod scene;
-pub mod procedural;
 pub mod utils;
 
 use app_dirs2::{AppDataType, AppInfo};
+use bytemuck::Contiguous;
 use chrono::Local;
 use colored::Colorize;
 use egui::TextureId;
@@ -30,7 +31,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use bytemuck::Contiguous;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -46,12 +46,12 @@ use winit::{
 
 use crate::{egui_renderer::EguiRenderer, graphics::Texture};
 
+pub use dropbear_future_queue as future;
+use dropbear_future_queue::FutureQueue;
 pub use gilrs;
 use log::LevelFilter;
 pub use wgpu;
 pub use winit;
-pub use dropbear_future_queue as future;
-use dropbear_future_queue::FutureQueue;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -218,7 +218,7 @@ Hardware:
             egui_renderer,
             viewport_texture,
             texture_id: Arc::new(texture_id),
-            future_queue
+            future_queue,
         };
 
         Ok(result)
@@ -261,29 +261,31 @@ Hardware:
 
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
-            Err(e) => return match e {
-                SurfaceError::Lost => {
-                    log_once::warn_once!("Surface lost, reconfiguring...");
-                    self.surface.configure(&self.device, &self.config);
-                    Ok(())
-                }
-                SurfaceError::Outdated => {
-                    log_once::warn_once!("Surface outdated, reconfiguring...");
-                    self.surface.configure(&self.device, &self.config);
-                    Ok(())
-                }
-                SurfaceError::Timeout => {
-                    log_once::warn_once!("Surface timeout, skipping frame");
-                    Ok(())
-                }
-                SurfaceError::OutOfMemory => {
-                    Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
-                }
-                SurfaceError::Other => {
-                    log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                    Ok(())
-                }
-            },
+            Err(e) => {
+                return match e {
+                    SurfaceError::Lost => {
+                        log_once::warn_once!("Surface lost, reconfiguring...");
+                        self.surface.configure(&self.device, &self.config);
+                        Ok(())
+                    }
+                    SurfaceError::Outdated => {
+                        log_once::warn_once!("Surface outdated, reconfiguring...");
+                        self.surface.configure(&self.device, &self.config);
+                        Ok(())
+                    }
+                    SurfaceError::Timeout => {
+                        log_once::warn_once!("Surface timeout, skipping frame");
+                        Ok(())
+                    }
+                    SurfaceError::OutOfMemory => {
+                        Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
+                    }
+                    SurfaceError::Other => {
+                        log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
+                        Ok(())
+                    }
+                };
+            }
         };
 
         let screen_descriptor = ScreenDescriptor {
@@ -306,8 +308,7 @@ Hardware:
 
         let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
 
-        scene_manager
-            .update(previous_dt, &mut graphics, event_loop);
+        scene_manager.update(previous_dt, &mut graphics, event_loop);
         scene_manager.render(&mut graphics);
 
         self.egui_renderer.lock().end_frame_and_draw(
@@ -374,8 +375,8 @@ pub struct App {
     /// The library used for polling controllers, specifically the instance of that.
     gilrs: Gilrs,
     /// A queue that polls through futures for asynchronous functions
-    /// 
-    /// Winit doesn't use async, so this is the next best alternative. 
+    ///
+    /// Winit doesn't use async, so this is the next best alternative.
     future_queue: Arc<FutureQueue>,
 }
 
@@ -427,18 +428,22 @@ impl App {
     /// - config: The window configuration, such as the title, and window dimensions.
     /// - app_name: A string to the app name for debugging.
     /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
-    /// 
+    ///
     /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
     /// managers.
-    pub async fn run<F>(config: WindowConfiguration, app_name: &str, future_queue: Option<Arc<FutureQueue>>, setup: F) -> anyhow::Result<()>
+    pub async fn run<F>(
+        config: WindowConfiguration,
+        app_name: &str,
+        future_queue: Option<Arc<FutureQueue>>,
+        setup: F,
+    ) -> anyhow::Result<()>
     where
         F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
     {
         let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
             .expect("Failed to get app data directory")
             .join("logs");
-        std::fs::create_dir_all(&log_dir)
-            .expect("Failed to create log dir");
+        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
 
         let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_filename = format!("{}.{}.log", app_name, datetime_str);
@@ -515,19 +520,29 @@ impl App {
 
         // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
         log::info!("======================================================================");
-        log::info!("dropbear-engine v{} compiled with {}", env!("CARGO_PKG_VERSION"),
-            rustc_version_runtime::version_meta().short_version_string);
+        log::info!(
+            "dropbear-engine v{} compiled with {}",
+            env!("CARGO_PKG_VERSION"),
+            rustc_version_runtime::version_meta().short_version_string
+        );
         log::info!("Made by tk with love at https://github.com/4tkbytes/dropbear <3");
         log::info!("======================================================================");
         #[cfg(debug_assertions)]
         {
-            log::warn!("⚠️ Just a heads up: this is compiled with the debug profile. Expect shit to be slow...");
+            log::warn!(
+                "⚠️ Just a heads up: this is compiled with the debug profile. Expect shit to be slow..."
+            );
         }
         log::info!("dropbear-engine running...");
         let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
-        if let Ok(path) = ad {log::info!("App data is stored at {}", path.display())};
+        if let Ok(path) = ad {
+            log::info!("App data is stored at {}", path.display())
+        };
         #[cfg(debug_assertions)]
-        log::debug!("Additional nerdy build stuff: {:?}", rustc_version_runtime::version_meta());
+        log::debug!(
+            "Additional nerdy build stuff: {:?}",
+            rustc_version_runtime::version_meta()
+        );
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
         let mut app = Box::new(App::new(config, future_queue));
@@ -553,10 +568,10 @@ impl App {
 /// easier by not having to guess your package name if it changes).
 ///
 /// # Parameters
-/// * config - [`WindowConfiguration`]: The configuration/settings of the window. 
+/// * config - [`WindowConfiguration`]: The configuration/settings of the window.
 /// * queue - [`Option<Throwable<FutureQueue>>`]: An optional value for a [`FutureQueue`]
 /// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
-///   but instead be set as an [`Arc<Mutex<T>>>`]. 
+///   but instead be set as an [`Arc<Mutex<T>>>`].
 macro_rules! run_app {
     ($config:expr, $queue:expr, $setup:expr) => {
         $crate::App::run($config, env!("CARGO_PKG_NAME"), $queue, $setup)
@@ -616,7 +631,7 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.future_queue.poll();
-                
+
                 let frame_start = Instant::now();
 
                 let active_handlers = self.scene_manager.get_active_input_handlers();
@@ -624,7 +639,8 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update(&mut self.gilrs);
 
-                let render_result = state.render(&mut self.scene_manager, self.delta_time, event_loop);
+                let render_result =
+                    state.render(&mut self.scene_manager, self.delta_time, event_loop);
 
                 if let Err(e) = render_result {
                     log::error!("Render failed: {:?}", e);
@@ -658,42 +674,44 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if code == KeyCode::F11 && key_state.is_pressed()
-                    && let Some(state) = &self.state {
-                        match self.config.windowed_mode {
-                            WindowedModes::Windowed(_, _) => {
-                                if state.window.fullscreen().is_some() {
-                                    state.window.set_fullscreen(None);
-                                    let _ = state
-                                        .window
-                                        .request_inner_size(PhysicalSize::new(1280, 720));
-                                    state.window.set_maximized(false);
-                                } else {
-                                    state.window.set_fullscreen(Some(
-                                        winit::window::Fullscreen::Borderless(None),
-                                    ));
-                                }
-                            }
-                            WindowedModes::Maximised => {
-                                if state.window.fullscreen().is_some() {
-                                    state.window.set_fullscreen(None);
-                                    state.window.set_maximized(true);
-                                } else {
-                                    state.window.set_maximized(false);
-                                    state.window.set_fullscreen(Some(
-                                        winit::window::Fullscreen::Borderless(None),
-                                    ));
-                                }
-                            }
-                            WindowedModes::Fullscreen => {
+                if code == KeyCode::F11
+                    && key_state.is_pressed()
+                    && let Some(state) = &self.state
+                {
+                    match self.config.windowed_mode {
+                        WindowedModes::Windowed(_, _) => {
+                            if state.window.fullscreen().is_some() {
                                 state.window.set_fullscreen(None);
                                 let _ = state
                                     .window
                                     .request_inner_size(PhysicalSize::new(1280, 720));
                                 state.window.set_maximized(false);
+                            } else {
+                                state.window.set_fullscreen(Some(
+                                    winit::window::Fullscreen::Borderless(None),
+                                ));
                             }
                         }
+                        WindowedModes::Maximised => {
+                            if state.window.fullscreen().is_some() {
+                                state.window.set_fullscreen(None);
+                                state.window.set_maximized(true);
+                            } else {
+                                state.window.set_maximized(false);
+                                state.window.set_fullscreen(Some(
+                                    winit::window::Fullscreen::Borderless(None),
+                                ));
+                            }
+                        }
+                        WindowedModes::Fullscreen => {
+                            state.window.set_fullscreen(None);
+                            let _ = state
+                                .window
+                                .request_inner_size(PhysicalSize::new(1280, 720));
+                            state.window.set_maximized(false);
+                        }
                     }
+                }
                 self.input_manager
                     .handle_key_input(code, key_state.is_pressed(), event_loop);
             }

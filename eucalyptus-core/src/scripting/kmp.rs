@@ -1,7 +1,7 @@
 //! Deals with Kotlin/Native library loading for different platforms.
 
-use std::ffi::{c_char, CStr};
 use dropbear_engine::entity::AdoptedEntity;
+use std::ffi::{CStr, c_char};
 
 /// Looks up an entity by its string label in the given world and writes the result to `out_entity`.
 ///
@@ -18,31 +18,33 @@ pub unsafe extern "C" fn dropbear_get_entity(
     world_ptr: *const hecs::World,
     out_entity: *mut u64,
 ) -> i32 {
-    if label.is_null() || world_ptr.is_null() || out_entity.is_null() {
-        log::warn!("dropbear_get_entity: received null pointer");
-        return -1;
-    }
+    unsafe {
+        if label.is_null() || world_ptr.is_null() || out_entity.is_null() {
+            log::warn!("dropbear_get_entity: received null pointer");
+            return -1;
+        }
 
-    let world = unsafe { &*world_ptr };
+        let world = unsafe { &*world_ptr };
 
-    let label_str = unsafe {
-        match CStr::from_ptr(label).to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                log::warn!("dropbear_get_entity: invalid UTF-8 in label");
-                return -1;
+        let label_str = unsafe {
+            match CStr::from_ptr(label).to_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    log::warn!("dropbear_get_entity: invalid UTF-8 in label");
+                    return -1;
+                }
+            }
+        };
+
+        for (id, entity) in world.query::<&AdoptedEntity>().iter() {
+            if entity.model.label == label_str {
+                *out_entity = id.id() as u64;
+                log::debug!("Found entity with label: {:?}", label_str);
+                return 0;
             }
         }
-    };
 
-    for (id, entity) in world.query::<&AdoptedEntity>().iter() {
-        if entity.model.label == label_str {
-            *out_entity = id.id() as u64;
-            log::debug!("Found entity with label: {:?}", label_str);
-            return 0;
-        }
+        log::warn!("Entity with label '{:?}' not found", label_str);
+        -1
     }
-
-    log::warn!("Entity with label '{:?}' not found", label_str);
-    -1
 }

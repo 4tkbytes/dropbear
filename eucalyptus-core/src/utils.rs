@@ -1,4 +1,3 @@
-
 use crate::states::Node;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");

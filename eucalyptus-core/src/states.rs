@@ -9,20 +9,20 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use egui::Ui;
 use egui_dock_fork::DockState;
 use glam::DVec3;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
+use rayon::prelude::*;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::UnboundedSender;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
-use egui::Ui;
-use rayon::prelude::*;
+use tokio::sync::mpsc::UnboundedSender;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -80,7 +80,9 @@ impl ProjectConfig {
         // self.assets = Assets::walk(path);
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.as_ref().join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
+        let config_path = path
+            .as_ref()
+            .join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
         self.project_path = path.as_ref().to_path_buf();
 
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -291,7 +293,7 @@ impl Display for ResourceType {
             ResourceType::Shader => "shader",
             ResourceType::Thumbnail => "thumbnail",
             ResourceType::Script => "script",
-            ResourceType::Config => "eucalyptus project config"
+            ResourceType::Config => "eucalyptus project config",
         };
         write!(f, "{}", str)
     }
@@ -394,7 +396,11 @@ impl SourceConfig {
     }
 }
 
-fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_list: &[&str]) -> Vec<Node> {
+fn collect_nodes(
+    dir: impl AsRef<Path>,
+    project_path: impl AsRef<Path>,
+    exclude_list: &[&str],
+) -> Vec<Node> {
     let mut nodes = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -430,9 +436,17 @@ fn collect_nodes(dir: impl AsRef<Path>, project_path: impl AsRef<Path>, exclude_
                     ResourceType::Texture
                 } else if parent_folder.contains("shader") {
                     ResourceType::Shader
-                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase()) == Some("kt".to_string()) {
+                } else if entry_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    == Some("kt".to_string())
+                {
                     ResourceType::Script
-                } else if entry_path.extension().map(|e| e.to_string_lossy().to_lowercase().contains("eu")).unwrap_or_default() {
+                } else if entry_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase().contains("eu"))
+                    .unwrap_or_default()
+                {
                     ResourceType::Config
                 } else {
                     ResourceType::Unknown
@@ -462,7 +476,7 @@ pub enum EntityNode {
         name: String,
     },
     Script {
-        tags: Vec<String>
+        tags: Vec<String>,
     },
     Light {
         id: hecs::Entity,
@@ -482,7 +496,7 @@ pub enum EntityNode {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ScriptComponent {
-    pub tags: Vec<String>
+    pub tags: Vec<String>,
 }
 
 impl EntityNode {
@@ -510,14 +524,14 @@ impl EntityNode {
             ];
 
             // Check if this entity also has camera components
-            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
-                if let Some((camera, component)) = camera_query.get() {
-                    children.push(EntityNode::Camera {
-                        id,
-                        name: camera.label.clone(),
-                        camera_type: component.camera_type,
-                    });
-                }
+            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id)
+                && let Some((camera, component)) = camera_query.get()
+            {
+                children.push(EntityNode::Camera {
+                    id,
+                    name: camera.label.clone(),
+                    camera_type: component.camera_type,
+                });
             }
 
             nodes.push(EntityNode::Group {
@@ -618,7 +632,6 @@ pub struct CameraConfig {
 
     // pub follow_target_entity_label: Option<String>,
     // pub follow_offset: Option<[f64; 3]>,
-    
     pub starting_camera: bool,
 }
 
@@ -733,24 +746,38 @@ impl ModelProperties {
 
     pub fn show_value_editor(ui: &mut Ui, value: &mut Value) -> bool {
         match value {
-            Value::String(s) => {
-                ui.text_edit_singleline(s).changed()
-            }
-            Value::Int(i) => {
-                ui.add(egui::Slider::new(i, -1000..=1000).text("")).changed()
-            }
-            Value::Float(f) => {
-                ui.add(egui::Slider::new(f, -100.0..=100.0).text("")).changed()
-            }
-            Value::Bool(b) => {
-                ui.checkbox(b, "").changed()
-            }
+            Value::String(s) => ui.text_edit_singleline(s).changed(),
+            Value::Int(i) => ui
+                .add(egui::Slider::new(i, -1000..=1000).text(""))
+                .changed(),
+            Value::Float(f) => ui
+                .add(egui::Slider::new(f, -100.0..=100.0).text(""))
+                .changed(),
+            Value::Bool(b) => ui.checkbox(b, "").changed(),
             Value::Vec3(vec) => {
                 let mut changed = false;
                 ui.horizontal(|ui| {
-                    changed |= ui.add(egui::Slider::new(&mut vec[0], -10.0..=10.0).text("X").fixed_decimals(2)).changed();
-                    changed |= ui.add(egui::Slider::new(&mut vec[1], -10.0..=10.0).text("Y").fixed_decimals(2)).changed();
-                    changed |= ui.add(egui::Slider::new(&mut vec[2], -10.0..=10.0).text("Z").fixed_decimals(2)).changed();
+                    changed |= ui
+                        .add(
+                            egui::Slider::new(&mut vec[0], -10.0..=10.0)
+                                .text("X")
+                                .fixed_decimals(2),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::Slider::new(&mut vec[1], -10.0..=10.0)
+                                .text("Y")
+                                .fixed_decimals(2),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::Slider::new(&mut vec[2], -10.0..=10.0)
+                                .text("Z")
+                                .fixed_decimals(2),
+                        )
+                        .changed();
                 });
                 changed
             }
@@ -815,9 +842,8 @@ impl SceneConfig {
         &self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
-        progress_sender: Option<UnboundedSender<WorldLoadingStatus>>
+        progress_sender: Option<UnboundedSender<WorldLoadingStatus>>,
     ) -> anyhow::Result<hecs::Entity> {
-
         if let Some(ref s) = progress_sender {
             let _ = s.send(WorldLoadingStatus::Idle);
         }
@@ -827,7 +853,9 @@ impl SceneConfig {
             self.scene_name,
             world.len()
         );
-        { world.clear(); }
+        {
+            world.clear();
+        }
 
         #[allow(unused_variables)]
         let project_config = if cfg!(feature = "editor") {
@@ -842,7 +870,11 @@ impl SceneConfig {
 
         let entity_configs: Vec<(usize, SceneEntity)> = {
             let cloned = self.entities.clone();
-            cloned.into_par_iter().enumerate().map(|(i, e)| (i, e)).collect()
+            cloned
+                .into_par_iter()
+                .enumerate()
+                .map(|(i, e)| (i, e))
+                .collect()
         };
 
         for (index, entity_config) in entity_configs {
@@ -851,7 +883,11 @@ impl SceneConfig {
             let total = self.entities.len();
 
             if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingEntity { index, name: entity_config.label.clone(), total });
+                let _ = s.send(WorldLoadingStatus::LoadingEntity {
+                    index,
+                    name: entity_config.label.clone(),
+                    total,
+                });
             }
 
             let result = match &entity_config.model_path.ref_type {
@@ -864,9 +900,9 @@ impl SceneConfig {
                                 .to_project_path(project_config.clone())
                                 .ok_or_else(|| {
                                     anyhow::anyhow!(
-                                            "Unable to convert resource reference [{}] to project path",
-                                            reference
-                                        )
+                                        "Unable to convert resource reference [{}] to project path",
+                                        reference
+                                    )
                                 })?
                         } else {
                             log::debug!("Using feature data-only");
@@ -874,11 +910,11 @@ impl SceneConfig {
                         }
                     };
                     log::debug!(
-                            "Path for entity {} is {} from reference {}",
-                            entity_config.label,
-                            path.display(),
-                            reference
-                        );
+                        "Path for entity {} is {} from reference {}",
+                        entity_config.label,
+                        path.display(),
+                        reference
+                    );
 
                     let adopted =
                         AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
@@ -925,7 +961,14 @@ impl SceneConfig {
                             //     world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
                             // } else {
                             // }
-                            world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                adopted,
+                                transform,
+                                script,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                         } else {
                             // if let (Some(target_label), Some(offset)) = (
                             //     &camera_config.follow_target_entity_label,
@@ -938,17 +981,21 @@ impl SceneConfig {
                             //     world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
                             // } else {
                             // }
-                            world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                adopted,
+                                transform,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                         }
+                    } else if let Some(script_config) = &entity_config.script {
+                        let script = ScriptComponent {
+                            tags: script_config.tags.clone(),
+                        };
+                        world.spawn((adopted, transform, script, entity_config.properties.clone()))
                     } else {
-                        if let Some(script_config) = &entity_config.script {
-                            let script = ScriptComponent {
-                                tags: script_config.tags.clone(),
-                            };
-                            world.spawn((adopted, transform, script, entity_config.properties.clone()))
-                        } else {
-                            world.spawn((adopted, transform, entity_config.properties.clone()))
-                        }
+                        world.spawn((adopted, transform, entity_config.properties.clone()))
                     };
 
                     Ok(())
@@ -962,7 +1009,7 @@ impl SceneConfig {
                         bytes,
                         Some(&entity_config.label),
                     )
-                        .await?;
+                    .await?;
                     let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
 
                     let transform = entity_config.transform;
@@ -997,9 +1044,22 @@ impl SceneConfig {
                             let script = ScriptComponent {
                                 tags: script_config.tags.clone(),
                             };
-                            world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                adopted,
+                                transform,
+                                script,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                         } else {
-                            world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                adopted,
+                                transform,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                         }
                     } else {
                         // Entity without camera components
@@ -1007,7 +1067,12 @@ impl SceneConfig {
                             let script = ScriptComponent {
                                 tags: script_config.tags.clone(),
                             };
-                            world.spawn((adopted, transform, script, entity_config.properties.clone()))
+                            world.spawn((
+                                adopted,
+                                transform,
+                                script,
+                                entity_config.properties.clone(),
+                            ))
                         } else {
                             world.spawn((adopted, transform, entity_config.properties.clone()))
                         }
@@ -1107,7 +1172,14 @@ impl SceneConfig {
                             //     };
                             //     world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
                             // } else {
-                                world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                plane,
+                                transform,
+                                script,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                             // }
                         } else {
                             // if let (Some(target_label), Some(offset)) = (
@@ -1120,7 +1192,13 @@ impl SceneConfig {
                             //     };
                             //     world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
                             // } else {
-                                world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component))
+                            world.spawn((
+                                plane,
+                                transform,
+                                entity_config.properties.clone(),
+                                camera,
+                                camera_component,
+                            ))
                             // }
                         }
                     } else {
@@ -1129,7 +1207,12 @@ impl SceneConfig {
                             let script = ScriptComponent {
                                 tags: script_config.tags.clone(),
                             };
-                            world.spawn((plane, transform, script, entity_config.properties.clone()))
+                            world.spawn((
+                                plane,
+                                transform,
+                                script,
+                                entity_config.properties.clone(),
+                            ))
                         } else {
                             world.spawn((plane, transform, entity_config.properties.clone()))
                         }
@@ -1138,8 +1221,8 @@ impl SceneConfig {
                     Ok(())
                 }
                 ResourceReferenceType::None => Err(anyhow::anyhow!(
-                        "Entity has a resource reference of None, which cannot be loaded or referenced"
-                    )),
+                    "Entity has a resource reference of None, which cannot be loaded or referenced"
+                )),
             };
 
             result?;
@@ -1147,17 +1230,21 @@ impl SceneConfig {
         }
 
         let total = self.lights.len();
-        
+
         for (index, light_config) in self.lights.iter().enumerate() {
             log::debug!("Loading light: {}", light_config.label);
             if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingLight { index, name: light_config.label.clone(), total });
+                let _ = s.send(WorldLoadingStatus::LoadingLight {
+                    index,
+                    name: light_config.label.clone(),
+                    total,
+                });
             }
 
             let light = Light::new(
                 graphics.clone(),
                 light_config.light_component.clone(),
-                light_config.transform.clone(),
+                light_config.transform,
                 Some(&light_config.label),
             )
             .await;
@@ -1179,7 +1266,11 @@ impl SceneConfig {
                 camera_config.camera_type
             );
             if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingCamera { index, name: camera_config.label.clone(), total });
+                let _ = s.send(WorldLoadingStatus::LoadingCamera {
+                    index,
+                    name: camera_config.label.clone(),
+                    total,
+                });
             }
 
             let camera = Camera::new(
@@ -1216,7 +1307,9 @@ impl SceneConfig {
             //     };
             //     { world.spawn((camera, component, follow_target)); }
             // } else {
-                { world.spawn((camera, component)); }
+            {
+                world.spawn((camera, component));
+            }
             // }
         }
 
@@ -1231,19 +1324,26 @@ impl SceneConfig {
                 log::info!("No lights in scene, spawning default light");
                 is_none = true;
             }
-            
+
             if is_none {
                 if let Some(ref s) = progress_sender {
-                    let _ = s.send(WorldLoadingStatus::LoadingLight { index: 0, name: String::from("Default Light"), total: 1 });
+                    let _ = s.send(WorldLoadingStatus::LoadingLight {
+                        index: 0,
+                        name: String::from("Default Light"),
+                        total: 1,
+                    });
                 }
                 let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
                 let trans = Transform {
                     position: glam::DVec3::new(2.0, 4.0, 2.0),
                     ..Default::default()
                 };
-                let light = Light::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
+                let light =
+                    Light::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
 
-                { world.spawn((comp, trans, light, ModelProperties::default())); }
+                {
+                    world.spawn((comp, trans, light, ModelProperties::default()));
+                }
             }
         }
 
@@ -1276,7 +1376,11 @@ impl SceneConfig {
                 } else {
                     log::info!("No debug camera found, creating viewport camera for editor");
                     if let Some(ref s) = progress_sender {
-                        let _ = s.send(WorldLoadingStatus::LoadingCamera { index: 0, name: String::from("Viewport Camera"), total: 1 });
+                        let _ = s.send(WorldLoadingStatus::LoadingCamera {
+                            index: 0,
+                            name: String::from("Viewport Camera"),
+                            total: 1,
+                        });
                     }
                     let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
                     let component = DebugCamera::new();

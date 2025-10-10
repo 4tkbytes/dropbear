@@ -29,15 +29,19 @@ impl KotlinREPL {
             history: Vec::new(),
             history_index: None,
         };
-        
+
         repl.add_output("Kotlin REPL - Ready", false, false);
-        repl.add_output("Type Kotlin expressions to test script functionality", false, false);
+        repl.add_output(
+            "Type Kotlin expressions to test script functionality",
+            false,
+            false,
+        );
         repl.add_output("Example: Input.isKeyPressed(KeyCode.W)", false, false);
         repl.add_output("", false, false);
-        
+
         repl
     }
-    
+
     fn add_output(&mut self, text: &str, is_error: bool, is_input: bool) {
         self.output.push(ReplOutputLine {
             text: text.to_string(),
@@ -45,17 +49,17 @@ impl KotlinREPL {
             is_input,
         });
     }
-    
+
     fn execute(&mut self, code: &str) {
         // Add input to output
         self.add_output(&format!("> {}", code), false, true);
-        
+
         // Add to history
         if !code.trim().is_empty() {
             self.history.push(code.to_string());
             self.history_index = None;
         }
-        
+
         // Execute the code
         match self.execute_kotlin_code(code) {
             Ok(result) => {
@@ -67,22 +71,20 @@ impl KotlinREPL {
                 self.add_output(&format!("Error: {}", e), true, false);
             }
         }
-        
+
         self.add_output("", false, false); // blank line
     }
-    
-    fn execute_kotlin_code(
-        &self,
-        code: &str,
-    ) -> anyhow::Result<String> {
+
+    fn execute_kotlin_code(&self, code: &str) -> anyhow::Result<String> {
         // For now, we'll provide a simplified evaluation
         // In the future, this could compile and run actual Kotlin code via JNI
-        
+
         // Check for common test commands
         if code.trim().starts_with("Input.isKeyPressed") {
             Ok("boolean (check console for actual value)".to_string())
-        } else if code.trim().starts_with("Input.getMouseX") 
-                || code.trim().starts_with("Input.getMouseY") {
+        } else if code.trim().starts_with("Input.getMouseX")
+            || code.trim().starts_with("Input.getMouseY")
+        {
             Ok("double (check console for actual value)".to_string())
         } else if code.contains("Transform") {
             Ok("Transform manipulation (check entity in viewport)".to_string())
@@ -97,14 +99,18 @@ impl KotlinREPL {
 - transform.scale - Get/set scale (Vector3D)
 
 Note: This is a simplified REPL. Full script execution requires 
-attaching a script to an entity and running the game."#.to_string())
+attaching a script to an entity and running the game."#
+                .to_string())
         } else if code.trim() == "clear" {
-            return Err(anyhow::anyhow!("CLEAR_SCREEN"));
+            Err(anyhow::anyhow!("CLEAR_SCREEN"))
         } else {
-            Ok(format!("Command received: {}\n(Full Kotlin evaluation not yet implemented)", code))
+            Ok(format!(
+                "Command received: {}\n(Full Kotlin evaluation not yet implemented)",
+                code
+            ))
         }
     }
-    
+
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             // Title bar
@@ -174,8 +180,8 @@ attaching a script to an entity and running the game."#.to_string())
                     }
                     
                     // History navigation
-                    if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                        if !self.history.is_empty() {
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowUp))
+                        && !self.history.is_empty() {
                             if let Some(idx) = self.history_index {
                                 if idx > 0 {
                                     self.history_index = Some(idx - 1);
@@ -186,10 +192,9 @@ attaching a script to an entity and running the game."#.to_string())
                                 self.input = self.history[self.history.len() - 1].clone();
                             }
                         }
-                    }
                     
-                    if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                        if let Some(idx) = self.history_index {
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowDown))
+                        && let Some(idx) = self.history_index {
                             if idx < self.history.len() - 1 {
                                 self.history_index = Some(idx + 1);
                                 self.input = self.history[idx + 1].clone();
@@ -198,7 +203,6 @@ attaching a script to an entity and running the game."#.to_string())
                                 self.input.clear();
                             }
                         }
-                    }
                 }
                 
                 if ui.button("Execute").clicked() && !self.input.is_empty() {

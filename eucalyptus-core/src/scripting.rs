@@ -1,16 +1,14 @@
-pub mod kmp;
 pub mod jni;
+pub mod kmp;
 
 use crate::input::InputState;
-use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent, Value};
+use crate::scripting::jni::JavaContext;
+use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
-use std::path::{Path, PathBuf};
-use std::{collections::HashMap, fs};
-use std::ffi::OsString;
-use std::sync::{Arc, LazyLock};
 use libloading::Library;
-use crate::scripting::jni::JavaContext;
+use std::path::PathBuf;
+use std::{collections::HashMap, fs};
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
@@ -18,8 +16,12 @@ pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin
 pub enum ScriptTarget {
     #[default]
     None,
-    JVM { library_path: PathBuf },
-    Native { library_path: PathBuf },
+    JVM {
+        library_path: PathBuf,
+    },
+    Native {
+        library_path: PathBuf,
+    },
 }
 
 pub struct ScriptManager {
@@ -52,9 +54,7 @@ impl ScriptManager {
                 self.jvm = Some(jvm);
             }
             ScriptTarget::Native { library_path } => {
-                let library = unsafe {
-                    Library::new(library_path)?
-                };
+                let library = unsafe { Library::new(library_path)? };
 
                 self.library = Some(library);
             }
@@ -73,7 +73,6 @@ impl ScriptManager {
         world: &mut World,
         input_state: &InputState,
     ) -> anyhow::Result<()> {
-
         #[cfg(feature = "jvm")]
         {
             if let Some(jvm) = &mut self.jvm {
@@ -91,7 +90,6 @@ impl ScriptManager {
         input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
-
         Err(anyhow::anyhow!("it aint ready yet bozo"))
     }
 }

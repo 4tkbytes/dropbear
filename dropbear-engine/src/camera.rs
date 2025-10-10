@@ -1,4 +1,4 @@
-//! Camera and components related to cameras. 
+//! Camera and components related to cameras.
 
 use std::sync::Arc;
 
@@ -132,7 +132,7 @@ impl Camera {
             label,
         )
     }
-    
+
     pub fn rotation(&self) -> DQuat {
         let yaw = DQuat::from_axis_angle(DVec3::Y, self.yaw);
         let pitch = DQuat::from_axis_angle(DVec3::X, self.pitch);
@@ -159,7 +159,7 @@ impl Camera {
         self.eye
     }
 
-    /// Prints out the values of the camera. 
+    /// Prints out the values of the camera.
     pub fn debug_camera_state(&self) {
         let camera = self;
         log::debug!("Camera state:");

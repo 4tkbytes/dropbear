@@ -1,5 +1,6 @@
-
 use super::*;
+use crate::signal::SignalController;
+use crate::spawn::PendingSpawnController;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
@@ -8,16 +9,14 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
-use eucalyptus_core::states::{WorldLoadingStatus};
-use eucalyptus_core::{logging};
+use eucalyptus_core::logging;
+use eucalyptus_core::states::WorldLoadingStatus;
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-use crate::signal::SignalController;
-use crate::spawn::PendingSpawnController;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -29,19 +28,29 @@ impl Scene for Editor {
         let graphics_shared = graphics.shared.clone();
         let active_camera_clone = self.active_camera.clone();
         let project_path_clone = self.project_path.clone();
-        
+
         let dock_state_shared = Arc::new(Mutex::new(self.dock_state.clone()));
         let dock_state_for_loading = dock_state_shared.clone();
 
         let handle = graphics.shared.future_queue.push(async move {
             let mut temp_world = World::new();
-            if let Err(e) = Self::load_project_config(graphics_shared, Some(tx), &mut temp_world, Some(tx2), active_camera_clone, project_path_clone, dock_state_for_loading).await {
+            if let Err(e) = Self::load_project_config(
+                graphics_shared,
+                Some(tx),
+                &mut temp_world,
+                Some(tx2),
+                active_camera_clone,
+                project_path_clone,
+                dock_state_for_loading,
+            )
+            .await
+            {
                 log::error!("Failed to load project config: {}", e);
             }
         });
 
         self.world_load_handle = Some(handle);
-        
+
         self.dock_state_shared = Some(dock_state_shared);
 
         self.window = Some(graphics.shared.window.clone());
@@ -54,13 +63,14 @@ impl Scene for Editor {
             if let Ok(loaded_world) = receiver.try_recv() {
                 self.world = Box::new(loaded_world);
                 self.is_world_loaded.mark_project_loaded();
-                
-                if let Some(dock_state_shared) = &self.dock_state_shared &&
-                let Some(loaded_dock_state) = dock_state_shared.try_lock() {
+
+                if let Some(dock_state_shared) = &self.dock_state_shared
+                    && let Some(loaded_dock_state) = dock_state_shared.try_lock()
+                {
                     self.dock_state = loaded_dock_state.clone();
                     log::info!("Dock state updated from loaded config");
                 }
-                
+
                 log::info!("World received");
             } else {
                 self.world_receiver = Some(receiver);
@@ -81,7 +91,10 @@ impl Scene for Editor {
             return;
         }
 
-        match self.check_up(graphics.shared.clone(), graphics.shared.future_queue.clone()) {
+        match self.check_up(
+            graphics.shared.clone(),
+            graphics.shared.future_queue.clone(),
+        ) {
             Ok(_) => {}
             Err(e) => {
                 fatal!("{}", e);
@@ -101,10 +114,7 @@ impl Scene for Editor {
 
             let mut script_entities = Vec::new();
             {
-                for (entity_id, script) in self.world
-                    .query::<&mut ScriptComponent>()
-                    .iter()
-                {
+                for (entity_id, script) in self.world.query::<&mut ScriptComponent>().iter() {
                     log_once::debug_once!(
                         "Script Entity -> id: {:?}, tags: {:?}",
                         entity_id,
@@ -138,11 +148,11 @@ impl Scene for Editor {
         // && self.is_using_debug_camera()
         {
             let active_cam = self.active_camera.lock();
-            if let Some(active_camera) = *active_cam &&
-                let Ok(mut query) = self.world
+            if let Some(active_camera) = *active_cam
+                && let Ok(mut query) = self
+                    .world
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
-                    &&
-                let Some((camera, _)) = query.get()
+                && let Some((camera, _)) = query.get()
             {
                 for key in &self.input_state.pressed_keys {
                     match key {
@@ -167,15 +177,17 @@ impl Scene for Editor {
 
         {
             let active_cam = self.active_camera.lock();
-            if let Some(active_camera) = *active_cam 
-            && let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera)
-            && let Some(camera) = query.get() {
+            if let Some(active_camera) = *active_cam
+                && let Ok(mut query) = self.world.query_one::<&mut Camera>(active_camera)
+                && let Some(camera) = query.get()
+            {
                 camera.aspect = new_aspect;
             }
         }
 
         {
-            for (_entity_id, (camera, component)) in self.world
+            for (_entity_id, (camera, component)) in self
+                .world
                 .query::<(&mut Camera, &mut CameraComponent)>()
                 .iter()
             {
@@ -186,30 +198,25 @@ impl Scene for Editor {
 
         {
             {
-                let query = self.world
-                    .query_mut::<(&mut AdoptedEntity, &Transform)>();
+                let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
                 for (_, (entity, transform)) in query {
                     entity.update(graphics.shared.clone(), transform);
                 }
             }
 
-
             {
-                let light_query =
-                    self.world
-                        .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
+                let light_query = self
+                    .world
+                    .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
                 for (_, (light_component, transform, light)) in light_query {
                     light.update(light_component, transform);
                 }
             }
-            
         }
 
         {
-            self.light_manager.update(
-                graphics.shared.clone(),
-                &self.world,
-            );
+            self.light_manager
+                .update(graphics.shared.clone(), &self.world);
         }
     }
 
@@ -225,7 +232,9 @@ impl Scene for Editor {
         self.color = color;
         self.size = graphics.shared.viewport_texture.size;
         self.texture_id = Some(*graphics.shared.texture_id.clone());
-        { self.show_ui(&graphics.shared.get_egui_context()); }
+        {
+            self.show_ui(&graphics.shared.get_egui_context());
+        }
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());
@@ -250,7 +259,6 @@ impl Scene for Editor {
                         lights
                     };
 
-
                     let entities = {
                         let mut entities = Vec::new();
                         let mut entity_query = self.world.query::<&AdoptedEntity>();
@@ -259,7 +267,6 @@ impl Scene for Editor {
                         }
                         entities
                     };
-
 
                     {
                         let mut render_pass = graphics.clear_colour(color);
@@ -279,8 +286,7 @@ impl Scene for Editor {
                         }
                     }
 
-                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> =
-                        HashMap::new();
+                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
                     for entity in &entities {
                         let model_ptr = entity.model.id;
                         let instance_raw = entity.instance.to_raw();
@@ -302,13 +308,14 @@ impl Scene for Editor {
                                     let mut render_pass = graphics.continue_pass();
                                     render_pass.set_pipeline(pipeline);
 
-                                    let instance_buffer = graphics.shared.device.create_buffer_init(
-                                        &wgpu::util::BufferInitDescriptor {
+                                    let instance_buffer = graphics
+                                        .shared
+                                        .device
+                                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                             label: Some("Batched Instance Buffer"),
                                             contents: bytemuck::cast_slice(&instances),
                                             usage: wgpu::BufferUsages::VERTEX,
-                                        },
-                                    );
+                                        });
                                     render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
                                     render_pass.draw_model_instanced(
                                         &model,

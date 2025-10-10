@@ -5,8 +5,8 @@
 use winit::event_loop::ActiveEventLoop;
 
 use crate::input;
-use std::{collections::HashMap, rc::Rc};
 use parking_lot::RwLock;
+use std::{collections::HashMap, rc::Rc};
 
 pub trait Scene {
     fn load(&mut self, graphics: &mut crate::graphics::RenderContext);
@@ -90,49 +90,54 @@ impl Manager {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene
-                && let Some(scene) = self.scenes.get_mut(current_scene_name) {
-                { scene.write().exit(event_loop); }
+                && let Some(scene) = self.scenes.get_mut(current_scene_name)
+            {
+                {
+                    scene.write().exit(event_loop);
                 }
+            }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
-                { scene.write().load(graphics); }
+                {
+                    scene.write().load(graphics);
+                }
             }
             self.current_scene = Some(next_scene_name);
         }
 
         // update scene
         if let Some(scene_name) = &self.current_scene
-            && let Some(scene) = self.scenes.get_mut(scene_name) {
-                {
-                    scene.write()
-                        .update(dt, graphics);
-                }
-                let command = scene.write().run_command();
-                match command {
-                    SceneCommand::SwitchScene(target) => {
-                        if let Some(current) = &self.current_scene {
-                            if current == &target {
-                                // reload the scene
-                                if let Some(scene) = self.scenes.get_mut(current) {
-                                    scene.write().exit(event_loop);
-                                    scene.write().load(graphics);
+            && let Some(scene) = self.scenes.get_mut(scene_name)
+        {
+            {
+                scene.write().update(dt, graphics);
+            }
+            let command = scene.write().run_command();
+            match command {
+                SceneCommand::SwitchScene(target) => {
+                    if let Some(current) = &self.current_scene {
+                        if current == &target {
+                            // reload the scene
+                            if let Some(scene) = self.scenes.get_mut(current) {
+                                scene.write().exit(event_loop);
+                                scene.write().load(graphics);
 
-                                    log::debug!("Reloaded scene: {}", current);
-                                }
-                            } else {
-                                self.switch(&target);
+                                log::debug!("Reloaded scene: {}", current);
                             }
                         } else {
                             self.switch(&target);
                         }
+                    } else {
+                        self.switch(&target);
                     }
-                    SceneCommand::Quit => {
-                        log::info!("Exiting app!");
-                        event_loop.exit();
-                    }
-                    SceneCommand::None => {}
-                    SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
                 }
+                SceneCommand::Quit => {
+                    log::info!("Exiting app!");
+                    event_loop.exit();
+                }
+                SceneCommand::None => {}
+                SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
             }
+        }
     }
 
     pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {

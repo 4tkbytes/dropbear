@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 #[derive(Clone)]
 pub struct SafePointer<T> {
     ptr: *const T,
-    _marker: PhantomData<T>
+    _marker: PhantomData<T>,
 }
 
 unsafe impl<T> Send for SafePointer<T> where T: Send {}

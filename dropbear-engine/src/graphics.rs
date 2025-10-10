@@ -5,6 +5,12 @@ use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 use parking_lot::Mutex;
 // use nalgebra::{Matrix4, UnitQuaternion, Vector3};
+use crate::{
+    State,
+    egui_renderer::EguiRenderer,
+    model::{self, Vertex},
+};
+use dropbear_future_queue::FutureQueue;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
     CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass,
@@ -14,12 +20,6 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::window::Window;
-use dropbear_future_queue::FutureQueue;
-use crate::{
-    State,
-    egui_renderer::EguiRenderer,
-    model::{self, Vertex},
-};
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
 pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");

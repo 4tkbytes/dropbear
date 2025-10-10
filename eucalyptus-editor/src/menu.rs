@@ -1,36 +1,30 @@
-use std::{
-    fs,
-    path::PathBuf,
-};
-use std::io::Cursor;
-use std::path::Path;
-use std::sync::Arc;
 use anyhow::anyhow;
 use dropbear_engine::{
+    future::{FutureHandle, FutureQueue},
     graphics::RenderContext,
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
-    future::{FutureHandle, FutureQueue},
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
+use eucalyptus_core::states::{PROJECT, ProjectConfig};
 use flate2::read::GzDecoder;
 use git2::Repository;
 use log::{self, debug};
 use rfd::FileDialog;
+use std::io::Cursor;
+use std::path::Path;
+use std::sync::Arc;
+use std::{fs, path::PathBuf};
 use tar::Archive;
+use tokio::sync::watch;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
-use eucalyptus_core::states::{PROJECT, ProjectConfig};
-use tokio::sync::watch;
 
 #[derive(Debug, Clone)]
 pub enum ProjectProgress {
-    Step {
-        progress: f32,
-        message: String,
-    },
+    Step { progress: f32, message: String },
     Error(String),
     Done,
 }
@@ -69,6 +63,7 @@ impl MainMenu {
     fn start_project_creation(&mut self, queue: Arc<FutureQueue>) {
         let project_name = self.project_name.clone();
         let project_path = self.project_path.clone();
+        let project_domain = self.project_domain.clone();
 
         let (progress_tx, progress_rx) = watch::channel(ProjectProgress::Step {
             progress: 0.0,
@@ -84,6 +79,7 @@ impl MainMenu {
             let folders = [
                 ("git", 0.1, "Initialising git repository..."),
                 ("gradle", 0.2, "Unpacking gradle template..."),
+                ("setting_config", 0.25, "Setting gradle config..."),
                 ("resources/models", 0.3, "Creating models folder..."),
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
@@ -122,9 +118,41 @@ impl MainMenu {
                             *global = config;
                             Ok(())
                         }
+                        "setting_config" => {
+                            let project_root = path.clone();
+
+                            let src_script_path = project_root.join("src/commonMain/kotlin/Script.kt");
+                            let domain_path = project_domain.clone().replace('.', "/");
+                            let dest_script_path = project_root.join(format!("src/commonMain/kotlin/{}/{}/Script.kt", domain_path, project_name.to_lowercase()));
+
+                            if let Some(parent) = dest_script_path.parent() {
+                                fs::create_dir_all(parent)?;
+                            }
+
+                            fs::rename(&src_script_path, &dest_script_path)?;
+
+                            let mut content = fs::read_to_string(&dest_script_path)?;
+
+                            let package_declaration = format!("package {}.{}\n\n", project_domain.clone(), project_name.clone().to_lowercase());
+                            content = package_declaration + &content;
+
+                            fs::write(&dest_script_path, content)?;
+
+                            let build_gradle_path = project_root.join("build.gradle.kts");
+                            let gradle_content = fs::read_to_string(&build_gradle_path)?;
+
+                            let updated_gradle_content = gradle_content
+                                .replace("domain", project_domain.clone().as_str())
+                                .replace("project", &project_name.to_lowercase());
+
+                            fs::write(&build_gradle_path, updated_gradle_content)?;
+
+                            Ok(())
+                        }
                         "gradle" => {
                             log::debug!("Unpacking gradle template");
-                            let gradle_template = include_bytes!("../../resources/templates/gradle_template.tar.gz");
+                            let gradle_template =
+                                include_bytes!("../../resources/templates/gradle_template.tar.gz");
 
                             let temp_extract_dir = path.join("temp_extract_dir");
 
@@ -135,7 +163,10 @@ impl MainMenu {
 
                             let temp_path = Path::new(&temp_extract_dir);
                             let mut entries = fs::read_dir(temp_path)?;
-                            let top_dir = entries.next().ok_or("No entries found in archive").map_err(|e| anyhow::anyhow!(e))??;
+                            let top_dir = entries
+                                .next()
+                                .ok_or("No entries found in archive")
+                                .map_err(|e| anyhow::anyhow!(e))??;
 
                             if !top_dir.file_type()?.is_dir() {
                                 return Err(anyhow::anyhow!("Top-level entry is not a directory"));
@@ -183,10 +214,14 @@ impl MainMenu {
                     let _ = progress_tx.send(ProjectProgress::Done);
                     Ok(())
                 } else {
-                    Err(anyhow!("Project creation failed with {} errors", errors.len()))
+                    Err(anyhow!(
+                        "Project creation failed with {} errors",
+                        errors.len()
+                    ))
                 }
             } else {
-                let _ = progress_tx.send(ProjectProgress::Error("Project path not set".to_string()));
+                let _ =
+                    progress_tx.send(ProjectProgress::Error("Project path not set".to_string()));
                 Err(anyhow!("Project path not set"))
             }
         });
@@ -207,12 +242,18 @@ impl Scene for MainMenu {
     fn render(&mut self, graphics: &mut RenderContext) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
-            if let Some(result) = graphics.shared.future_queue.exchange_owned_as::<anyhow::Result<()>>(handle) {
+            if let Some(result) = graphics
+                .shared
+                .future_queue
+                .exchange_owned_as::<anyhow::Result<()>>(handle)
+            {
                 self.project_creation_handle = None;
 
                 if let Err(e) = result {
                     log::error!("Project creation failed: {e}");
-                    self.project_error.get_or_insert_with(Vec::new).push(e.to_string());
+                    self.project_error
+                        .get_or_insert_with(Vec::new)
+                        .push(e.to_string());
                 } else {
                     log::info!("Project created successfully!");
                     self.show_new_project = false;
@@ -221,9 +262,10 @@ impl Scene for MainMenu {
                 }
             }
         }
-        
+
         if let Some(rx) = self.project_progress_rx.as_ref()
-            && let Ok(true) = rx.has_changed() {
+            && let Ok(true) = rx.has_changed()
+        {
             let progress = rx.borrow().clone();
             match progress {
                 ProjectProgress::Step { progress, message } => {
@@ -254,10 +296,14 @@ impl Scene for MainMenu {
                     ui.add_space(40.0);
 
                     let button_size = egui::vec2(300.0, 60.0);
-                    let is_busy = self.is_in_file_dialogue || self.project_creation_handle.is_some();
+                    let is_busy =
+                        self.is_in_file_dialogue || self.project_creation_handle.is_some();
 
                     if ui
-                        .add_enabled(!is_busy, egui::Button::new("New Project").min_size(button_size))
+                        .add_enabled(
+                            !is_busy,
+                            egui::Button::new("New Project").min_size(button_size),
+                        )
                         .clicked()
                     {
                         log::debug!("Creating new project");
@@ -266,7 +312,10 @@ impl Scene for MainMenu {
                     ui.add_space(20.0);
 
                     if ui
-                        .add_enabled(!is_busy, egui::Button::new("Open Project").min_size(button_size))
+                        .add_enabled(
+                            !is_busy,
+                            egui::Button::new("Open Project").min_size(button_size),
+                        )
                         .clicked()
                     {
                         local_open_project = true;
@@ -274,7 +323,10 @@ impl Scene for MainMenu {
                     ui.add_space(20.0);
 
                     if ui
-                        .add_enabled(!is_busy, egui::Button::new("Settings").min_size(button_size))
+                        .add_enabled(
+                            !is_busy,
+                            egui::Button::new("Settings").min_size(button_size),
+                        )
                         .clicked()
                     {
                         log::debug!("Settings (not implemented)");
@@ -366,8 +418,10 @@ impl Scene for MainMenu {
 
                     let can_create = self.project_path.is_some() && !self.project_name.is_empty();
                     if ui
-                        .add_enabled(can_create && !self.project_creation_handle.is_some(),
-                                     egui::Button::new("Create Project"))
+                        .add_enabled(
+                            can_create && self.project_creation_handle.is_none(),
+                            egui::Button::new("Create Project"),
+                        )
                         .clicked()
                     {
                         log::info!("Creating new project at {:?}", self.project_path);
@@ -428,8 +482,7 @@ impl Scene for MainMenu {
 
 impl Keyboard for MainMenu {
     fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
-        if key == KeyCode::Escape
-            && !self.show_new_project && !self.is_in_file_dialogue {
+        if key == KeyCode::Escape && !self.show_new_project && !self.is_in_file_dialogue {
             event_loop.exit();
         }
     }

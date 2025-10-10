@@ -1,10 +1,10 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
 use crate::entity::AdoptedEntity;
 use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::model::{LazyType, Material, Mesh, Model, ModelId, ModelVertex, MODEL_CACHE};
+use crate::model::{LazyType, MODEL_CACHE, Material, Mesh, Model, ModelId, ModelVertex};
 use crate::utils::{ResourceReference, ResourceReferenceType};
 use futures::executor::block_on;
 use image::GenericImageView;
+use std::hash::{DefaultHasher, Hash, Hasher};
 /// A straight plane (and some components). Thats it.
 ///
 /// Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
@@ -103,7 +103,7 @@ impl LazyType for LazyPlaneBuilder {
             path: ResourceReference::from_reference(ResourceReferenceType::Plane),
             meshes: vec![mesh],
             materials: vec![material],
-            id: ModelId(hasher.finish())
+            id: ModelId(hasher.finish()),
         };
 
         Ok(block_on(AdoptedEntity::adopt(graphics, model)))
@@ -177,7 +177,14 @@ impl PlaneBuilder {
         texture_bytes: &[u8],
         label: Option<&str>,
     ) -> anyhow::Result<AdoptedEntity> {
-        let label = if let Some(label) = label {label.to_string()} else {format!("{}*{}_tx{}xtz{}_plane", self.width, self.height, self.tiles_x, self.tiles_z)};
+        let label = if let Some(label) = label {
+            label.to_string()
+        } else {
+            format!(
+                "{}*{}_tx{}xtz{}_plane",
+                self.width, self.height, self.tiles_x, self.tiles_z
+            )
+        };
         let mut hasher = DefaultHasher::new();
         if self.tiles_x == 0 && self.tiles_z == 0 {
             self.tiles_x = self.width as u32;
@@ -218,7 +225,9 @@ impl PlaneBuilder {
         let model = if let Some(cached_model) = MODEL_CACHE.lock().get(&label.clone()) {
             log::debug!("Model loaded from cache: {:?}", label.clone());
             Some(cached_model.clone())
-        } else {None};
+        } else {
+            None
+        };
 
         let vertex_buffer = graphics
             .device
@@ -260,12 +269,11 @@ impl PlaneBuilder {
                 path: ResourceReference::from_reference(ResourceReferenceType::Plane),
                 meshes: vec![mesh],
                 materials: vec![material],
-                id: ModelId(hash)
+                id: ModelId(hash),
             };
             MODEL_CACHE.lock().insert(label, m.clone());
             m
         };
-
 
         Ok(AdoptedEntity::adopt(graphics, model).await)
     }

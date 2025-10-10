@@ -354,13 +354,15 @@ impl Light {
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
         };
 
-        let cube_model = Arc::new(Model::load_from_memory(
-            graphics.clone(),
-            include_bytes!("../../resources/models/cube.glb").to_vec(),
-            label,
-        )
-        .await
-        .unwrap());
+        let cube_model = Arc::new(
+            Model::load_from_memory(
+                graphics.clone(),
+                include_bytes!("../../resources/models/cube.glb").to_vec(),
+                label,
+            )
+            .await
+            .unwrap(),
+        );
 
         let label_str = label.unwrap_or("Light").to_string();
 

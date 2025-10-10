@@ -104,25 +104,26 @@ impl ResourceReference {
 
         for (i, component) in components.iter().enumerate() {
             if let std::path::Component::Normal(name) = component
-                && *name == "resources" {
-                    let remaining_components = &components[i + 1..];
-                    if remaining_components.is_empty() {
-                        anyhow::bail!("Unable to locate any remaining components");
-                    }
-
-                    let resource_path = remaining_components
-                        .iter()
-                        .map(|c| match c {
-                            std::path::Component::Normal(name) => name.to_str().unwrap_or(""),
-                            _ => "",
-                        })
-                        .collect::<Vec<_>>()
-                        .join("/");
-
-                    return Ok(Self {
-                        ref_type: ResourceReferenceType::File(resource_path),
-                    });
+                && *name == "resources"
+            {
+                let remaining_components = &components[i + 1..];
+                if remaining_components.is_empty() {
+                    anyhow::bail!("Unable to locate any remaining components");
                 }
+
+                let resource_path = remaining_components
+                    .iter()
+                    .map(|c| match c {
+                        std::path::Component::Normal(name) => name.to_str().unwrap_or(""),
+                        _ => "",
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/");
+
+                return Ok(Self {
+                    ref_type: ResourceReferenceType::File(resource_path),
+                });
+            }
         }
 
         anyhow::bail!("Nothing here")
@@ -183,9 +184,10 @@ impl ResourceReference {
             }
             ResourceReferenceType::File(path) => {
                 if let Ok(exe_path) = self.to_executable_path()
-                    && exe_path.exists() {
-                        return Ok(exe_path);
-                    }
+                    && exe_path.exists()
+                {
+                    return Ok(exe_path);
+                }
 
                 Ok(std::env::current_dir()?
                     .join("resources")
