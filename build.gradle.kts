@@ -43,18 +43,35 @@ kotlin {
         else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
     }
 
-    if (file("${project.rootDir}/target/debug/$libName").exists()) {
-        println("Debug library exists")
-//        "${project.rootDir}/target/debug/$libName"
-    } else if (file("${project.rootDir}/target/release/$libName").exists()) {
-        println("Release library exists")
-//        "${project.rootDir}/target/debug/$libName"
-    } else if (file("${project.rootDir}/libs/$libName").exists()) {
-        println("Local library exists")
-//        "${project.rootDir}/libs/$libName"
-    } else {
-        println("libeucalyptus_core.so does not exist. This is a local build, so most likely you haven't built the rust library yet. \n" +
-                "Try running cargo build")
+    val (libDir, libNameForLinking) = when {
+        file("${project.rootDir}/target/debug").exists() -> {
+            val debugLibDir = "${project.rootDir}/target/debug"
+            if (isMingwX64) {
+                Pair(debugLibDir, "eucalyptus_core")
+            } else {
+                Pair(debugLibDir, "eucalyptus_core")
+            }
+        }
+        file("${project.rootDir}/target/release").exists() -> {
+            val releaseLibDir = "${project.rootDir}/target/release"
+            if (isMingwX64) {
+                Pair(releaseLibDir, "eucalyptus_core")
+            } else {
+                Pair(releaseLibDir, "eucalyptus_core")
+            }
+        }
+        file("${project.rootDir}/libs").exists() -> {
+            val libsDir = "${project.rootDir}/libs"
+            if (isMingwX64) {
+                Pair(libsDir, "eucalyptus_core")
+            } else {
+                Pair(libsDir, "eucalyptus_core")
+            }
+        }
+        else -> {
+            println("WARNING: Rust library directory not found!")
+            Pair(null, null)
+        }
     }
 
     nativeTarget.apply {
@@ -69,6 +86,14 @@ kotlin {
         binaries {
             sharedLib {
                 baseName = "dropbear"
+                
+                if (libDir != null && libNameForLinking != null) {
+                    if (isMingwX64) {
+                        linkerOpts("${libDir}/${libName}.lib")
+                    } else {
+                        linkerOpts("-L${libDir}", "-l${libNameForLinking}")
+                    }
+                }
             }
         }
     }
@@ -124,13 +149,20 @@ tasks.register<JavaCompile>("generateJniHeaders") {
 publishing {
     repositories {
         maven {
-            val dotenv = io.github.cdimascio.dotenv.dotenv()
-            name = "GitHubPackages"
+          name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
-            credentials {
-                username = dotenv["GITHUB_USERNAME"]
-                password = dotenv["GITHUB_TOKEN"]
+            
+            val isPublishing = gradle.startParameter.taskNames.any { 
+                it.contains("publish", ignoreCase = true) 
             }
+            
+            if (isPublishing) {
+                val dotenv = io.github.cdimascio.dotenv.dotenv()
+                credentials {
+                  username = dotenv["GITHUB_USERNAME"]
+                  password = dotenv["GITHUB_TOKEN"]
+              }
+          }
         }
     }
 
