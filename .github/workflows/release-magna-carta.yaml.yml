@@ -1,9 +1,13 @@
+# .github/workflows/release-magna-carta.yml
 name: Release Magna Carta
 
 on:
   push:
     branches:
-      - main  # or your default branch
+      - main
+
+permissions:
+  contents: write  # Required to create GitHub releases
 
 jobs:
   check-and-release:
@@ -28,17 +32,32 @@ jobs:
     needs: check-and-release
     if: needs.check-and-release.outputs.should_release == 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: magna-carta-linux
+            artifact_name: magna-carta-linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: magna-carta-linux-arm64
+
+          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: magna-carta-windows.exe
+            artifact_name: magna-carta-windows-x64.exe
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: magna-carta-windows-arm64.exe
+
+          # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: magna-carta-macos
+            artifact_name: magna-carta-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: magna-carta-macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
@@ -51,6 +70,11 @@ jobs:
 
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }} -p magna-carta
+
+      - name: Set executable permissions (Unix-like)
+        if: matrix.os != 'windows-latest'
+        run: |
+          chmod +x "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -71,6 +95,13 @@ jobs:
         with:
           path: artifacts
 
+      - name: Restore executable permissions
+        run: |
+          chmod +x artifacts/magna-carta-linux-x64/magna-carta-linux-x64
+          chmod +x artifacts/magna-carta-linux-arm64/magna-carta-linux-arm64
+          chmod +x artifacts/magna-carta-macos-x64/magna-carta-macos-x64
+          chmod +x artifacts/magna-carta-macos-arm64/magna-carta-macos-arm64
+
       - name: Check if changelog exists
         id: changelog-check
         run: |
@@ -82,7 +113,6 @@ jobs:
           fi
 
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,6 +121,9 @@ jobs:
           name: Magna Carta Release v${{ github.run_number }}
           body_path: ${{ steps.changelog-check.outputs.changelog_exists == 'true' && 'RELEASE_BODY.md' || '' }}
           files: |
-            artifacts/magna-carta-linux/magna-carta-linux
-            artifacts/magna-carta-windows.exe/magna-carta-windows.exe
-            artifacts/magna-carta-macos/magna-carta-macos
+            artifacts/magna-carta-linux-x64/magna-carta-linux-x64
+            artifacts/magna-carta-linux-arm64/magna-carta-linux-arm64
+            artifacts/magna-carta-windows-x64.exe/magna-carta-windows-x64.exe
+            artifacts/magna-carta-windows-arm64.exe/magna-carta-windows-arm64.exe
+            artifacts/magna-carta-macos-x64/magna-carta-macos-x64
+            artifacts/magna-carta-macos-arm64/magna-carta-macos-arm64
