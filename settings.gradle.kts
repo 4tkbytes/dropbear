@@ -6,3 +6,4 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+include("magna-carta-plugin")

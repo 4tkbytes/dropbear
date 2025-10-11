@@ -47,19 +47,15 @@ mod tests {
         let generator = KotlinNativeGenerator;
         let output = generator.generate(&manifest).unwrap();
 
-        // Verify imports
         assert!(output.contains("import com.game.Player"));
         assert!(output.contains("import com.game.GlobalLogger"));
 
-        // Verify tags
         assert!(output.contains("tags = listOf(\"player\", \"movement\")"));
         assert!(output.contains("tags = listOf()"));
 
-        // Verify class instantiations
         assert!(output.contains("script = Player()"));
         assert!(output.contains("script = GlobalLogger()"));
 
-        // Verify CName exports
         assert!(output.contains("@CName(\"dropbear_load\")"));
         assert!(output.contains("@CName(\"dropbear_update\")"));
         assert!(output.contains("@CName(\"dropbear_destroy\")"));

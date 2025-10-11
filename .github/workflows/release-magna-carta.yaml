@@ -2,34 +2,14 @@ name: Release Magna Carta
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'magna-carta-v*'
 
 permissions:
   contents: write
 
 jobs:
-  check-and-release:
-    runs-on: ubuntu-latest
-    outputs:
-      should_release: ${{ steps.check-commit.outputs.should_release }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check commit message
-        id: check-commit
-        run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$COMMIT_MSG" == *"jarvis, create a new release for magna-carta"* ]]; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_release=false" >> $GITHUB_OUTPUT
-          fi
-
   build-and-release:
-    needs: check-and-release
-    if: needs.check-and-release.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -74,17 +54,9 @@ jobs:
       - name: Rename and prepare artifact
         shell: bash
         run: |
-          # Source binary path
           SRC="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           DST="${{ matrix.artifact_name }}"
-          
-          # Copy to root for easy upload
           cp "$SRC" "./$DST"
-          
-          # Set executable permissions (Unix)
-          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-            chmod +x "./$DST"
-          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -93,8 +65,7 @@ jobs:
           path: ${{ matrix.artifact_name }}
 
   create-release:
-    needs: [check-and-release, build-and-release]
-    if: needs.check-and-release.outputs.should_release == 'true'
+    needs: build-and-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -104,12 +75,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Restore executable permissions (just in case)
-        run: |
-          chmod +x artifacts/magna-carta-linux-x64/magna-carta-linux-x64
-          chmod +x artifacts/magna-carta-macos-x64/magna-carta-macos-x64
-          chmod +x artifacts/magna-carta-macos-arm64/magna-carta-macos-arm64
 
       - name: Check if changelog exists
         id: changelog-check
@@ -126,8 +91,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: magna-carta-v${{ github.run_number }}
-          name: magna-carta release v${{ github.run_number }}
+          tag_name: ${{ github.ref_name }}  # Uses the actual tag name (e.g., magna-carta-v1.2.3)
+          name: Magna Carta Release ${{ github.ref_name }}
           body_path: ${{ steps.changelog-check.outputs.changelog_exists == 'true' && 'RELEASE_BODY.md' || '' }}
           files: |
             artifacts/magna-carta-linux-x64/magna-carta-linux-x64

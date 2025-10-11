@@ -1,0 +1,63 @@
+package com.dropbear.magna_carta
+
+import de.undercouch.gradle.tasks.download.Download
+import org.gradle.api.Plugin
+import org.gradle.api.Project
+import org.gradle.api.file.Directory
+import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.kotlin.dsl.create
+import org.gradle.kotlin.dsl.get
+import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.register
+import org.gradle.kotlin.dsl.withType
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import java.io.File
+import java.security.MessageDigest
+
+class MagnaCartaPlugin : Plugin<Project> {
+    override fun apply(project: Project) {
+        val extension = project.extensions.create("magna-carta", MagnaCartaExtension::class)
+
+        val downloadToolTask = project.tasks.register("downloadMagnaCartaTool", DownloadMagnaCartaToolTask::class) {
+            toolVersion.set("magna-carta-v2")
+            outputDir.set(project.gradle.gradleUserHomeDir.resolve("magna-carta"))
+        }
+
+        val generateJvmTask = project.tasks.register("generateMagnaCartaJvm", GenerateMagnaCartaTask::class) {
+            dependsOn(downloadToolTask)
+            toolExecutable.set(downloadToolTask.flatMap { it.outputFile })
+            target.set("jvm")
+            inputDir.set(project.projectDir.resolve("src"))
+            outputDir.set(project.layout.buildDirectory.dir("generated/magna-carta/jvm"))
+        }
+
+        val generateNativeTask = project.tasks.register("generateMagnaCartaNative", GenerateMagnaCartaTask::class) {
+            dependsOn(downloadToolTask)
+            toolExecutable.set(downloadToolTask.flatMap { it.outputFile })
+            target.set("native")
+            inputDir.set(project.projectDir.resolve("src"))
+            outputDir.set(project.layout.buildDirectory.dir("generated/magna-carta/native"))
+        }
+
+        project.pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
+            val kotlin = project.extensions.getByType(KotlinMultiplatformExtension::class)
+            kotlin.sourceSets.apply {
+                val jvmMain = getByName("jvmMain")
+                jvmMain.kotlin.srcDir(generateJvmTask.map { it.outputDir })
+
+                val nativeMain = maybeCreate("nativeMain")
+                nativeMain.kotlin.srcDir(generateNativeTask.map { it.outputDir })
+
+                kotlin.targets.withType(KotlinNativeTarget::class.java) {
+                    compilations.getByName("main").defaultSourceSet.dependsOn(nativeMain)
+                }
+            }
+        }
+    }
+}
+
+abstract class MagnaCartaExtension { }
