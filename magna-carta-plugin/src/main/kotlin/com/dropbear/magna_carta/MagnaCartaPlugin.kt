@@ -35,15 +35,27 @@ class MagnaCartaPlugin : Plugin<Project> {
 
         project.pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
             val kotlin = project.extensions.getByType(KotlinMultiplatformExtension::class)
-            kotlin.sourceSets.apply {
-                val jvmMain = getByName("jvmMain")
-                jvmMain.kotlin.srcDir(generateJvmTask.map { it.outputDir })
 
-                val nativeMain = maybeCreate("nativeMain")
+            kotlin.sourceSets.apply {
+                if (names.contains("jvmMain")) {
+                    val jvmMain = getByName("jvmMain")
+                    jvmMain.kotlin.srcDir(generateJvmTask.map { it.outputDir })
+                }
+
+                val nativeMain = findByName("nativeMain") ?: create("nativeMain")
                 nativeMain.kotlin.srcDir(generateNativeTask.map { it.outputDir })
 
                 kotlin.targets.withType(KotlinNativeTarget::class.java) {
                     compilations.getByName("main").defaultSourceSet.dependsOn(nativeMain)
+                }
+            }
+
+
+            kotlin.targets.all {
+                this.compilations.all {
+                    this.compileTaskProvider.configure {
+                        this.dependsOn(generateJvmTask, generateNativeTask)
+                    }
                 }
             }
         }

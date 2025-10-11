@@ -18,8 +18,6 @@ impl Generator for KotlinJVMGenerator {
             local_time.format("%Y-%m-%d %H:%M:%S")
         )?;
         writeln!(output)?;
-        writeln!(output, "package com.dropbear")?;
-        writeln!(output)?;
 
         let mut imported_packages = std::collections::HashSet::new();
         for item in manifest.items() {

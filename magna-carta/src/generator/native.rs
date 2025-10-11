@@ -17,10 +17,8 @@ impl Generator for KotlinNativeGenerator {
         )?;
         writeln!(
             output,
-            "@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)"
+            "@file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)"
         )?;
-        writeln!(output)?;
-        writeln!(output, "package com.dropbear")?;
         writeln!(output)?;
 
         writeln!(output, "import com.dropbear.DropbearEngine")?;
@@ -79,7 +77,7 @@ impl Generator for KotlinNativeGenerator {
 
         writeln!(
             output,
-            "private fun getDropbearEngine(worldPointer: COpaquePointer?, currentEntity: Long?): DropbearEngine {{"
+            "private fun getDropbearEngine(worldPointer: COpaquePointer?, currentEntity: ULong?): DropbearEngine {{"
         )?;
         writeln!(output, "    val nativeEngine = NativeEngine()")?;
         writeln!(output, "    nativeEngine.init(worldPointer)")?;
@@ -110,7 +108,7 @@ impl Generator for KotlinNativeGenerator {
             writeln!(output, "@CName(\"{}\")", func_name)?;
             writeln!(
                 output,
-                "fun {}ScriptByTag(worldPointer: COpaquePointer?, currentEntity: Long?, tag: String?{}) {{",
+                "fun {}ScriptByTag(worldPointer: COpaquePointer?, currentEntity: ULong?, tag: String?{}) {{",
                 method_name,
                 param_extra
             )?;

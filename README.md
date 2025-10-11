@@ -16,6 +16,7 @@ If you might have not realised, all the crates/projects names are after Australi
 ### Related Projects
 
 - [magna-carta](https://github.com/4tkbytes/dropbear/tree/main/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching. 
+- [magna-carta-plugin](https://github.com/4tkbytes/dropbear/tree/main/magna-carta-plugin) is a Gradle plugin for generating metadata during compile time with the help of the magna-carta cli tool. 
 - [dropbear_future-queue](https://github.com/4tkbytes/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
 - [model_to_image](https://github.com/4tkbytes/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasteriser. _(very crude but usable)_
 
