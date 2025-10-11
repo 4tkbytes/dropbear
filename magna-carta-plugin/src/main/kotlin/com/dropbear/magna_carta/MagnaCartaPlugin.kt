@@ -1,29 +1,19 @@
 package com.dropbear.magna_carta
 
-import de.undercouch.gradle.tasks.download.Download
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.file.Directory
-import org.gradle.api.tasks.Exec
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.Internal
-import org.gradle.api.tasks.OutputDirectory
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
-import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-import java.io.File
-import java.security.MessageDigest
 
 class MagnaCartaPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val extension = project.extensions.create("magna-carta", MagnaCartaExtension::class)
 
         val downloadToolTask = project.tasks.register("downloadMagnaCartaTool", DownloadMagnaCartaToolTask::class) {
-            toolVersion.set("magna-carta-v2")
+            toolVersion.set("magna-carta-v0.0.1")
             outputDir.set(project.gradle.gradleUserHomeDir.resolve("magna-carta"))
         }
 

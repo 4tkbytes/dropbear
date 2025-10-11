@@ -30,27 +30,27 @@ abstract class DownloadMagnaCartaToolTask: Download() {
             os.isLinux && arch == "amd64" -> Triple(
                 "magna-carta-linux-x64",
                 "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-linux-x64",
-                "4cbfeca26ff0cfca5342dbd748066978041c213e6e3eb05214eec0f18a5b37b7"
+                "88b3497ab7e787260aeb7f4d91fe46fa9f78ccfb32f841a27a693b824da4bc32"
             )
             os.isMacOsX && arch == "aarch64" -> Triple(
                 "magna-carta-macos-arm64",
                 "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-arm64",
-                "446a89a9077fc78674342e3a16308957e9b39c347d3a313de00056630a446bb4"
+                "73ba95d193ab7ac5925324e4c3006c60e88bf0cb89b7a08786b75f2bfc038c10"
             )
             os.isMacOsX && (arch == "x86_64" || arch == "amd64") -> Triple(
                 "magna-carta-macos-x64",
                 "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-x64",
-                "5705f0ef43aab59e9f6b1b35fec391cceb373213f275b12d85e3614272ec0660"
+                "012202ee74db0d9638033c8947b7f94d4b20be95b00f2ea181d892af20e226e2"
             )
             os.isWindows && arch == "aarch64" -> Triple(
                 "magna-carta-windows-arm64.exe",
                 "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-arm64.exe",
-                "39072fab25a69ff8c321638897b7df00d5782c6a46b578eafbaedcb9d4efc53b"
+                "639ab60a2693d82b548be1497ef25117a13b6e0c69fc45a19450fd10e2610d13"
             )
             os.isWindows && (arch == "x86_64" || arch == "amd64") -> Triple(
                 "magna-carta-windows-x64.exe",
                 "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-x64.exe",
-                "cce4c645da4e8a929a0f77f6685dcb104f955c19a7caba55e11d9b4c1c0ad077"
+                "983880be951c9bda800a616739c4245f97e5ddb2818017d0d9c29ae62c0b9016"
             )
             else -> throw GradleException("Unsupported OS/arch: $os / $arch")
         }
