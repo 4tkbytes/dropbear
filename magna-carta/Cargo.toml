@@ -6,10 +6,6 @@ license = "MIT"
 repository.workspace = true
 readme = "README.md"
 
-[[bin]]
-name = "magna-carta-cli"
-path = "src/bin/main.rs"
-
 [dependencies]
 anyhow.workspace = true
 tree-sitter.workspace = true
