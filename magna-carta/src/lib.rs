@@ -1,4 +1,4 @@
-mod generator;
+pub mod generator;
 
 use std::path::PathBuf;
 use tree_sitter::{Parser, Query, QueryCursor};

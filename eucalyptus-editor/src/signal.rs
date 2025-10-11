@@ -172,7 +172,6 @@ impl SignalController for Editor {
                         }
                     }
                     
-                    // Handle build failure after the borrow is done
                     if should_stop_building {
                         self.last_build_error = Some(self.build_logs.join("\n"));
                         self.signal = Signal::None;
@@ -186,12 +185,10 @@ impl SignalController for Editor {
                     if self.show_build_window {
                         let mut window_open = true;
                         let mut cancel_clicked = false;
-                        
                         egui::Window::new("Building Project")
                             .collapsible(false)
-                            .resizable(true)
-                            .default_width(600.0)
-                            .default_height(400.0)
+                            .resizable(false)
+                            .fixed_size([500.0, 400.0])
                             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                             .open(&mut window_open)
                             .show(&graphics.get_egui_context(), |ui| {
@@ -212,8 +209,9 @@ impl SignalController for Editor {
                                     ui.add_space(5.0);
                                     
                                     egui::ScrollArea::vertical()
-                                        .auto_shrink([false, false])
                                         .stick_to_bottom(true)
+                                        .max_height(200.0)
+                                        .auto_shrink([false, false])
                                         .show(ui, |ui| {
                                             for log_line in &self.build_logs {
                                                 ui.label(
@@ -242,7 +240,7 @@ impl SignalController for Editor {
                                     }
                                 });
                             });
-                        
+
                         if !window_open || cancel_clicked {
                             if let Some(handle) = self.handle_created {
                                 log::info!("Cancelling build task due to window close");
@@ -270,7 +268,7 @@ impl SignalController for Editor {
                                 Ok(path) => {
                                     log::debug!("Path is valid, JAR location as {}", path.display());
                                     success!("Build completed successfully!");
-                                    self.show_build_window = false; // Close the build window
+                                    self.show_build_window = false;
                                     
                                     let has_player_camera_target = self
                                         .world
@@ -348,6 +346,8 @@ impl SignalController for Editor {
                                                 }
                                             }
                                         }
+                                        
+                                        self.signal = Signal::None;
                                     } else {
                                         self.signal = Signal::None;
                                         fatal!("Unable to build: No initial camera set");
@@ -367,7 +367,7 @@ impl SignalController for Editor {
                             }
                         }
                     } else {
-                        log::warn!("Handle has not been created, must be a bug");
+                        // log::warn!("Handle has not been created, must be a bug");
                         self.signal = Signal::None;
                         self.show_build_window = false;
                         self.editor_state = EditorState::Editing;
@@ -381,9 +381,8 @@ impl SignalController for Editor {
                         
                         egui::Window::new("Build Error")
                             .collapsible(true)
-                            .resizable(true)
-                            .default_width(700.0)
-                            .default_height(500.0)
+                            .resizable(false)
+                            .fixed_size([700.0, 500.0])
                             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                             .open(&mut window_open)
                             .show(&graphics.get_egui_context(), |ui| {
@@ -398,6 +397,7 @@ impl SignalController for Editor {
                                     // Scrollable error log with code styling
                                     egui::ScrollArea::both()
                                         .auto_shrink([false, false])
+                                        .max_height(300.0)
                                         .show(ui, |ui| {
                                             ui.add(
                                                 egui::TextEdit::multiline(&mut error_log.as_str())

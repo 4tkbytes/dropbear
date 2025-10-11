@@ -97,11 +97,11 @@ impl ScriptManager {
 
         let mut child = Command::new(&gradle_cmd)
             .current_dir(project_root)
-            .args(&["--console=plain", "assemble"])
+            .args(["--console=plain", "jvmJar"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .context(format!("Failed to spawn `{} assemble`", gradle_cmd))?;
+            .context(format!("Failed to spawn `{} jvmJar`", gradle_cmd))?;
 
         let stdout = child.stdout.take().expect("Stdout was piped");
         let stderr = child.stderr.take().expect("Stderr was piped");
@@ -111,7 +111,6 @@ impl ScriptManager {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 // if let Ok(line) = line {
-                println!("stdout: {}", line);
                     let _ = tx_out.send(BuildStatus::Building(line));
                 // }
             }
@@ -122,7 +121,6 @@ impl ScriptManager {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 // if let Ok(line) = line {
-                println!("stderr: {}", line);
                     let _ = tx_err.send(BuildStatus::Building(line));
                 // }
             }

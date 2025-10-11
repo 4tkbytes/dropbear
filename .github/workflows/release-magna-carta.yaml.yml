@@ -1,0 +1,96 @@
+name: Release Magna Carta
+
+on:
+  push:
+    branches:
+      - main  # or your default branch
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check-commit.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check commit message
+        id: check-commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"jarvis, create a new release for magna-carta"* ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-release:
+    needs: check-and-release
+    if: needs.check-and-release.outputs.should_release == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: magna-carta-linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: magna-carta-windows.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: magna-carta-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }} -p magna-carta
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  create-release:
+    needs: [check-and-release, build-and-release]
+    if: needs.check-and-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Check if changelog exists
+        id: changelog-check
+        run: |
+          if [ -f "docs/changelog/magna-carta/CHANGELOG.md" ]; then
+            cp docs/changelog/magna-carta/CHANGELOG.md ./RELEASE_BODY.md
+            echo "changelog_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: magna-carta-v${{ github.run_number }}
+          name: Magna Carta Release v${{ github.run_number }}
+          body_path: ${{ steps.changelog-check.outputs.changelog_exists == 'true' && 'RELEASE_BODY.md' || '' }}
+          files: |
+            artifacts/magna-carta-linux/magna-carta-linux
+            artifacts/magna-carta-windows.exe/magna-carta-windows.exe
+            artifacts/magna-carta-macos/magna-carta-macos

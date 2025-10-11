@@ -583,8 +583,8 @@ impl InspectableComponent for ScriptComponent {
         _cfg: &mut StaticallyKept,
         ui: &mut Ui,
         _undo_stack: &mut Vec<UndoableAction>,
-        signal: &mut Signal,
-        label: &mut String,
+        _signal: &mut Signal,
+        _label: &mut String,
     ) {
         ui.vertical(|ui| {
             CollapsingHeader::new("Scripting")

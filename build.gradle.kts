@@ -102,7 +102,7 @@ kotlin {
         }
 
         jvmMain {
-            kotlin.srcDirs("src/jvmMain/kotlin", "src/jvmMain/java")
+            kotlin.srcDirs("src/jvmMain/kotlin", "src/jvmMain/java", "build/magna-carta")
             dependencies {
 
             }
