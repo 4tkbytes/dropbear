@@ -38,6 +38,8 @@ tokio.workspace = true
 reqwest.workspace = true
 tar.workspace = true
 flate2.workspace = true
+crossbeam-channel.workspace = true
+pollster = "0.4.0"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

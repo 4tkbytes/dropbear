@@ -8,12 +8,13 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::ScriptTarget;
+use eucalyptus_core::scripting::{BuildStatus, ScriptTarget};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
+use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use hecs::Entity;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub trait SignalController {
@@ -103,87 +104,326 @@ impl SignalController for Editor {
                     self.signal = Signal::None;
                     return Err(anyhow::anyhow!("Unable to play: already in playing mode"));
                 }
-                let has_player_camera_target = self
-                    .world
-                    .query::<(&Camera, &CameraComponent)>()
-                    .iter()
-                    .any(|(_, (_, comp))| comp.starting_camera);
 
-                if has_player_camera_target {
-                    if let Err(e) = self.create_backup() {
-                        self.signal = Signal::None;
-                        fatal!("Failed to create play mode backup: {}", e);
-                    }
+                if matches!(self.editor_state, EditorState::Editing) {
+                    log::debug!("Starting build process");
+                    let (tx, rx) = crossbeam_channel::unbounded();
+                    self.progress_rx = Some(rx);
+                    
+                    // Clear previous build logs and reset progress
+                    self.build_logs.clear();
+                    self.build_progress = 0.0;
+                    self.show_build_window = true;
+                    self.last_build_error = None; // Clear previous error
 
-                    self.editor_state = EditorState::Playing;
+                    let project_root = {
+                        let cfg = PROJECT.read();
+                        cfg.project_path.clone()
+                    };
 
-                    self.switch_to_player_camera();
+                    let script_manager = self.script_manager.clone();
+                    let project_root = project_root.to_path_buf();
+                    let status_tx = tx.clone();
 
-                    let mut script_entities = Vec::new();
-                    {
-                        for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
-                            script_entities.push((entity_id, script.clone()));
-                        }
-                    }
+                    let handle = graphics.future_queue.push(async move {
+                        let mut manager = script_manager.lock().await;
+                        manager.build_jvm(project_root, status_tx).await
+                    });
 
-                    let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-                    for (entity_id, script) in script_entities {
-                        for tag in script.tags {
-                            if etag.contains_key(&tag) {
-                                etag.get_mut(&tag).unwrap().push(entity_id);
-                            } else {
-                                etag.insert(tag.clone(), vec![entity_id]);
+                    log::debug!("Pushed future to future_queue, received handle: {:?}", handle);
+
+                    self.handle_created = Some(handle);
+
+                    self.editor_state = EditorState::Building;
+                    log::debug!("Set editor state to EditorState::Building");
+                }
+
+                if matches!(self.editor_state, EditorState::Building) {
+                    let mut should_stop_building = false;
+                    
+                    if let Some(rx) = &self.progress_rx {
+                        while let Ok(status) = rx.try_recv() {
+                            match status {
+                                BuildStatus::Started => {
+                                    self.build_logs.push("Build started...".to_string());
+                                    self.build_progress = 0.1;
+                                    log::info!("Build started");
+                                }
+                                BuildStatus::Building(msg) => {
+                                    log::info!("[BUILD] {}", msg);
+                                    self.build_logs.push(msg.clone());
+                                    self.build_progress = (self.build_progress + 0.01).min(0.9);
+                                }
+                                BuildStatus::Completed => {
+                                    self.build_logs.push("Build completed successfully!".to_string());
+                                    self.build_progress = 1.0;
+                                    log::info!("Build completed");
+                                }
+                                BuildStatus::Failed(e) => {
+                                    let error_msg = format!("Build failed: {}", e);
+                                    self.build_logs.push(error_msg.clone());
+                                    
+                                    self.build_progress = 0.0;
+                                    fatal!("Failed to build gradle: {}", e);
+                                    
+                                    should_stop_building = true;
+                                }
                             }
                         }
                     }
-
-                    let etag_clone = etag.clone();
-
-                    // todo: get the library name working
-                    if let Err(e) = self
-                        .script_manager
-                        .init_script(etag_clone, ScriptTarget::None)
-                    {
-                        fatal!("Failed to ready script manager interface because {}", e);
-                        self.signal = Signal::StopPlaying;
-                        return Err(anyhow::anyhow!(e));
+                    
+                    // Handle build failure after the borrow is done
+                    if should_stop_building {
+                        self.last_build_error = Some(self.build_logs.join("\n"));
+                        self.signal = Signal::None;
+                        self.show_build_window = false;
+                        self.show_build_error_window = true;
+                        self.handle_created = None;
+                        self.progress_rx = None;
+                        self.editor_state = EditorState::Editing;
                     }
 
-                    for (tag, entities) in &etag {
-                        log::debug!(
+                    if self.show_build_window {
+                        let mut window_open = true;
+                        let mut cancel_clicked = false;
+                        
+                        egui::Window::new("Building Project")
+                            .collapsible(false)
+                            .resizable(true)
+                            .default_width(600.0)
+                            .default_height(400.0)
+                            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                            .open(&mut window_open)
+                            .show(&graphics.get_egui_context(), |ui| {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading("Gradle Build Progress");
+                                    ui.add_space(10.0);
+                                    
+                                    let progress_bar = egui::ProgressBar::new(self.build_progress)
+                                        .show_percentage()
+                                        .animate(true);
+                                    ui.add(progress_bar);
+                                    
+                                    ui.add_space(15.0);
+                                    ui.separator();
+                                    ui.add_space(5.0);
+                                    
+                                    ui.heading("Build Log");
+                                    ui.add_space(5.0);
+                                    
+                                    egui::ScrollArea::vertical()
+                                        .auto_shrink([false, false])
+                                        .stick_to_bottom(true)
+                                        .show(ui, |ui| {
+                                            for log_line in &self.build_logs {
+                                                ui.label(
+                                                    egui::RichText::new(log_line)
+                                                        .family(egui::FontFamily::Monospace)
+                                                        .size(12.0)
+                                                );
+                                            }
+                                            
+                                            if !self.build_logs.is_empty() {
+                                                ui.add_space(10.0);
+                                                ui.label(
+                                                    egui::RichText::new(
+                                                        format!("Total log entries: {}", self.build_logs.len())
+                                                    )
+                                                    .italics()
+                                                    .color(egui::Color32::GRAY)
+                                                );
+                                            }
+                                        });
+                                    
+                                    ui.add_space(10.0);
+                                    
+                                    if ui.button("Cancel Build").clicked() {
+                                        cancel_clicked = true;
+                                    }
+                                });
+                            });
+                        
+                        if !window_open || cancel_clicked {
+                            if let Some(handle) = self.handle_created {
+                                log::info!("Cancelling build task due to window close");
+                                graphics.future_queue.cancel(&handle);
+                            }
+                            
+                            self.show_build_window = false;
+                            self.handle_created = None;
+                            self.progress_rx = None;
+                            self.editor_state = EditorState::Editing;
+                            self.signal = Signal::None;
+                        }
+                    }
+
+                    if let Some(handle) = self.handle_created {
+                        if let Some(result) = graphics
+                            .future_queue
+                            .exchange_as::<anyhow::Result<PathBuf>>(&handle)
+                        {
+                            log::debug!("Build future completed, processing result");
+                            self.handle_created = None;
+                            self.progress_rx = None;
+                            
+                            match result {
+                                Ok(path) => {
+                                    log::debug!("Path is valid, JAR location as {}", path.display());
+                                    success!("Build completed successfully!");
+                                    self.show_build_window = false; // Close the build window
+                                    
+                                    let has_player_camera_target = self
+                                        .world
+                                        .query::<(&Camera, &CameraComponent)>()
+                                        .iter()
+                                        .any(|(_, (_, comp))| comp.starting_camera);
+
+                                    if has_player_camera_target {
+                                        if let Err(e) = self.create_backup() {
+                                            self.signal = Signal::None;
+                                            fatal!("Failed to create play mode backup: {}", e);
+                                        }
+
+                                        self.editor_state = EditorState::Playing;
+
+                                        self.switch_to_player_camera();
+
+                                        let mut script_entities = Vec::new();
+                                        {
+                                            for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                                                script_entities.push((entity_id, script.clone()));
+                                            }
+                                        }
+
+                                        let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
+                                        for (entity_id, script) in script_entities {
+                                            for tag in script.tags {
+                                                if etag.contains_key(&tag) {
+                                                    etag.get_mut(&tag).unwrap().push(entity_id);
+                                                } else {
+                                                    etag.insert(tag.clone(), vec![entity_id]);
+                                                }
+                                            }
+                                        }
+
+                                        let etag_clone = etag.clone();
+
+                                        if let Err(e) = pollster::block_on(self
+                                            .script_manager
+                                            .lock())
+                                            .init_script(etag_clone, ScriptTarget::JVM { library_path: path })
+                                        {
+                                            fatal!("Failed to ready script manager interface because {}", e);
+                                            self.signal = Signal::StopPlaying;
+                                            return Err(anyhow::anyhow!(e));
+                                        }
+
+                                        for (tag, entities) in &etag {
+                                            log::debug!(
                             "Initialising script for tag {:?} with entities: {:?}",
                             tag,
                             entities
                         );
 
-                        for e in entities {
-                            if let Err(e) = self.script_manager.load_script(
-                                *e,
-                                tag.clone(),
-                                &mut self.world,
-                                &self.input_state,
-                            ) {
-                                fatal!(
+                                            for e in entities {
+                                                if let Err(e) = pollster::block_on(self.script_manager.lock())
+                                                    .load_script(
+                                                        *e,
+                                                        tag.clone(),
+                                                        &mut self.world,
+                                                        &self.input_state,
+                                                    ) {
+                                                    fatal!(
                                     "Failed to initialise script for tag {:?} because {}",
                                     tag,
                                     e
                                 );
-                                self.signal = Signal::StopPlaying;
-                                return Err(anyhow::anyhow!(e));
-                            } else {
-                                success_without_console!(
+                                                    self.signal = Signal::StopPlaying;
+                                                    return Err(anyhow::anyhow!(e));
+                                                } else {
+                                                    success_without_console!(
                                     "You are in play mode now! Press Escape to exit"
                                 );
-                                log::info!("You are in play mode now! Press Escape to exit");
+                                                    log::info!("You are in play mode now! Press Escape to exit");
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        self.signal = Signal::None;
+                                        fatal!("Unable to build: No initial camera set");
+                                    }
+                                }
+                                Err(e) => {
+                                    let error_msg = format!("Build process error: {}", e);
+                                    self.build_logs.push(error_msg.clone());
+                                    self.last_build_error = Some(self.build_logs.join("\n"));
+                                    
+                                    fatal!("Failed to ready script manager interface because {}", e);
+                                    self.signal = Signal::None;
+                                    self.show_build_window = false;
+                                    self.show_build_error_window = true;
+                                    self.editor_state = EditorState::Editing;
+                                }
                             }
                         }
+                    } else {
+                        log::warn!("Handle has not been created, must be a bug");
+                        self.signal = Signal::None;
+                        self.show_build_window = false;
+                        self.editor_state = EditorState::Editing;
                     }
-                } else {
-                    self.signal = Signal::None;
-                    fatal!("Unable to build: No initial camera set");
                 }
 
-                self.signal = Signal::None;
+                if self.show_build_error_window {
+                    if let Some(error_log) = &self.last_build_error {
+                        let mut window_open = true;
+                        let mut close_clicked = false;
+                        
+                        egui::Window::new("Build Error")
+                            .collapsible(true)
+                            .resizable(true)
+                            .default_width(700.0)
+                            .default_height(500.0)
+                            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                            .open(&mut window_open)
+                            .show(&graphics.get_egui_context(), |ui| {
+                                ui.vertical(|ui| {
+                                    ui.heading("Build Failed");
+                                    ui.add_space(5.0);
+                                    ui.label("The Gradle build failed. See the error log below:");
+                                    ui.add_space(10.0);
+                                    ui.separator();
+                                    ui.add_space(10.0);
+                                    
+                                    // Scrollable error log with code styling
+                                    egui::ScrollArea::both()
+                                        .auto_shrink([false, false])
+                                        .show(ui, |ui| {
+                                            ui.add(
+                                                egui::TextEdit::multiline(&mut error_log.as_str())
+                                                    .font(egui::TextStyle::Monospace)
+                                                    .desired_width(f32::INFINITY)
+                                                    .desired_rows(20)
+                                            );
+                                        });
+                                    
+                                    ui.add_space(10.0);
+                                    
+                                    if ui.button("Close").clicked() {
+                                        close_clicked = true;
+                                    }
+                                });
+                            });
+                        
+                        if !window_open || close_clicked {
+                            self.show_build_error_window = false;
+                        }
+                    } else {
+                        self.show_build_error_window = false;
+                    }
+                }
+
+                // self.signal = Signal::None;
                 Ok(())
             }
             Signal::StopPlaying => {

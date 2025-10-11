@@ -33,6 +33,7 @@ crossbeam-channel = "0.5.15"
 interprocess = "2.2"
 serde_json = "1.0.143"
 libloading = "0.8.9"
+async-process = "2.5"
 
 [features]
 editor = ["jvm"]

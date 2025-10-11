@@ -29,7 +29,7 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::scripting::ScriptManager;
+use eucalyptus_core::scripting::{BuildStatus, ScriptManager};
 use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
@@ -80,7 +80,7 @@ pub struct Editor {
     pub(crate) editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
-    pub(crate) script_manager: ScriptManager,
+    pub(crate) script_manager: Arc<tokio::sync::Mutex<ScriptManager>>,
     play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
@@ -101,6 +101,15 @@ pub struct Editor {
     world_load_handle: Option<FutureHandle>,
     pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
     world_receiver: Option<oneshot::Receiver<hecs::World>>,
+
+    // building
+    pub progress_rx: Option<crossbeam_channel::Receiver<BuildStatus>>,
+    pub handle_created: Option<FutureHandle>,
+    pub build_logs: Vec<String>,
+    pub build_progress: f32,
+    pub show_build_window: bool,
+    pub last_build_error: Option<String>,
+    pub show_build_error_window: bool,
 
     dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
 }
@@ -165,7 +174,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new()?,
+            script_manager: Arc::new(tokio::sync::Mutex::new(ScriptManager::new()?)),
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,
@@ -179,6 +188,13 @@ impl Editor {
             world_load_handle: None,
             alt_pending_spawn_queue: vec![],
             world_receiver: None,
+            progress_rx: None,
+            handle_created: None,
+            build_logs: Vec::new(),
+            build_progress: 0.0,
+            show_build_window: false,
+            last_build_error: None,
+            show_build_error_window: false,
             dock_state_shared: None,
         })
     }
@@ -1200,6 +1216,7 @@ pub struct PlayModeBackup {
 
 pub enum EditorState {
     Editing,
+    Building,
     Playing,
 }
 

@@ -146,33 +146,34 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     dependsOn("compileKotlinJvm")
 }
 
-publishing {
-    repositories {
-        maven {
-          name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
-            
-            val isPublishing = gradle.startParameter.taskNames.any { 
-                it.contains("publish", ignoreCase = true) 
-            }
-            
-            if (isPublishing) {
-                val dotenv = io.github.cdimascio.dotenv.dotenv()
-                credentials {
-                  username = dotenv["GITHUB_USERNAME"]
-                  password = dotenv["GITHUB_TOKEN"]
-              }
-          }
-        }
-    }
-
-    publications {
-        create<MavenPublication>("release") {
-            groupId = group as String?
-            artifactId = rootProject.name
-            version = version
-
-            from(components["kotlin"])
-        }
-    }
-}
+// switched to jitpack now :)
+//publishing {
+//    repositories {
+//        maven {
+//          name = "GitHubPackages"
+//            url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
+//
+//            val isPublishing = gradle.startParameter.taskNames.any {
+//                it.contains("publish", ignoreCase = true)
+//            }
+//
+//            if (isPublishing) {
+//                val dotenv = io.github.cdimascio.dotenv.dotenv()
+//                credentials {
+//                  username = dotenv["GITHUB_USERNAME"]
+//                  password = dotenv["GITHUB_TOKEN"]
+//              }
+//          }
+//        }
+//    }
+//
+//    publications {
+//        create<MavenPublication>("release") {
+//            groupId = group as String?
+//            artifactId = rootProject.name
+//            version = version
+//
+//            from(components["kotlin"])
+//        }
+//    }
+//}

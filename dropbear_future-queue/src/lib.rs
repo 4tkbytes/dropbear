@@ -44,6 +44,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
 
 /// A type used for a future.
 ///
@@ -64,6 +65,7 @@ pub enum FutureStatus {
     NotPolled,
     CurrentlyPolling,
     Completed,
+    Cancelled,
 }
 
 /// A handle to the future task
@@ -77,6 +79,7 @@ struct HandleEntry {
     receiver: Option<ResultReceiver>,
     status: FutureStatus,
     cached_result: Option<AnyResult>,
+    task_handle: Option<JoinHandle<()>>,
 }
 
 /// A queue for polling futures. It is stored in here until [`FutureQueue::poll`] is run.
@@ -118,6 +121,7 @@ impl FutureQueue {
             receiver: Some(receiver),
             status: FutureStatus::NotPolled,
             cached_result: None,
+            task_handle: None,
         };
 
         self.handle_registry.lock().insert(id, entry);
@@ -165,14 +169,21 @@ impl FutureQueue {
                 }
             }
 
-            futures_to_spawn.push(future);
+            futures_to_spawn.push((id, future));
         }
 
         drop(queue);
 
-        for future in futures_to_spawn {
+        let registry = self.handle_registry.clone();
+        for (id, future) in futures_to_spawn {
             log("Spawning future with tokio");
-            tokio::spawn(future);
+            let handle = tokio::spawn(future);
+            
+            // Store the task handle
+            let mut reg = registry.lock();
+            if let Some(entry) = reg.get_mut(&id) {
+                entry.task_handle = Some(handle);
+            }
         }
     }
 
@@ -290,6 +301,36 @@ impl FutureQueue {
         registry.get(handle).map(|entry| entry.status.clone())
     }
 
+    /// Cancels a running future by its handle.
+    ///
+    /// This will abort the task if it's currently running, mark it as cancelled,
+    /// and clean up associated resources. Returns true if the task was cancelled,
+    /// false if the handle was not found or already completed.
+    pub fn cancel(&self, handle: &FutureHandle) -> bool {
+        let mut registry = self.handle_registry.lock();
+        
+        if let Some(entry) = registry.get_mut(handle) {
+            if matches!(entry.status, FutureStatus::Completed | FutureStatus::Cancelled) {
+                return false;
+            }
+            
+            if let Some(task_handle) = entry.task_handle.take() {
+                task_handle.abort();
+                log(format!("Aborted task for handle: {:?}", handle));
+            }
+            
+            entry.status = FutureStatus::Cancelled;
+            entry.receiver = None;
+            entry.cached_result = None;
+            
+            log(format!("Cancelled handle: {:?}", handle));
+            true
+        } else {
+            log(format!("Handle not found for cancellation: {:?}", handle));
+            false
+        }
+    }
+
     /// Cleans up any completed handles and removes them from the registry.
     ///
     /// You can do this manually, however this is typically done at the end of the frame.
@@ -298,7 +339,7 @@ impl FutureQueue {
         let completed_ids: Vec<FutureHandle> = registry
             .iter()
             .filter_map(|(&id, entry)| {
-                matches!(entry.status, FutureStatus::Completed).then_some(id)
+                matches!(entry.status, FutureStatus::Completed | FutureStatus::Cancelled).then_some(id)
             })
             .collect();
 

@@ -128,8 +128,8 @@ impl Scene for Editor {
                 log_once::warn_once!("Script entities is empty");
             }
 
-            for (entity_id, script_name) in script_entities {
-                if let Err(e) = self.script_manager.update_script(
+            for (entity_id, _) in script_entities {
+                if let Err(e) = pollster::block_on(self.script_manager.lock()).update_script(
                     entity_id,
                     &mut self.world,
                     &self.input_state,

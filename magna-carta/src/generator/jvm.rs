@@ -14,7 +14,6 @@ impl Generator for KotlinJVMGenerator {
         )?;
         writeln!(output)?;
 
-        // Import all discovered classes
         let mut imported_packages = std::collections::HashSet::new();
         for item in manifest.items() {
             if let Some(last_dot) = item.fqcn().rfind('.') {
@@ -28,7 +27,6 @@ impl Generator for KotlinJVMGenerator {
         }
         writeln!(output)?;
 
-        // Simple registry class for JVM
         writeln!(output, "object RunnableRegistry {{")?;
         writeln!(output, "    val SCRIPTS = listOf(")?;
 

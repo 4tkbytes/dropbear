@@ -7,12 +7,16 @@ use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use libloading::Library;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs};
+use anyhow::Context;
+use crossbeam_channel::Sender;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum ScriptTarget {
     #[default]
     None,
@@ -22,6 +26,14 @@ pub enum ScriptTarget {
     Native {
         library_path: PathBuf,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum BuildStatus {
+    Started,
+    Building(String),
+    Completed,
+    Failed(String),
 }
 
 pub struct ScriptManager {
@@ -41,12 +53,136 @@ impl ScriptManager {
         })
     }
 
+    pub async fn build_jvm(
+        &mut self,
+        project_root: impl AsRef<Path>,
+        status_sender: Sender<BuildStatus>
+    ) -> anyhow::Result<PathBuf> {
+        let project_root = project_root.as_ref();
+
+        if !project_root.exists() {
+            let err = format!("Project root does not exist: {:?}", project_root);
+            let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+            return Err(anyhow::anyhow!(err));
+        }
+
+        if !(project_root.join("build.gradle").exists() || project_root.join("build.gradle.kts").exists()) {
+            let err = format!("No Gradle build script found in: {:?}", project_root);
+            let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+            return Err(anyhow::anyhow!(err));
+        }
+
+        let _ = status_sender.send(BuildStatus::Started);
+
+        // Determine the gradle command to use
+        let gradle_cmd = if cfg!(target_os = "windows") {
+            // On Windows, prefer gradlew.bat if it exists, otherwise use gradle
+            let gradlew = project_root.join("gradlew.bat");
+            if gradlew.exists() {
+                gradlew.to_string_lossy().to_string()
+            } else {
+                "gradle.bat".to_string()
+            }
+        } else {
+            // On Unix-like systems, prefer ./gradlew if it exists
+            let gradlew = project_root.join("gradlew");
+            if gradlew.exists() {
+                "./gradlew".to_string()
+            } else {
+                "gradle".to_string()
+            }
+        };
+
+        let _ = status_sender.send(BuildStatus::Building(format!("Running: {}", gradle_cmd)));
+
+        let mut child = Command::new(&gradle_cmd)
+            .current_dir(project_root)
+            .args(&["--console=plain", "assemble"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context(format!("Failed to spawn `{} assemble`", gradle_cmd))?;
+
+        let stdout = child.stdout.take().expect("Stdout was piped");
+        let stderr = child.stderr.take().expect("Stderr was piped");
+
+        let tx_out = status_sender.clone();
+        let stdout_task = tokio::spawn(async move {
+            let mut reader = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                // if let Ok(line) = line {
+                println!("stdout: {}", line);
+                    let _ = tx_out.send(BuildStatus::Building(line));
+                // }
+            }
+        });
+
+        let tx_err = status_sender.clone();
+        let stderr_task = tokio::spawn(async move {
+            let mut reader = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                // if let Ok(line) = line {
+                println!("stderr: {}", line);
+                    let _ = tx_err.send(BuildStatus::Building(line));
+                // }
+            }
+        });
+
+        let status = child.wait().await.context("Failed to wait for gradle process")?;
+
+        let _ = tokio::join!(stdout_task, stderr_task);
+
+        if !status.success() {
+            let code = status.code().unwrap_or(-1);
+            let err_msg = format!("Gradle build failed with exit code {}", code);
+            let _ = status_sender.send(BuildStatus::Failed(err_msg.clone()));
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
+        let libs_dir = project_root.join("build").join("libs");
+        if !libs_dir.exists() {
+            let err = "Build succeeded but 'build/libs' directory is missing".to_string();
+            let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+            return Err(anyhow::anyhow!(err));
+        }
+
+        let jar_files: Vec<PathBuf> = std::fs::read_dir(&libs_dir)
+            .context("Failed to read 'build/libs'")?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|path| {
+                path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("jar"))
+                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-sources")
+                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-javadoc")
+            })
+            .collect();
+
+        if jar_files.is_empty() {
+            let err = "No JAR artifact found in 'build/libs' (looked for non-source, non-javadoc JARs)".to_string();
+            let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+            return Err(anyhow::anyhow!(err));
+        }
+
+        let jar_path = jar_files
+            .into_iter()
+            .max_by_key(|path| {
+                std::fs::metadata(path)
+                    .and_then(|m| Ok(m.len()))
+                    .unwrap_or(0)
+            })
+            .unwrap();
+
+        let _ = status_sender.send(BuildStatus::Completed);
+        Ok(jar_path)
+    }
+
     pub fn init_script(
         &mut self,
         entity_tag_database: HashMap<String, Vec<Entity>>,
         target: ScriptTarget,
     ) -> anyhow::Result<()> {
         self.entity_tag_database = entity_tag_database;
+        let target_clone = target.clone();
+        self.script_target = target_clone;
 
         match target {
             ScriptTarget::JVM { library_path } => {

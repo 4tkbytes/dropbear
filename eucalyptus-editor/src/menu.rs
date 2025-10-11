@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use dropbear_engine::{
     future::{FutureHandle, FutureQueue},
     graphics::RenderContext,
@@ -8,15 +8,11 @@ use dropbear_engine::{
 use egui::{self, FontId, Frame, RichText};
 use egui_toast_fork::{ToastOptions, Toasts};
 use eucalyptus_core::states::{PROJECT, ProjectConfig};
-use flate2::read::GzDecoder;
 use git2::Repository;
 use log::{self, debug};
 use rfd::FileDialog;
-use std::io::Cursor;
-use std::path::Path;
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
-use tar::Archive;
 use tokio::sync::watch;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
@@ -77,9 +73,9 @@ impl MainMenu {
         let handle = queue.push(async move {
             let mut errors = Vec::new();
             let folders = [
-                ("git", 0.1, "Initialising git repository..."),
-                ("gradle", 0.2, "Unpacking gradle template..."),
-                ("setting_config", 0.25, "Setting gradle config..."),
+                ("gradle", 0.1, "Unpacking gradle template..."),
+                ("setting_config", 0.2, "Setting gradle config..."),
+                ("git", 0.3, "Initialising git repository..."),
                 ("resources/models", 0.3, "Creating models folder..."),
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
@@ -143,47 +139,36 @@ impl MainMenu {
 
                             let updated_gradle_content = gradle_content
                                 .replace("domain", project_domain.clone().as_str())
-                                .replace("project", &project_name.to_lowercase());
+                                .replace("projectExample", &project_name.to_lowercase());
 
                             fs::write(&build_gradle_path, updated_gradle_content)?;
 
                             Ok(())
                         }
                         "gradle" => {
-                            log::debug!("Unpacking gradle template");
-                            let gradle_template =
-                                include_bytes!("../../resources/templates/gradle_template.tar.gz");
+                            log::debug!("Cloning gradle template from GitHub");
+                            let url = "https://github.com/4tkbytes/eucalyptus-gradle-template";
 
-                            let temp_extract_dir = path.join("temp_extract_dir");
+                            fs::create_dir_all(path).context("Failed to create project directory")?;
 
-                            let cursor = Cursor::new(gradle_template);
-                            let gz_decoder = GzDecoder::new(cursor);
-                            let mut archive = Archive::new(gz_decoder);
-                            archive.unpack(&temp_extract_dir)?;
+                            let temp_clone_path = path.with_file_name(format!("{}.clone_tmp", path.file_name().unwrap_or_default().to_str().unwrap_or_default()));
 
-                            let temp_path = Path::new(&temp_extract_dir);
-                            let mut entries = fs::read_dir(temp_path)?;
-                            let top_dir = entries
-                                .next()
-                                .ok_or("No entries found in archive")
-                                .map_err(|e| anyhow::anyhow!(e))??;
+                            Repository::clone(url, &temp_clone_path)?;
 
-                            if !top_dir.file_type()?.is_dir() {
-                                return Err(anyhow::anyhow!("Top-level entry is not a directory"));
-                            }
-
-                            let top_dir_path = top_dir.path();
-                            println!("Found top-level directory: {:?}", top_dir_path);
-
-                            fs::create_dir_all(path)?;
-                            for entry in fs::read_dir(top_dir_path)? {
+                            for entry in fs::read_dir(&temp_clone_path)? {
                                 let entry = entry?;
-                                let dest_path = Path::new(path).join(entry.file_name());
+                                let file_name = entry.file_name();
+                                if file_name == ".git" {
+                                    continue;
+                                }
+                                let dest_path = path.join(file_name);
                                 fs::rename(entry.path(), dest_path)?;
                             }
 
-                            fs::remove_dir_all(&temp_extract_dir)?;
+                            fs::remove_dir_all(&temp_clone_path)
+                                .context("Failed to remove temporary clone directory")?;
 
+                            log::debug!("Template cloned and .git removed successfully");
                             Ok(())
                         }
                         _ => {
