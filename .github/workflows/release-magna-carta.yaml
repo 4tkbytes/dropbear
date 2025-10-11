@@ -1,4 +1,3 @@
-# .github/workflows/release-magna-carta.yml
 name: Release Magna Carta
 
 on:
@@ -7,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write  # Required to create GitHub releases
+  contents: write
 
 jobs:
   check-and-release:
@@ -35,29 +34,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: magna-carta-linux-x64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: magna-carta-linux-arm64
+            binary_name: magna-carta
 
-          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: magna-carta-windows-x64.exe
+            binary_name: magna-carta.exe
+
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             artifact_name: magna-carta-windows-arm64.exe
+            binary_name: magna-carta.exe
 
-          # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: magna-carta-macos-x64
-          - os: macos-latest
+            binary_name: magna-carta
+
+          - os: macos-14
             target: aarch64-apple-darwin
             artifact_name: magna-carta-macos-arm64
+            binary_name: magna-carta
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
@@ -71,16 +71,26 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }} -p magna-carta
 
-      - name: Set executable permissions (Unix-like)
-        if: matrix.os != 'windows-latest'
+      - name: Rename and prepare artifact
+        shell: bash
         run: |
-          chmod +x "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
+          # Source binary path
+          SRC="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          DST="${{ matrix.artifact_name }}"
+          
+          # Copy to root for easy upload
+          cp "$SRC" "./$DST"
+          
+          # Set executable permissions (Unix)
+          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
+            chmod +x "./$DST"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
 
   create-release:
     needs: [check-and-release, build-and-release]
@@ -95,10 +105,9 @@ jobs:
         with:
           path: artifacts
 
-      - name: Restore executable permissions
+      - name: Restore executable permissions (just in case)
         run: |
           chmod +x artifacts/magna-carta-linux-x64/magna-carta-linux-x64
-          chmod +x artifacts/magna-carta-linux-arm64/magna-carta-linux-arm64
           chmod +x artifacts/magna-carta-macos-x64/magna-carta-macos-x64
           chmod +x artifacts/magna-carta-macos-arm64/magna-carta-macos-arm64
 
@@ -122,7 +131,6 @@ jobs:
           body_path: ${{ steps.changelog-check.outputs.changelog_exists == 'true' && 'RELEASE_BODY.md' || '' }}
           files: |
             artifacts/magna-carta-linux-x64/magna-carta-linux-x64
-            artifacts/magna-carta-linux-arm64/magna-carta-linux-arm64
             artifacts/magna-carta-windows-x64.exe/magna-carta-windows-x64.exe
             artifacts/magna-carta-windows-arm64.exe/magna-carta-windows-arm64.exe
             artifacts/magna-carta-macos-x64/magna-carta-macos-x64
