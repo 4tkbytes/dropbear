@@ -12,15 +12,6 @@ repositories {
     mavenCentral()
 }
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("io.github.cdimascio:dotenv-kotlin:6.4.1")
-    }
-}
-
 kotlin {
     jvm()
 
@@ -86,7 +77,7 @@ kotlin {
         binaries {
             sharedLib {
                 baseName = "dropbear"
-                
+
                 if (libDir != null && libNameForLinking != null) {
                     if (isMingwX64) {
                         linkerOpts("${libDir}/${libName}.lib")
@@ -113,7 +104,7 @@ kotlin {
         jvmMain {
             kotlin.srcDirs("src/jvmMain/kotlin", "src/jvmMain/java")
             dependencies {
-                
+
             }
         }
     }
@@ -146,34 +137,40 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     dependsOn("compileKotlinJvm")
 }
 
-// switched to jitpack now :)
-//publishing {
-//    repositories {
-//        maven {
-//          name = "GitHubPackages"
-//            url = uri("https://maven.pkg.github.com/4tkbytes/dropbear")
-//
-//            val isPublishing = gradle.startParameter.taskNames.any {
-//                it.contains("publish", ignoreCase = true)
-//            }
-//
-//            if (isPublishing) {
-//                val dotenv = io.github.cdimascio.dotenv.dotenv()
-//                credentials {
-//                  username = dotenv["GITHUB_USERNAME"]
-//                  password = dotenv["GITHUB_TOKEN"]
-//              }
-//          }
-//        }
-//    }
-//
-//    publications {
-//        create<MavenPublication>("release") {
-//            groupId = group as String?
-//            artifactId = rootProject.name
-//            version = version
-//
-//            from(components["kotlin"])
-//        }
-//    }
-//}
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPages"
+            url = uri(layout.buildDirectory.dir("repo"))
+        }
+    }
+
+    publications.withType<MavenPublication> {
+        pom {
+            name.set("dropbear")
+            description.set("The dropbear scripting part of the engine... uhh yeah!")
+            url.set("https://github.com/4tkbytes/dropbear")
+
+            licenses {
+                license {
+                    name.set("dropbear engine License, Version 1.2")
+                    url.set("https://raw.githubusercontent.com/4tkbytes/dropbear/refs/heads/main/LICENSE.md")
+                }
+            }
+
+            developers {
+                developer {
+                    id.set("4tkbytes")
+                    name.set("tk")
+                    email.set("4tkbytes@pm.me")
+                }
+            }
+
+            scm {
+                url.set("https://github.com/4tkbytes/dropbear")
+                connection.set("scm:git:git://github.com/4tkbytes/dropbear.git")
+                developerConnection.set("scm:git:ssh://git@github.com/4tkbytes/dropbear.git")
+            }
+        }
+    }
+}
