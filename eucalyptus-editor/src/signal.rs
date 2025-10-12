@@ -397,6 +397,8 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::StopPlaying => {
+                let _ = self.script_manager.kill();
+
                 if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);

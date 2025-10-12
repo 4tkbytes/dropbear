@@ -8,13 +8,12 @@ use jni::sys::jlong;
 use jni::sys::jobject;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use std::path::{Path};
-use std::sync::Arc;
 
 pub type WorldPtr = *mut World;
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
-    pub(crate) jvm: Arc<JavaVM>,
+    pub(crate) jvm: JavaVM,
     dropbear_engine_class: Option<GlobalRef>,
 }
 
@@ -25,7 +24,7 @@ impl JavaContext {
             .option(format!("-Djava.class.path={}", jar_path.as_ref().display()))
             .build()?;
 
-        let jvm = Arc::new(JavaVM::new(jvm_args)?);
+        let jvm = JavaVM::new(jvm_args)?;
 
         log::info!("Created JVM instance");
 
