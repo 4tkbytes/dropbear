@@ -11,14 +11,20 @@ struct Cli {
     #[arg(short, long, help = "Input directory containing Kotlin source files")]
     input: PathBuf,
 
-    #[arg(short, long, help = "Output directory for generated files")]
-    output: PathBuf,
+    #[arg(short, long, help = "Output directory for generated files (ignored if --stdout is used)")]
+    output: Option<PathBuf>,
 
     #[arg(short, long, help = "Target platform")]
     target: Target,
+
+    #[arg(long, help = "Print generated manifest to stdout instead of writing to file")]
+    stdout: bool,
+
+    #[arg(long, help = "Print manifest raw")]
+    raw: bool,
 }
 
-#[derive(ValueEnum, Clone)]
+#[derive(ValueEnum, Clone, Debug)]
 enum Target {
     Jvm,
     Native,
@@ -26,6 +32,10 @@ enum Target {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    if !cli.stdout && cli.output.is_none() {
+        return Err(anyhow::anyhow!("--output is required unless --stdout is used"));
+    }
 
     let mut processor = KotlinProcessor::new()?;
     let mut manifest = ScriptManifest::new();
@@ -36,21 +46,34 @@ fn main() -> anyhow::Result<()> {
 
     visit_kotlin_files(&cli.input, &mut processor, &mut manifest)?;
 
-    fs::create_dir_all(&cli.output)?;
-
-    match cli.target {
+    let generated_content = match cli.target {
         Target::Jvm => {
             let generator = KotlinJVMGenerator;
-            let output_path = cli.output.join("RunnableRegistry.kt");
-            generator.write_to_file(&manifest, &output_path)?;
-            println!("Generated JVM manifest at: {}", output_path.display());
+            generator.generate(&manifest)?
         }
         Target::Native => {
             let generator = KotlinNativeGenerator;
-            let output_path = cli.output.join("ScriptManifest.kt");
-            generator.write_to_file(&manifest, &output_path)?;
-            println!("Generated Native manifest at: {}", output_path.display());
+            generator.generate(&manifest)?
         }
+    };
+
+    if cli.raw {
+        println!("{:#?}", manifest);
+    }
+
+    if cli.stdout {
+        print!("{}", generated_content);
+    } else {
+        let output_dir = cli.output.unwrap();
+        fs::create_dir_all(&output_dir)?;
+
+        let filename = match cli.target {
+            Target::Jvm => "RunnableRegistry.kt",
+            Target::Native => "ScriptManifest.kt",
+        };
+        let output_path = output_dir.join(filename);
+        fs::write(&output_path, generated_content)?;
+        println!("Generated {:?} manifest at: {}", cli.target, output_path.display());
     }
 
     println!("Found {} script classes", manifest.items().len());
@@ -66,18 +89,18 @@ fn visit_kotlin_files(
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 visit_kotlin_files(&path, processor, manifest)?;
             } else if path.extension() == Some(std::ffi::OsStr::new("kt")) {
                 let source_code = fs::read_to_string(&path)?;
-                
+
                 if let Some(item) = processor.process_file(&source_code, path.clone())? {
                     manifest.add_item(item);
                 }
             }
         }
     }
-    
+
     Ok(())
 }

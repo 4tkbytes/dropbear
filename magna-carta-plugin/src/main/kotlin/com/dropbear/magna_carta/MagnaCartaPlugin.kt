@@ -10,7 +10,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 class MagnaCartaPlugin : Plugin<Project> {
     override fun apply(project: Project) {
-        val extension = project.extensions.create("magna-carta", MagnaCartaExtension::class)
+        project.extensions.create("magna-carta", MagnaCartaExtension::class)
 
         val downloadToolTask = project.tasks.register("downloadMagnaCartaTool", DownloadMagnaCartaToolTask::class) {
             toolVersion.set("magna-carta-v0.0.1")
@@ -22,7 +22,7 @@ class MagnaCartaPlugin : Plugin<Project> {
             toolExecutable.set(downloadToolTask.flatMap { it.outputFile })
             target.set("jvm")
             inputDir.set(project.projectDir.resolve("src"))
-            outputDir.set(project.layout.buildDirectory.dir("generated/magna-carta/jvm"))
+            outputDir.set(project.layout.buildDirectory.dir("magna-carta/jvmMain"))
         }
 
         val generateNativeTask = project.tasks.register("generateMagnaCartaNative", GenerateMagnaCartaTask::class) {
@@ -30,7 +30,7 @@ class MagnaCartaPlugin : Plugin<Project> {
             toolExecutable.set(downloadToolTask.flatMap { it.outputFile })
             target.set("native")
             inputDir.set(project.projectDir.resolve("src"))
-            outputDir.set(project.layout.buildDirectory.dir("generated/magna-carta/native"))
+            outputDir.set(project.layout.buildDirectory.dir("magna-carta/nativeLibMain"))
         }
 
         project.pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
@@ -42,11 +42,11 @@ class MagnaCartaPlugin : Plugin<Project> {
                     jvmMain.kotlin.srcDir(generateJvmTask.map { it.outputDir })
                 }
 
-                val nativeMain = findByName("nativeMain") ?: create("nativeMain")
-                nativeMain.kotlin.srcDir(generateNativeTask.map { it.outputDir })
+                val nativeLibMain = findByName("nativeLibMain") ?: create("nativeLibMain")
+                nativeLibMain.kotlin.srcDir(generateNativeTask.map { it.outputDir })
 
                 kotlin.targets.withType(KotlinNativeTarget::class.java) {
-                    compilations.getByName("main").defaultSourceSet.dependsOn(nativeMain)
+                    compilations.getByName("main").defaultSourceSet.dependsOn(nativeLibMain)
                 }
             }
 
@@ -54,7 +54,17 @@ class MagnaCartaPlugin : Plugin<Project> {
             kotlin.targets.all {
                 this.compilations.all {
                     this.compileTaskProvider.configure {
-                        this.dependsOn(generateJvmTask, generateNativeTask)
+                        when (this.name) {
+                            "compileKotlinNative" -> {
+                                this.dependsOn(generateNativeTask)
+                            }
+                            "compileKotlinJvm" -> {
+                                this.dependsOn(generateJvmTask)
+                            }
+                            else -> {
+                                println("Unknown compilation task: ${this.name}")
+                            }
+                        }
                     }
                 }
             }

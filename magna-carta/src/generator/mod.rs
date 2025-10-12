@@ -4,10 +4,15 @@ use std::path::Path;
 pub mod jvm;
 pub mod native;
 
-#[allow(dead_code)]
+/// A trait that can generate code from a manifest.
 pub trait Generator {
+    /// Generate code from a manifest.
+    ///
+    /// # Returns
+    /// [`anyhow::Result<String>`] - The code from the manifest into that specific language.
     fn generate(&self, manifest: &ScriptManifest) -> anyhow::Result<String>;
 
+    /// Writes to a file using the std library.
     fn write_to_file(
         &self,
         manifest: &ScriptManifest,

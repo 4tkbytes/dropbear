@@ -75,6 +75,10 @@ The dropbear engine uses Kotlin Multiplatform, which allows the cooked up produc
 KMP can support, which includes mobile, WASM and desktop. Because the editor is only available on desktop, the JVM is 
 used to evaluate the scripts as it allows for hot-reloading (not made yet).
 
+The dropbear engine does not support any Java code (for class scripting) as it won't be read by the magna-carta parser. 
+Java libraries are still fine, and java classes work, but cannot be annotated by the parser, and only works
+on the JVM target. You can customise the build.gradle.kts file in your project to your own likings. 
+
 ## Documentation
 
 API documentation and articles are available at (todo)
