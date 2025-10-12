@@ -13,7 +13,7 @@ extern "C" {
 // ===========================================
 
 // returns 0 on success, non-zero on failure
-int dropbear_get_entity(const char* label, const World* world_ptr, uint64_t* out_entity);
+int dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
 
 // ===========================================
 

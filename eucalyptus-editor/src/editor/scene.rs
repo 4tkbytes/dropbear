@@ -112,35 +112,17 @@ impl Scene for Editor {
                 self.signal = Signal::StopPlaying;
             }
 
-            let mut script_entities = Vec::new();
-            {
-                for (entity_id, script) in self.world.query::<&mut ScriptComponent>().iter() {
-                    log_once::debug_once!(
-                        "Script Entity -> id: {:?}, tags: {:?}",
-                        entity_id,
-                        script.tags
-                    );
-                    script_entities.push((entity_id, script.tags.clone()));
-                }
-            }
+            let world_ptr = self.world.as_mut() as *mut World;
 
-            if script_entities.is_empty() {
-                log_once::warn_once!("Script entities is empty");
-            }
-
-            for (entity_id, _) in script_entities {
-                if let Err(e) = pollster::block_on(self.script_manager.lock()).update_script(
-                    entity_id,
-                    &mut self.world,
-                    &self.input_state,
-                    dt,
-                ) {
-                    log_once::warn_once!(
-                        "Failed to update script for entity {:?}: {}",
-                        entity_id,
-                        e
-                    );
-                }
+            if let Err(e) = self.script_manager.update_script(
+                world_ptr,
+                &self.input_state,
+                dt,
+            ) {
+                log_once::warn_once!(
+                    "Failed to update script: {}",
+                    e
+                );
             }
         }
 

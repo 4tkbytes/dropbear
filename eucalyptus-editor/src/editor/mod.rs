@@ -80,7 +80,7 @@ pub struct Editor {
     pub(crate) editor_state: EditorState,
     gizmo_mode: EnumSet<GizmoMode>,
 
-    pub(crate) script_manager: Arc<tokio::sync::Mutex<ScriptManager>>,
+    pub(crate) script_manager: ScriptManager,
     play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
@@ -174,7 +174,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: Arc::new(tokio::sync::Mutex::new(ScriptManager::new()?)),
+            script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,

@@ -15,15 +15,13 @@ actual class NativeEngine {
         this.worldHandle = handle
         if (this.worldHandle == null) {
             Logger.i("NativeEngine: Error - Invalid world handle received!")
-        } else {
-            Logger.i("NativeEngine: Initialized with world handle")
         }
     }
 
-    actual fun getEntity(label: String): ULong? {
+    actual fun getEntity(label: String): Long? {
         val world = worldHandle ?: return null
         memScoped {
-            val outEntity = alloc<ULongVar>()
+            val outEntity = alloc<LongVar>()
             val result = dropbear_get_entity(
                 label = label,
                 world_ptr = world.reinterpret(),

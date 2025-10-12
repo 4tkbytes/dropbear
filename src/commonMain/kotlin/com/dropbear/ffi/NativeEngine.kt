@@ -1,7 +1,5 @@
 package com.dropbear.ffi
 
-import com.dropbear.EntityRef
-
 expect class NativeEngine {
-    fun getEntity(label: String): ULong?
+    fun getEntity(label: String): Long?
 }

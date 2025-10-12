@@ -82,15 +82,11 @@ impl Generator for KotlinNativeGenerator {
 
         writeln!(
             output,
-            "private fun getDropbearEngine(worldPointer: COpaquePointer?, currentEntity: ULong?): DropbearEngine {{"
+            "private fun getDropbearEngine(worldPointer: COpaquePointer?): DropbearEngine {{"
         )?;
         writeln!(output, "    val nativeEngine = NativeEngine()")?;
         writeln!(output, "    nativeEngine.init(worldPointer)")?;
-        writeln!(
-            output,
-            "    val entityRef = currentEntity?.let {{ EntityRef(EntityId(it)) }}"
-        )?;
-        writeln!(output, "    return DropbearEngine(nativeEngine, entityRef)")?;
+        writeln!(output, "    return DropbearEngine(nativeEngine)")?;
         writeln!(output, "}}")?;
         writeln!(output)?;
 
@@ -113,7 +109,7 @@ impl Generator for KotlinNativeGenerator {
             writeln!(output, "@CName(\"{}\")", func_name)?;
             writeln!(
                 output,
-                "fun {}ScriptByTag(worldPointer: COpaquePointer?, currentEntity: ULong?, tag: String?{}) {{",
+                "fun {}ScriptByTag(worldPointer: COpaquePointer?, currentEntity: Long?, tag: String?{}) {{",
                 method_name,
                 param_extra
             )?;
@@ -121,7 +117,7 @@ impl Generator for KotlinNativeGenerator {
             writeln!(output, "    val factories = getScriptFactories(tag)")?;
             writeln!(
                 output,
-                "    val engine = getDropbearEngine(worldPointer, currentEntity)"
+                "    val engine = getDropbearEngine(worldPointer)"
             )?;
             writeln!(output, "    for (factory in factories) {{")?;
             writeln!(output, "        val script = factory()")?;

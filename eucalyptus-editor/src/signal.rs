@@ -8,11 +8,11 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{BuildStatus, ScriptTarget};
+use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
-use hecs::Entity;
+use hecs::{Entity, World};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -110,24 +110,21 @@ impl SignalController for Editor {
                     let (tx, rx) = crossbeam_channel::unbounded();
                     self.progress_rx = Some(rx);
                     
-                    // Clear previous build logs and reset progress
                     self.build_logs.clear();
                     self.build_progress = 0.0;
                     self.show_build_window = true;
-                    self.last_build_error = None; // Clear previous error
+                    self.last_build_error = None;
 
                     let project_root = {
                         let cfg = PROJECT.read();
                         cfg.project_path.clone()
                     };
 
-                    let script_manager = self.script_manager.clone();
                     let project_root = project_root.to_path_buf();
                     let status_tx = tx.clone();
 
                     let handle = graphics.future_queue.push(async move {
-                        let mut manager = script_manager.lock().await;
-                        manager.build_jvm(project_root, status_tx).await
+                        ScriptManager::build_jvm(project_root, status_tx).await
                     });
 
                     log::debug!("Pushed future to future_queue, received handle: {:?}", handle);
@@ -139,8 +136,7 @@ impl SignalController for Editor {
                 }
 
                 if matches!(self.editor_state, EditorState::Building) {
-                    let mut should_stop_building = false;
-                    
+                    let mut local_handle_exchanged: Option<anyhow::Result<PathBuf>> = None;
                     if let Some(rx) = &self.progress_rx {
                         while let Ok(status) = rx.try_recv() {
                             match status {
@@ -157,7 +153,21 @@ impl SignalController for Editor {
                                 BuildStatus::Completed => {
                                     self.build_logs.push("Build completed successfully!".to_string());
                                     self.build_progress = 1.0;
-                                    log::info!("Build completed");
+                                    success_without_console!("Build completed");
+                                    log::info!("Build completed successfully!");
+
+                                    if let Some(handle) = self.handle_created {
+                                        if let Some(result) = graphics
+                                            .future_queue
+                                            .exchange_owned_as::<anyhow::Result<PathBuf>>(&handle)
+                                        {
+                                            local_handle_exchanged = Some(result);
+                                        }
+                                    } else {
+                                        self.signal = Signal::None;
+                                        self.show_build_window = false;
+                                        self.editor_state = EditorState::Editing;
+                                    }
                                 }
                                 BuildStatus::Failed(e) => {
                                     let error_msg = format!("Build failed: {}", e);
@@ -165,26 +175,13 @@ impl SignalController for Editor {
                                     
                                     self.build_progress = 0.0;
                                     fatal!("Failed to build gradle: {}", e);
-                                    
-                                    should_stop_building = true;
                                 }
                             }
                         }
                     }
-                    
-                    if should_stop_building {
-                        self.last_build_error = Some(self.build_logs.join("\n"));
-                        self.signal = Signal::None;
-                        self.show_build_window = false;
-                        self.show_build_error_window = true;
-                        self.handle_created = None;
-                        self.progress_rx = None;
-                        self.editor_state = EditorState::Editing;
-                    }
 
                     if self.show_build_window {
                         let mut window_open = true;
-                        let mut cancel_clicked = false;
                         egui::Window::new("Building Project")
                             .collapsible(false)
                             .resizable(false)
@@ -234,16 +231,12 @@ impl SignalController for Editor {
                                         });
                                     
                                     ui.add_space(10.0);
-                                    
-                                    if ui.button("Cancel Build").clicked() {
-                                        cancel_clicked = true;
-                                    }
                                 });
                             });
 
-                        if !window_open || cancel_clicked {
+                        if !window_open {
                             if let Some(handle) = self.handle_created {
-                                log::info!("Cancelling build task due to window close");
+                                log::warn!("Cancelling build task due to window close");
                                 graphics.future_queue.cancel(&handle);
                             }
                             
@@ -255,122 +248,100 @@ impl SignalController for Editor {
                         }
                     }
 
-                    if let Some(handle) = self.handle_created {
-                        if let Some(result) = graphics
-                            .future_queue
-                            .exchange_as::<anyhow::Result<PathBuf>>(&handle)
-                        {
-                            log::debug!("Build future completed, processing result");
-                            self.handle_created = None;
-                            self.progress_rx = None;
-                            
-                            match result {
-                                Ok(path) => {
-                                    log::debug!("Path is valid, JAR location as {}", path.display());
-                                    success!("Build completed successfully!");
-                                    self.show_build_window = false;
-                                    
-                                    let has_player_camera_target = self
-                                        .world
-                                        .query::<(&Camera, &CameraComponent)>()
-                                        .iter()
-                                        .any(|(_, (_, comp))| comp.starting_camera);
+                    if let Some(result) = local_handle_exchanged {
+                        log::debug!("Build future completed, processing result");
+                        self.handle_created = None;
+                        self.progress_rx = None;
 
-                                    if has_player_camera_target {
-                                        if let Err(e) = self.create_backup() {
-                                            self.signal = Signal::None;
-                                            fatal!("Failed to create play mode backup: {}", e);
-                                        }
+                        match result {
+                            Ok(path) => {
+                                log::debug!("Path is valid, JAR location as {}", path.display());
+                                success!("Build completed successfully!");
+                                self.show_build_window = false;
 
-                                        self.editor_state = EditorState::Playing;
+                                let has_player_camera_target = self
+                                    .world
+                                    .query::<(&Camera, &CameraComponent)>()
+                                    .iter()
+                                    .any(|(_, (_, comp))| comp.starting_camera);
 
-                                        self.switch_to_player_camera();
-
-                                        let mut script_entities = Vec::new();
-                                        {
-                                            for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
-                                                script_entities.push((entity_id, script.clone()));
-                                            }
-                                        }
-
-                                        let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-                                        for (entity_id, script) in script_entities {
-                                            for tag in script.tags {
-                                                if etag.contains_key(&tag) {
-                                                    etag.get_mut(&tag).unwrap().push(entity_id);
-                                                } else {
-                                                    etag.insert(tag.clone(), vec![entity_id]);
-                                                }
-                                            }
-                                        }
-
-                                        let etag_clone = etag.clone();
-
-                                        if let Err(e) = pollster::block_on(self
-                                            .script_manager
-                                            .lock())
-                                            .init_script(etag_clone, ScriptTarget::JVM { library_path: path })
-                                        {
-                                            fatal!("Failed to ready script manager interface because {}", e);
-                                            self.signal = Signal::StopPlaying;
-                                            return Err(anyhow::anyhow!(e));
-                                        }
-
-                                        for (tag, entities) in &etag {
-                                            log::debug!(
-                            "Initialising script for tag {:?} with entities: {:?}",
-                            tag,
-                            entities
-                        );
-
-                                            for e in entities {
-                                                if let Err(e) = pollster::block_on(self.script_manager.lock())
-                                                    .load_script(
-                                                        *e,
-                                                        tag.clone(),
-                                                        &mut self.world,
-                                                        &self.input_state,
-                                                    ) {
-                                                    fatal!(
-                                    "Failed to initialise script for tag {:?} because {}",
-                                    tag,
-                                    e
-                                );
-                                                    self.signal = Signal::StopPlaying;
-                                                    return Err(anyhow::anyhow!(e));
-                                                } else {
-                                                    success_without_console!(
-                                    "You are in play mode now! Press Escape to exit"
-                                );
-                                                    log::info!("You are in play mode now! Press Escape to exit");
-                                                }
-                                            }
-                                        }
-                                        
+                                if has_player_camera_target {
+                                    if let Err(e) = self.create_backup() {
                                         self.signal = Signal::None;
-                                    } else {
-                                        self.signal = Signal::None;
-                                        fatal!("Unable to build: No initial camera set");
+                                        fatal!("Failed to create play mode backup: {}", e);
                                     }
-                                }
-                                Err(e) => {
-                                    let error_msg = format!("Build process error: {}", e);
-                                    self.build_logs.push(error_msg.clone());
-                                    self.last_build_error = Some(self.build_logs.join("\n"));
-                                    
-                                    fatal!("Failed to ready script manager interface because {}", e);
+
+                                    self.editor_state = EditorState::Playing;
+
+                                    self.switch_to_player_camera();
+
+                                    let mut script_entities = Vec::new();
+                                    {
+                                        for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                                            script_entities.push((entity_id, script.clone()));
+                                        }
+                                    }
+
+                                    let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
+                                    for (entity_id, script) in script_entities {
+                                        for tag in script.tags {
+                                            if etag.contains_key(&tag) {
+                                                etag.get_mut(&tag).unwrap().push(entity_id);
+                                            } else {
+                                                etag.insert(tag.clone(), vec![entity_id]);
+                                            }
+                                        }
+                                    }
+
+                                    let etag_clone = etag.clone();
+
+                                    if let Err(e) = self
+                                        .script_manager
+                                        .init_script(etag_clone, ScriptTarget::JVM { library_path: path })
+                                    {
+                                        fatal!("Failed to ready script manager interface because {}", e);
+                                        self.signal = Signal::StopPlaying;
+                                        return Err(anyhow::anyhow!(e));
+                                    }
+
+                                    let world_ptr = self.world.as_mut() as *mut World;
+
+                                    if let Err(e) = self.script_manager
+                                        .load_script(
+                                            world_ptr,
+                                            &self.input_state,
+                                        ) {
+                                        fatal!(
+                                            "Failed to initialise script because {}",
+                                            e
+                                        );
+                                        self.signal = Signal::StopPlaying;
+                                        return Err(anyhow::anyhow!(e));
+                                    } else {
+                                        success_without_console!(
+                                            "You are in play mode now! Press Escape to exit"
+                                        );
+                                        log::info!("You are in play mode now! Press Escape to exit");
+                                    }
+
                                     self.signal = Signal::None;
-                                    self.show_build_window = false;
-                                    self.show_build_error_window = true;
-                                    self.editor_state = EditorState::Editing;
+                                } else {
+                                    self.signal = Signal::None;
+                                    fatal!("Unable to build: No initial camera set");
                                 }
                             }
+                            Err(e) => {
+                                let error_msg = format!("Build process error: {}", e);
+                                self.build_logs.push(error_msg.clone());
+                                self.last_build_error = Some(self.build_logs.join("\n"));
+
+                                fatal!("Failed to ready script manager interface because {}", e);
+                                self.signal = Signal::None;
+                                self.show_build_window = false;
+                                self.show_build_error_window = true;
+                                self.editor_state = EditorState::Editing;
+                            }
                         }
-                    } else {
-                        // log::warn!("Handle has not been created, must be a bug");
-                        self.signal = Signal::None;
-                        self.show_build_window = false;
-                        self.editor_state = EditorState::Editing;
                     }
                 }
 
@@ -378,7 +349,7 @@ impl SignalController for Editor {
                     if let Some(error_log) = &self.last_build_error {
                         let mut window_open = true;
                         let mut close_clicked = false;
-                        
+
                         egui::Window::new("Build Error")
                             .collapsible(true)
                             .resizable(false)
@@ -394,7 +365,6 @@ impl SignalController for Editor {
                                     ui.separator();
                                     ui.add_space(10.0);
                                     
-                                    // Scrollable error log with code styling
                                     egui::ScrollArea::both()
                                         .auto_shrink([false, false])
                                         .max_height(300.0)

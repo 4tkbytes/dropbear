@@ -2,13 +2,14 @@ pub mod jni;
 pub mod kmp;
 
 use crate::input::InputState;
-use crate::scripting::jni::JavaContext;
+use crate::scripting::jni::{JavaContext, WorldPtr};
 use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use libloading::Library;
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs};
+use ::jni::objects::{GlobalRef, JValue};
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -41,6 +42,11 @@ pub struct ScriptManager {
     library: Option<Library>,
     script_target: ScriptTarget,
     entity_tag_database: HashMap<String, Vec<Entity>>,
+    jvm_created: bool,
+
+    #[cfg(feature = "jvm")]
+    entity_scripts: HashMap<u32, Vec<GlobalRef>>,
+    // the native version must be stateless, and doesn't have such a thing
 }
 
 impl ScriptManager {
@@ -50,11 +56,12 @@ impl ScriptManager {
             library: None,
             script_target: Default::default(),
             entity_tag_database: HashMap::new(),
+            jvm_created: false,
+            entity_scripts: Default::default(),
         })
     }
 
     pub async fn build_jvm(
-        &mut self,
         project_root: impl AsRef<Path>,
         status_sender: Sender<BuildStatus>
     ) -> anyhow::Result<PathBuf> {
@@ -74,9 +81,7 @@ impl ScriptManager {
 
         let _ = status_sender.send(BuildStatus::Started);
 
-        // Determine the gradle command to use
         let gradle_cmd = if cfg!(target_os = "windows") {
-            // On Windows, prefer gradlew.bat if it exists, otherwise use gradle
             let gradlew = project_root.join("gradlew.bat");
             if gradlew.exists() {
                 gradlew.to_string_lossy().to_string()
@@ -84,7 +89,6 @@ impl ScriptManager {
                 "gradle.bat".to_string()
             }
         } else {
-            // On Unix-like systems, prefer ./gradlew if it exists
             let gradlew = project_root.join("gradlew");
             if gradlew.exists() {
                 "./gradlew".to_string()
@@ -97,11 +101,11 @@ impl ScriptManager {
 
         let mut child = Command::new(&gradle_cmd)
             .current_dir(project_root)
-            .args(["--console=plain", "jvmJar"])
+            .args(["--console=plain", "fatJar"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .context(format!("Failed to spawn `{} jvmJar`", gradle_cmd))?;
+            .context(format!("Failed to spawn `{} fatJar`", gradle_cmd))?;
 
         let stdout = child.stdout.take().expect("Stdout was piped");
         let stderr = child.stderr.take().expect("Stderr was piped");
@@ -110,9 +114,7 @@ impl ScriptManager {
         let stdout_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                // if let Ok(line) = line {
-                    let _ = tx_out.send(BuildStatus::Building(line));
-                // }
+                let _ = tx_out.send(BuildStatus::Building(line));
             }
         });
 
@@ -120,9 +122,7 @@ impl ScriptManager {
         let stderr_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                // if let Ok(line) = line {
-                    let _ = tx_err.send(BuildStatus::Building(line));
-                // }
+                let _ = tx_err.send(BuildStatus::Building(line));
             }
         });
 
@@ -155,19 +155,30 @@ impl ScriptManager {
             .collect();
 
         if jar_files.is_empty() {
-            let err = "No JAR artifact found in 'build/libs' (looked for non-source, non-javadoc JARs)".to_string();
+            let err = "No JAR artifact found in 'build/libs'".to_string();
             let _ = status_sender.send(BuildStatus::Failed(err.clone()));
             return Err(anyhow::anyhow!(err));
         }
 
-        let jar_path = jar_files
-            .into_iter()
-            .max_by_key(|path| {
-                std::fs::metadata(path)
-                    .and_then(|m| Ok(m.len()))
-                    .unwrap_or(0)
-            })
-            .unwrap();
+        let fat_jar = jar_files
+            .iter()
+            .find(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map_or(false, |name| name.contains("-all"))
+            });
+
+        let jar_path = if let Some(fat) = fat_jar {
+            fat.clone()
+        } else {
+            jar_files
+                .into_iter()
+                .max_by_key(|path| {
+                    std::fs::metadata(path).map(|m| m.len())
+                        .unwrap_or(0)
+                })
+                .unwrap()
+        };
 
         let _ = status_sender.send(BuildStatus::Completed);
         Ok(jar_path)
@@ -178,22 +189,32 @@ impl ScriptManager {
         entity_tag_database: HashMap<String, Vec<Entity>>,
         target: ScriptTarget,
     ) -> anyhow::Result<()> {
-        self.entity_tag_database = entity_tag_database;
-        let target_clone = target.clone();
-        self.script_target = target_clone;
+        self.entity_tag_database = entity_tag_database.clone();
+        self.script_target = target.clone();
 
-        match target {
+        match &target {
             ScriptTarget::JVM { library_path } => {
-                let jvm = JavaContext::new(library_path)?;
-                self.jvm = Some(jvm);
+                if !self.jvm_created {
+                    let jvm = JavaContext::new(library_path)?;
+                    self.jvm = Some(jvm);
+                    self.jvm_created = true;
+                    log::debug!("Created new JVM instance");
+                } else {
+                    log::debug!("Reusing existing JVM instance");
+                }
+
+                if let Some(jvm) = &mut self.jvm {
+                    jvm.clear_engine()?;
+                }
             }
             ScriptTarget::Native { library_path } => {
                 let library = unsafe { Library::new(library_path)? };
-
                 self.library = Some(library);
             }
-            _ => {
-                anyhow::bail!("Invalid script target, must be either JVM or Native");
+            ScriptTarget::None => {
+                self.jvm = None;
+                self.library = None;
+                self.jvm_created = false;
             }
         }
 
@@ -202,31 +223,74 @@ impl ScriptManager {
 
     pub fn load_script(
         &mut self,
-        entity_id: hecs::Entity,
-        tag: String,
-        world: &mut World,
-        input_state: &InputState,
+        world: WorldPtr,
+        _input_state: &InputState,
     ) -> anyhow::Result<()> {
-        #[cfg(feature = "jvm")]
-        {
-            if let Some(jvm) = &mut self.jvm {
-                jvm.init(world)?;
+        if matches!(self.script_target, ScriptTarget::JVM { .. })
+            && let Some(jvm) = &mut self.jvm {
+            jvm.init(world)?;
+            log::debug!("Initialised JVM engine");
+
+            for (tag, entities) in &self.entity_tag_database {
+                for entity in entities {
+                    log::debug!("Loading scripts with tag {} for entity {}", tag, entity.id());
+                    let entity_id = entity.id();
+                    let scripts = jvm.load_scripts_for_entity(world, entity_id, tag)?;
+                    self.entity_scripts.insert(entity_id, scripts);
+                }
             }
+            return Ok(());
         }
 
-        Err(anyhow::anyhow!("it aint ready yet bozo"))
+        if matches!(self.script_target, ScriptTarget::Native { .. }) {
+            // TODO: native implementation
+            return Err(anyhow::anyhow!("Native library loading not implemented yet"));
+        }
+
+        Err(anyhow::anyhow!("Invalid script target configuration"))
     }
+
 
     pub fn update_script(
         &mut self,
-        entity_id: hecs::Entity,
-        world: &mut World,
-        input_state: &InputState,
+        world: WorldPtr,
+        _input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("it aint ready yet bozo"))
+        if matches!(self.script_target, ScriptTarget::JVM { .. })
+            && let Some(jvm) = &self.jvm
+        {
+            let mut env = jvm.jvm.attach_current_thread()?;
+
+            for (tag, entities) in &self.entity_tag_database {
+                for entity in entities {
+                    let entity_id = entity.id();
+                    log::debug!("Updating scripts with tag {} for entity {}", tag, entity_id);
+
+                    if let Some(scripts) = self.entity_scripts.get(&entity_id) {
+                        let engine_ref = jvm.create_engine_for_entity(world, entity_id)?;
+
+                        for script_ref in scripts {
+                            log::debug!("Calling method update");
+                            env.call_method(
+                                script_ref,
+                                "update",
+                                "(Lcom/dropbear/DropbearEngine;F)V",
+                                &[
+                                    JValue::Object(engine_ref.as_obj()),
+                                    JValue::Float(dt),
+                                ],
+                            )?;
+                        }
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Native implementation not implemented yet"))
     }
-}
+} // ScriptManager
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
     let project_path = {

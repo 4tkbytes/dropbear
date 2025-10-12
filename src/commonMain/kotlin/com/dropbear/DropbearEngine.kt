@@ -2,11 +2,7 @@ package com.dropbear
 
 import com.dropbear.ffi.NativeEngine
 
-class DropbearEngine(val native: NativeEngine, val currentEntity: EntityRef? = null) {
-    private val globalScripts = mutableListOf<System>()
-
-    fun init() {
-    }
+class DropbearEngine(val native: NativeEngine) {
 
     fun getEntity(label: String): Result<EntityRef> {
         val entityId = native.getEntity(label)

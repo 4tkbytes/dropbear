@@ -1,7 +1,12 @@
 package com.dropbear
 
-interface System {
-    fun load(engine: DropbearEngine)
-    fun update(engine: DropbearEngine, deltaTime: Float)
-    fun destroy(engine: DropbearEngine)
+open class System {
+    public var currentEntity: EntityRef? = null
+
+    open fun load(engine: DropbearEngine) {}
+    open fun update(engine: DropbearEngine, deltaTime: Float) {}
+    open fun destroy(engine: DropbearEngine) {}
+    fun setCurrentEntity(entity: Long) {
+        this.currentEntity = EntityRef(EntityId(entity))
+    }
 }

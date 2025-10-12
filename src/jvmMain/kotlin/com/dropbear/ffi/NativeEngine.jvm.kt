@@ -1,20 +1,21 @@
 package com.dropbear.ffi
 
 actual class NativeEngine {
-    private var worldHandle: ULong = 0u
+    private var worldHandle: Long = 0L
 
-    actual fun getEntity(label: String): ULong? {
-        val result = JNINative.getEntity(worldHandle.toLong(), label)
+    actual fun getEntity(label: String): Long? {
+        val result = JNINative.getEntity(worldHandle, label)
         return if (result < 0) {
             null
         } else {
-            result.toULong()
+            result
         }
     }
 
-    fun init(handle: ULong) {
+    @JvmName("init")
+    fun init(handle: Long) {
         this.worldHandle = handle
-        if (this.worldHandle == 0uL) {
+        if (this.worldHandle < 0L) {
             println("NativeEngine: Error - Invalid world handle received!")
             return
         }

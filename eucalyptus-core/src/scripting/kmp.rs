@@ -16,7 +16,7 @@ use std::ffi::{CStr, c_char};
 pub unsafe extern "C" fn dropbear_get_entity(
     label: *const c_char,
     world_ptr: *const hecs::World,
-    out_entity: *mut u64,
+    out_entity: *mut i64,
 ) -> i32 {
     unsafe {
         if label.is_null() || world_ptr.is_null() || out_entity.is_null() {
@@ -24,21 +24,19 @@ pub unsafe extern "C" fn dropbear_get_entity(
             return -1;
         }
 
-        let world = unsafe { &*world_ptr };
+        let world =  &*world_ptr;
 
-        let label_str = unsafe {
-            match CStr::from_ptr(label).to_str() {
-                Ok(s) => s,
-                Err(_) => {
-                    log::warn!("dropbear_get_entity: invalid UTF-8 in label");
-                    return -1;
-                }
+        let label_str = match CStr::from_ptr(label).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                log::warn!("dropbear_get_entity: invalid UTF-8 in label");
+                return -1;
             }
         };
 
         for (id, entity) in world.query::<&AdoptedEntity>().iter() {
             if entity.model.label == label_str {
-                *out_entity = id.id() as u64;
+                *out_entity = id.id() as i64;
                 log::debug!("Found entity with label: {:?}", label_str);
                 return 0;
             }
