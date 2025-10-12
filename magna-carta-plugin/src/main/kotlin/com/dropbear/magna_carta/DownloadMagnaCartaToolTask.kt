@@ -21,6 +21,9 @@ abstract class DownloadMagnaCartaToolTask: Download() {
 
     @TaskAction
     override fun download() {
+        println("Just a heads up: You can build your own version of magna-carta from the dropbear repository, and then" +
+                "symlink it to ~/.gradle/magna-carta under the name ${getToolFileName()}")
+
         val os = OperatingSystem.current()
         val arch = System.getProperty("os.arch")
 
