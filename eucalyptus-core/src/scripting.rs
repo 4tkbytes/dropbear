@@ -229,14 +229,16 @@ impl ScriptManager {
         if matches!(self.script_target, ScriptTarget::JVM { .. })
             && let Some(jvm) = &mut self.jvm {
             jvm.init(world)?;
-            log::debug!("Initialised JVM engine");
 
             for (tag, entities) in &self.entity_tag_database {
                 for entity in entities {
-                    log::debug!("Loading scripts with tag {} for entity {}", tag, entity.id());
                     let entity_id = entity.id();
                     let scripts = jvm.load_scripts_for_entity(world, entity_id, tag)?;
-                    self.entity_scripts.insert(entity_id, scripts);
+
+                    self.entity_scripts
+                        .entry(entity_id)
+                        .or_default()
+                        .extend(scripts);
                 }
             }
             return Ok(());
