@@ -81,7 +81,7 @@ on the JVM target. You can customise the build.gradle.kts file in your project t
 
 ## Documentation
 
-API documentation and articles are available at (todo)
+API documentation and articles are available at [4tkbytes.github.io/dropbear](https://4tkbytes.github.io/dropbear). 
 
 ## Compability
 
