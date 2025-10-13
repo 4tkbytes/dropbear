@@ -298,7 +298,6 @@ impl ScriptManager {
         // self.library.take();
         Ok(())
     }
-
 }
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
