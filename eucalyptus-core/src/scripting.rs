@@ -292,14 +292,6 @@ impl ScriptManager {
 
         Err(anyhow::anyhow!("Native implementation not implemented yet"))
     }
-
-    pub fn kill(&mut self) -> anyhow::Result<()> {
-        log::debug!("Killing JVM");
-        self.jvm = None;
-        self.jvm_created = false;
-        // self.library.take();
-        Ok(())
-    }
 }
 
 pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
