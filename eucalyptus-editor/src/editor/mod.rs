@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
-
+use crossbeam_channel::Receiver;
 use crate::build::build;
 use crate::camera::UndoableCameraAction;
 use crate::debug;
@@ -47,6 +47,7 @@ use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
+use eucalyptus_core::scripting::jni::hotreload::{HotReloadEvent, HotReloader};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -89,8 +90,6 @@ pub struct Editor {
     // channels
     /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
     progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
-    /// Unused: A threadsafe Unbounded Sender
-    _progress_rx: Option<UnboundedSender<WorldLoadingStatus>>,
     /// Used to check if the world has been loaded in
     is_world_loaded: IsWorldLoadedYet,
     /// Used to fetch the current status of the loading, so it can be used for different
@@ -103,13 +102,18 @@ pub struct Editor {
     world_receiver: Option<oneshot::Receiver<hecs::World>>,
 
     // building
-    pub progress_rx: Option<crossbeam_channel::Receiver<BuildStatus>>,
+    pub progress_rx: Option<Receiver<BuildStatus>>,
     pub handle_created: Option<FutureHandle>,
     pub build_logs: Vec<String>,
     pub build_progress: f32,
     pub show_build_window: bool,
     pub last_build_error: Option<String>,
     pub show_build_error_window: bool,
+
+    // hot reloading
+    pub hot_reloader: HotReloader,
+    pub hot_reload_rx: Option<Receiver<HotReloadEvent>>,
+
 
     dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
 }
@@ -127,7 +131,7 @@ impl Editor {
         let [_old, _] = surface.split_below(
             right,
             0.5,
-            vec![EditorTab::AssetViewer, EditorTab::KotlinREPL],
+            vec![EditorTab::AssetViewer],
         );
 
         // this shit doesn't work :(
@@ -181,7 +185,6 @@ impl Editor {
             input_state: InputState::new(),
             light_manager: LightManager::new(),
             active_camera: Arc::new(Mutex::new(None)),
-            _progress_rx: None,
             progress_tx: None,
             is_world_loaded: IsWorldLoadedYet::new(),
             current_state: WorldLoadingStatus::Idle,
@@ -195,6 +198,8 @@ impl Editor {
             show_build_window: false,
             last_build_error: None,
             show_build_error_window: false,
+            hot_reloader: HotReloader::new(),
+            hot_reload_rx: None,
             dock_state_shared: None,
         })
     }

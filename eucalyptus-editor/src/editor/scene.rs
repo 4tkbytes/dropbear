@@ -1,3 +1,4 @@
+use crossbeam_channel::TryRecvError;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
@@ -110,6 +111,32 @@ impl Scene for Editor {
         if matches!(self.editor_state, EditorState::Playing) {
             if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
                 self.signal = Signal::StopPlaying;
+            }
+
+            if let Some(rx) = &self.hot_reload_rx {
+                match rx.try_recv() {
+                    Ok(val) => {
+                        match val {
+                            HotReloadEvent::SuccessBuild => {
+                                let world_ptr = self.world.as_mut() as *mut World;
+                                match self.script_manager.reload(world_ptr) {
+                                    Ok(_) => {
+                                        log::info!("Reloaded script");
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to reload script: {}", e);   
+                                    }
+                                }
+                            }
+                            HotReloadEvent::FailedBuild(e) => {
+                                log_once::warn_once!("Failed to build: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log_once::warn_once!("Failed to receive hot reload signal: {}", e);
+                    }
+                }
             }
 
             let world_ptr = self.world.as_mut() as *mut World;

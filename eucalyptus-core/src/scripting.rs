@@ -2,8 +2,8 @@ pub mod jni;
 pub mod kmp;
 
 use crate::input::InputState;
-use crate::scripting::jni::{JavaContext, WorldPtr};
-use crate::states::{EntityNode, PROJECT, SOURCE, ScriptComponent};
+use crate::scripting::jni::JavaContext;
+use crate::states::{EntityNode, ScriptComponent, PROJECT, SOURCE};
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::{Entity, World};
 use libloading::Library;
@@ -14,6 +14,7 @@ use anyhow::Context;
 use crossbeam_channel::Sender;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use crate::ptr::WorldPtr;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
@@ -43,10 +44,10 @@ pub struct ScriptManager {
     script_target: ScriptTarget,
     entity_tag_database: HashMap<String, Vec<Entity>>,
     jvm_created: bool,
+    lib_path: Option<PathBuf>,
 
     #[cfg(feature = "jvm")]
     entity_scripts: HashMap<u32, Vec<GlobalRef>>,
-    // the native version must be stateless, and doesn't have such a thing
 }
 
 impl ScriptManager {
@@ -58,6 +59,7 @@ impl ScriptManager {
             entity_tag_database: HashMap::new(),
             jvm_created: false,
             entity_scripts: Default::default(),
+            lib_path: None,
         })
     }
 
@@ -81,21 +83,7 @@ impl ScriptManager {
 
         let _ = status_sender.send(BuildStatus::Started);
 
-        let gradle_cmd = if cfg!(target_os = "windows") {
-            let gradlew = project_root.join("gradlew.bat");
-            if gradlew.exists() {
-                gradlew.to_string_lossy().to_string()
-            } else {
-                "gradle.bat".to_string()
-            }
-        } else {
-            let gradlew = project_root.join("gradlew");
-            if gradlew.exists() {
-                "./gradlew".to_string()
-            } else {
-                "gradle".to_string()
-            }
-        };
+        let gradle_cmd = get_gradle_command(project_root);
 
         let _ = status_sender.send(BuildStatus::Building(format!("Running: {}", gradle_cmd)));
 
@@ -194,6 +182,8 @@ impl ScriptManager {
 
         match &target {
             ScriptTarget::JVM { library_path } => {
+                self.lib_path = Some(library_path.clone());
+
                 if !self.jvm_created {
                     let jvm = JavaContext::new(library_path)?;
                     self.jvm = Some(jvm);
@@ -201,6 +191,9 @@ impl ScriptManager {
                     log::debug!("Created new JVM instance");
                 } else {
                     log::debug!("Reusing existing JVM instance");
+                    if let Some(jvm) = &mut self.jvm {
+                        jvm.jar_path = library_path.clone();
+                    }
                 }
 
                 if let Some(jvm) = &mut self.jvm {
@@ -215,6 +208,7 @@ impl ScriptManager {
                 self.jvm = None;
                 self.library = None;
                 self.jvm_created = false;
+                self.lib_path = None;
             }
         }
 
@@ -264,33 +258,53 @@ impl ScriptManager {
         {
             let mut env = jvm.jvm.attach_current_thread()?;
 
-            for (tag, entities) in &self.entity_tag_database {
-                for entity in entities {
-                    let entity_id = entity.id();
-                    log::debug!("Updating scripts with tag {} for entity {}", tag, entity_id);
+            for (entity_id, scripts) in &self.entity_scripts {
+                log::debug!("Updating {} scripts for entity {}", scripts.len(), entity_id);
 
-                    if let Some(scripts) = self.entity_scripts.get(&entity_id) {
-                        let engine_ref = jvm.create_engine_for_entity(world, entity_id)?;
+                let engine_ref = jvm.create_engine_for_entity(world, *entity_id)?;
 
-                        for script_ref in scripts {
-                            log::debug!("Calling method update");
-                            env.call_method(
-                                script_ref,
-                                "update",
-                                "(Lcom/dropbear/DropbearEngine;F)V",
-                                &[
-                                    JValue::Object(engine_ref.as_obj()),
-                                    JValue::Float(dt),
-                                ],
-                            )?;
-                        }
-                    }
+                for script_ref in scripts {
+                    env.call_method(
+                        script_ref,
+                        "update",
+                        "(Lcom/dropbear/DropbearEngine;F)V",
+                        &[
+                            JValue::Object(engine_ref.as_obj()),
+                            JValue::Float(dt),
+                        ],
+                    )?;
                 }
             }
             return Ok(());
         }
 
         Err(anyhow::anyhow!("Native implementation not implemented yet"))
+    }
+
+    pub fn reload(&mut self, world_ptr: WorldPtr) -> anyhow::Result<()> {
+        if let Some(jvm) = &mut self.jvm {
+            jvm.reload(world_ptr)?
+        }
+        Ok(())
+    }
+}
+
+fn get_gradle_command(project_root: impl AsRef<Path>) -> String {
+    let project_root = project_root.as_ref().to_owned();
+    if cfg!(target_os = "windows") {
+        let gradlew = project_root.join("gradlew.bat");
+        if gradlew.exists() {
+            gradlew.to_string_lossy().to_string()
+        } else {
+            "gradle.bat".to_string()
+        }
+    } else {
+        let gradlew = project_root.join("gradlew");
+        if gradlew.exists() {
+            "./gradlew".to_string()
+        } else {
+            "gradle".to_string()
+        }
     }
 }
 
@@ -342,7 +356,8 @@ pub fn move_script_to_src(script_path: &PathBuf) -> anyhow::Result<PathBuf> {
                 break;
             }
             Err(e) => {
-                if e.raw_os_error() == Some(32) && attempt < MAX_RETRIES {
+                if let Some(e_int) = e.raw_os_error() && e_int == 32
+                && attempt < MAX_RETRIES {
                     log::warn!(
                         "Sharing violation copying script (attempt {}/{}). Retrying in {}ms: {}",
                         attempt + 1,

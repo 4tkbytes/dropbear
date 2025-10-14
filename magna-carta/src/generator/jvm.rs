@@ -20,8 +20,8 @@ impl Generator for KotlinJVMGenerator {
         writeln!(output)?;
 
         writeln!(output, "package com.dropbear.decl")?;
-
         writeln!(output)?;
+
         let mut imported_packages = std::collections::HashSet::new();
         for item in manifest.items() {
             if let Some(last_dot) = item.fqcn().rfind('.') {
@@ -47,31 +47,40 @@ impl Generator for KotlinJVMGenerator {
         }
 
         writeln!(output, "object RunnableRegistry {{")?;
-        writeln!(output, "    private val TAG_REGISTRY = mapOf(")?;
+        writeln!(output, "    private val tagRegistry = mutableMapOf<String, MutableList<() -> com.dropbear.System>>()")?;
+        writeln!(output)?;
 
-        let tag_entries: Vec<String> = tag_map
-            .iter()
-            .map(|(tag, classes)| {
-                let factories: Vec<String> = classes
-                    .iter()
-                    .map(|cls| format!("::{}", cls))
-                    .collect();
-                format!("        \"{}\" to listOf({})", tag, factories.join(", "))
-            })
-            .collect();
+        writeln!(output, "    init {{")?;
+        writeln!(output, "        registerStaticScripts()")?;
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
 
-        if !tag_entries.is_empty() {
-            writeln!(output, "{}", tag_entries.join(",\n"))?;
+        writeln!(output, "    private fun registerStaticScripts() {{")?;
+        for (tag, classes) in &tag_map {
+            writeln!(output, "        // Tag: {}", tag)?;
+            for class in classes {
+                writeln!(
+                    output,
+                    "        tagRegistry.computeIfAbsent(\"{}\") {{ mutableListOf() }}.add(::{})",
+                    tag, class
+                )?;
+            }
         }
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
 
-        writeln!(output, "    )")?;
+        writeln!(output, "    @Synchronized")?;
+        writeln!(output, "    fun reload() {{")?;
+        writeln!(output, "        tagRegistry.clear()")?;
+        writeln!(output, "        registerStaticScripts()")?;
+        writeln!(output, "    }}")?;
         writeln!(output)?;
 
         writeln!(
             output,
             "    fun getScriptFactories(tag: String): List<() -> com.dropbear.System> {{"
         )?;
-        writeln!(output, "        return TAG_REGISTRY[tag] ?: emptyList()")?;
+        writeln!(output, "        return tagRegistry[tag]?.toList() ?: emptyList()")?;
         writeln!(output, "    }}")?;
         writeln!(output)?;
 
@@ -83,6 +92,11 @@ impl Generator for KotlinJVMGenerator {
             output,
             "        return getScriptFactories(tag).map {{ it() }}"
         )?;
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
+
+        writeln!(output, "    fun getAllTags(): Set<String> {{")?;
+        writeln!(output, "        return tagRegistry.keys.toSet()")?;
         writeln!(output, "    }}")?;
 
         writeln!(output, "}}")?;

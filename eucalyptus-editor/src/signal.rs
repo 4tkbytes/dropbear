@@ -304,6 +304,16 @@ impl SignalController for Editor {
                                         return Err(anyhow::anyhow!(e));
                                     }
 
+                                    let project_path = {
+                                        PROJECT.read().project_path.clone()
+                                    };
+
+                                    let (tx, rx) = crossbeam_channel::unbounded();
+
+                                    self.hot_reload_rx = Some(rx);
+
+                                    self.hot_reloader.start(project_path, graphics.future_queue.clone(), tx);
+
                                     let world_ptr = self.world.as_mut() as *mut World;
 
                                     if let Err(e) = self.script_manager
@@ -397,6 +407,8 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::StopPlaying => {
+                self.hot_reloader.stop(graphics.future_queue.clone());
+
                 if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);
@@ -405,11 +417,6 @@ impl SignalController for Editor {
                 self.editor_state = EditorState::Editing;
 
                 self.switch_to_debug_camera();
-
-                // already kills itself
-                // for (entity_id, _) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
-                //     self.script_manager.remove_entity_script(entity_id);
-                // }
 
                 success!("Exited play mode");
                 log::info!("Back to the editor you go...");

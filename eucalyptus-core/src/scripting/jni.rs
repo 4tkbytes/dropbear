@@ -1,20 +1,23 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
+pub mod hotreload;
+
 use dropbear_engine::entity::AdoptedEntity;
 use hecs::World;
 use jni::objects::{GlobalRef, JClass, JString, JValue};
 use jni::sys::jlong;
 use jni::sys::jobject;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
-use std::path::{Path};
-
-pub type WorldPtr = *mut World;
+use std::path::{Path, PathBuf};
+use crate::ptr::WorldPtr;
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
     pub(crate) jvm: JavaVM,
     dropbear_engine_class: Option<GlobalRef>,
+    pub(crate) jar_path: PathBuf,
+    hot_reload_loader: Option<GlobalRef>,
 }
 
 impl JavaContext {
@@ -31,11 +34,28 @@ impl JavaContext {
         Ok(Self {
             jvm,
             dropbear_engine_class: None,
+            jar_path: jar_path.as_ref().to_owned(),
+            hot_reload_loader: None,
         })
     }
 
     pub fn init(&mut self, world: WorldPtr) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
+
+        if self.hot_reload_loader.is_none() {
+            log::trace!("Creating HotSwappableJarLoader for hot-reload support");
+
+            let loader_class = env.find_class("com/dropbear/reload/HotReloadManager")?;
+            let jar_path_str = env.new_string(self.jar_path.to_str().unwrap())?;
+
+            let loader_obj = env.new_object(
+                loader_class,
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&jar_path_str)],
+            )?;
+
+            self.hot_reload_loader = Some(env.new_global_ref(loader_obj)?);
+        }
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
             let _ = old_ref; // drop
@@ -72,11 +92,29 @@ impl JavaContext {
         Ok(())
     }
 
-    pub fn clear_engine(&mut self) -> anyhow::Result<()> {
-        if let Some(old_ref) = self.dropbear_engine_class.take() {
-            let _ = old_ref; // drop
+    pub fn reload(&mut self, world: WorldPtr) -> anyhow::Result<()> {
+        log::info!("Hot-reloading JAR: {}", self.jar_path.display());
+
+        {
+            let mut env = self.jvm.attach_current_thread()?;
+
+            if let Some(loader) = &self.hot_reload_loader {
+                log::trace!("Calling HotSwappableJarLoader.reload()");
+                env.call_method(loader.as_obj(), "reload", "()V", &[])?;
+            }
+
+            log::trace!("Calling RunnableRegistry.reload()");
+            let registry_class = env.find_class("com/dropbear/decl/RunnableRegistry")?;
+            env.call_static_method(registry_class, "reload", "()V", &[])?;
+
+            log::trace!("Re-initialising engine with new classes");
         }
-        self.dropbear_engine_class = None;
+
+        self.clear_engine()?;
+        self.init(world)?;
+
+        log::info!("Hot-reload complete!");
+
         Ok(())
     }
 
@@ -206,12 +244,21 @@ impl JavaContext {
             "(Lcom/dropbear/ffi/NativeEngine;)V",
             &[
                 JValue::Object(&native_engine_obj),
-                // JValue::Object(&entity_ref_obj),
             ],
         )?;
 
         log::trace!("Creating new global ref for DropbearEngine and returning");
         Ok(env.new_global_ref(dropbear_obj)?)
+    }
+
+    pub fn clear_engine(&mut self) -> anyhow::Result<()> {
+        if let Some(old_ref) = self.dropbear_engine_class.take() {
+            let _ = old_ref; // drop
+        }
+        if let Some(ref loader) = self.hot_reload_loader {
+            let _ = loader;
+        }
+        Ok(())
     }
 }
 
@@ -222,6 +269,7 @@ impl Drop for JavaContext {
         }
     }
 }
+
 #[unsafe(no_mangle)]
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 // (JNIEnv *, jobject, jlong, jstring);

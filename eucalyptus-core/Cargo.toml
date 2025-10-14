@@ -34,6 +34,7 @@ interprocess = "2.2"
 serde_json = "1.0.143"
 libloading = "0.8.9"
 async-process = "2.5"
+tokio-util = "0.7"
 
 [features]
 editor = ["jvm"]
