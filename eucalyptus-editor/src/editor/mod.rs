@@ -47,7 +47,6 @@ use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
-use eucalyptus_core::scripting::jni::hotreload::{HotReloadEvent, HotReloader};
 
 pub struct Editor {
     scene_command: SceneCommand,
@@ -109,11 +108,6 @@ pub struct Editor {
     pub show_build_window: bool,
     pub last_build_error: Option<String>,
     pub show_build_error_window: bool,
-
-    // hot reloading
-    pub hot_reloader: HotReloader,
-    pub hot_reload_rx: Option<Receiver<HotReloadEvent>>,
-
 
     dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
 }
@@ -198,8 +192,6 @@ impl Editor {
             show_build_window: false,
             last_build_error: None,
             show_build_error_window: false,
-            hot_reloader: HotReloader::new(),
-            hot_reload_rx: None,
             dock_state_shared: None,
         })
     }

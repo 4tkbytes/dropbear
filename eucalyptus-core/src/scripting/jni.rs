@@ -1,9 +1,6 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
-pub mod hotreload;
-
-use std::fs::ReadDir;
 use dropbear_engine::entity::AdoptedEntity;
 use hecs::World;
 use jni::objects::{GlobalRef, JClass, JString, JValue};
@@ -12,7 +9,7 @@ use jni::sys::jobject;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use std::path::{Path, PathBuf};
 use crate::APP_INFO;
-use crate::logging::{LogLevel, LOG_LEVEL};
+use crate::logging::{LOG_LEVEL};
 use crate::ptr::WorldPtr;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
@@ -33,8 +30,14 @@ impl JavaContext {
         let host_jar_path = deps.join(host_jar_filename);
 
         std::fs::create_dir_all(&deps)?;
-        std::fs::write(&host_jar_path, LIBRARY_PATH)?;
-        log::info!("Host library JAR written to {:?}", host_jar_path);
+
+        if !host_jar_path.exists() {
+            log::info!("Host library JAR not found at {:?}, writing embedded JAR.", host_jar_path);
+            std::fs::write(&host_jar_path, LIBRARY_PATH)?;
+            log::info!("Host library JAR written to {:?}", host_jar_path);
+        } else {
+            log::debug!("Host library JAR found at {:?}", host_jar_path);
+        }
 
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)

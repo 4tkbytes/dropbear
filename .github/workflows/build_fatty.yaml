@@ -25,11 +25,11 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build
+        run: ./gradlew build fatJar
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: application-jar
-          path: build/libs/*.jar
+          path: build/libs/*-all.jar
           retention-days: 30

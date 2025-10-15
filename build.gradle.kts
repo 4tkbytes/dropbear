@@ -115,10 +115,6 @@ kotlin {
             compileTaskProvider.configure {
                 compilerOptions {
                     freeCompilerArgs.add("-Xexpect-actual-classes")
-                    // reminding kotlin that this is a library and not an executable
-                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_PARAMETER")
-                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_VARIABLE")
-                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_PRIVATE_MEMBER")
                 }
             }
         }
