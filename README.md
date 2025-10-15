@@ -44,10 +44,10 @@ Then run this to build the project
 git clone git@github.com:4tkbytes/dropbear
 cd dropbear
 
+# eucalyptus-editor requires dropbear-1.0-SNAPSHOT-all.jar to be built first
+./gradlew build
 # this will build all the projects in the workspace
 cargo build
-# ensure that rust is built before gradlew as rust produces a cdylib which gradlew needs to link to
-./gradlew build
 ```
 
 [//]: # (# ensure submodules are checked-out)
@@ -57,7 +57,9 @@ cargo build
 [//]: # (git submodule update)
 
 > [!TIP]
-> It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. If you are a normal joe,
+> It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. 
+> 
+> If you are a normal joe,
 > then just use the standard IntelliJ IDEA.
 
 ### Prebuilt

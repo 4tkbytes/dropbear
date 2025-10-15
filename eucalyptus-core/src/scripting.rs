@@ -46,14 +46,21 @@ pub struct ScriptManager {
 
 impl ScriptManager {
     pub fn new() -> anyhow::Result<Self> {
-        Ok(Self {
+        let mut result = Self {
             jvm: None,
             library: None,
             script_target: Default::default(),
             entity_tag_database: HashMap::new(),
             jvm_created: false,
             lib_path: None,
-        })
+        };
+
+        let jvm = JavaContext::new()?;
+        result.jvm = Some(jvm);
+        result.jvm_created = true;
+        log::debug!("Created new JVM instance");
+        
+        Ok(result)
     }
 
     pub fn init_script(
@@ -69,7 +76,7 @@ impl ScriptManager {
                 self.lib_path = Some(library_path.clone());
 
                 if !self.jvm_created {
-                    let jvm = JavaContext::new(library_path)?;
+                    let jvm = JavaContext::new()?;
                     self.jvm = Some(jvm);
                     self.jvm_created = true;
                     log::debug!("Created new JVM instance");
@@ -102,23 +109,25 @@ impl ScriptManager {
     pub fn load_script(
         &mut self,
         world: WorldPtr,
-
         _input_state: &InputState,
     ) -> anyhow::Result<()> {
-        if matches!(self.script_target, ScriptTarget::JVM { .. })
-            && let Some(jvm) = &mut self.jvm {
-            jvm.init(world)?;
-
-            for tag in self.entity_tag_database.keys() {
-                log::trace!("Loading systems for tag: {}", tag);
-                jvm.load_systems_for_tag(tag)?;
+        match &self.script_target {
+            ScriptTarget::JVM { library_path } => {
+                if let Some(jvm) = &mut self.jvm {
+                    jvm.init(library_path, world)?;
+                    for tag in self.entity_tag_database.keys() {
+                        log::trace!("Loading systems for tag: {}", tag);
+                        jvm.load_systems_for_tag(tag)?;
+                    }
+                    return Ok(());
+                }
             }
-            return Ok(());
-        }
-
-        if matches!(self.script_target, ScriptTarget::Native { .. }) {
-            // TODO: native implementation
-            return Err(anyhow::anyhow!("Native library loading not implemented yet"));
+            ScriptTarget::Native { library_path: _ } => {
+                return Err(anyhow::anyhow!("Native library loading not implemented yet"));
+            }
+            ScriptTarget::None => {
+                return Err(anyhow::anyhow!("No script target set"));
+            }
         }
 
         Err(anyhow::anyhow!("Invalid script target configuration"))

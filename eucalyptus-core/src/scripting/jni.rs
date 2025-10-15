@@ -23,7 +23,8 @@ pub struct JavaContext {
 }
 
 impl JavaContext {
-    pub fn new(jar_path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    /// Creates a new JVM instance
+    pub fn new() -> anyhow::Result<Self> {
         let root = app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?;
         let deps = root.join("dependencies");
         let host_jar_filename = "dropbear-1.0-SNAPSHOT-all.jar";
@@ -45,6 +46,7 @@ impl JavaContext {
                 "-Djava.class.path={}",
                 host_jar_path.display()
             ))
+            .option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741")
             .build()?;
         let jvm = JavaVM::new(jvm_args)?;
 
@@ -54,11 +56,12 @@ impl JavaContext {
             jvm,
             dropbear_engine_class: None,
             system_manager_instance: None,
-            jar_path: jar_path.as_ref().to_owned(),
+            jar_path: PathBuf::new(),
         })
     }
 
-    pub fn init(&mut self, world: WorldPtr) -> anyhow::Result<()> {
+    pub fn init(&mut self, jar_path: impl AsRef<Path>, world: WorldPtr) -> anyhow::Result<()> {
+        self.jar_path = jar_path.as_ref().to_owned();
         let mut env = self.jvm.attach_current_thread()?;
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
