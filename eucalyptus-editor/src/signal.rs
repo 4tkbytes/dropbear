@@ -312,7 +312,7 @@ impl SignalController for Editor {
 
                                     self.hot_reload_rx = Some(rx);
 
-                                    self.hot_reloader.start(project_path, graphics.future_queue.clone(), tx);
+                                    // self.hot_reloader.start(project_path, graphics.future_queue.clone(), tx);
 
                                     let world_ptr = self.world.as_mut() as *mut World;
 
@@ -407,7 +407,7 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::StopPlaying => {
-                self.hot_reloader.stop(graphics.future_queue.clone());
+                // self.hot_reloader.stop(graphics.future_queue.clone());
 
                 if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);

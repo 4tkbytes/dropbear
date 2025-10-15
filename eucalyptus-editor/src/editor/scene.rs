@@ -1,4 +1,3 @@
-use crossbeam_channel::TryRecvError;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;

@@ -17,13 +17,16 @@ pub struct JavaContext {
     pub(crate) jvm: JavaVM,
     dropbear_engine_class: Option<GlobalRef>,
     pub(crate) jar_path: PathBuf,
-    hot_reload_loader: Option<GlobalRef>,
+    // hot_reload_loader: Option<GlobalRef>,
 }
 
 impl JavaContext {
     pub fn new(jar_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
+            // todo: change the path to be the APPDATA part
+            .option("-javaagent:C:\\Users\\thrib\\dropbear\\resources\\dependencies\\hotswap-agent-2.0.0.jar")
+            .option("-XX:+PrintGCDetails")
             .option(format!("-Djava.class.path={}", jar_path.as_ref().display()))
             .build()?;
 
@@ -35,27 +38,27 @@ impl JavaContext {
             jvm,
             dropbear_engine_class: None,
             jar_path: jar_path.as_ref().to_owned(),
-            hot_reload_loader: None,
+            // hot_reload_loader: None,
         })
     }
 
     pub fn init(&mut self, world: WorldPtr) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
-        if self.hot_reload_loader.is_none() {
-            log::trace!("Creating HotSwappableJarLoader for hot-reload support");
-
-            let loader_class = env.find_class("com/dropbear/reload/HotReloadManager")?;
-            let jar_path_str = env.new_string(self.jar_path.to_str().unwrap())?;
-
-            let loader_obj = env.new_object(
-                loader_class,
-                "(Ljava/lang/String;)V",
-                &[JValue::Object(&jar_path_str)],
-            )?;
-
-            self.hot_reload_loader = Some(env.new_global_ref(loader_obj)?);
-        }
+        // if self.hot_reload_loader.is_none() {
+        //     log::trace!("Creating HotSwappableJarLoader for hot-reload support");
+        //
+        //     let loader_class = env.find_class("com/dropbear/reload/HotReloadManager")?;
+        //     let jar_path_str = env.new_string(self.jar_path.to_str().unwrap())?;
+        //
+        //     let loader_obj = env.new_object(
+        //         loader_class,
+        //         "(Ljava/lang/String;)V",
+        //         &[JValue::Object(&jar_path_str)],
+        //     )?;
+        //
+        //     self.hot_reload_loader = Some(env.new_global_ref(loader_obj)?);
+        // }
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
             let _ = old_ref; // drop
@@ -98,10 +101,10 @@ impl JavaContext {
         {
             let mut env = self.jvm.attach_current_thread()?;
 
-            if let Some(loader) = &self.hot_reload_loader {
-                log::trace!("Calling HotSwappableJarLoader.reload()");
-                env.call_method(loader.as_obj(), "reload", "()V", &[])?;
-            }
+            // if let Some(loader) = &self.hot_reload_loader {
+            //     log::trace!("Calling HotSwappableJarLoader.reload()");
+            //     env.call_method(loader.as_obj(), "reload", "()V", &[])?;
+            // }
 
             log::trace!("Calling RunnableRegistry.reload()");
             let registry_class = env.find_class("com/dropbear/decl/RunnableRegistry")?;
@@ -255,9 +258,9 @@ impl JavaContext {
         if let Some(old_ref) = self.dropbear_engine_class.take() {
             let _ = old_ref; // drop
         }
-        if let Some(ref loader) = self.hot_reload_loader {
-            let _ = loader;
-        }
+        // if let Some(ref loader) = self.hot_reload_loader {
+        //     let _ = loader;
+        // }
         Ok(())
     }
 }
