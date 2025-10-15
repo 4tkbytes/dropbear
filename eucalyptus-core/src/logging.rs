@@ -7,6 +7,7 @@
 
 #[cfg(feature = "editor")]
 use egui::Context;
+use std::fmt::{Display, Formatter};
 
 #[cfg(feature = "editor")]
 use egui_toast_fork::Toasts;
@@ -15,6 +16,33 @@ use egui_toast_fork::Toasts;
 use once_cell::sync::Lazy;
 #[cfg(feature = "editor")]
 use parking_lot::Mutex;
+
+pub static LOG_LEVEL: Lazy<Mutex<LogLevel>> = Lazy::new(|| {
+    Mutex::new(LogLevel::default())
+});
+
+#[derive(Default)]
+/// LogLevel as shown in LogLevel.kt in the dropbear engine jar library
+pub enum LogLevel {
+    TRACE,
+    DEBUG,
+    #[default]
+    INFO,
+    WARN,
+    ERROR
+}
+
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::TRACE => write!(f, "TRACE"),
+            LogLevel::DEBUG => write!(f, "DEBUG"),
+            LogLevel::INFO => write!(f, "INFO"),
+            LogLevel::WARN => write!(f, "WARN"),
+            LogLevel::ERROR => write!(f, "ERROR"),
+        }
+    }
+}
 
 #[cfg(feature = "editor")]
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {

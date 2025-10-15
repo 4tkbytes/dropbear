@@ -3,18 +3,19 @@
 
 package com.dropbear.ffi
 
-import co.touchlab.kermit.Logger
 import com.dropbear.ffi.generated.dropbear_get_entity
+import com.dropbear.logging.Logger
 import kotlinx.cinterop.*
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
     private var worldHandle: COpaquePointer? = null
 
+    @Suppress("unused") // called from jni
     fun init(handle: COpaquePointer?) {
         this.worldHandle = handle
         if (this.worldHandle == null) {
-            Logger.i("NativeEngine: Error - Invalid world handle received!")
+            Logger.info("NativeEngine: Error - Invalid world handle received!")
         }
     }
 

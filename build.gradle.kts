@@ -92,7 +92,8 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api("co.touchlab:kermit:2.0.4")
+//                api("co.touchlab:kermit:2.0.4")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
             }
         }
         nativeMain {
@@ -114,6 +115,10 @@ kotlin {
             compileTaskProvider.configure {
                 compilerOptions {
                     freeCompilerArgs.add("-Xexpect-actual-classes")
+                    // reminding kotlin that this is a library and not an executable
+                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_PARAMETER")
+                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_VARIABLE")
+                    freeCompilerArgs.add("-Xsuppress-warning=UNUSED_PRIVATE_MEMBER")
                 }
             }
         }
@@ -173,4 +178,21 @@ publishing {
             }
         }
     }
+}
+
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(kotlin.jvm().compilations["main"].output)
+
+    configurations.named("jvmRuntimeClasspath").get().forEach { file ->
+        if (file.name.endsWith(".jar")) {
+            from(zipTree(file))
+        } else {
+            from(file)
+        }
+    }
+
+    manifest {}
 }

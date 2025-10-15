@@ -8,7 +8,7 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
+use eucalyptus_core::scripting::{build_jvm, BuildStatus, ScriptTarget};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -124,7 +124,7 @@ impl SignalController for Editor {
                     let status_tx = tx.clone();
 
                     let handle = graphics.future_queue.push(async move {
-                        ScriptManager::build_jvm(project_root, status_tx).await
+                        build_jvm(project_root, status_tx).await
                     });
 
                     log::debug!("Pushed future to future_queue, received handle: {:?}", handle);
@@ -304,16 +304,6 @@ impl SignalController for Editor {
                                         return Err(anyhow::anyhow!(e));
                                     }
 
-                                    let project_path = {
-                                        PROJECT.read().project_path.clone()
-                                    };
-
-                                    let (tx, rx) = crossbeam_channel::unbounded();
-
-                                    self.hot_reload_rx = Some(rx);
-
-                                    // self.hot_reloader.start(project_path, graphics.future_queue.clone(), tx);
-
                                     let world_ptr = self.world.as_mut() as *mut World;
 
                                     if let Err(e) = self.script_manager
@@ -402,13 +392,9 @@ impl SignalController for Editor {
                         self.show_build_error_window = false;
                     }
                 }
-
-                // self.signal = Signal::None;
                 Ok(())
             }
             Signal::StopPlaying => {
-                // self.hot_reloader.stop(graphics.future_queue.clone());
-
                 if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);

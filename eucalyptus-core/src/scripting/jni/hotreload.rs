@@ -1,11 +1,10 @@
 use std::path::Path;
-use std::sync::Arc;
 use crossbeam_channel::Sender;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use dropbear_engine::future::{FutureHandle, FutureQueue};
-use crate::scripting::{get_gradle_command};
+use crate::scripting::get_gradle_command;
 
 pub enum HotReloadEvent {
     SuccessBuild,
@@ -14,7 +13,7 @@ pub enum HotReloadEvent {
 
 pub struct HotReloader {
     cancellation_token: CancellationToken,
-    handle: Option<FutureHandle>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl HotReloader {
@@ -28,14 +27,16 @@ impl HotReloader {
     pub fn start(
         &mut self,
         project_root: impl AsRef<Path>,
-        future_queue: Arc<FutureQueue>,
         sender: Sender<HotReloadEvent>,
     ) {
+        if self.is_running() {
+            self.stop();
+        }
+
         let project_root = project_root.as_ref().to_path_buf();
         let token = self.cancellation_token.clone();
-        let sender_clone = sender.clone();
 
-        let handle = future_queue.push(async move {
+        let handle = tokio::spawn(async move {
             let gradle_cmd = get_gradle_command(project_root.clone());
 
             loop {
@@ -46,9 +47,10 @@ impl HotReloader {
 
                 let mut child = match Command::new(&gradle_cmd)
                     .current_dir(&project_root)
-                    .args(["--continuous", "--console=plain", "fatJar"])
+                    .args(["--continuous", "--console=plain", "jvmJar"])
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
+                    .kill_on_drop(true)
                     .spawn()
                 {
                     Ok(child) => child,
@@ -65,9 +67,8 @@ impl HotReloader {
                 let stdout = child.stdout.take().expect("Stdout was piped");
                 let stderr = child.stderr.take().expect("Stderr was piped");
 
-                // Spawn child tasks with cancellation
                 let stdout_handle = tokio::spawn({
-                    let sender = sender_clone.clone();
+                    let sender = sender.clone();
                     let token = token.clone();
 
                     async move {
@@ -137,12 +138,23 @@ impl HotReloader {
                     _ = token.cancelled() => {
                         log::info!("Hot reloader cancelled, cleaning up...");
                         let _ = child.kill().await;
+
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
                         stdout_handle.abort();
                         stderr_handle.abort();
+                        let _ = tokio::join!(stdout_handle, stderr_handle);
                         break;
                     }
-                    _ = child.wait() => {
-                        log::warn!("Gradle process exited unexpectedly, restarting...");
+                    status = child.wait() => {
+                        match status {
+                            Ok(exit_status) => {
+                                log::warn!("Gradle process exited with status: {}, restarting...", exit_status);
+                            }
+                            Err(e) => {
+                                log::error!("Error waiting for gradle process: {}", e);
+                            }
+                        }
                         let _ = tokio::join!(stdout_handle, stderr_handle);
                     }
                 }
@@ -156,20 +168,24 @@ impl HotReloader {
             log::info!("Hot reloader task finished");
         });
 
-        self.handle = Some(handle.clone());
+        self.handle = Some(handle);
     }
 
-    pub fn stop(&mut self, future_queue: Arc<FutureQueue>) {
+    pub fn stop(&mut self) {
+        log::info!("Stopping hot reloader...");
+
         self.cancellation_token.cancel();
 
         if let Some(handle) = self.handle.take() {
-            future_queue.cancel(&handle);
-            log::info!("Hot reloader stopped");
+            handle.abort();
         }
+
+        self.cancellation_token = CancellationToken::new();
     }
 
     pub fn is_running(&self) -> bool {
-        self.handle.is_some() && !self.cancellation_token.is_cancelled()
+        self.handle.as_ref().map_or(false, |h| !h.is_finished())
+            && !self.cancellation_token.is_cancelled()
     }
 }
 
@@ -181,6 +197,6 @@ impl Default for HotReloader {
 
 impl Drop for HotReloader {
     fn drop(&mut self) {
-        self.cancellation_token.cancel();
+        self.stop();
     }
 }

@@ -20,7 +20,6 @@ egui_dock-fork.workspace = true
 glam.workspace = true
 hecs.workspace = true
 log.workspace = true
-log-once.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
 ron.workspace = true
@@ -30,11 +29,9 @@ tokio.workspace = true
 rayon.workspace = true
 jni.workspace = true
 crossbeam-channel = "0.5.15"
-interprocess = "2.2"
-serde_json = "1.0.143"
 libloading = "0.8.9"
-async-process = "2.5"
 tokio-util = "0.7"
+app_dirs2.workspace = true
 
 [features]
 editor = ["jvm"]
@@ -46,5 +43,3 @@ jvm = []
 [build-dependencies]
 anyhow = "1.0"
 app_dirs2 = "2.5"
-reqwest = { version = "0.12", features = ["blocking"] }
-zip = "4.3"
