@@ -8,7 +8,7 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
+use eucalyptus_core::scripting::{build_jvm, BuildStatus, ScriptTarget};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -124,7 +124,7 @@ impl SignalController for Editor {
                     let status_tx = tx.clone();
 
                     let handle = graphics.future_queue.push(async move {
-                        ScriptManager::build_jvm(project_root, status_tx).await
+                        build_jvm(project_root, status_tx).await
                     });
 
                     log::debug!("Pushed future to future_queue, received handle: {:?}", handle);
@@ -392,13 +392,9 @@ impl SignalController for Editor {
                         self.show_build_error_window = false;
                     }
                 }
-
-                // self.signal = Signal::None;
                 Ok(())
             }
             Signal::StopPlaying => {
-                let _ = self.script_manager.kill();
-
                 if let Err(e) = self.restore() {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);
@@ -407,11 +403,6 @@ impl SignalController for Editor {
                 self.editor_state = EditorState::Editing;
 
                 self.switch_to_debug_camera();
-
-                // already kills itself
-                // for (entity_id, _) in Arc::get_mut(&mut self.world).unwrap().query::<&ScriptComponent>().iter() {
-                //     self.script_manager.remove_entity_script(entity_id);
-                // }
 
                 success!("Exited play mode");
                 log::info!("Back to the editor you go...");

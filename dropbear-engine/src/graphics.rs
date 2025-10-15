@@ -297,11 +297,11 @@ impl Texture {
     pub fn new(graphics: Arc<SharedGraphicsContext>, diffuse_bytes: &[u8]) -> Self {
         let start = Instant::now();
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        println!("Loading image to memory: {:?}", start.elapsed());
+        log::trace!("Loading image to memory: {:?}", start.elapsed());
 
         let start = Instant::now();
         let diffuse_rgba = diffuse_image.to_rgba8();
-        println!(
+        log::trace!(
             "Converting diffuse image to rgba8 took {:?}",
             start.elapsed()
         );
@@ -324,7 +324,7 @@ impl Texture {
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        println!("Creating new diffuse texture took {:?}", start.elapsed());
+        log::trace!("Creating new diffuse texture took {:?}", start.elapsed());
 
         let start = Instant::now();
         graphics.queue.write_texture(
@@ -342,7 +342,7 @@ impl Texture {
             },
             texture_size,
         );
-        println!(
+        log::trace!(
             "Writing texture to graphics queue took {:?}",
             start.elapsed()
         );
@@ -358,7 +358,7 @@ impl Texture {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-        println!("Creating sampler took {:?}", start.elapsed());
+        log::trace!("Creating sampler took {:?}", start.elapsed());
 
         let start = Instant::now();
         let diffuse_bind_group = graphics
@@ -377,8 +377,8 @@ impl Texture {
                 ],
                 label: Some("texture_bind_group"),
             });
-        println!("Creating diffuse bind group took {:?}", start.elapsed());
-        println!("Done creating texture");
+        log::trace!("Creating diffuse bind group took {:?}", start.elapsed());
+        log::trace!("Done creating texture");
         Self {
             bind_group: Some(diffuse_bind_group),
             layout: Some(graphics.texture_bind_layout.clone()),
@@ -508,7 +508,7 @@ impl Texture {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        println!(
+        log::trace!(
             "Creating new diffuse texture took {:?}",
             create_start.elapsed()
         );
@@ -529,7 +529,7 @@ impl Texture {
             },
             texture_size,
         );
-        println!(
+        log::trace!(
             "Writing texture to graphics queue took {:?}",
             write_start.elapsed()
         );
@@ -544,7 +544,7 @@ impl Texture {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-        println!("Creating sampler took {:?}", sampler_start.elapsed());
+        log::trace!("Creating sampler took {:?}", sampler_start.elapsed());
 
         let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -565,12 +565,12 @@ impl Texture {
                 ],
                 label: Some("texture_bind_group"),
             });
-        println!(
+        log::trace!(
             "Creating diffuse bind group took {:?}",
             bind_group_start.elapsed()
         );
 
-        println!("Done creating texture");
+        log::trace!("Done creating texture");
 
         Texture {
             texture: diffuse_texture,
@@ -606,7 +606,7 @@ impl Texture {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        println!(
+        log::trace!(
             "Creating new diffuse texture took {:?}",
             create_start.elapsed()
         );
@@ -627,7 +627,7 @@ impl Texture {
             },
             texture_size,
         );
-        println!(
+        log::trace!(
             "Writing texture to graphics queue took {:?}",
             write_start.elapsed()
         );
@@ -642,7 +642,7 @@ impl Texture {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-        println!("Creating sampler took {:?}", sampler_start.elapsed());
+        log::trace!("Creating sampler took {:?}", sampler_start.elapsed());
 
         let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -663,12 +663,12 @@ impl Texture {
                 ],
                 label: Some("texture_bind_group"),
             });
-        println!(
+        log::trace!(
             "Creating diffuse bind group took {:?}",
             bind_group_start.elapsed()
         );
 
-        println!("Done creating texture");
+        log::trace!("Done creating texture");
 
         Texture {
             texture: diffuse_texture,
