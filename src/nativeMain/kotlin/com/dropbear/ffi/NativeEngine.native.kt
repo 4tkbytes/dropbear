@@ -3,8 +3,10 @@
 
 package com.dropbear.ffi
 
+import com.dropbear.EntityId
 import com.dropbear.ffi.generated.dropbear_get_entity
 import com.dropbear.logging.Logger
+import com.dropbear.math.Transform
 import kotlinx.cinterop.*
 import kotlin.experimental.ExperimentalNativeApi
 
@@ -30,5 +32,12 @@ actual class NativeEngine {
             )
             return if (result == 0) outEntity.value else null
         }
+    }
+
+    actual fun getTransform(entityId: EntityId): Transform? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setTransform(entityId: EntityId, transform: Transform) {
     }
 }

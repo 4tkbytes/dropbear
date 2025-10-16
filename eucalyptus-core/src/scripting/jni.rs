@@ -4,13 +4,13 @@
 pub mod exception;
 
 use std::fs;
-use dropbear_engine::entity::AdoptedEntity;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
 use hecs::World;
-use jni::objects::{GlobalRef, JClass, JString, JValue};
-use jni::sys::jlong;
-use jni::sys::jobject;
+use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
+use jni::sys::{jclass, jlong};
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use std::path::{PathBuf};
+use glam::{DQuat, DVec3};
 use crate::{success, APP_INFO};
 use sha2::{Digest, Sha256};
 use crate::logging::{LOG_LEVEL};
@@ -267,7 +267,7 @@ impl JavaContext {
             let result = get_exception_info(&mut env);
             if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
-            log::debug!("Updated all systems with dt: {}", dt);
+            log::trace!("Updated all systems with dt: {}", dt);
         } else {
             return Err(anyhow::anyhow!("SystemManager not initialised when updating systems."));
         }
@@ -384,12 +384,12 @@ impl Drop for JavaContext {
     }
 }
 
-#[unsafe(no_mangle)]
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
-// (JNIEnv *, jobject, jlong, jstring);
+//   (JNIEnv *, jclass, jlong, jstring);
+#[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     mut env: JNIEnv,
-    _obj: jobject,
+    _obj: jclass,
     world_handle: jlong,
     label: JString,
 ) -> jlong {
@@ -413,7 +413,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     let world = world_handle as *mut World;
 
     if world.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] World pointer is null in Java_com_dropbear_ffi_JNINative_getEntity");
+        println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] World pointer is null");
         return -1;
     }
 
@@ -425,4 +425,159 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
         }
     }
     -1
+}
+
+// JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getTransform
+//   (JNIEnv *, jclass, jlong, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getTransform(
+    mut env: JNIEnv,
+    _class: jclass,
+    world_handle: jlong,
+    entity_id: jlong,
+) -> JObject {
+    let world = world_handle as *mut World;
+
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] World pointer is null");
+        return JObject::null();
+    }
+
+    let world = unsafe { &mut *world };
+
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &Transform)>(entity)
+        && let Some((_, transform)) = q.get()
+    {
+        let new_transform = *transform;
+
+        let transform_class = match env.find_class("com/dropbear/math/Transform") {
+            Ok(c) => c,
+            Err(_) => return JObject::null(),
+        };
+
+        return match env.new_object(
+            &transform_class,
+            "(DDDDDDDDDD)V",
+            &[
+                new_transform.position.x.into(),
+                new_transform.position.y.into(),
+                new_transform.position.z.into(),
+                new_transform.rotation.x.into(),
+                new_transform.rotation.y.into(),
+                new_transform.rotation.z.into(),
+                new_transform.rotation.w.into(),
+                new_transform.scale.x.into(),
+                new_transform.scale.y.into(),
+                new_transform.scale.z.into(),
+            ],
+        ) {
+            Ok(java_transform) => java_transform,
+            Err(_) => {
+                println!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create Transform object");
+                JObject::null()
+            }
+        };
+    }
+
+    println!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to query for transform value for entity: {}", entity_id);
+    JObject::null()
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTransform
+//   (JNIEnv *, jclass, jlong, jlong, jobject);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setTransform(
+    mut env: JNIEnv,
+    _class: jclass,
+    world_handle: jlong,
+    entity_id: jlong,
+    transform_obj: JObject,
+) {
+    let world = world_handle as *mut World;
+
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let get_number_field = |env: &mut JNIEnv, obj: &JObject, field_name: &str| -> f64 {
+        match env.get_field(obj, field_name, "Ljava/lang/Number;") {
+            Ok(v) => match v.l() {
+                Ok(num_obj) => {
+                    match env.call_method(&num_obj, "doubleValue", "()D", &[]) {
+                        Ok(result) => result.d().unwrap_or_else(|_| {
+                            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract double from {}", field_name);
+                            0.0
+                        }),
+                        Err(_) => {
+                            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to call doubleValue on {}", field_name);
+                            0.0
+                        }
+                    }
+                }
+                Err(_) => {
+                    println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract Number object for {}", field_name);
+                    0.0
+                }
+            },
+            Err(_) => {
+                println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get field {}", field_name);
+                0.0
+            }
+        }
+    };
+
+    let position_obj: JObject = match env.get_field(&transform_obj, "position", "Lcom/dropbear/math/Vector3;") {
+        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+        Err(_) => JObject::null(),
+    };
+
+    let rotation_obj: JObject = match env.get_field(&transform_obj, "rotation", "Lcom/dropbear/math/Quaternion;") {
+        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+        Err(_) => JObject::null(),
+    };
+
+    let scale_obj: JObject = match env.get_field(&transform_obj, "scale", "Lcom/dropbear/math/Vector3;") {
+        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+        Err(_) => JObject::null(),
+    };
+
+    if position_obj.is_null() || rotation_obj.is_null() || scale_obj.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract position/rotation/scale objects");
+        return;
+    }
+
+    let px = get_number_field(&mut env, &position_obj, "x");
+    let py = get_number_field(&mut env, &position_obj, "y");
+    let pz = get_number_field(&mut env, &position_obj, "z");
+
+    let rx = get_number_field(&mut env, &rotation_obj, "x");
+    let ry = get_number_field(&mut env, &rotation_obj, "y");
+    let rz = get_number_field(&mut env, &rotation_obj, "z");
+    let rw = get_number_field(&mut env, &rotation_obj, "w");
+
+    let sx = get_number_field(&mut env, &scale_obj, "x");
+    let sy = get_number_field(&mut env, &scale_obj, "y");
+    let sz = get_number_field(&mut env, &scale_obj, "z");
+
+    let new_transform = Transform {
+        position: DVec3::new(px, py, pz),
+        rotation: DQuat::from_axis_angle(DVec3::new(rx, ry, rz), rw),
+        scale: DVec3::new(sx, sy, sz),
+    };
+
+    if let Ok(mut q) = world.query_one::<&mut Transform>(entity) {
+        if let Some(transform) = q.get() {
+            *transform = new_transform;
+        } else {
+            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query for transform component");
+        }
+    } else {
+        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query entity for transform component");
+    }
 }

@@ -1,9 +1,15 @@
 package com.dropbear.math
 
+import kotlin.jvm.JvmField
+
 /**
  * A class for holding a vector of `3` values of the same type.
  */
-class Vector3<T: Number>(var x: T, var y: T, var z: T) {
+class Vector3<T: Number>(
+    @JvmField var x: T,
+    @JvmField var y: T,
+    @JvmField var z: T,
+) {
     companion object {
         /**
          * Creates a new [com.dropbear.math.Vector3] of type `T` with one value.

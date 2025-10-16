@@ -123,6 +123,7 @@ impl Scene for Editor {
                     "Failed to update script: {}",
                     e
                 );
+                self.signal = Signal::StopPlaying;
             }
         }
 
