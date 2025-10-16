@@ -1,4 +1,3 @@
-use std::error::Error;
 use jni::JNIEnv;
 use jni::objects::JThrowable;
 

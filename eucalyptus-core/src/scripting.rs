@@ -112,9 +112,9 @@ impl ScriptManager {
         _input_state: &InputState,
     ) -> anyhow::Result<()> {
         match &self.script_target {
-            ScriptTarget::JVM { library_path } => {
+            ScriptTarget::JVM { library_path: _ } => {
                 if let Some(jvm) = &mut self.jvm {
-                    jvm.init(library_path, world)?;
+                    jvm.init(world)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;

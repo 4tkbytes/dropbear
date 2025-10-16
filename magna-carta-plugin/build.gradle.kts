@@ -3,6 +3,7 @@ import org.gradle.kotlin.dsl.compileOnly
 plugins {
     `kotlin-dsl`
     `maven-publish`
+    id("com.gradle.plugin-publish") version "2.0.0"
 }
 
 group = "com.dropbear"
@@ -18,11 +19,17 @@ dependencies {
 }
 
 gradlePlugin {
+    website.set("https://github.com/4tkbytes/dropbear")
+    vcsUrl.set("https://github.com/4tkbytes/dropbear")
     plugins {
-        create("dropbearPlugin") {
+
+        create("magnaCartaPlugin") {
             id = "magna-carta"
             implementationClass = "com.dropbear.magna_carta.MagnaCartaPlugin"
-            version = "1.0-SNAPSHOT"
+            displayName = "magna-carta plugin"
+            description = "Gradle plugin for generating manifests from annotation data during compile time" +
+                    " for use with KMP and the dropbear engine"
+            version = version as String
         }
     }
 }

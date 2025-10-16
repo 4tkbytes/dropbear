@@ -659,7 +659,9 @@ impl InspectableComponent for AdoptedEntity {
                     }
                     cfg.label_last_edit = None;
                 }
-            })
+            });
+
+            ui.label(format!("Entity ID: {}", entity.id()));
         });
     }
 }

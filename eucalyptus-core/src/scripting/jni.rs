@@ -3,14 +3,16 @@
 
 pub mod exception;
 
+use std::fs;
 use dropbear_engine::entity::AdoptedEntity;
 use hecs::World;
-use jni::objects::{GlobalRef, JClass, JObject, JString, JThrowable, JValue, JValueGen};
+use jni::objects::{GlobalRef, JClass, JString, JValue};
 use jni::sys::jlong;
 use jni::sys::jobject;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
-use std::path::{Path, PathBuf};
-use crate::{info, APP_INFO};
+use std::path::{PathBuf};
+use crate::{success, APP_INFO};
+use sha2::{Digest, Sha256};
 use crate::logging::{LOG_LEVEL};
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::exception::get_exception_info;
@@ -30,17 +32,46 @@ impl JavaContext {
     pub fn new() -> anyhow::Result<Self> {
         let root = app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?;
         let deps = root.join("dependencies");
-        let host_jar_filename = "dropbear-1.0-SNAPSHOT-all.jar";
+        let host_jar_filename = "dropbear-jvm-fat-1.0-SNAPSHOT.jar";
         let host_jar_path = deps.join(host_jar_filename);
+        let hash_filename = format!("{}.sha256", host_jar_filename);
+        let hash_file_path = deps.join(hash_filename);
 
-        std::fs::create_dir_all(&deps)?;
+        fs::create_dir_all(&deps)?;
 
-        if !host_jar_path.exists() {
-            log::info!("Host library JAR not found at {:?}, writing embedded JAR.", host_jar_path);
-            std::fs::write(&host_jar_path, LIBRARY_PATH)?;
-            log::info!("Host library JAR written to {:?}", host_jar_path);
+        let embedded_jar_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(LIBRARY_PATH);
+            format!("{:x}", hasher.finalize())
+        };
+
+        let stored_hash = fs::read_to_string(&hash_file_path).ok();
+
+        let should_update = match stored_hash {
+            Some(stored) => {
+                if stored.trim() == embedded_jar_hash {
+                    log::debug!("Host library JAR hash matches stored hash. No update needed.");
+                    false
+                } else {
+                    log::info!("Host library JAR hash differs from stored hash. Update required.");
+                    true
+                }
+            }
+            None => {
+                log::info!("Host library JAR hash file not found. Update required.");
+                true
+            }
+        };
+
+        if should_update {
+            log::info!("Writing (or updating) Host library JAR to {:?}.", host_jar_path);
+            fs::write(&host_jar_path, LIBRARY_PATH)?;
+            log::info!("Host library JAR written to {:?}.", host_jar_path);
+
+            fs::write(&hash_file_path, &embedded_jar_hash)?;
+            log::debug!("Host library JAR hash written to {:?}.", hash_file_path);
         } else {
-            log::debug!("Host library JAR found at {:?}", host_jar_path);
+            log::debug!("Host library JAR at {:?} is up-to-date.", host_jar_path);
         }
 
         let jvm_args = InitArgsBuilder::new()
@@ -59,7 +90,8 @@ impl JavaContext {
         let jvm_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_args)?;
 
-        info!("JDB debugger enabled on localhost:6741");
+        #[cfg(feature = "editor")]
+        success!("JDB debugger enabled on localhost:6741");
 
         log::info!("Created JVM instance");
 
@@ -71,8 +103,7 @@ impl JavaContext {
         })
     }
 
-    pub fn init(&mut self, jar_path: impl AsRef<Path>, world: WorldPtr) -> anyhow::Result<()> {
-        self.jar_path = jar_path.as_ref().to_owned();
+    pub fn init(&mut self, world: WorldPtr) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
@@ -353,44 +384,45 @@ impl Drop for JavaContext {
     }
 }
 
-
-
+#[unsafe(no_mangle)]
+// JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
+// (JNIEnv *, jobject, jlong, jstring);
 pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     mut env: JNIEnv,
     _obj: jobject,
     world_handle: jlong,
     label: JString,
 ) -> jlong {
-    eprintln!("JNI call started");
-    eprintln!("world_handle: {}", world_handle);
-    eprintln!("label ptr: {:p}", label.as_raw());
-
-    if world_handle == 0 {
-        eprintln!("ERROR: world_handle is null!");
-        return -1;
-    }
-
-    let label_result = env.get_string(&label);
-    if label_result.is_err() {
-        eprintln!("ERROR: Failed to get string: {:?}", label_result.err());
-        return -1;
-    }
-    let label = label_result.unwrap();
+    let label_jni_result = env.get_string(&label);
+    let label_str = match label_jni_result {
+        Ok(java_string) => {
+            match java_string.to_str() {
+                Ok(rust_str) => rust_str.to_string(),
+                Err(e) => {
+                    println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to convert Java string to Rust string: {}", e);
+                    return -1;
+                }
+            }
+        },
+        Err(e) => {
+            println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to get string from JNI: {}", e);
+            return -1;
+        }
+    };
 
     let world = world_handle as *mut World;
 
     if world.is_null() {
-        eprintln!("ERROR: world pointer is null!");
+        println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] World pointer is null in Java_com_dropbear_ffi_JNINative_getEntity");
         return -1;
     }
 
     let world = unsafe { &mut *world };
-    let rust_label = label.to_str().unwrap().to_string();
 
     for (id, entity) in world.query::<&AdoptedEntity>().iter() {
-        if entity.model.label == rust_label {
-            return jlong::from(id.id());
+        if entity.model.label == label_str {
+            return id.id() as jlong;
         }
     }
-    jlong::from(-1)
+    -1
 }

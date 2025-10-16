@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
@@ -13,7 +15,9 @@ repositories {
 }
 
 kotlin {
-    jvm()
+    jvm {
+        withJava()
+    }
 
     val hostOs = System.getProperty("os.name")
     val isArm64 = System.getProperty("os.arch") == "aarch64"
@@ -102,7 +106,7 @@ kotlin {
         }
 
         jvmMain {
-            kotlin.srcDirs("src/jvmMain/kotlin", "src/jvmMain/java", "build/magna-carta")
+            kotlin.srcDirs("src/jvmMain/kotlin", "build/magna-carta")
             dependencies {
 
             }

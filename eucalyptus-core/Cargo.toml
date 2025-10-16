@@ -30,8 +30,8 @@ rayon.workspace = true
 jni.workspace = true
 crossbeam-channel = "0.5.15"
 libloading = "0.8.9"
-tokio-util = "0.7"
 app_dirs2.workspace = true
+sha2 = "0.10"
 
 [features]
 # editor only stuff
