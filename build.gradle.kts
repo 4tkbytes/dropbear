@@ -92,7 +92,6 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-//                api("co.touchlab:kermit:2.0.4")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
             }
         }

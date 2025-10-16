@@ -1,16 +1,19 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
+pub mod exception;
+
 use dropbear_engine::entity::AdoptedEntity;
 use hecs::World;
-use jni::objects::{GlobalRef, JClass, JString, JValue};
+use jni::objects::{GlobalRef, JClass, JObject, JString, JThrowable, JValue, JValueGen};
 use jni::sys::jlong;
 use jni::sys::jobject;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use std::path::{Path, PathBuf};
-use crate::APP_INFO;
+use crate::{info, APP_INFO};
 use crate::logging::{LOG_LEVEL};
 use crate::ptr::WorldPtr;
+use crate::scripting::jni::exception::get_exception_info;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 
@@ -45,10 +48,18 @@ impl JavaContext {
             .option(format!(
                 "-Djava.class.path={}",
                 host_jar_path.display()
-            ))
-            .option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741")
-            .build()?;
+            ));
+
+        #[cfg(feature = "editor")]
+        let jvm_args = jvm_args
+            .option(
+                "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741"
+            );
+
+        let jvm_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_args)?;
+
+        info!("JDB debugger enabled on localhost:6741");
 
         log::info!("Created JVM instance");
 
@@ -77,6 +88,9 @@ impl JavaContext {
         log::trace!("Creating new instance of NativeEngine");
         let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
 
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
         let world_handle = world as jlong;
         log::trace!("Calling NativeEngine.init() with arg [{} as JValue::Long]", world_handle);
         env.call_method(
@@ -86,6 +100,9 @@ impl JavaContext {
             &[JValue::Long(world_handle)],
         )?;
 
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
         let dropbear_class: JClass = env.find_class("com/dropbear/DropbearEngine")?;
         log::trace!("Creating DropbearEngine constructor with arg (NativeEngine_object)");
         let dropbear_obj = env.new_object(
@@ -94,18 +111,24 @@ impl JavaContext {
             &[JValue::Object(&native_engine_obj)],
         )?;
 
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
         log::trace!("Creating new global ref for DropbearEngine");
         let engine_global_ref = env.new_global_ref(dropbear_obj)?;
         self.dropbear_engine_class = Some(engine_global_ref.clone());
 
         let jar_path_jstring = env.new_string(self.jar_path.to_string_lossy())?;
-        let log_level_str = {LOG_LEVEL.lock().to_string()};
+        let log_level_str = { LOG_LEVEL.lock().to_string() };
         let log_level_enum_class = env.find_class("com/dropbear/logging/LogLevel")?;
         let log_level_enum_instance = env.get_static_field(
             log_level_enum_class,
             log_level_str,
             "Lcom/dropbear/logging/LogLevel;"
         )?.l()?;
+
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
         let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
         let log_writer_obj = env.new_object(std_out_writer_class, "()V", &[])?;
@@ -114,7 +137,13 @@ impl JavaContext {
         let system_manager_class: JClass = env.find_class("com/dropbear/host/SystemManager")?;
         log::trace!("Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)");
 
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
         let log_target_jstring = env.new_string("dropbear_rust_host")?;
+
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
         let system_manager_obj = env.new_object(
             system_manager_class,
@@ -128,9 +157,15 @@ impl JavaContext {
             ],
         )?;
 
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
         log::trace!("Creating new global ref for SystemManager");
         let manager_global_ref = env.new_global_ref(system_manager_obj)?;
         self.system_manager_instance = Some(manager_global_ref);
+
+        let result = get_exception_info(&mut env);
+        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
         Ok(())
     }
@@ -149,6 +184,9 @@ impl JavaContext {
                 "(Ljava/lang/String;)V",
                 &[JValue::Object(&jar_path_jstring)],
             )?;
+
+            let result = get_exception_info(&mut env);
+            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
         } else {
             log::warn!("SystemManager instance not found during reload.");
             // self.init(world)?;
@@ -173,6 +211,9 @@ impl JavaContext {
                 &[JValue::Object(&tag_jstring)],
             )?;
 
+            let result = get_exception_info(&mut env);
+            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
             log::debug!("Loaded systems for tag: {}", tag);
         } else {
             return Err(anyhow::anyhow!("SystemManager not initialised when loading systems for tag: {}", tag));
@@ -191,6 +232,9 @@ impl JavaContext {
                 "(F)V",
                 &[JValue::Float(dt)],
             )?;
+
+            let result = get_exception_info(&mut env);
+            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
             log::debug!("Updated all systems with dt: {}", dt);
         } else {
@@ -212,6 +256,9 @@ impl JavaContext {
                 &[JValue::Object(&tag_jstring), JValue::Float(dt)],
             )?;
 
+            let result = get_exception_info(&mut env);
+            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+
             log::debug!("Updated systems for tag: {} with dt: {}", tag, dt);
         } else {
             return Err(anyhow::anyhow!("SystemManager not initialised when updating systems for tag: {}", tag));
@@ -232,6 +279,9 @@ impl JavaContext {
                 &[JValue::Object(&tag_jstring)],
             )?;
 
+            let exception = get_exception_info(&mut env);
+            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
+
             Ok(result.i()?)
         } else {
             Err(anyhow::anyhow!("SystemManager not initialised when getting system count for tag: {}", tag))
@@ -251,6 +301,9 @@ impl JavaContext {
                 &[JValue::Object(&tag_jstring)],
             )?;
 
+            let exception = get_exception_info(&mut env);
+            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
+
             Ok(result.z()?)
         } else {
             Err(anyhow::anyhow!("SystemManager not initialised when checking for systems for tag: {}", tag))
@@ -268,6 +321,9 @@ impl JavaContext {
                 "()I",
                 &[],
             )?;
+
+            let exception = get_exception_info(&mut env);
+            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
 
             Ok(result.i()?)
         } else {
@@ -297,20 +353,38 @@ impl Drop for JavaContext {
     }
 }
 
-#[unsafe(no_mangle)]
-// JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
-// (JNIEnv *, jobject, jlong, jstring);
+
+
 pub fn Java_com_dropbear_ffi_JNINative_getEntity(
-    env: &mut JNIEnv,
+    mut env: JNIEnv,
     _obj: jobject,
     world_handle: jlong,
     label: JString,
 ) -> jlong {
-    let label = env.get_string(&label).unwrap();
+    eprintln!("JNI call started");
+    eprintln!("world_handle: {}", world_handle);
+    eprintln!("label ptr: {:p}", label.as_raw());
+
+    if world_handle == 0 {
+        eprintln!("ERROR: world_handle is null!");
+        return -1;
+    }
+
+    let label_result = env.get_string(&label);
+    if label_result.is_err() {
+        eprintln!("ERROR: Failed to get string: {:?}", label_result.err());
+        return -1;
+    }
+    let label = label_result.unwrap();
+
     let world = world_handle as *mut World;
 
-    let world = unsafe { &mut *world };
+    if world.is_null() {
+        eprintln!("ERROR: world pointer is null!");
+        return -1;
+    }
 
+    let world = unsafe { &mut *world };
     let rust_label = label.to_str().unwrap().to_string();
 
     for (id, entity) in world.query::<&AdoptedEntity>().iter() {

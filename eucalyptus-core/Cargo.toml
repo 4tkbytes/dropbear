@@ -34,6 +34,7 @@ tokio-util = "0.7"
 app_dirs2.workspace = true
 
 [features]
+# editor only stuff
 editor = ["jvm"]
 jvm = []
 

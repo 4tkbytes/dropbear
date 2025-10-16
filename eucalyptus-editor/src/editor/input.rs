@@ -266,37 +266,37 @@ impl Mouse for Editor {
     #[cfg(not(target_os = "linux"))]
     // for some reason, this doesn't work on linux but works on windows (not tested on anywhere else)
     fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if ((self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
-            || (matches!(self.editor_state, EditorState::Playing)
-                && !self.input_state.is_cursor_locked))
-            && let Some(window) = &self.window
-        {
-            let size = window.inner_size();
-            let center = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
-
-            let distance_from_center =
-                ((position.x - center.x).powi(2) + (position.y - center.y).powi(2)).sqrt();
-
-            if distance_from_center > 5.0 {
-                let dx = position.x - center.x;
-                let dy = position.y - center.y;
-
-                if let Some(active_camera) = *self.active_camera.lock()
-                    && let Ok(mut q) = self.world.query_one::<(
-                        &mut Camera,
-                        &CameraComponent,
-                        // Option<&CameraFollowTarget>,
-                    )>(active_camera)
-                    && let Some((camera, _)) = q.get()
-                {
-                    camera.track_mouse_delta(dx, dy);
-                }
-
-                let _ = window.set_cursor_position(center);
-            }
-
-            window.set_cursor_visible(false);
-        }
+        // if ((self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
+        //     || (matches!(self.editor_state, EditorState::Playing)
+        //         && !self.input_state.is_cursor_locked))
+        //     && let Some(window) = &self.window
+        // {
+        //     let size = window.inner_size();
+        //     let center = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+        //
+        //     let distance_from_center =
+        //         ((position.x - center.x).powi(2) + (position.y - center.y).powi(2)).sqrt();
+        //
+        //     if distance_from_center > 5.0 {
+        //         let dx = position.x - center.x;
+        //         let dy = position.y - center.y;
+        //
+        //         if let Some(active_camera) = *self.active_camera.lock()
+        //             && let Ok(mut q) = self.world.query_one::<(
+        //                 &mut Camera,
+        //                 &CameraComponent,
+        //                 // Option<&CameraFollowTarget>,
+        //             )>(active_camera)
+        //             && let Some((camera, _)) = q.get()
+        //         {
+        //             camera.track_mouse_delta(dx, dy);
+        //         }
+        //
+        //         let _ = window.set_cursor_position(center);
+        //     }
+        //
+        //     window.set_cursor_visible(false);
+        // }
 
         self.input_state.mouse_pos = (position.x, position.y);
     }

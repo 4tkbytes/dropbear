@@ -1,8 +1,6 @@
 use dropbear_engine::camera::Camera;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use winit::keyboard::KeyCode;
 
 #[derive(Debug, Clone)]
 pub struct CameraComponent {
@@ -48,30 +46,6 @@ impl PlayerCamera {
         CameraComponent {
             camera_type: CameraType::Player,
             ..CameraComponent::new()
-        }
-    }
-
-    pub fn handle_keyboard_input(camera: &mut Camera, pressed_keys: &HashSet<KeyCode>) {
-        for key in pressed_keys {
-            match key {
-                KeyCode::KeyW => camera.move_forwards(),
-                KeyCode::KeyA => camera.move_left(),
-                KeyCode::KeyD => camera.move_right(),
-                KeyCode::KeyS => camera.move_back(),
-                KeyCode::ShiftLeft => camera.move_down(),
-                KeyCode::Space => camera.move_up(),
-                _ => {}
-            }
-        }
-    }
-
-    pub fn handle_mouse_input(
-        camera: &mut Camera,
-        component: &CameraComponent,
-        mouse_delta: Option<(f64, f64)>,
-    ) {
-        if let Some((dx, dy)) = mouse_delta {
-            camera.track_mouse_delta(dx * component.sensitivity, dy * component.sensitivity);
         }
     }
 }
