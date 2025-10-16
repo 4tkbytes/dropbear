@@ -4,7 +4,7 @@
 package com.dropbear.ffi
 
 import com.dropbear.EntityId
-import com.dropbear.ffi.generated.dropbear_get_entity
+import com.dropbear.ffi.generated.*
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 import kotlinx.cinterop.*
@@ -35,9 +35,62 @@ actual class NativeEngine {
     }
 
     actual fun getTransform(entityId: EntityId): Transform? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outTransform = alloc<NativeTransform>()
+            val result = dropbear_get_transform(
+                world_ptr = world.reinterpret(),
+                entity_id = entityId.id,
+                out_transform = outTransform.ptr
+            )
+            if (result == 0) {
+                return Transform(
+                    position = com.dropbear.math.Vector3D(
+                        outTransform.position_x,
+                        outTransform.position_y,
+                        outTransform.position_z
+                    ),
+                    rotation = com.dropbear.math.QuaternionD(
+                        outTransform.rotation_x,
+                        outTransform.rotation_y,
+                        outTransform.rotation_z,
+                        outTransform.rotation_w
+                    ),
+                    scale = com.dropbear.math.Vector3D(
+                        outTransform.scale_x,
+                        outTransform.scale_y,
+                        outTransform.scale_z
+                    )
+                )
+            } else {
+                return null
+            }
+        }
     }
 
     actual fun setTransform(entityId: EntityId, transform: Transform) {
+        val world = worldHandle ?: return
+        memScoped {
+            val nativeTransform = cValue<NativeTransform> {
+                position_x = transform.position.x
+                position_y = transform.position.y
+                position_z = transform.position.z
+
+                rotation_w = transform.rotation.w
+                rotation_x = transform.rotation.x
+                rotation_y = transform.rotation.y
+                rotation_z = transform.rotation.z
+
+                scale_x = transform.scale.x
+                scale_y = transform.scale.y
+                scale_z = transform.scale.z
+            }
+
+            dropbear_set_transform(
+                world_ptr = world.reinterpret(),
+                entity_id = entityId.id,
+                transform = nativeTransform
+            )
+        }
     }
 }
