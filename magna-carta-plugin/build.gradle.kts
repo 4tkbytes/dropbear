@@ -33,3 +33,41 @@ gradlePlugin {
         }
     }
 }
+
+publishing {
+    publications {
+        withType<MavenPublication>().configureEach {
+            pom {
+                name.set("magna-carta")
+                description.set("Gradle plugin for manifest generation for the Dropbear engine")
+                url.set("https://4tkbytes.github.io/dropbear/")
+
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("4tkbytes")
+                        name.set("4tkbytes")
+                        email.set("4tkbytes@pm.me")
+                    }
+                }
+                scm {
+                    connection.set("scm:git:git://github.com/4tkbytes/dropbear.git")
+                    developerConnection.set("scm:git:ssh://github.com/4tkbytes/dropbear.git")
+                    url.set("https://github.com/4tkbytes/dropbear")
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = "GitHubPages"
+            url = uri("${layout.buildDirectory}/repo")
+        }
+    }
+}
