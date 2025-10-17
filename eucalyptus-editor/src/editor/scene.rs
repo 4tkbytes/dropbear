@@ -100,6 +100,14 @@ impl Scene for Editor {
                 fatal!("{}", e);
             }
         }
+        
+        if !self.plugin_registry.plugins_loaded {
+            if let Err(e) = self.plugin_registry.load_plugins() {
+                fatal!("Failed to load plugins: {}", e);
+            } else {
+                log::info!("Plugins loaded");
+            }
+        }
 
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);

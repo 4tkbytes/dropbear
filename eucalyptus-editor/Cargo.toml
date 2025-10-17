@@ -26,7 +26,6 @@ hecs.workspace = true
 log.workspace = true
 log-once.workspace = true
 model_to_image.workspace = true
-open.workspace = true
 parking_lot.workspace = true
 transform-gizmo-egui.workspace = true
 wgpu.workspace = true
@@ -35,11 +34,9 @@ clap.workspace = true
 walkdir.workspace = true
 zip.workspace = true
 tokio.workspace = true
-reqwest.workspace = true
-tar.workspace = true
-flate2.workspace = true
 crossbeam-channel.workspace = true
-pollster = "0.4.0"
+libloading.workspace = true
+indexmap.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
@@ -51,5 +48,4 @@ editor = ["eucalyptus-core/editor"]
 [build-dependencies]
 anyhow = "1.0"
 app_dirs2 = "2.5"
-reqwest = { version = "0.12", features = ["blocking"] }
 zip = "4.3"

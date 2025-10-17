@@ -1,7 +1,6 @@
 pub mod component;
 pub mod dock;
 pub mod input;
-pub mod repl;
 pub mod scene;
 
 pub(crate) use crate::editor::dock::*;
@@ -47,58 +46,59 @@ use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
+use crate::plugin::PluginRegistry;
 
 pub struct Editor {
-    scene_command: SceneCommand,
+    pub scene_command: SceneCommand,
     pub world: Box<World>,
-    dock_state: DockState<EditorTab>,
-    texture_id: Option<egui::TextureId>,
-    size: Extent3d,
-    render_pipeline: Option<RenderPipeline>,
-    light_manager: LightManager,
-    color: Color,
+    pub dock_state: DockState<EditorTab>,
+    pub texture_id: Option<egui::TextureId>,
+    pub size: Extent3d,
+    pub render_pipeline: Option<RenderPipeline>,
+    pub light_manager: LightManager,
+    pub color: Color,
 
-    active_camera: Arc<Mutex<Option<hecs::Entity>>>,
+    pub active_camera: Arc<Mutex<Option<hecs::Entity>>>,
 
-    is_viewport_focused: bool,
+    pub is_viewport_focused: bool,
     // is_cursor_locked: bool,
-    window: Option<Arc<Window>>,
+    pub window: Option<Arc<Window>>,
 
-    show_new_project: bool,
-    project_name: String,
+    pub show_new_project: bool,
+    pub project_name: String,
     pub(crate) project_path: Arc<Mutex<Option<PathBuf>>>,
-    pending_scene_switch: bool,
+    pub pending_scene_switch: bool,
 
-    gizmo: Gizmo,
+    pub gizmo: Gizmo,
     pub(crate) selected_entity: Option<hecs::Entity>,
-    viewport_mode: ViewportMode,
+    pub viewport_mode: ViewportMode,
 
     pub(crate) signal: Signal,
     pub(crate) undo_stack: Vec<UndoableAction>,
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
     pub(crate) editor_state: EditorState,
-    gizmo_mode: EnumSet<GizmoMode>,
+    pub gizmo_mode: EnumSet<GizmoMode>,
 
     pub(crate) script_manager: ScriptManager,
-    play_mode_backup: Option<PlayModeBackup>,
+    pub play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
     pub(crate) input_state: InputState,
 
     // channels
     /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
-    progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
+    pub progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
     /// Used to check if the world has been loaded in
     is_world_loaded: IsWorldLoadedYet,
     /// Used to fetch the current status of the loading, so it can be used for different
     /// egui loading windows or splash screens and such.
-    current_state: WorldLoadingStatus,
+    pub current_state: WorldLoadingStatus,
 
     // handles for futures
-    world_load_handle: Option<FutureHandle>,
+    pub world_load_handle: Option<FutureHandle>,
     pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
-    world_receiver: Option<oneshot::Receiver<hecs::World>>,
+    pub world_receiver: Option<oneshot::Receiver<hecs::World>>,
 
     // building
     pub progress_rx: Option<Receiver<BuildStatus>>,
@@ -109,7 +109,10 @@ pub struct Editor {
     pub last_build_error: Option<String>,
     pub show_build_error_window: bool,
 
-    dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
+    // plugins
+    pub plugin_registry: PluginRegistry,
+
+    pub dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
 }
 
 impl Editor {
@@ -152,6 +155,8 @@ impl Editor {
             }
         });
 
+        let plugin_registry = PluginRegistry::new();
+
         Ok(Self {
             scene_command: SceneCommand::None,
             dock_state,
@@ -192,6 +197,7 @@ impl Editor {
             show_build_window: false,
             last_build_error: None,
             show_build_error_window: false,
+            plugin_registry,
             dock_state_shared: None,
         })
     }
@@ -612,8 +618,10 @@ impl Editor {
                     if ui_window.button("Open Viewport").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
-                    if ui_window.button("Open Kotlin REPL").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::KotlinREPL);
+                    for (i, (_, plugin)) in self.plugin_registry.plugins.iter().enumerate() {
+                        if ui_window.button(format!("Open {}", plugin.display_name())).clicked() {
+                            self.dock_state.push_to_focused_leaf(EditorTab::Plugin(i));
+                        }
                     }
                 });
                 {
@@ -624,6 +632,8 @@ impl Editor {
                 }
             });
         });
+
+        let editor_ptr = self as *mut Editor;
 
         egui::CentralPanel::default().show(ctx, |ui| {
             DockArea::new(&mut self.dock_state)
@@ -643,6 +653,8 @@ impl Editor {
                         active_camera: &mut self.active_camera,
                         gizmo_mode: &mut self.gizmo_mode,
                         editor_mode: &mut self.editor_state,
+                        plugin_registry: &mut self.plugin_registry,
+                        editor: editor_ptr,
                     },
                 );
         });

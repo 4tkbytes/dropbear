@@ -12,6 +12,7 @@ If you might have not realised, all the crates/projects names are after Australi
 - [eucalyptus-editor](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
 - [eucalyptus-core](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
 - [redback-runtime](https://github.com/4tkbytes/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
+- [eucalyptus-sdk](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-sdk) is used to develop plugins to be used with the `eucalyptus-editor`
 
 ### Related Projects
 

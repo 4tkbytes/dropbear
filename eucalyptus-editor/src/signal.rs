@@ -16,6 +16,7 @@ use hecs::{Entity, World};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use winit::keyboard::KeyCode;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -136,6 +137,152 @@ impl SignalController for Editor {
                 }
 
                 if matches!(self.editor_state, EditorState::Building) {
+                    #[cfg(not(target_os = "macos"))]
+                    let ctrl_pressed = self
+                        .input_state
+                        .pressed_keys
+                        .contains(&KeyCode::ControlLeft)
+                        || self
+                        .input_state
+                        .pressed_keys
+                        .contains(&KeyCode::ControlRight);
+                    #[cfg(target_os = "macos")]
+                    let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
+                        || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
+
+                    let alt_pressed = self.input_state.pressed_keys.contains(&KeyCode::AltLeft)
+                        || self.input_state.pressed_keys.contains(&KeyCode::AltRight);
+
+                    // Ctrl+Alt+P skips build process and starts running, such as if using cached jar
+                    if ctrl_pressed && alt_pressed && self.input_state.pressed_keys.contains(&KeyCode::KeyP) {
+
+                        if let Some(handle) = self.handle_created {
+                            log::debug!("Cancelling build task due to manual intervention");
+                            graphics.future_queue.cancel(&handle);
+                        } else {
+                            log::warn!("No handle was created during this time. Weird...")
+                        }
+
+                        let project_root = {
+                            let cfg = PROJECT.read();
+                            cfg.project_path.clone()
+                        };
+                        let libs_dir = project_root.join("build").join("libs");
+                        if !libs_dir.exists() {
+                            let err = "Build succeeded but 'build/libs' directory is missing".to_string();
+                            return Err(anyhow::anyhow!(err));
+                        }
+
+                        let jar_files: Vec<PathBuf> = std::fs::read_dir(&libs_dir)?
+                            .filter_map(|entry| entry.ok().map(|e| e.path()))
+                            .filter(|path| {
+                                path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("jar"))
+                                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-sources")
+                                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-javadoc")
+                            })
+                            .collect();
+
+                        if jar_files.is_empty() {
+                            let err = "No JAR artifact found in 'build/libs'".to_string();
+                            return Err(anyhow::anyhow!(err));
+                        }
+
+                        let fat_jar = jar_files
+                            .iter()
+                            .find(|path| {
+                                path.file_name()
+                                    .and_then(|n| n.to_str())
+                                    .map_or(false, |name| name.contains("-all"))
+                            });
+
+                        let jar_path = if let Some(fat) = fat_jar {
+                            fat.clone()
+                        } else {
+                            jar_files
+                                .into_iter()
+                                .max_by_key(|path| {
+                                    std::fs::metadata(path).map(|m| m.len())
+                                        .unwrap_or(0)
+                                })
+                                .unwrap()
+                        };
+
+                        info!("Using cached JAR: {}", jar_path.display());
+
+                        self.show_build_window = false;
+
+                        let has_player_camera_target = self
+                            .world
+                            .query::<(&Camera, &CameraComponent)>()
+                            .iter()
+                            .any(|(_, (_, comp))| comp.starting_camera);
+
+                        if has_player_camera_target {
+                            if let Err(e) = self.create_backup() {
+                                self.signal = Signal::None;
+                                fatal!("Failed to create play mode backup: {}", e);
+                            }
+
+                            self.editor_state = EditorState::Playing;
+
+                            self.switch_to_player_camera();
+
+                            let mut script_entities = Vec::new();
+                            {
+                                for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                                    script_entities.push((entity_id, script.clone()));
+                                }
+                            }
+
+                            let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
+                            for (entity_id, script) in script_entities {
+                                for tag in script.tags {
+                                    if etag.contains_key(&tag) {
+                                        etag.get_mut(&tag).unwrap().push(entity_id);
+                                    } else {
+                                        etag.insert(tag.clone(), vec![entity_id]);
+                                    }
+                                }
+                            }
+
+                            let etag_clone = etag.clone();
+
+                            if let Err(e) = self
+                                .script_manager
+                                .init_script(etag_clone, ScriptTarget::JVM { library_path: jar_path })
+                            {
+                                fatal!("Failed to ready script manager interface because {}", e);
+                                self.signal = Signal::StopPlaying;
+                                return Err(anyhow::anyhow!(e));
+                            }
+
+                            let world_ptr = self.world.as_mut() as *mut World;
+
+                            if let Err(e) = self.script_manager
+                                .load_script(
+                                    world_ptr,
+                                    &self.input_state,
+                                ) {
+                                fatal!(
+                                    "Failed to initialise script because {}",
+                                    e
+                                );
+                                self.signal = Signal::StopPlaying;
+                                return Err(anyhow::anyhow!(e));
+                            } else {
+                                success_without_console!(
+                                    "You are in play mode now! Press Escape to exit"
+                                );
+                                log::info!("You are in play mode now! Press Escape to exit");
+                            }
+
+                            self.signal = Signal::None;
+                        } else {
+                            self.signal = Signal::None;
+                            fatal!("Unable to build: No initial camera set");
+                        }
+                    }
+
                     let mut local_handle_exchanged: Option<anyhow::Result<PathBuf>> = None;
                     if let Some(rx) = &self.progress_rx {
                         while let Ok(status) = rx.try_recv() {
@@ -227,6 +374,7 @@ impl SignalController for Editor {
                                                     .italics()
                                                     .color(egui::Color32::GRAY)
                                                 );
+                                                ui.label("Tip: Press Ctrl+Alt+P to skip build and start running");
                                             }
                                         });
                                     

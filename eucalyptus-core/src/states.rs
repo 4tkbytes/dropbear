@@ -1355,7 +1355,6 @@ impl SceneConfig {
         );
         #[cfg(feature = "editor")]
         {
-            // Editor mode - look for debug camera, create one if none exists
             let debug_camera = {
                 world
                     .query::<(&Camera, &CameraComponent)>()
@@ -1392,7 +1391,6 @@ impl SceneConfig {
 
         #[cfg(not(feature = "editor"))]
         {
-            // Runtime mode - look for player camera, panic if none exists
             let player_camera = world
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
@@ -1460,7 +1458,12 @@ pub enum EditorTab {
     ResourceInspector, // left side,
     ModelEntityList,   // right side,
     Viewport,          // middle,
-    KotlinREPL,        // bottom side - new REPL tab
+    Plugin(usize),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PluginInfo {
+    pub display_name: String,
 }
 
 /// An enum that describes the status of loading the world.

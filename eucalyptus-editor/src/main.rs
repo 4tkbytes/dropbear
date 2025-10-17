@@ -1,24 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod build;
-mod camera;
-mod debug;
-mod editor;
-mod menu;
-mod signal;
-mod spawn;
-mod utils;
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{WindowConfiguration, scene};
+use dropbear_engine::{scene, WindowConfiguration};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::{fs, path::PathBuf, rc::Rc};
-
-pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
-    name: "Eucalyptus",
-    author: "4tkbytes",
-};
+use eucalyptus_editor::{build, editor, menu};
+use eucalyptus_core::APP_INFO;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -89,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
 
-            crate::build::build(project_path)?;
+            build::build(project_path)?;
         }
         Some(("package", sub_matches)) => {
             let project_path = match sub_matches.get_one::<String>("project") {
@@ -103,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
 
-            crate::build::package(project_path, sub_matches)?;
+            build::package(project_path, sub_matches)?;
         }
         Some(("health", _)) => {
             build::health()?;

@@ -208,6 +208,8 @@ impl Keyboard for Editor {
                     } else {
                         self.switch_to_debug_camera();
                     }
+                } else {
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::KeyX => {
@@ -221,12 +223,15 @@ impl Keyboard for Editor {
             KeyCode::KeyP => {
                 if !is_playing && ctrl_pressed {
                     self.signal = Signal::Play
+                } else {
+                    self.input_state.pressed_keys.insert(key);
                 }
             }
             _ => {
                 self.input_state.pressed_keys.insert(key);
             }
         }
+        self.input_state.pressed_keys.insert(key);
     }
 
     fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {

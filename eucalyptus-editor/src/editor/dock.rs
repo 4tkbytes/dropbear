@@ -2,7 +2,7 @@ use super::*;
 use crate::editor::ViewportMode;
 use std::{collections::HashSet, sync::LazyLock};
 
-use crate::APP_INFO;
+use eucalyptus_core::APP_INFO;
 use crate::editor::component::InspectableComponent;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_engine::{
@@ -10,14 +10,15 @@ use dropbear_engine::{
     lighting::{Light, LightComponent},
 };
 use egui;
-use egui::CollapsingHeader;
-use egui_dock_fork::TabViewer;
+use egui::{CollapsingHeader};
+use egui_dock_fork::{TabViewer};
 use egui_extras;
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{File, Node, RESOURCES, ResourceType};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
+use crate::plugin::PluginRegistry;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -32,6 +33,9 @@ pub struct EditorTabViewer<'a> {
     pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
     pub editor_mode: &'a mut EditorState,
     pub active_camera: &'a mut Arc<Mutex<Option<hecs::Entity>>>,
+    pub plugin_registry: &'a mut PluginRegistry,
+    // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
+    pub editor: *mut Editor,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -77,10 +81,6 @@ pub struct DraggedAsset {
 pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
     LazyLock::new(|| Mutex::new(StaticallyKept::default()));
 
-// Separate static for REPL to avoid deadlocks
-pub static KOTLIN_REPL: LazyLock<Mutex<Option<crate::editor::repl::KotlinREPL>>> =
-    LazyLock::new(|| Mutex::new(None));
-
 /// Variables kept statically.
 ///
 /// The entire module (including the tab viewer) due to it
@@ -114,7 +114,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ModelEntityList => "Model/Entity List".into(),
             EditorTab::AssetViewer => "Asset Viewer".into(),
             EditorTab::ResourceInspector => "Resource Inspector".into(),
-            EditorTab::KotlinREPL => "Kotlin REPL".into(),
+            EditorTab::Plugin(dock_index) => {
+                if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(*dock_index) {
+                    plugin.display_name().into()
+                } else {
+                    "Unknown Plugin Name".into()
+                }
+            }
         }
     }
 
@@ -202,7 +208,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 self.world.query_one::<(
                                     &Camera,
                                     &CameraComponent,
-                                    // Option<&CameraFollowTarget>,
                                 )>(active_camera)
                             {
                                 if let Some((camera, _)) = q.get() {
@@ -934,17 +939,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
                     }
 
-                    // if let Some(e) = local_insert_follow_target {
-                    //     match self.world.insert_one(e, CameraFollowTarget::default()) {
-                    //         Ok(_) => {
-                    //             success!("Added CameraFollowTarget");
-                    //         }
-                    //         Err(e) => {
-                    //             warn!("Unable to add CameraFollowTarget: {}", e);
-                    //         }
-                    //     }
-                    // }
-
                     // lighting system
                     if let Ok(mut q) = self
                         .world
@@ -1022,16 +1016,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 self.signal,
                                 &mut camera.label.clone(),
                             );
-                            // if let Some(target) = follow_target {
-                            //     target.inspect(
-                            //         entity,
-                            //         &mut cfg,
-                            //         ui,
-                            //         self.undo_stack,
-                            //         self.signal,
-                            //         &mut camera.label.clone(),
-                            //     );
-                            // }
 
                             ui.separator();
 
@@ -1075,15 +1059,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");
                 }
             }
-            EditorTab::KotlinREPL => {
-                // Use separate static to avoid deadlock with TABS_GLOBAL
-                let mut repl_lock = KOTLIN_REPL.lock();
-                if repl_lock.is_none() {
-                    *repl_lock = Some(crate::editor::repl::KotlinREPL::new());
+            EditorTab::Plugin(dock_info) => {
+                if self.editor.is_null() {
+                    panic!("Editor pointer is null, unexpected behaviour");
                 }
-
-                if let Some(repl) = repl_lock.as_mut() {
-                    repl.ui(ui);
+                let editor = unsafe { &mut *self.editor };
+                if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(*dock_info) {
+                    plugin.ui(ui, editor);
+                } else {
+                    ui.colored_label(
+                        egui::Color32::RED,
+                        format!("Plugin at index '{}' not found", *dock_info),
+                    );
                 }
             }
         }
@@ -1136,8 +1123,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 menu_action = Some(EditorTabMenuAction::ViewportOption);
                             }
                         }
-                        EditorTab::KotlinREPL => {
-                            // No context menu actions for REPL tab yet
+                        EditorTab::Plugin(dock_info) => {
+                            if self.editor.is_null() {
+                                panic!("Editor pointer is null, unexpected behaviour");
+                            }
+
+                            let editor = unsafe { &mut *self.editor };
+                            if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(dock_info) {
+                                plugin.context_menu(ui, editor);
+                            } else {
+                                ui.colored_label(
+                                    egui::Color32::RED,
+                                    format!("Plugin at index '{}' not found", dock_info),
+                                );
+                            }
                         }
                     }
                 })
