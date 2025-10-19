@@ -798,16 +798,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.horizontal(|ui| {
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                             if ui.button("Remove Component ❌").clicked() {
-                                                // if let Some(target) = &follow_target {
-                                                //     *self.signal = Signal::RemoveComponent(
-                                                //         *entity,
-                                                //         Box::new(ComponentType::Camera(
-                                                //             Box::new(camera.clone()),
-                                                //             camera_component.clone(),
-                                                //             Some((*target).to_owned()),
-                                                //         )),
-                                                //     );
-                                                // } else {
                                                     *self.signal = Signal::RemoveComponent(
                                                         *entity,
                                                         Box::new(ComponentType::Camera(
@@ -838,17 +828,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         self.signal,
                                         &mut camera.label.clone(),
                                     );
-
-                                    // if let Some(target) = follow_target {
-                                    //     target.inspect(
-                                    //         entity,
-                                    //         &mut cfg,
-                                    //         ui,
-                                    //         self.undo_stack,
-                                    //         self.signal,
-                                    //         &mut camera.label.clone(),
-                                    //     );
-                                    // }
 
                                     ui.separator();
                                     ui.label("Camera Controls:");

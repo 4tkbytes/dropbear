@@ -19,20 +19,21 @@ impl Generator for KotlinNativeGenerator {
             output,
             "@file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)"
         )?;
+        writeln!(output, "@file:Suppress(\"UNUSED_PARAMETER\", \"unused\")")?;
         writeln!(output)?;
 
         writeln!(output, "package com.dropbear.decl")?;
         writeln!(output)?;
 
-        writeln!(output, "import com.dropbear.DropbearEngine")?;
-        writeln!(output, "import com.dropbear.EntityId")?;
-        writeln!(output, "import com.dropbear.EntityRef")?;
-        writeln!(output, "import com.dropbear.System")?;
-        writeln!(output, "import com.dropbear.ffi.NativeEngine")?;
-        writeln!(output, "import kotlinx.cinterop.COpaquePointer")?;
-        writeln!(output, "import kotlinx.cinterop.ExperimentalForeignApi")?;
-        writeln!(output, "import kotlin.experimental.ExperimentalNativeApi")?;
-        writeln!(output, "import kotlin.native.CName")?;
+        writeln!(output, r#"
+import com.dropbear.DropbearEngine
+import com.dropbear.System
+import com.dropbear.ffi.NativeEngine
+import com.dropbear.logging.Logger
+import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlin.experimental.ExperimentalNativeApi
+        "#)?;
         writeln!(output)?;
 
         let mut imported_classes = Vec::new();
@@ -59,77 +60,175 @@ impl Generator for KotlinNativeGenerator {
             }
         }
 
-        writeln!(output, "private fun getScriptFactories(tag: String): List<() -> System> {{")?;
-        writeln!(output, "    return when (tag) {{")?;
 
-        for (tag, classes) in &tag_map {
-            let factories: Vec<String> = classes
-                .iter()
-                .map(|cls| format!("{{ {}() }}", cls))
-                .collect();
-            writeln!(
-                output,
-                "        \"{}\" -> listOf({})",
-                tag,
-                factories.join(", ")
-            )?;
-        }
+        writeln!(output, r#"
+object ScriptManager {{
+    private var dropbearEngine: DropbearEngine? = null
+    private val scriptsByTag: MutableMap<String, MutableList<System>> = mutableMapOf()
 
-        writeln!(output, "        else -> emptyList()")?;
-        writeln!(output, "    }}")?;
-        writeln!(output, "}}")?;
-        writeln!(output)?;
+    fun init(worldPtr: COpaquePointer?, inputPtr: COpaquePointer?) : Int {{
+        try {{
+            val nativeEngine = NativeEngine()
+            nativeEngine.init(worldPtr, inputPtr)
+            dropbearEngine = DropbearEngine(nativeEngine)
 
-        writeln!(
-            output,
-            "private fun getDropbearEngine(worldPointer: COpaquePointer?): DropbearEngine {{"
-        )?;
-        writeln!(output, "    val nativeEngine = NativeEngine()")?;
-        writeln!(output, "    nativeEngine.init(worldPointer)")?;
-        writeln!(output, "    return DropbearEngine(nativeEngine)")?;
-        writeln!(output, "}}")?;
-        writeln!(output)?;
+            scriptsByTag.clear()
+            Logger.debug("Native ScriptManager initialised")
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Native ScriptManager failed to initialise: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
 
-        for (func_name, method_name) in [
-            ("dropbear_load", "load"),
-            ("dropbear_update", "update"),
-            ("dropbear_destroy", "destroy"),
-        ] {
-            let param_extra = if method_name == "update" {
-                ", deltaTime: Double"
-            } else {
-                ""
-            };
-            let call_extra = if method_name == "update" {
-                ", deltaTime.toFloat()"
-            } else {
-                ""
-            };
+    fun loadSystemsByTag(tag: String): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val factories = getScriptFactories(tag)
+            val instances = factories.map {{ it() }}
 
-            writeln!(output, "@CName(\"{}\")", func_name)?;
-            writeln!(
-                output,
-                "fun {}ScriptByTag(worldPointer: COpaquePointer?, currentEntity: Long?, tag: String?{}) {{",
-                method_name,
-                param_extra
-            )?;
-            writeln!(output, "    if (tag == null) return")?;
-            writeln!(output, "    val factories = getScriptFactories(tag)")?;
-            writeln!(
-                output,
-                "    val engine = getDropbearEngine(worldPointer)"
-            )?;
-            writeln!(output, "    for (factory in factories) {{")?;
-            writeln!(output, "        val script = factory()")?;
-            if method_name == "update" {
-                writeln!(output, "        script.{}(engine{})", method_name, call_extra)?;
-            } else {
-                writeln!(output, "        script.{}(engine)", method_name)?;
+            for (instance in instances) {{
+                instance.load(engine)
+            }}
+
+            scriptsByTag.getOrPut(tag) {{ mutableListOf() }}.addAll(instances)
+            Logger.debug("Loaded ${{instances.size}} script(s) for tag: '$tag'")
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Error loading systems for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun updateAllSystems(dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            for (instances in scriptsByTag.values) {{
+                for (instance in instances) {{
+                    instance.update(engine, dt)
+                }}
+            }}
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Error updating all systems: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun updateSystemsByTag(tag: String, dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+            for (instance in instances) {{
+                instance.update(engine, dt)
+            }}
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Error updating systems for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun destroyByTag(tag: String): Int {{
+        try {{
+            val engine = dropbearEngine ?: return -2
+            val instances = scriptsByTag[tag] ?: emptyList()
+            for (instance in instances) {{
+                instance.destroy(engine)
+            }}
+            scriptsByTag.remove(tag)
+            Logger.debug("Destroyed ${{instances.size}} script(s) for tag: '$tag'")
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Error destroying systems for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun destroyAll(): Int {{
+        try {{
+            val engine = dropbearEngine ?: return -2
+            for (instances in scriptsByTag.values) {{
+                for (instance in instances) {{
+                    instance.destroy(engine)
+                }}
+            }}
+            scriptsByTag.clear()
+            dropbearEngine = null
+            return 0
+        }} catch (e: Exception) {{
+            Logger.error("Error destroying scripts: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+            "#)?;
+        // getScriptFactories (generated)
+        {
+            writeln!(output, "  private fun getScriptFactories(tag: String): List<() -> System> {{")?;
+            writeln!(output, "       return when (tag) {{")?;
+
+            for (tag, classes) in &tag_map {
+                let factories: Vec<String> = classes
+                    .iter()
+                    .map(|cls| format!("{{ {}() }}", cls))
+                    .collect();
+                writeln!(
+                    output,
+                    "           \"{}\" -> listOf({})",
+                    tag,
+                    factories.join(", ")
+                )?;
             }
-            writeln!(output, "    }}")?;
-            writeln!(output, "}}")?;
+
+            writeln!(output, "           else -> emptyList()")?;
+            writeln!(output, "        }}")?;
+            writeln!(output, "  }}")?;
             writeln!(output)?;
         }
+
+        writeln!(output, "}}")?;
+
+        writeln!(output, r#"
+@CName("dropbear_init")
+fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?): Int {{
+    return ScriptManager.init(worldPtr, inputStatePtr)
+}}
+
+
+@CName("dropbear_load_tagged")
+fun dropbear_load_systems_for_tag(tag: String?): Int {{
+    if (tag == null) return -1
+    return ScriptManager.loadSystemsByTag(tag)
+}}
+
+@CName("dropbear_update_all")
+fun dropbear_update_all_systems(dt: Float): Int {{
+    return ScriptManager.updateAllSystems(dt)
+}}
+
+@CName("dropbear_update_tagged")
+fun dropbear_update_systems_for_tag(tag: String?, dt: Float): Int {{
+    if (tag == null) return -1
+    return ScriptManager.updateSystemsByTag(tag, dt)
+}}
+
+@CName("dropbear_destroy_tagged")
+fun dropbear_destroy(tag: String?): Int {{
+    if (tag == null) return -1
+    return ScriptManager.destroyByTag(tag)
+}}
+
+@CName("dropbear_destroy_all")
+fun dropbear_destroy_all(): Int {{
+    return ScriptManager.destroyAll()
+}}
+        "#)?;
 
         Ok(output)
     }

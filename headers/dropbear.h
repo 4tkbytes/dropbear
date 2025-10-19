@@ -4,7 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// ===========================================
+
 typedef struct World World; // opaque pointer
+typedef struct InputState InputState; // opaque pointer
+
+// ===========================================
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +45,10 @@ int dropbear_set_transform(
     int64_t entity_id,
     const NativeTransform transform
 );
+
+void dropbear_print_input_state(const InputState* input_state_ptr);
+
+int dropbear_is_key_pressed(const InputState* input_state_ptr, int keycode, int* out_value); // out_value is a boolean 0 or 1
 
 // ===========================================
 

@@ -313,15 +313,38 @@ impl Mouse for Editor {
 }
 
 impl Controller for Editor {
-    fn button_down(&mut self, _button: Button, _id: GamepadId) {}
+    fn button_down(&mut self, button: Button, id: GamepadId) {
+        self.input_state
+            .pressed_buttons
+            .entry(id)
+            .or_insert_with(HashSet::new)
+            .insert(button);
+    }
 
-    fn button_up(&mut self, _button: Button, _id: GamepadId) {}
+    fn button_up(&mut self, button: Button, id: GamepadId) {
+        if let Some(buttons) = self.input_state.pressed_buttons.get_mut(&id) {
+            buttons.remove(&button);
+        }
+    }
 
-    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {}
+    fn left_stick_changed(&mut self, x: f32, y: f32, id: GamepadId) {
+        self.input_state.left_stick_position.insert(id, (x, y));
+    }
 
-    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: GamepadId) {}
+    fn right_stick_changed(&mut self, x: f32, y: f32, id: GamepadId) {
+        self.input_state.right_stick_position.insert(id, (x, y));
+    }
 
-    fn on_connect(&mut self, _id: GamepadId) {}
+    fn on_connect(&mut self, id: GamepadId) {
+        self.input_state.connected_gamepads.insert(id);
+    }
 
-    fn on_disconnect(&mut self, _id: GamepadId) {}
+    fn on_disconnect(&mut self, id: GamepadId) {
+        self.input_state.connected_gamepads.remove(&id);
+        self.input_state.pressed_buttons.remove(&id);
+        self.input_state.left_stick_position.remove(&id);
+        self.input_state.right_stick_position.remove(&id);
+        self.input_state.left_trigger.remove(&id);
+        self.input_state.right_trigger.remove(&id);
+    }
 }

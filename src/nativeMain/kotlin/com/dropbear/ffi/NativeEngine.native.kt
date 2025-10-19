@@ -5,6 +5,7 @@ package com.dropbear.ffi
 
 import com.dropbear.EntityId
 import com.dropbear.ffi.generated.*
+import com.dropbear.input.KeyCode
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 import kotlinx.cinterop.*
@@ -12,12 +13,17 @@ import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
     private var worldHandle: COpaquePointer? = null
+    private var inputHandle: COpaquePointer? = null
 
-    @Suppress("unused") // called from jni
-    fun init(handle: COpaquePointer?) {
-        this.worldHandle = handle
+    @Suppress("unused")
+    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?) {
+        this.worldHandle = worldHandle
+        this.inputHandle = inputHandle
         if (this.worldHandle == null) {
-            Logger.info("NativeEngine: Error - Invalid world handle received!")
+            Logger.error("NativeEngine: Error - Invalid world handle received!")
+        }
+        if (this.inputHandle == null) {
+            Logger.error("NativeEngine: Error - Invalid input handle received!")
         }
     }
 
@@ -91,6 +97,24 @@ actual class NativeEngine {
                 entity_id = entityId.id,
                 transform = nativeTransform
             )
+        }
+    }
+
+    actual fun printInputState() {
+        val input = inputHandle ?: return
+        dropbear_print_input_state(input_state_ptr = input.reinterpret())
+    }
+
+    actual fun isKeyPressed(key: KeyCode): Boolean {
+        val input = inputHandle ?: return false
+        memScoped {
+            val out = alloc<IntVar>()
+            dropbear_is_key_pressed(
+                input.reinterpret(),
+                key.ordinal,
+                out.ptr
+            )
+            return out.value != 0
         }
     }
 }

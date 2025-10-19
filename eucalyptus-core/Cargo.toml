@@ -28,10 +28,11 @@ winit.workspace = true
 tokio.workspace = true
 rayon.workspace = true
 jni.workspace = true
-crossbeam-channel = "0.5.15"
-libloading = "0.8.9"
+sha2.workspace = true
+libloading.workspace = true
+crossbeam-channel.workspace = true
 app_dirs2.workspace = true
-sha2 = "0.10"
+num_enum.workspace = true
 
 [features]
 # editor only stuff

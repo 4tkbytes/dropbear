@@ -1,5 +1,5 @@
 pub mod jni;
-pub mod kmp;
+pub mod native;
 
 use crate::input::InputState;
 use crate::scripting::jni::JavaContext;
@@ -11,7 +11,7 @@ use anyhow::Context;
 use crossbeam_channel::Sender;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use crate::ptr::WorldPtr;
+use crate::ptr::{InputStatePtr, WorldPtr};
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
@@ -109,12 +109,12 @@ impl ScriptManager {
     pub fn load_script(
         &mut self,
         world: WorldPtr,
-        _input_state: &InputState,
+        input_state: InputStatePtr,
     ) -> anyhow::Result<()> {
         match &self.script_target {
             ScriptTarget::JVM { library_path: _ } => {
                 if let Some(jvm) = &mut self.jvm {
-                    jvm.init(world)?;
+                    jvm.init(world, input_state)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;

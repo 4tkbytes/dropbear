@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
-
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
@@ -14,59 +12,52 @@ repositories {
     mavenCentral()
 }
 
+val hostOs = providers.systemProperty("os.name").get()
+val isArm64 = providers.systemProperty("os.arch").map { it == "aarch64" }.get()
+val isMingwX64 = hostOs.startsWith("Windows")
+val isLinux = hostOs == "Linux"
+val isMacOs = hostOs == "Mac OS X"
+
+val libName = when {
+    isMacOs -> "libeucalyptus_core.dylib"
+    isLinux -> "libeucalyptus_core.so"
+    isMingwX64 -> "eucalyptus_core.dll"
+    else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
+}
+
+val libPathProvider = provider {
+    val candidates = listOf(
+        layout.projectDirectory.file("target/debug/$libName").asFile,
+        layout.projectDirectory.file("target/release/$libName").asFile,
+        layout.projectDirectory.file("libs/$libName").asFile
+    )
+
+    candidates.firstOrNull { it.exists() }?.absolutePath
+        ?: println("No Rust library exists")
+}
+
 kotlin {
     jvm {
         withJava()
     }
 
-    val hostOs = System.getProperty("os.name")
-    val isArm64 = System.getProperty("os.arch") == "aarch64"
-    val isMingwX64 = hostOs.startsWith("Windows")
     val nativeTarget = when {
-        hostOs == "Mac OS X" && isArm64 -> macosArm64("nativeLib")
-        hostOs == "Mac OS X" && !isArm64 -> macosX64("nativeLib")
-        hostOs == "Linux" && isArm64 -> linuxArm64("nativeLib")
-        hostOs == "Linux" && !isArm64 -> linuxX64("nativeLib")
+        isMacOs && isArm64 -> macosArm64("nativeLib")
+        isMacOs && !isArm64 -> macosX64("nativeLib")
+        isLinux && isArm64 -> linuxArm64("nativeLib")
+        isLinux && !isArm64 -> linuxX64("nativeLib")
         isMingwX64 -> mingwX64("nativeLib")
         else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
     }
 
-    val libName = when {
-        hostOs == "Mac OS X" -> "libeucalyptus_core.dylib"
-        hostOs == "Linux" -> "libeucalyptus_core.so"
-        isMingwX64 -> "eucalyptus_core.dll"
-        else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
-    }
-
-    val (libDir, libNameForLinking) = when {
-        file("${project.rootDir}/target/debug").exists() -> {
-            val debugLibDir = "${project.rootDir}/target/debug"
-            if (isMingwX64) {
-                Pair(debugLibDir, "eucalyptus_core")
-            } else {
-                Pair(debugLibDir, "eucalyptus_core")
-            }
-        }
-        file("${project.rootDir}/target/release").exists() -> {
-            val releaseLibDir = "${project.rootDir}/target/release"
-            if (isMingwX64) {
-                Pair(releaseLibDir, "eucalyptus_core")
-            } else {
-                Pair(releaseLibDir, "eucalyptus_core")
-            }
-        }
-        file("${project.rootDir}/libs").exists() -> {
-            val libsDir = "${project.rootDir}/libs"
-            if (isMingwX64) {
-                Pair(libsDir, "eucalyptus_core")
-            } else {
-                Pair(libsDir, "eucalyptus_core")
-            }
-        }
-        else -> {
-            println("WARNING: Rust library directory not found!")
-            Pair(null, null)
-        }
+    val nativeLibPath = libPathProvider.get()
+    val nativeLibDir = file(nativeLibPath).parentFile.absolutePath
+    val nativeLibFileName = file(nativeLibPath).name
+    val nativeLibNameForLinking = when {
+        isMacOs -> nativeLibFileName.removePrefix("lib").removeSuffix(".dylib")
+        isLinux -> nativeLibFileName.removePrefix("lib").removeSuffix(".so")
+        isMingwX64 -> nativeLibFileName.removeSuffix(".dll")
+        else -> throw GradleException("Unsupported OS for library name derivation.")
     }
 
     nativeTarget.apply {
@@ -82,12 +73,14 @@ kotlin {
             sharedLib {
                 baseName = "dropbear"
 
-                if (libDir != null && libNameForLinking != null) {
-                    if (isMingwX64) {
-                        linkerOpts("${libDir}/${libName}.lib")
-                    } else {
-                        linkerOpts("-L${libDir}", "-l${libNameForLinking}")
-                    }
+                if (isLinux || isMacOs) {
+                    linkerOpts("-L$nativeLibDir", "-l$nativeLibNameForLinking", "-Wl,-rpath,\\\$ORIGIN")
+                } else if (isMingwX64) {
+                    val importLibName = "$nativeLibNameForLinking.lib"
+                    val importLibPath = file("$nativeLibDir/$importLibName").absolutePath
+                    linkerOpts(
+                        importLibPath
+                    )
                 }
             }
         }

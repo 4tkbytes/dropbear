@@ -84,7 +84,7 @@ pub struct Editor {
     pub play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
-    pub(crate) input_state: InputState,
+    pub(crate) input_state: Box<InputState>,
 
     // channels
     /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
@@ -181,7 +181,7 @@ impl Editor {
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             play_mode_backup: None,
-            input_state: InputState::new(),
+            input_state: Box::new(InputState::new()),
             light_manager: LightManager::new(),
             active_camera: Arc::new(Mutex::new(None)),
             progress_tx: None,

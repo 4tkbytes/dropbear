@@ -14,6 +14,7 @@
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
     <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="fatJar" run_configuration_type="GradleRunConfiguration" />
       <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
     </method>
   </configuration>

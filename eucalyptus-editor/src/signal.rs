@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
+use eucalyptus_core::input::InputState;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -257,11 +258,12 @@ impl SignalController for Editor {
                             }
 
                             let world_ptr = self.world.as_mut() as *mut World;
+                            let input_ptr = self.input_state.as_mut() as *mut InputState;
 
                             if let Err(e) = self.script_manager
                                 .load_script(
                                     world_ptr,
-                                    &self.input_state,
+                                    input_ptr,
                                 ) {
                                 fatal!(
                                     "Failed to initialise script because {}",
@@ -453,11 +455,12 @@ impl SignalController for Editor {
                                     }
 
                                     let world_ptr = self.world.as_mut() as *mut World;
+                                    let input_ptr = self.input_state.as_mut() as *mut InputState;
 
                                     if let Err(e) = self.script_manager
                                         .load_script(
                                             world_ptr,
-                                            &self.input_state,
+                                            input_ptr,
                                         ) {
                                         fatal!(
                                             "Failed to initialise script because {}",
