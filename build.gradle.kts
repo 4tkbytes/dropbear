@@ -37,7 +37,7 @@ val libPathProvider = provider {
         foundFile.absolutePath
     } else {
         println("No Rust library exists")
-        null
+        ""
     }
 }
 
@@ -57,7 +57,7 @@ kotlin {
 
     val nativeLibPathRaw = libPathProvider.get()
 
-    if (nativeLibPathRaw != null && nativeLibPathRaw.isNotBlank()) {
+    if (nativeLibPathRaw.isNotBlank()) {
         val nativeLibPath = file(nativeLibPathRaw)
         val nativeLibDir = nativeLibPath.parentFile.absolutePath
         val nativeLibFileName = nativeLibPath.name
