@@ -12,7 +12,12 @@ actual class NativeEngine {
     private var inputHandle: Long = 0L
 
     actual fun getEntity(label: String): Long? {
-        return JNINative.getEntity(worldHandle, label)
+        val result = JNINative.getEntity(worldHandle, label)
+        return if (result == -1L) {
+            null
+        } else {
+            result
+        }
     }
 
     @JvmName("init")
@@ -75,5 +80,57 @@ actual class NativeEngine {
     actual fun getLastMousePos(): Vector2D? {
         val result = JNINative.getLastMousePos(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
+    }
+
+    actual fun getStringProperty(entityHandle: Long, label: String): String? {
+        return JNINative.getStringProperty(worldHandle, entityHandle, label)
+    }
+
+    actual fun getIntProperty(entityHandle: Long, label: String): Int? {
+        return JNINative.getIntProperty(worldHandle, entityHandle, label)
+    }
+
+    actual fun getLongProperty(entityHandle: Long, label: String): Long? {
+        return JNINative.getLongProperty(worldHandle, entityHandle, label)
+    }
+
+    actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
+        return JNINative.getFloatProperty(worldHandle, entityHandle, label).toFloat()
+    }
+
+    actual fun getDoubleProperty(entityHandle: Long, label: String): Double? {
+        return JNINative.getFloatProperty(worldHandle, entityHandle, label)
+    }
+
+    actual fun getBoolProperty(entityHandle: Long, label: String): Boolean? {
+        return JNINative.getBoolProperty(worldHandle, entityHandle, label)
+    }
+
+    actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
+        return JNINative.getVec3Property(worldHandle, entityHandle, label)
+    }
+
+    actual fun setStringProperty(entityHandle: Long, label: String, value: String) {
+        JNINative.setStringProperty(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun setIntProperty(entityHandle: Long, label: String, value: Int) {
+        JNINative.setIntProperty(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun setLongProperty(entityHandle: Long, label: String, value: Long) {
+        JNINative.setLongProperty(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun setFloatProperty(entityHandle: Long, label: String, value: Double) {
+        JNINative.setFloatProperty(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun setBoolProperty(entityHandle: Long, label: String, value: Boolean) {
+        JNINative.setBoolProperty(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
+        JNINative.setVec3Property(worldHandle, entityHandle, label, value)
     }
 }

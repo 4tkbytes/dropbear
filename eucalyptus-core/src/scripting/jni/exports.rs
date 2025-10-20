@@ -4,9 +4,10 @@ use crate::utils::keycode_from_ordinal;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
-use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jboolean, jclass, jfloatArray, jint, jlong};
+use jni::objects::{JClass, JObject, JPrimitiveArray, JString};
+use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jstring};
 use jni::JNIEnv;
+use crate::states::{ModelProperties, Value};
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -388,5 +389,574 @@ pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
         new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
     } else {
         new_float_array(&mut env, 0.0, 0.0)
+    }
+}
+
+// JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getStringProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jstring {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] World pointer is null");
+        return std::ptr::null_mut();
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to get property name");
+            return std::ptr::null_mut();
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::String(val) => {
+                    match env.new_string(val) {
+                        Ok(string) => {
+                            string.as_raw()
+                        }
+                        Err(e) => {
+                            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to create string: {}", e);
+                            std::ptr::null_mut()
+                        }
+                    }
+                }
+                _ => {
+                    println!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property is not a string");
+                    std::ptr::null_mut()
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property not found");
+            std::ptr::null_mut()
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to query entity for model properties");
+        std::ptr::null_mut()
+    }
+}
+
+// JNIEXPORT jint JNICALL Java_com_dropbear_ffi_JNINative_getIntProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jint {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] World pointer is null");
+        return 0;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to get property name");
+            return 0;
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::Int(val) => *val as jint,
+                _ => {
+                    eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property is not an int");
+                    0
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property not found");
+            0
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to query entity for model properties");
+        0
+    }
+}
+
+// JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLongProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jlong {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] World pointer is null");
+        return 0;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to get property name");
+            return 0;
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::Int(val) => *val as jlong,
+                _ => {
+                    eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property is not a long");
+                    0
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property not found");
+            0
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to query entity for model properties");
+        0
+    }
+}
+
+// JNIEXPORT jdouble JNICALL Java_com_dropbear_ffi_JNINative_getFloatProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jdouble {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] World pointer is null");
+        return 0.0;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to get property name");
+            return 0.0;
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::Float(val) => *val as jdouble,
+                _ => {
+                    eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property is not a float");
+                    0.0
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property not found");
+            0.0
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to query entity for model properties");
+        0.0
+    }
+}
+
+// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_getBoolProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jboolean {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] World pointer is null");
+        return 0;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to get property name");
+            return 0;
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::Bool(val) => if *val { 1 } else { 0 },
+                _ => {
+                    eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property is not a bool");
+                    0
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property not found");
+            0
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to query entity for model properties");
+        0
+    }
+}
+
+// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getVec3Property
+//   (JNIEnv *, jclass, jlong, jlong, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+) -> jfloatArray {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] World pointer is null");
+        return std::ptr::null_mut();
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+        && let Some((_, props)) = q.get()
+    {
+        let string = env.get_string(&property_name);
+        let value: String = if let Ok(str) = string {
+            let value = str.to_string_lossy();
+            value.to_string()
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to get property name");
+            return std::ptr::null_mut();
+        };
+        let output = props.get_property(&value);
+        if let Some(output) = output {
+            match output {
+                Value::Vec3([x, y, z]) => {
+                    let arr = env.new_float_array(3);
+                    if let Ok(arr) = arr {
+                        let values = [*x, *y, *z];
+                        if env.set_float_array_region(&arr, 0, &values).is_ok() {
+                            arr.into_raw()
+                        } else {
+                            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to set array region");
+                            std::ptr::null_mut()
+                        }
+                    } else {
+                        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to create float array");
+                        std::ptr::null_mut()
+                    }
+                }
+                _ => {
+                    eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property is not a vec3");
+                    std::ptr::null_mut()
+                }
+            }
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property not found");
+            std::ptr::null_mut()
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to query entity for model properties");
+        std::ptr::null_mut()
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setStringProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jstring);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: JString,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    let string = env.get_string(&value);
+    let value: String = if let Ok(str) = string {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+        props.set_property(key, Value::String(value));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to query entity for model properties");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setIntProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jint);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: jint,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
+    {
+        props.set_property(key, Value::Int(value as i64));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to query entity for model properties");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setLongProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: jlong,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    if let Ok((_, props))= world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
+    {
+        props.set_property(key, Value::Int(value));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to query entity for model properties");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setFloatProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jdouble);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: jdouble,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
+    {
+        props.set_property(key, Value::Float(value));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to query entity for model properties");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setBoolProperty
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jboolean);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: jboolean,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] World pointer is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to get property name");
+        return;
+    };
+
+    let bool_value = value != 0;
+
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
+    {
+        props.set_property(key, Value::Bool(bool_value));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to query entity for model properties");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setVec3Property
+//   (JNIEnv *, jclass, jlong, jlong, jstring, jfloatArray);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    property_name: JString,
+    value: jfloatArray,
+) {
+    let world = world_handle as *mut World;
+    if world.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] World pointer is null");
+        return;
+    }
+
+    if value.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Value array is null");
+        return;
+    }
+
+    let world = unsafe { &mut *world };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let array = unsafe { JPrimitiveArray::from_raw(value) };
+
+    let key = env.get_string(&property_name);
+    let key: String = if let Ok(str) = key {
+        let value = str.to_string_lossy();
+        value.to_string()
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get property name");
+        return;
+    };
+
+    let length = env.get_array_length(&array);
+
+    if let Ok(length) = length {
+        if length != 3 {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Vec3 array must have exactly 3 elements, got {}", length);
+            return;
+        }
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array length");
+        return;
+    }
+
+    let mut values = [0.0f32; 3];
+    if env.get_float_array_region(&array, 0, &mut values).is_err() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array region");
+        return;
+    }
+
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
+    {
+        props.set_property(key, Value::Vec3([values[0], values[1], values[2]]));
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to query entity for model properties");
     }
 }

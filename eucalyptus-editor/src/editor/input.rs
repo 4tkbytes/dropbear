@@ -36,6 +36,14 @@ impl Keyboard for Editor {
 
         let is_playing = matches!(self.editor_state, EditorState::Playing);
 
+        // template
+        // if let Some((_, tab)) = self.dock_state.find_active_focused()
+        //      && matches!(tab, EditorTab::Viewport)
+        // {
+        //
+        // }
+
+
         match key {
             KeyCode::KeyG => {
                 if self.is_viewport_focused && !is_playing {
@@ -69,10 +77,14 @@ impl Keyboard for Editor {
             }
             KeyCode::Delete => {
                 if !is_playing {
-                    if self.selected_entity.is_some() {
-                        self.signal = Signal::Delete;
-                    } else {
-                        warn!("Failed to delete: No entity selected");
+                    if let Some((_, tab)) = self.dock_state.find_active_focused()
+                        &&matches!(tab, EditorTab::ModelEntityList)
+                    {
+                        if self.selected_entity.is_some() && self.is_viewport_focused {
+                            self.signal = Signal::Delete;
+                        } else {
+                            warn!("Failed to delete: No entity selected");
+                        }
                     }
                 } else {
                     self.input_state.pressed_keys.insert(key);
@@ -113,36 +125,40 @@ impl Keyboard for Editor {
             }
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
-                    if let Some(entity) = &self.selected_entity {
-                        let query = self
-                            .world
-                            .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
-                        if let Ok(mut q) = query {
-                            if let Some((e, t, props)) = q.get() {
-                                let s_entity = SceneEntity {
-                                    model_path: e.model.path.clone(),
-                                    label: e.model.label.clone(),
-                                    transform: *t,
-                                    properties: props.clone(),
-                                    script: None,
-                                    entity_id: None,
-                                    camera: None,
-                                };
-                                self.signal = Signal::Copy(s_entity);
+                    if let Some((_, tab)) = self.dock_state.find_active_focused()
+                         && matches!(tab, EditorTab::ModelEntityList)
+                    {
+                        if let Some(entity) = &self.selected_entity {
+                            let query = self
+                                .world
+                                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
+                            if let Ok(mut q) = query {
+                                if let Some((e, t, props)) = q.get() {
+                                    let s_entity = SceneEntity {
+                                        model_path: e.model.path.clone(),
+                                        label: e.model.label.clone(),
+                                        transform: *t,
+                                        properties: props.clone(),
+                                        script: None,
+                                        entity_id: None,
+                                        camera: None,
+                                    };
+                                    self.signal = Signal::Copy(s_entity);
 
-                                info!("Copied!");
+                                    info!("Copied!");
 
-                                log::debug!("Copied selected entity");
-                            } else {
-                                warn!(
+                                    log::debug!("Copied selected entity");
+                                } else {
+                                    warn!(
                                     "Unable to copy entity: Unable to fetch world entity properties"
                                 );
+                                }
+                            } else {
+                                warn!("Unable to copy entity: Unable to obtain lock");
                             }
                         } else {
-                            warn!("Unable to copy entity: Unable to obtain lock");
+                            warn!("Unable to copy entity: None selected");
                         }
-                    } else {
-                        warn!("Unable to copy entity: None selected");
                     }
                 } else if matches!(self.viewport_mode, ViewportMode::Gizmo) {
                     info!("GizmoMode set to scale");
@@ -153,13 +169,8 @@ impl Keyboard for Editor {
             }
             KeyCode::KeyV => {
                 if ctrl_pressed && !is_playing {
-                    match &self.signal {
-                        Signal::Copy(entity) => {
-                            self.signal = Signal::Paste(entity.clone());
-                        }
-                        _ => {
-                            warn!("Unable to paste: You haven't selected anything!");
-                        }
+                    if let Signal::Copy(entity) = &self.signal {
+                        self.signal = Signal::Paste(entity.clone());
                     }
                 } else {
                     self.input_state.pressed_keys.insert(key);
@@ -189,6 +200,7 @@ impl Keyboard for Editor {
                 if ctrl_pressed && !is_playing {
                     if shift_pressed {
                         // redo
+                        info!("Redo not implemented yet, please report this")
                     } else {
                         // undo
                         log::debug!("Undo signal sent");

@@ -252,4 +252,50 @@ actual class NativeEngine {
             }
         }
     }
+
+    actual fun getStringProperty(entityHandle: Long, label: String): String? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getIntProperty(entityHandle: Long, label: String): Int? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getLongProperty(entityHandle: Long, label: String): Long? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getDoubleProperty(entityHandle: Long, label: String): Double? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getBoolProperty(entityHandle: Long, label: String): Boolean? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setStringProperty(entityHandle: Long, label: String, value: String) {
+    }
+
+    actual fun setIntProperty(entityHandle: Long, label: String, value: Int) {
+    }
+
+    actual fun setLongProperty(entityHandle: Long, label: String, value: Long) {
+    }
+
+    actual fun setFloatProperty(entityHandle: Long, label: String, value: Double) {
+    }
+
+    actual fun setBoolProperty(entityHandle: Long, label: String, value: Boolean) {
+    }
+
+    actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
+    }
 }
