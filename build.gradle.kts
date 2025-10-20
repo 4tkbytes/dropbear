@@ -37,7 +37,7 @@ val libPathProvider = provider {
         foundFile.absolutePath
     } else {
         println("No Rust library exists")
-        ""
+        null
     }
 }
 
@@ -55,37 +55,51 @@ kotlin {
         else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
     }
 
-    val nativeLibPath = libPathProvider.get()
-    val nativeLibDir = file(nativeLibPath).parentFile.absolutePath
-    val nativeLibFileName = file(nativeLibPath).name
-    val nativeLibNameForLinking = when {
-        isMacOs -> nativeLibFileName.removePrefix("lib").removeSuffix(".dylib")
-        isLinux -> nativeLibFileName.removePrefix("lib").removeSuffix(".so")
-        isMingwX64 -> nativeLibFileName.removeSuffix(".dll")
-        else -> throw GradleException("Unsupported OS for library name derivation.")
-    }
+    val nativeLibPathRaw = libPathProvider.get()
 
-    nativeTarget.apply {
-        compilations.getByName("main") {
-            cinterops {
-                val dropbear by creating {
-                    defFile(project.file("src/dropbear.def"))
-                    includeDirs.headerFilterOnly(project.file("headers"))
+    if (nativeLibPathRaw != null && nativeLibPathRaw.isNotBlank()) {
+        val nativeLibPath = file(nativeLibPathRaw)
+        val nativeLibDir = nativeLibPath.parentFile.absolutePath
+        val nativeLibFileName = nativeLibPath.name
+        val nativeLibNameForLinking = when {
+            isMacOs -> nativeLibFileName.removePrefix("lib").removeSuffix(".dylib")
+            isLinux -> nativeLibFileName.removePrefix("lib").removeSuffix(".so")
+            isMingwX64 -> nativeLibFileName.removeSuffix(".dll")
+            else -> throw GradleException("Unsupported OS for library name derivation.")
+        }
+
+        nativeTarget.apply {
+            compilations.getByName("main") {
+                cinterops {
+                    val dropbear by creating {
+                        defFile(project.file("src/dropbear.def"))
+                        includeDirs.headerFilterOnly(project.file("headers"))
+                    }
+                }
+            }
+            binaries {
+                sharedLib {
+                    baseName = "dropbear"
+
+                    if (isLinux || isMacOs) {
+                        linkerOpts("-L$nativeLibDir", "-l$nativeLibNameForLinking", "-Wl,-rpath,\\\$ORIGIN")
+                    } else if (isMingwX64) {
+                        val importLibName = "$nativeLibNameForLinking.dll.lib"
+                        val importLibPath = file("$nativeLibDir/$importLibName").absolutePath
+                        linkerOpts(importLibPath)
+                    }
                 }
             }
         }
-        binaries {
-            sharedLib {
-                baseName = "dropbear"
-
-                if (isLinux || isMacOs) {
-                    linkerOpts("-L$nativeLibDir", "-l$nativeLibNameForLinking", "-Wl,-rpath,\\\$ORIGIN")
-                } else if (isMingwX64) {
-                    val importLibName = "$nativeLibNameForLinking.dll.lib"
-                    val importLibPath = file("$nativeLibDir/$importLibName").absolutePath
-                    linkerOpts(
-                        importLibPath
-                    )
+    } else {
+        println("Skipping native target configuration due to missing library path.")
+        nativeTarget.apply {
+            compilations.getByName("main") {
+                cinterops {
+                    val dropbear by creating {
+                        defFile(project.file("src/dropbear.def"))
+                        includeDirs.headerFilterOnly(project.file("headers"))
+                    }
                 }
             }
         }
