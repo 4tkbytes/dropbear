@@ -6,8 +6,11 @@ package com.dropbear.ffi
 import com.dropbear.EntityId
 import com.dropbear.ffi.generated.*
 import com.dropbear.input.KeyCode
+import com.dropbear.input.MouseButton
+import com.dropbear.input.MouseButtonCodes
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
+import com.dropbear.math.Vector2D
 import kotlinx.cinterop.*
 import kotlin.experimental.ExperimentalNativeApi
 
@@ -115,6 +118,131 @@ actual class NativeEngine {
                 out.ptr
             )
             return out.value != 0
+        }
+    }
+
+    actual fun getMousePosition(): Vector2D? {
+        memScoped {
+            val xVar = alloc<FloatVar>()
+            val yVar = alloc<FloatVar>()
+
+            val result = dropbear_get_mouse_position(
+                inputHandle.reinterpret(),
+                xVar.ptr,
+                yVar.ptr
+            )
+
+            if (result == 0) {
+                val x = xVar.value.toDouble()
+                val y = yVar.value.toDouble()
+                return Vector2D(x, y)
+            } else {
+                println("getMousePosition failed with code: $result")
+                return null
+            }
+        }
+    }
+
+    actual fun isMouseButtonPressed(button: MouseButton): Boolean {
+        val buttonCode: Int = when (button) {
+            MouseButton.Left -> MouseButtonCodes.LEFT
+            MouseButton.Right -> MouseButtonCodes.RIGHT
+            MouseButton.Middle -> MouseButtonCodes.MIDDLE
+            MouseButton.Back -> MouseButtonCodes.BACK
+            MouseButton.Forward -> MouseButtonCodes.FORWARD
+            is MouseButton.Other -> button.value
+        }
+
+        memScoped {
+            val pressedVar = alloc<IntVar>()
+
+            val result = dropbear_is_mouse_button_pressed(
+                inputHandle.reinterpret(),
+                buttonCode,
+                pressedVar.ptr
+            )
+
+            if (result == 0) {
+                return pressedVar.value != 0
+            } else {
+                println("isMouseButtonPressed failed with code: $result")
+                return false
+            }
+        }
+    }
+
+    actual fun getMouseDelta(): Vector2D? {
+        memScoped {
+            val deltaXVar = alloc<FloatVar>()
+            val deltaYVar = alloc<FloatVar>()
+
+            val result = dropbear_get_mouse_delta(
+                inputHandle.reinterpret(),
+                deltaXVar.ptr,
+                deltaYVar.ptr
+            )
+
+            if (result == 0) {
+                val deltaX = deltaXVar.value.toDouble()
+                val deltaY = deltaYVar.value.toDouble()
+                return Vector2D(deltaX, deltaY)
+            } else {
+                println("getMouseDelta failed with code: $result")
+                return null
+            }
+        }
+    }
+
+    actual fun isCursorLocked(): Boolean {
+        memScoped {
+            val lockedVar = alloc<IntVar>()
+
+            val result = dropbear_is_cursor_locked(
+                inputHandle.reinterpret(),
+                lockedVar.ptr
+            )
+
+            if (result == 0) {
+                return lockedVar.value != 0
+            } else {
+                println("isCursorLocked failed with code: $result")
+                return false
+            }
+        }
+    }
+
+    actual fun setCursorLocked(locked: Boolean) {
+        val lockedInt = if (locked) 1 else 0
+
+        val result = dropbear_set_cursor_locked(
+            inputHandle.reinterpret(),
+            lockedInt
+        )
+
+        if (result != 0) {
+            println("setCursorLocked failed with code: $result")
+        }
+    }
+
+    actual fun getLastMousePos(): Vector2D? {
+        memScoped {
+            val xVar = alloc<FloatVar>()
+            val yVar = alloc<FloatVar>()
+
+            val result = dropbear_get_last_mouse_pos(
+                inputHandle.reinterpret(),
+                xVar.ptr,
+                yVar.ptr
+            )
+
+            if (result == 0) {
+                val x = xVar.value.toDouble()
+                val y = yVar.value.toDouble()
+                return Vector2D(x, y)
+            } else {
+                println("getLastMousePos failed with code: $result")
+                return null
+            }
         }
     }
 }

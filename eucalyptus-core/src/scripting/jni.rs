@@ -3,6 +3,7 @@
 
 pub mod exception;
 mod exports;
+mod utils;
 
 use std::fs;
 use jni::objects::{GlobalRef, JClass, JValue};

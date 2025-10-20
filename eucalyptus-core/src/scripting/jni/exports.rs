@@ -1,21 +1,19 @@
+use crate::ptr::InputStatePtr;
+use crate::scripting::jni::utils::{java_button_to_rust, new_float_array};
+use crate::utils::keycode_from_ordinal;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
+use jni::objects::{JClass, JObject, JString};
+use jni::sys::{jboolean, jclass, jfloatArray, jint, jlong};
 use jni::JNIEnv;
-use jni::objects::{JObject, JString};
-use jni::sys::{jboolean, jclass, jint, jlong};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::platform::scancode::PhysicalKeyExtScancode;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
-use crate::ptr::InputStatePtr;
-use num_enum::FromPrimitive;
-use crate::utils::keycode_from_ordinal;
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     mut env: JNIEnv,
-    _obj: jclass,
+    _obj: JClass,
     world_handle: jlong,
     label: JString,
 ) -> jlong {
@@ -116,7 +114,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     mut env: JNIEnv,
-    _class: jclass,
+    _class: JClass,
     world_handle: jlong,
     entity_id: jlong,
     transform_obj: JObject,
@@ -213,7 +211,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_printInputState(
     _env: JNIEnv,
-    _class: jclass,
+    _class: JClass,
     input_handle: jlong,
 ) {
     let input = input_handle as InputStatePtr;
@@ -232,7 +230,7 @@ pub fn Java_com_dropbear_ffi_JNINative_printInputState(
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
     _env: JNIEnv,
-    _class: jclass,
+    _class: JClass,
     input_handle: jlong,
     key: jint,
 ) -> jboolean {
@@ -258,5 +256,136 @@ pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
             println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [WARN] Ordinal keycode is invalid");
             false.into()
         }
+    }
+}
+
+// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMousePosition
+//   (JNIEnv *, jclass, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getMousePosition(
+    mut env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+) -> jfloatArray {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getMousePosition] [ERROR] Input state pointer is null");
+        return new_float_array(&mut env, -1.0, -1.0);
+    }
+
+    let input = unsafe { &*input };
+
+    new_float_array(&mut env, input.mouse_pos.0 as f32, input.mouse_pos.1 as f32)
+}
+
+// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isMouseButtonPressed
+//   (JNIEnv *, jclass, jlong, jint);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isMouseButtonPressed(
+    _env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+    button: jint,
+) -> jboolean {
+    let input_ptr = input_handle as InputStatePtr;
+
+    if input_ptr.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Input state pointer is null");
+        return false as jboolean;
+    }
+
+    let input = unsafe { &*input_ptr };
+
+    if let Some(rust_button) = java_button_to_rust(button) {
+        let is_pressed = input.mouse_button.contains(&rust_button);
+        is_pressed as jboolean
+    } else {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Invalid button code: {}", button);
+        false as jboolean
+    }
+}
+
+// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMouseDelta
+//   (JNIEnv *, jclass, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
+    mut env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+) -> jfloatArray {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [ERROR] Input state pointer is null");
+        return new_float_array(&mut env, -1.0, -1.0);
+    }
+
+    let input = unsafe { &*input };
+
+    if let Some(pos) = input.mouse_delta {
+        new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
+    } else {
+        new_float_array(&mut env, 0.0, 0.0)
+    }
+}
+
+// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorLocked
+//   (JNIEnv *, jclass, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isCursorLocked(
+    _env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+) -> jboolean {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_isCursorLocked] [ERROR] Input state pointer is null");
+        return false as jboolean;
+    }
+
+    let input = unsafe { &*input };
+
+    input.is_cursor_locked as jboolean
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorLocked
+//   (JNIEnv *, jclass, jlong, jboolean);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
+    _env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+    locked: jboolean,
+) {
+    let input = input_handle as InputStatePtr;
+
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_isCursorLocked] [ERROR] Input state pointer is null");
+        return;
+    }
+
+    let input = unsafe { &mut *input };
+
+    input.is_cursor_locked = locked != 0;
+}
+
+// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getLastMousePos
+//   (JNIEnv *, jclass, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
+    mut env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+) -> jfloatArray {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getLastMousePos] [ERROR] Input state pointer is null");
+        return new_float_array(&mut env, -1.0, -1.0);
+    }
+
+    let input = unsafe { &*input };
+    if let Some(pos) = input.last_mouse_pos {
+        new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
+    } else {
+        new_float_array(&mut env, 0.0, 0.0)
     }
 }

@@ -11,6 +11,7 @@ pub struct InputState {
     pub last_key_press_times: HashMap<KeyCode, Instant>,
     #[allow(dead_code)]
     pub double_press_threshold: Duration,
+
     pub mouse_pos: (f64, f64),
     pub mouse_button: HashSet<MouseButton>,
     pub pressed_keys: HashSet<KeyCode>,
@@ -22,8 +23,6 @@ pub struct InputState {
     pub pressed_buttons: HashMap<GamepadId, HashSet<Button>>,
     pub left_stick_position: HashMap<GamepadId, (f32, f32)>,
     pub right_stick_position: HashMap<GamepadId, (f32, f32)>,
-    pub left_trigger: HashMap<GamepadId, f32>,
-    pub right_trigger: HashMap<GamepadId, f32>,
 }
 
 impl Default for InputState {
@@ -47,8 +46,6 @@ impl InputState {
             pressed_buttons: Default::default(),
             left_stick_position: Default::default(),
             right_stick_position: Default::default(),
-            left_trigger: Default::default(),
-            right_trigger: Default::default(),
         }
     }
 

@@ -1,6 +1,4 @@
 use std::ffi::{c_char, CStr};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::platform::scancode::PhysicalKeyExtScancode;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use crate::ptr::InputStatePtr;
 use crate::scripting::native::DropbearNativeError;
@@ -129,11 +127,11 @@ pub unsafe extern "C" fn dropbear_print_input_state(
 pub unsafe extern "C" fn dropbear_is_key_pressed(
     input_state_ptr: InputStatePtr,
     key: i32,
-    out_is_pressed: *mut bool,
+    out_is_pressed: *mut i32,
 ) -> i32 {
     if input_state_ptr.is_null() {
         eprintln!("[dropbear_is_key_pressed] [ERROR] Input state pointer is null");
-        unsafe { *out_is_pressed = false };
+        unsafe { *out_is_pressed = 0 }; //false
         return DropbearNativeError::NullPointer as i32;
     }
 
@@ -143,14 +141,14 @@ pub unsafe extern "C" fn dropbear_is_key_pressed(
         Some(k) => {
             println!("[dropbear_is_key_pressed] [DEBUG] Keycode: {:?}", k);
             if input.pressed_keys.contains(&k) {
-                true.into()
+                1
             } else {
-                false.into()
+                0
             }
         }
         None => {
             println!("[dropbear_is_key_pressed] [WARN] Ordinal keycode is invalid");
-            false.into()
+            0
         }
     }
 }

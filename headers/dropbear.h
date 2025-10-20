@@ -47,8 +47,13 @@ int dropbear_set_transform(
 );
 
 void dropbear_print_input_state(const InputState* input_state_ptr);
-
 int dropbear_is_key_pressed(const InputState* input_state_ptr, int keycode, int* out_value); // out_value is a boolean 0 or 1
+int dropbear_get_mouse_position(const InputState* input_state_ptr, float* out_x, float* out_y);
+int dropbear_is_mouse_button_pressed(const InputState* input_state_ptr, int button_code, int* out_pressed);
+int dropbear_get_mouse_delta(const InputState* input_state_ptr, float* out_delta_x, float* out_delta_y);
+int dropbear_is_cursor_locked(const InputState* input_state_ptr, int* out_locked);
+int dropbear_set_cursor_locked(const InputState* input_state_ptr, int locked);
+int dropbear_get_last_mouse_pos(const InputState* input_state_ptr, float* out_x, float* out_y);
 
 // ===========================================
 

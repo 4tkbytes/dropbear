@@ -258,6 +258,7 @@ impl Mouse for Editor {
                     && let Some((camera, _)) = q.get()
                 {
                     camera.track_mouse_delta(dx, dy);
+                    self.input_state.mouse_delta = Some((dx, dy));
                 }
             }
             self.input_state.last_mouse_pos = Some((position.x, position.y));
@@ -290,6 +291,7 @@ impl Mouse for Editor {
                     && let Some((camera, _)) = q.get()
                 {
                     camera.track_mouse_delta(dx, dy);
+                    self.input_state.mouse_delta = Some((dx, dy));
                 }
 
                 let _ = window.set_cursor_position(center);
@@ -344,7 +346,5 @@ impl Controller for Editor {
         self.input_state.pressed_buttons.remove(&id);
         self.input_state.left_stick_position.remove(&id);
         self.input_state.right_stick_position.remove(&id);
-        self.input_state.left_trigger.remove(&id);
-        self.input_state.right_trigger.remove(&id);
     }
 }

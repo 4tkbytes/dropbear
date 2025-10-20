@@ -17,4 +17,10 @@ public class JNINative {
     // input
     public static native void printInputState(long inputHandle);
     public static native boolean isKeyPressed(long inputHandle, int ordinal);
+    public static native float[] getMousePosition(long inputHandle);
+    public static native boolean isMouseButtonPressed(long inputHandle, int ordinal);
+    public static native float[] getMouseDelta(long inputHandle);
+    public static native boolean isCursorLocked(long inputHandle);
+    public static native void setCursorLocked(long inputHandle, boolean locked);
+    public static native float[] getLastMousePos(long inputHandle);
 }
