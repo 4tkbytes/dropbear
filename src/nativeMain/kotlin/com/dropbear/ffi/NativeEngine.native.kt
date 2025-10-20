@@ -122,12 +122,13 @@ actual class NativeEngine {
     }
 
     actual fun getMousePosition(): Vector2D? {
+        val input = inputHandle ?: return null
         memScoped {
             val xVar = alloc<FloatVar>()
             val yVar = alloc<FloatVar>()
 
             val result = dropbear_get_mouse_position(
-                inputHandle.reinterpret(),
+                input.reinterpret(),
                 xVar.ptr,
                 yVar.ptr
             )
@@ -153,11 +154,13 @@ actual class NativeEngine {
             is MouseButton.Other -> button.value
         }
 
+        val input = inputHandle ?: return false
+
         memScoped {
             val pressedVar = alloc<IntVar>()
 
             val result = dropbear_is_mouse_button_pressed(
-                inputHandle.reinterpret(),
+                input.reinterpret(),
                 buttonCode,
                 pressedVar.ptr
             )
@@ -172,12 +175,13 @@ actual class NativeEngine {
     }
 
     actual fun getMouseDelta(): Vector2D? {
+        val input = inputHandle ?: return null
         memScoped {
             val deltaXVar = alloc<FloatVar>()
             val deltaYVar = alloc<FloatVar>()
 
             val result = dropbear_get_mouse_delta(
-                inputHandle.reinterpret(),
+                input.reinterpret(),
                 deltaXVar.ptr,
                 deltaYVar.ptr
             )
@@ -194,11 +198,12 @@ actual class NativeEngine {
     }
 
     actual fun isCursorLocked(): Boolean {
+        val input = inputHandle ?: return false
         memScoped {
             val lockedVar = alloc<IntVar>()
 
             val result = dropbear_is_cursor_locked(
-                inputHandle.reinterpret(),
+                input.reinterpret(),
                 lockedVar.ptr
             )
 
@@ -213,9 +218,10 @@ actual class NativeEngine {
 
     actual fun setCursorLocked(locked: Boolean) {
         val lockedInt = if (locked) 1 else 0
+        val input = inputHandle ?: return
 
         val result = dropbear_set_cursor_locked(
-            inputHandle.reinterpret(),
+            input.reinterpret(),
             lockedInt
         )
 
@@ -225,12 +231,13 @@ actual class NativeEngine {
     }
 
     actual fun getLastMousePos(): Vector2D? {
+        val input = inputHandle ?: return null
         memScoped {
             val xVar = alloc<FloatVar>()
             val yVar = alloc<FloatVar>()
 
             val result = dropbear_get_last_mouse_pos(
-                inputHandle.reinterpret(),
+                input.reinterpret(),
                 xVar.ptr,
                 yVar.ptr
             )

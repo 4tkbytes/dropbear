@@ -324,6 +324,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
     if let Some(pos) = input.mouse_delta {
         new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
     } else {
+        println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [WARN] input_state.mouse_delta returns \"(None)\". Returning (0.0, 0.0)");
         new_float_array(&mut env, 0.0, 0.0)
     }
 }

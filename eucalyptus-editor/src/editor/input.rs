@@ -253,13 +253,20 @@ impl Mouse for Editor {
                     && let Ok(mut q) = self.world.query_one::<(
                         &mut Camera,
                         &CameraComponent,
-                        // Option<&CameraFollowTarget>,
                     )>(active_camera)
                     && let Some((camera, _)) = q.get()
                 {
                     camera.track_mouse_delta(dx, dy);
                     self.input_state.mouse_delta = Some((dx, dy));
                 }
+            }
+            self.input_state.last_mouse_pos = Some((position.x, position.y));
+        } else {
+            if let Some(last_pos) = self.input_state.last_mouse_pos {
+                let dx = position.x - last_pos.0;
+                let dy = position.y - last_pos.1;
+
+                self.input_state.mouse_delta = Some((dx, dy));
             }
             self.input_state.last_mouse_pos = Some((position.x, position.y));
         }
@@ -298,6 +305,14 @@ impl Mouse for Editor {
             }
 
             window.set_cursor_visible(false);
+        } else {
+            if let Some(last_pos) = self.input_state.last_mouse_pos {
+                let dx = position.x - last_pos.0;
+                let dy = position.y - last_pos.1;
+
+                self.input_state.mouse_delta = Some((dx, dy));
+            }
+            self.input_state.last_mouse_pos = Some((position.x, position.y));
         }
 
         self.input_state.mouse_pos = (position.x, position.y);
