@@ -32,8 +32,13 @@ val libPathProvider = provider {
         layout.projectDirectory.file("libs/$libName").asFile
     )
 
-    candidates.firstOrNull { it.exists() }?.absolutePath
-        ?: println("No Rust library exists")
+    val foundFile = candidates.firstOrNull { it.exists() }
+    if (foundFile != null) {
+        foundFile.absolutePath
+    } else {
+        println("No Rust library exists")
+        ""
+    }
 }
 
 kotlin {
