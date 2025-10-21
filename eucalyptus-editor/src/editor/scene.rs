@@ -127,10 +127,7 @@ impl Scene for Editor {
                 &self.input_state,
                 dt,
             ) {
-                log_once::warn_once!(
-                    "Failed to update script: {}",
-                    e
-                );
+                fatal!("Failed to update script: {}", e);
                 self.signal = Signal::StopPlaying;
             }
         }

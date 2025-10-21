@@ -260,7 +260,7 @@ impl JavaContext {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
-            log::trace!("Calling SystemManager.updateAllSystems() with dt: {}", dt);
+            log_once::trace_once!("Calling SystemManager.updateAllSystems() with dt: {}", dt);
             env.call_method(
                 manager_ref,
                 "updateAllSystems",
@@ -271,7 +271,7 @@ impl JavaContext {
             let result = get_exception_info(&mut env);
             if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
 
-            log::trace!("Updated all systems with dt: {}", dt);
+            log_once::trace_once!("Updated all systems with dt: {}", dt);
         } else {
             return Err(anyhow::anyhow!("SystemManager not initialised when updating systems."));
         }

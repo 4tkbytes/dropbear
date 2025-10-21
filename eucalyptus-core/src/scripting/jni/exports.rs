@@ -988,94 +988,90 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
         return std::ptr::null_mut();
     };
 
-    if let Some((id, (cam, comp))) = world.query::<(&Camera, &CameraComponent)>().iter().next() {
-        return if cam.label == label {
-            if matches!(comp.camera_type, CameraType::Debug) {
-                eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [WARN] Querying a CameraType::Debug is illegal, returning null");
-                std::ptr::null_mut()
-            } else {
-                let entity_id = if let Ok(v) = env.find_class("com/dropbear/EntityId") {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to find EntityId class");
-                    return std::ptr::null_mut();
-                };
-                let entity_id = if let Ok(v) = env.new_object(
-                    entity_id,
-                    "(J)V",
-                    &[JValue::Long(id.id() as i64)],
-                ) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new entity_id object");
-                    return std::ptr::null_mut();
-                };
-
-                let label = if let Ok(v) = env.new_string(cam.label.as_str()) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new string for label");
-                    return std::ptr::null_mut();
-                };
-
-                let eye = if let Ok(v) = create_vector3(&mut env, cam.eye.x, cam.eye.y, cam.eye.z) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for eye");
-                    return std::ptr::null_mut();
-                };
-
-                let target = if let Ok(v) = create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for target");
-                    return std::ptr::null_mut();
-                };
-
-                let up = if let Ok(v) = create_vector3(&mut env, cam.up.x, cam.up.y, cam.up.z) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for up");
-                    return std::ptr::null_mut();
-                };
-
-                let class = if let Ok(v) = env.find_class("com/dropbear/Camera") {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to locate camera class");
-                    return std::ptr::null_mut();
-                };
-
-                let camera_obj = if let Ok(v) = env.new_object(
-                    class,
-                    "(Ljava/lang/String;Lcom/dropbear/EntityId;Lcom/dropbear/math/Vector3<Ljava/lang/Double;>;Lcom/dropbear/math/Vector3<Ljava/lang/Double;>;Lcom/dropbear/math/Vector3<Ljava/lang/Double;>;DDDDDDDD)V",
-                    &[
-                        JValue::Object(&label),
-                        JValue::Object(&entity_id),
-                        JValue::Object(&eye),
-                        JValue::Object(&target),
-                        JValue::Object(&up),
-                        JValue::Double(cam.aspect),
-                        JValue::Double(cam.fov_y),
-                        JValue::Double(cam.znear),
-                        JValue::Double(cam.zfar),
-                        JValue::Double(cam.yaw),
-                        JValue::Double(cam.pitch),
-                        JValue::Double(cam.speed),
-                        JValue::Double(cam.sensitivity),
-                    ]
-                ) {
-                    v
-                } else {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create the camera object");
-                    return std::ptr::null_mut();
-                };
-
-                camera_obj.as_raw()
-            }
-        } else {
-            std::ptr::null_mut()
+    if let Some((id, (cam, comp))) = world.query::<(&Camera, &CameraComponent)>().iter().find(|(_, (cam, _))| cam.label == label) {
+        if matches!(comp.camera_type, CameraType::Debug) {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [WARN] Querying a CameraType::Debug is illegal, returning null");
+            return std::ptr::null_mut();
         }
+
+        let entity_id = if let Ok(v) = env.find_class("com/dropbear/EntityId") {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to find EntityId class");
+            return std::ptr::null_mut();
+        };
+        let entity_id = if let Ok(v) = env.new_object(
+            entity_id,
+            "(J)V",
+            &[JValue::Long(id.id() as i64)],
+        ) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new entity_id object");
+            return std::ptr::null_mut();
+        };
+
+        let label = if let Ok(v) = env.new_string(cam.label.as_str()) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new string for label");
+            return std::ptr::null_mut();
+        };
+
+        let eye = if let Ok(v) = create_vector3(&mut env, cam.eye.x, cam.eye.y, cam.eye.z) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for eye");
+            return std::ptr::null_mut();
+        };
+
+        let target = if let Ok(v) = create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for target");
+            return std::ptr::null_mut();
+        };
+
+        let up = if let Ok(v) = create_vector3(&mut env, cam.up.x, cam.up.y, cam.up.z) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for up");
+            return std::ptr::null_mut();
+        };
+
+        let class = if let Ok(v) = env.find_class("com/dropbear/Camera") {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to locate camera class");
+            return std::ptr::null_mut();
+        };
+
+        let camera_obj = if let Ok(v) = env.new_object(
+            class,
+            "(Ljava/lang/String;Lcom/dropbear/EntityId;Lcom/dropbear/math/Vector3;Lcom/dropbear/math/Vector3;Lcom/dropbear/math/Vector3;DDDDDDDD)V",
+            &[
+                JValue::Object(&label),
+                JValue::Object(&entity_id),
+                JValue::Object(&eye),
+                JValue::Object(&target),
+                JValue::Object(&up),
+                JValue::Double(cam.aspect),
+                JValue::Double(cam.fov_y),
+                JValue::Double(cam.znear),
+                JValue::Double(cam.zfar),
+                JValue::Double(cam.yaw),
+                JValue::Double(cam.pitch),
+                JValue::Double(cam.speed),
+                JValue::Double(cam.sensitivity),
+            ],
+        ) {
+            v
+        } else {
+            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create the camera object");
+            return std::ptr::null_mut();
+        };
+
+        return camera_obj.as_raw();
     }
 
     std::ptr::null_mut()

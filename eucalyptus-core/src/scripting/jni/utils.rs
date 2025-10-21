@@ -67,7 +67,7 @@ pub fn create_vector3<'a>(env: &mut JNIEnv<'a>, x: f64, y: f64, z: f64) -> anyho
 
     let vector3 = env.new_object(
         vector3_class,
-        "(Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;)V",
+        "(Ljava/lang/Number;Ljava/lang/Number;Ljava/lang/Number;)V",
         &[
             JValue::Object(&x_obj),
             JValue::Object(&y_obj),

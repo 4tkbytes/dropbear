@@ -12,9 +12,7 @@ use std::fmt::{Display, Formatter};
 #[cfg(feature = "editor")]
 use egui_toast_fork::Toasts;
 
-#[cfg(feature = "editor")]
 use once_cell::sync::Lazy;
-#[cfg(feature = "editor")]
 use parking_lot::Mutex;
 
 pub static LOG_LEVEL: Lazy<Mutex<LogLevel>> = Lazy::new(|| {
