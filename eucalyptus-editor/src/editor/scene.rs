@@ -100,6 +100,28 @@ impl Scene for Editor {
                 fatal!("{}", e);
             }
         }
+
+        { // basic futurequeue spawn queue management.
+            let mut completed = Vec::new();
+            for (i, handle) in self.light_spawn_queue.iter().enumerate() {
+                if let Some(l) = graphics.shared.future_queue.exchange_owned_as::<Light>(handle) {
+                    self.world.spawn(
+                        (
+                            l,
+                            LightComponent::default(),
+                            Transform::default(),
+                            ModelProperties::default(),
+                        ));
+                    success!("Spawned light successfully");
+                    completed.push(i);
+                }
+            }
+
+            for &i in completed.iter().rev() {
+                log_once::debug_once!("Removing item {} from pending spawn list", i);
+                self.light_spawn_queue.remove(i);
+            }
+        }
         
         if !self.plugin_registry.plugins_loaded {
             if let Err(e) = self.plugin_registry.load_plugins() {
@@ -265,11 +287,13 @@ impl Scene for Editor {
                                     1,
                                     light.instance_buffer.as_ref().unwrap().slice(..),
                                 );
-                                render_pass.draw_light_model(
-                                    &light.cube_model,
-                                    camera.bind_group(),
-                                    light.bind_group(),
-                                );
+                                if _component.visible {
+                                    render_pass.draw_light_model(
+                                        &light.cube_model,
+                                        camera.bind_group(),
+                                        light.bind_group(),
+                                    );
+                                }
                             }
                         }
                     }

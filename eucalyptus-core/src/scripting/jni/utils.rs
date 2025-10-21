@@ -1,3 +1,4 @@
+use glam::Vec3;
 use jni::JNIEnv;
 use jni::objects::{JFloatArray, JObject, JValue};
 use jni::sys::{jfloatArray, jint};
@@ -76,4 +77,16 @@ pub fn create_vector3<'a>(env: &mut JNIEnv<'a>, x: f64, y: f64, z: f64) -> anyho
     )?;
 
     Ok(vector3)
+}
+
+pub fn extract_vector3(env: &mut JNIEnv, vector_obj: &JObject) -> Option<Vec3> {
+    let x_obj = env.get_field(vector_obj, "x", "Ljava/lang/Number;").ok()?.l().ok()?;
+    let y_obj = env.get_field(vector_obj, "y", "Ljava/lang/Number;").ok()?.l().ok()?;
+    let z_obj = env.get_field(vector_obj, "z", "Ljava/lang/Number;").ok()?.l().ok()?;
+
+    let x = env.call_method(&x_obj, "doubleValue", "()D", &[]).ok()?.d().ok()?;
+    let y = env.call_method(&y_obj, "doubleValue", "()D", &[]).ok()?.d().ok()?;
+    let z = env.call_method(&z_obj, "doubleValue", "()D", &[]).ok()?.d().ok()?;
+
+    Some(Vec3::new(x as f32, y as f32, z as f32))
 }

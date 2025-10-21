@@ -354,6 +354,8 @@ impl Light {
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
         };
 
+        log::trace!("Created new light uniform");
+
         let cube_model = Arc::new(
             Model::load_from_memory(
                 graphics.clone(),

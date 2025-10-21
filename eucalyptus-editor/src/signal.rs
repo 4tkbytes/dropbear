@@ -846,7 +846,7 @@ impl SignalController for Editor {
                             Some("Default Light"),
                         );
                         let handle = graphics.future_queue.push(light);
-                        self.alt_pending_spawn_queue.push(handle);
+                        self.light_spawn_queue.push(handle);
                         success!("Pushed light to queue");
                     }
                     crate::editor::PendingSpawn2::Plane => {

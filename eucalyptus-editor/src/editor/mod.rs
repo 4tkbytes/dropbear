@@ -97,7 +97,7 @@ pub struct Editor {
 
     // handles for futures
     pub world_load_handle: Option<FutureHandle>,
-    pub(crate) alt_pending_spawn_queue: Vec<FutureHandle>,
+    pub(crate) light_spawn_queue: Vec<FutureHandle>,
     pub world_receiver: Option<oneshot::Receiver<hecs::World>>,
 
     // building
@@ -188,7 +188,7 @@ impl Editor {
             is_world_loaded: IsWorldLoadedYet::new(),
             current_state: WorldLoadingStatus::Idle,
             world_load_handle: None,
-            alt_pending_spawn_queue: vec![],
+            light_spawn_queue: vec![],
             world_receiver: None,
             progress_rx: None,
             handle_created: None,
@@ -1012,7 +1012,9 @@ pub enum UndoableAction {
     RemoveComponent(hecs::Entity, Box<ComponentType>),
     #[allow(dead_code)]
     CameraAction(UndoableCameraAction),
+    RemoveStartingCamera(hecs::Entity),
 }
+
 #[derive(Debug)]
 #[allow(dead_code)]
 // todo: deal with why there is no Camera
@@ -1122,14 +1124,7 @@ impl UndoableAction {
                         world.insert_one(*entity, component.clone())?;
                     }
                     ComponentType::Camera(camera, component) => {
-                        // if let Some(f) = follow {
-                        //     {
-                        //         world
-                        //             .insert(*entity, (camera.clone(), component.clone(), f.clone()))?;
-                        //     }
-                        // } else {
                         world.insert(*entity, (camera.clone(), component.clone()))?;
-                        // }
                     }
                 }
                 Ok(())
@@ -1173,6 +1168,16 @@ impl UndoableAction {
                         }
                     }
                 };
+                Ok(())
+            }
+            UndoableAction::RemoveStartingCamera(old) => {
+                for (_i, comp) in &mut world.query::<&mut CameraComponent>() {
+                    comp.starting_camera = false;
+                }
+                if let Ok((cam, comp)) = world.query_one_mut::<(&Camera, &mut CameraComponent)>(*old) {
+                    comp.starting_camera = true;
+                    log::debug!("Reverted starting camera back to true for '{}'", cam.label);
+                }
                 Ok(())
             }
         }

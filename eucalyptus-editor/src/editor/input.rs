@@ -80,7 +80,7 @@ impl Keyboard for Editor {
                     if let Some((_, tab)) = self.dock_state.find_active_focused()
                         &&matches!(tab, EditorTab::ModelEntityList)
                     {
-                        if self.selected_entity.is_some() && self.is_viewport_focused {
+                        if self.selected_entity.is_some() {
                             self.signal = Signal::Delete;
                         } else {
                             warn!("Failed to delete: No entity selected");

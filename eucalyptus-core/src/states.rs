@@ -1162,16 +1162,7 @@ impl SceneConfig {
                             let script = ScriptComponent {
                                 tags: script_config.tags.clone(),
                             };
-                            // if let (Some(target_label), Some(offset)) = (
-                            //     &camera_config.follow_target_entity_label,
-                            //     &camera_config.follow_offset,
-                            // ) {
-                            //     let follow_target = CameraFollowTarget {
-                            //         follow_target: target_label.clone(),
-                            //         offset: DVec3::from_array(*offset),
-                            //     };
-                            //     world.spawn((plane, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            // } else {
+
                             world.spawn((
                                 plane,
                                 transform,
@@ -1182,16 +1173,7 @@ impl SceneConfig {
                             ))
                             // }
                         } else {
-                            // if let (Some(target_label), Some(offset)) = (
-                            //     &camera_config.follow_target_entity_label,
-                            //     &camera_config.follow_offset,
-                            // ) {
-                            //     let follow_target = CameraFollowTarget {
-                            //         follow_target: target_label.clone(),
-                            //         offset: DVec3::from_array(*offset),
-                            //     };
-                            //     world.spawn((plane, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            // } else {
+
                             world.spawn((
                                 plane,
                                 transform,
@@ -1199,7 +1181,6 @@ impl SceneConfig {
                                 camera,
                                 camera_component,
                             ))
-                            // }
                         }
                     } else {
                         // Entity without camera components

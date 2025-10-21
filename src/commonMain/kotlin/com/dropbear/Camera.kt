@@ -3,8 +3,8 @@ package com.dropbear
 import com.dropbear.math.Vector3D
 
 class Camera(
-    private val label: String,
-    private val id: EntityId, // it could be attached to nothing or an AdoptedEntity
+    val label: String,
+    val id: EntityId, // it could be attached to nothing or an AdoptedEntity
     var eye: Vector3D = Vector3D.zero(),
     var target: Vector3D = Vector3D.zero(),
     var up: Vector3D = Vector3D.zero(),
@@ -17,7 +17,7 @@ class Camera(
     var speed: Double = 0.0,
     var sensitivity: Double = 0.0
 ) {
-    lateinit var engine: DropbearEngine
+    internal lateinit var engine: DropbearEngine
 
     /**
      * Pushes the camera values to the world to be updated.

@@ -734,6 +734,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
+                    let mut local_set_initial_camera = false;
                     if let Ok(mut q) = self.world.query_one::<(
                         &mut AdoptedEntity,
                         Option<&mut Transform>,
@@ -850,23 +851,14 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             camera_component.starting_camera = false;
                                             success!("Removed {} from starting camera", camera.label);
                                         }
-                                    } else {
-                                        #[allow(clippy::collapsible_else_if)] // I don't even know why the fuck clippy wants to flag this...
-                                        if ui.button("Set as initial camera").clicked() {
-                                            log::debug!("'Set as initial camera' button clicked");
-                                            if matches!(camera_component.camera_type, CameraType::Debug) {
-                                                warn!("Cannot set any cameras of type 'Debug' to initial camera");
-                                            } else {
-                                                success!("Set {} at the starting camera. When you start your game, \
-                                                expect to see through this camera!", camera.label);
-                                                camera_component.starting_camera = true;
-                                            }
+                                    } else if ui.button("Set as initial camera").clicked() {
+                                        log::debug!("'Set as initial camera' button clicked");
+                                        if matches!(camera_component.camera_type, CameraType::Debug) {
+                                            warn!("Cannot set any cameras of type 'Debug' to initial camera");
+                                        } else {
+                                            local_set_initial_camera = true
                                         }
                                     }
-
-                                    // if ui.button("Create offset").clicked() {
-                                    //     local_insert_follow_target = Some(*entity);
-                                    // }
                                 });
                             }
 
@@ -916,6 +908,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                     } else {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
+                    }
+
+                    if local_set_initial_camera {
+                        for (id, comp) in self.world.query::<&mut CameraComponent>().iter() {
+                            comp.starting_camera = false;
+                            self.undo_stack.push(UndoableAction::RemoveStartingCamera(id))
+                        }
+
+                        if let Ok(comp) = self.world.query_one_mut::<&mut CameraComponent>(*entity) {
+                            success!("This camera is currently set as the initial camera");
+                            comp.starting_camera = true;
+                        }
                     }
 
                     // lighting system

@@ -9,6 +9,7 @@ pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::states::{PROJECT, Value};
 use eucalyptus_core::utils::PROTO_TEXTURE;
 use std::sync::Arc;
+use eucalyptus_core::success;
 
 impl PendingSpawnController for Editor {
     fn check_up(
@@ -114,6 +115,7 @@ impl PendingSpawnController for Editor {
                                         spawn.transform,
                                         spawn.properties.clone(),
                                     ));
+                                    success!("Spawned entity successfully");
                                     completed.push(i);
                                 }
                                 Err(e) => {
