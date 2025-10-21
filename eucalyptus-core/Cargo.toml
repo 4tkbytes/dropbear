@@ -32,7 +32,7 @@ sha2.workspace = true
 libloading.workspace = true
 crossbeam-channel.workspace = true
 app_dirs2.workspace = true
-num_enum.workspace = true
+stdext.workspace = true
 
 [features]
 # editor only stuff

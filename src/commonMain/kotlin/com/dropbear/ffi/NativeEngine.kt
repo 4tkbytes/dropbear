@@ -1,5 +1,6 @@
 package com.dropbear.ffi
 
+import com.dropbear.Camera
 import com.dropbear.EntityId
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
@@ -11,6 +12,10 @@ expect class NativeEngine {
      * Fetches the entity from its label, returning a [Long] (the entity ID)
      */
     fun getEntity(label: String): Long?
+
+    fun getCamera(label: String): Camera?
+    fun getAttachedCamera(entityId: EntityId): Camera?
+    fun setCamera(camera: Camera);
 
     /**
      * Fetches the [Transform] component of an entity by it's ID

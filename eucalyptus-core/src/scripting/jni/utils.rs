@@ -1,5 +1,5 @@
 use jni::JNIEnv;
-use jni::objects::JFloatArray;
+use jni::objects::{JFloatArray, JObject, JValue};
 use jni::sys::{jfloatArray, jint};
 
 pub fn new_float_array(env: &mut JNIEnv, x: f32, y: f32) -> jfloatArray {
@@ -39,4 +39,41 @@ pub fn java_button_to_rust(button_code: jint) -> Option<winit::event::MouseButto
         other if other >= 0 => Some(winit::event::MouseButton::Other(other as u16)), // Assuming Other uses the int directly
         _ => None,
     }
+}
+
+pub fn create_vector3<'a>(env: &mut JNIEnv<'a>, x: f64, y: f64, z: f64) -> anyhow::Result<JObject<'a>> {
+    let vector3_class = env.find_class("com/dropbear/math/Vector3")?;
+
+    let x_obj = env.call_static_method(
+        "java/lang/Double",
+        "valueOf",
+        "(D)Ljava/lang/Double;",
+        &[JValue::Double(x)]
+    )?.l()?;
+
+    let y_obj = env.call_static_method(
+        "java/lang/Double",
+        "valueOf",
+        "(D)Ljava/lang/Double;",
+        &[JValue::Double(y)]
+    )?.l()?;
+
+    let z_obj = env.call_static_method(
+        "java/lang/Double",
+        "valueOf",
+        "(D)Ljava/lang/Double;",
+        &[JValue::Double(z)]
+    )?.l()?;
+
+    let vector3 = env.new_object(
+        vector3_class,
+        "(Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;)V",
+        &[
+            JValue::Object(&x_obj),
+            JValue::Object(&y_obj),
+            JValue::Object(&z_obj),
+        ]
+    )?;
+
+    Ok(vector3)
 }

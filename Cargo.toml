@@ -65,6 +65,7 @@ indexmap = "2.11"
 rand = "0.9"
 num_enum = "0.7"
 sha2 = "0.10"
+stdext = "0.3"
 
 [workspace.dependencies.image]
 version = "0.25"

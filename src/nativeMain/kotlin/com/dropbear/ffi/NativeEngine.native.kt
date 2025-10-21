@@ -3,6 +3,7 @@
 
 package com.dropbear.ffi
 
+import com.dropbear.Camera
 import com.dropbear.EntityId
 import com.dropbear.ffi.generated.*
 import com.dropbear.input.KeyCode
@@ -297,5 +298,16 @@ actual class NativeEngine {
     }
 
     actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
+    }
+
+    actual fun getCamera(label: String): Camera? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getAttachedCamera(entityId: EntityId): Camera? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setCamera(camera: Camera) {
     }
 }

@@ -47,4 +47,12 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
             else -> throw IllegalArgumentException("Unsupported property type: ${value::class}")
         }
     }
+
+    fun getAttachedCamera(): Camera? {
+        val result = engine.native.getAttachedCamera(id)
+        if (result != null) {
+            result.engine = this.engine
+        }
+        return result
+    }
 }

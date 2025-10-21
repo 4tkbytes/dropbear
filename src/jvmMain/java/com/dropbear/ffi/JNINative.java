@@ -1,5 +1,6 @@
 package com.dropbear.ffi;
 
+import com.dropbear.Camera;
 import com.dropbear.math.Transform;
 
 public class JNINative {
@@ -9,6 +10,9 @@ public class JNINative {
 
     // entity and ecs
     public static native long getEntity(long handle, String label);
+    public static native Camera getCamera(long worldHandle, String label);
+    public static native Camera getAttachedCamera(long worldHandle, long entityHandle);
+    public static native void setCamera(long worldHandle, Camera camera);
 
     // transformations
     public static native Transform getTransform(long handle, long entityHandle);

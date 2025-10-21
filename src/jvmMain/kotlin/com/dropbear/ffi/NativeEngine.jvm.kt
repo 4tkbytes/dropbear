@@ -1,5 +1,6 @@
 package com.dropbear.ffi
 
+import com.dropbear.Camera
 import com.dropbear.EntityId
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
@@ -132,5 +133,17 @@ actual class NativeEngine {
 
     actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
         JNINative.setVec3Property(worldHandle, entityHandle, label, value)
+    }
+
+    actual fun getCamera(label: String): Camera? {
+        return JNINative.getCamera(worldHandle, label)
+    }
+
+    actual fun getAttachedCamera(entityId: EntityId): Camera? {
+        return JNINative.getAttachedCamera(worldHandle, entityId.id)
+    }
+
+    actual fun setCamera(camera: Camera) {
+        JNINative.setCamera(worldHandle, camera)
     }
 }

@@ -8,14 +8,22 @@ import com.dropbear.math.Transform
 class DropbearEngine(val native: NativeEngine) {
     private var inputState: InputState? = null
 
-    public fun getEntity(label: String): EntityRef? {
+    fun getEntity(label: String): EntityRef? {
         val entityId = native.getEntity(label)
         val entityRef = if (entityId != null) EntityRef(EntityId(entityId)) else null
         entityRef?.engine = this
         return entityRef
     }
 
-    public fun getInputState(): InputState {
+    fun getCamera(label: String): Camera? {
+        val result = native.getCamera(label)
+        if (result != null) {
+            result.engine = this
+        }
+        return result
+    }
+
+    fun getInputState(): InputState {
         if (this.inputState == null) {
             Logger.trace("InputState not initialised, creating new one")
             this.inputState = InputState(this)
