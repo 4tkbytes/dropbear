@@ -244,11 +244,11 @@ pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
     }
     let input = unsafe { &*input };
 
-    println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [DEBUG] Original code: {:?}", key);
+    // println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [DEBUG] Original code: {:?}", key);
 
     match keycode_from_ordinal(key) {
         Some(k) => {
-            println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [DEBUG] Keycode: {:?}", k);
+            // println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [DEBUG] Keycode: {:?}", k);
             if input.pressed_keys.contains(&k) {
                 true.into()
             } else {
