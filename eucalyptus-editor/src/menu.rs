@@ -476,7 +476,7 @@ impl Keyboard for MainMenu {
 }
 
 impl Mouse for MainMenu {
-    fn mouse_move(&mut self, _position: PhysicalPosition<f64>) {}
+    fn mouse_move(&mut self, _position: PhysicalPosition<f64>, _delta: Option<(f64, f64)>) {}
     fn mouse_down(&mut self, _button: MouseButton) {}
     fn mouse_up(&mut self, _button: MouseButton) {}
 }

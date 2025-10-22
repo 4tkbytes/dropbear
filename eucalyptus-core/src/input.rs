@@ -2,11 +2,15 @@ use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
+use std::sync::Arc;
 use winit::{event::MouseButton, keyboard::KeyCode};
+use winit::window::Window;
 use dropbear_engine::gilrs::{Button, GamepadId};
 
 #[derive(Clone, Debug)]
 pub struct InputState {
+    pub window: Option<Arc<Window>>,
+
     #[allow(dead_code)]
     pub last_key_press_times: HashMap<KeyCode, Instant>,
     #[allow(dead_code)]
@@ -17,6 +21,8 @@ pub struct InputState {
     pub pressed_keys: HashSet<KeyCode>,
     pub mouse_delta: Option<(f64, f64)>,
     pub is_cursor_locked: bool,
+
+    /// This is not used, the mouse delta and/or the mouse position is used instead
     pub last_mouse_pos: Option<(f64, f64)>,
 
     pub connected_gamepads: HashSet<GamepadId>,
@@ -34,6 +40,7 @@ impl Default for InputState {
 impl InputState {
     pub fn new() -> Self {
         Self {
+            window: None,
             mouse_pos: Default::default(),
             mouse_button: Default::default(),
             pressed_keys: HashSet::new(),

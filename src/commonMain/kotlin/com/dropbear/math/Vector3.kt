@@ -145,6 +145,10 @@ class Vector3<T: Number>(
     override fun length(): Double {
         return sqrt(x.toDouble() * x.toDouble() + y.toDouble() * y.toDouble() + z.toDouble() * z.toDouble())
     }
+
+    override fun copy(): Vector3<T> {
+        return Vector3(x, y, z)
+    }
 }
 
 typealias Vector3D = Vector3<Double>

@@ -46,6 +46,7 @@ use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
+use winit::window::CursorGrabMode;
 use crate::plugin::PluginRegistry;
 
 pub struct Editor {
@@ -679,6 +680,10 @@ impl Editor {
 
     /// Restores transform components back to its original state before PlayMode.
     pub fn restore(&mut self) -> anyhow::Result<()> {
+        if let Some(window) = &self.window {
+            let _ = window.set_cursor_grab(CursorGrabMode::None);
+        }
+
         if let Some(backup) = &self.play_mode_backup {
             for (entity_id, original_transform, original_properties, original_script) in
                 &backup.entities
@@ -708,43 +713,15 @@ impl Editor {
                 }
             }
 
-            // for (entity_id, original_camera, original_component, original_follow_target) in
-            //     &backup.camera_data
-            // {
-            //     if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
-            //         *camera = original_camera.clone();
-            //     }
-            //
-            //     if let Ok(mut component) = self.world.get::<&mut CameraComponent>(*entity_id) {
-            //         *component = original_component.clone();
-            //     }
-            //
-            //     let has_follow_target = self.world.get::<&CameraFollowTarget>(*entity_id).is_ok();
-            //     match (has_follow_target, original_follow_target) {
-            //         (true, Some(original)) => {
-            //             // if let Ok(mut follow_target) =
-            //             //     self.world.get::<&mut CameraFollowTarget>(*entity_id)
-            //             // {
-            //             //     *follow_target = original.clone();
-            //             // }
-            //         }
-            //         (true, None) => {
-            //             // {
-            //             //     let _ = self.world
-            //             //         .remove_one::<CameraFollowTarget>(*entity_id);
-            //             // }
-            //         }
-            //         (false, Some(original)) => {
-            //             {
-            //                 let _ = self.world
-            //                     .insert_one(*entity_id, original.clone());
-            //             }
-            //         }
-            //         (false, None) => {
-            //             // No change needed
-            //         }
-            //     }
-            // }
+            for (entity_id, original_camera, original_camera_component) in &backup.camera_data {
+                if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
+                    *camera = original_camera.clone();
+                }
+
+                if let Ok(mut camera_component) = self.world.get::<&mut CameraComponent>(*entity_id) {
+                    *camera_component = original_camera_component.clone();
+                }
+            }
 
             log::info!("Restored scene from play mode backup");
 
@@ -1224,7 +1201,6 @@ pub struct PlayModeBackup {
         hecs::Entity,
         Camera,
         CameraComponent,
-        // Option<CameraFollowTarget>,
     )>,
 }
 

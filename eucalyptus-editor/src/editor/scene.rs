@@ -79,8 +79,7 @@ impl Scene for Editor {
         }
 
         if !self.is_world_loaded.is_fully_loaded() {
-            log::debug!("Scene is not fully loaded, initializing...");
-            // self.load(graphics).await;
+            log::debug!("Scene is not fully loaded, initialising...");
             return;
         } else {
             log_once::debug_once!("Scene has fully loaded");
@@ -100,6 +99,21 @@ impl Scene for Editor {
                 fatal!("{}", e);
             }
         }
+
+        { // title to projects name
+            let project_title = {
+                PROJECT.read().project_name.clone()
+            };
+            let title = format!("{} | Version {} on commit {}",
+                                project_title,
+                                env!("CARGO_PKG_VERSION"),
+                                env!("GIT_HASH"));
+            graphics.shared.window.set_title(&title);
+        }
+
+        log::info!("Updating window commands");
+        eucalyptus_core::window::poll(graphics.shared.window.clone());
+        log::info!("Window commands updated");
 
         { // basic futurequeue spawn queue management.
             let mut completed = Vec::new();
@@ -228,6 +242,8 @@ impl Scene for Editor {
             self.light_manager
                 .update(graphics.shared.clone(), &self.world);
         }
+
+        self.input_state.window = self.window.clone();
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {

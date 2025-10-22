@@ -10,6 +10,7 @@ use jni::JNIEnv;
 use dropbear_engine::camera::Camera;
 use crate::camera::{CameraComponent, CameraType};
 use crate::states::{ModelProperties, Value};
+use crate::window::{WindowCommand, WINDOW_COMMANDS};
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -363,13 +364,20 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     let input = input_handle as InputStatePtr;
 
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_isCursorLocked] [ERROR] Input state pointer is null");
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Input state pointer is null");
         return;
     }
 
     let input = unsafe { &mut *input };
+    let is_locked = locked != 0;
 
-    input.is_cursor_locked = locked != 0;
+    WINDOW_COMMANDS.lock().push(
+        WindowCommand::SetCursorGrab(is_locked)
+    );
+    println!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [DEBUG] Window command: {:?}", WINDOW_COMMANDS.lock());
+
+    input.is_cursor_locked = is_locked;
+    println!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [DEBUG] Input state: {:?}", input);
 }
 
 // JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getLastMousePos

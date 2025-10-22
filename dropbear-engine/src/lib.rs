@@ -52,6 +52,7 @@ pub use gilrs;
 use log::LevelFilter;
 pub use wgpu;
 pub use winit;
+use winit::event::{DeviceEvent, DeviceId};
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -378,6 +379,7 @@ pub struct App {
     ///
     /// Winit doesn't use async, so this is the next best alternative.
     future_queue: Arc<FutureQueue>,
+    delta_position: Option<(f64, f64)>,
 }
 
 impl App {
@@ -395,6 +397,7 @@ impl App {
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
             future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
+            delta_position: None,
         };
         log::debug!("Created new instance of app");
         result
@@ -408,14 +411,6 @@ impl App {
     pub fn set_target_fps(&mut self, fps: u32) {
         self.target_fps = fps.max(1);
     }
-
-    // /// Spawns a new task
-    // pub fn spawn_task<F>(&self, fut: F)
-    // where
-    //     F: std::future::Future<Output = ()> + Send + 'static,
-    // {
-    //     let _ = self.runtime.spawn(fut);
-    // }
 
     /// The run function. This function runs the app into gear.
     ///
@@ -725,7 +720,18 @@ impl ApplicationHandler for App {
                     .handle_mouse_input(button, button_state.is_pressed());
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.input_manager.handle_mouse_movement(position);
+                self.input_manager.handle_mouse_movement(position, self.delta_position);
+            }
+            _ => {}
+        }
+    }
+
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+        #[allow(clippy::single_match)]
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                // log::debug!("Mouse motion: {:?}", delta);
+                self.delta_position = Some(delta)
             }
             _ => {}
         }

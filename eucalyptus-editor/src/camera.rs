@@ -56,6 +56,9 @@ impl InspectableComponent for Camera {
                             "{:.2}, {:.2}, {:.2}",
                             self.eye.x, self.eye.y, self.eye.z
                         ));
+                        if ui.button("Reset").clicked() {
+                            self.eye = glam::DVec3::ZERO;
+                        }
                     });
 
                     ui.horizontal(|ui| {
@@ -64,6 +67,9 @@ impl InspectableComponent for Camera {
                             "{:.2}, {:.2}, {:.2}",
                             self.target.x, self.target.y, self.target.z
                         ));
+                        if ui.button("Reset").clicked() {
+                            self.target = glam::DVec3::ZERO;
+                        }
                     });
                 });
         });
@@ -94,39 +100,10 @@ impl InspectableComponent for CameraComponent {
             CollapsingHeader::new("Camera Component")
                 .default_open(true)
                 .show(ui, |ui| {
-                    // removing this because it is set based on the entity hierarchy
-                    // ui.horizontal(|ui| {
-                    //     ui.label("Type:");
-                    //     egui::ComboBox::from_label("")
-                    //         .selected_text(format!("{:?}", self.camera_type))
-                    //         .show_ui(ui, |ui| {
-                    //             ui.selectable_value(
-                    //                 &mut self.camera_type,
-                    //                 CameraType::Normal,
-                    //                 "Normal",
-                    //             );
-                    //             if !matches!(self.camera_type, CameraType::Player) {
-                    //                 ui.selectable_value(
-                    //                     &mut self.camera_type,
-                    //                     CameraType::Debug,
-                    //                     "Debug",
-                    //                 );
-                    //             } else {
-                    //                 ui.add_enabled(false, egui::Button::new("Debug"));
-                    //                 ui.label("Debug not available for player cameras");
-                    //             }
-                    //             ui.selectable_value(
-                    //                 &mut self.camera_type,
-                    //                 CameraType::Player,
-                    //                 "Player",
-                    //             );
-                    //         });
-                    // });
-
                     if !matches!(self.camera_type, CameraType::Player) {
                         egui::ComboBox::from_id_salt(
                             "i aint r kelly the way i take the piss ; \
-                        but im mj coz my shots don't miss",
+                        but im mj coz my shots don't eva miss",
                         )
                         .selected_text(format!("{:?}", self.camera_type))
                         .show_ui(ui, |ui| {
@@ -161,63 +138,7 @@ impl InspectableComponent for CameraComponent {
                         ui.label("FOV:");
                         ui.add(egui::Slider::new(&mut self.fov_y, 10.0..=120.0).suffix("°"));
                     });
-
-                    // if matches!(self.camera_type, CameraType::Player) {
-                    //     ui.separator();
-                    //     ui.label("Player Camera Controls:");
-                    //     if ui.button("Set as Active Camera").clicked() {
-                    //         *signal = Signal::CameraAction(CameraAction::SetInitialCamera);
-                    //         log::info!("Set player camera as active (not implemented)");
-                    //     }
-                    // }
                 });
         });
     }
 }
-
-// impl InspectableComponent for CameraFollowTarget {
-//     fn inspect(
-//         &mut self,
-//         entity: &mut Entity,
-//         _cfg: &mut StaticallyKept,
-//         ui: &mut Ui,
-//         _undo_stack: &mut Vec<UndoableAction>,
-//         signal: &mut Signal,
-//         _label: &mut String,
-//     ) {
-//         ui.vertical(|ui| {
-//             CollapsingHeader::new("Camera Follow Target")
-//                 .default_open(true)
-//                 .show(ui, |ui| {
-//                     ui.horizontal(|ui| {
-//                         ui.label("Offset:");
-//                     });
-//
-//                     ui.horizontal(|ui| {
-//                         ui.label("X:");
-//                         ui.add(egui::DragValue::new(&mut self.offset.x).speed(0.1));
-//                     });
-//
-//                     ui.horizontal(|ui| {
-//                         ui.label("Y:");
-//                         ui.add(egui::DragValue::new(&mut self.offset.y).speed(0.1));
-//                     });
-//
-//                     ui.horizontal(|ui| {
-//                         ui.label("Z:");
-//                         ui.add(egui::DragValue::new(&mut self.offset.z).speed(0.1));
-//                     });
-//                     ui.horizontal(|ui| {
-//                         if ui.button("Set current position as offset").clicked() {
-//                             success!("Set current position as offset");
-//                             *signal = Signal::CameraAction(CameraAction::SetCurrentPositionAsOffset(*entity))
-//                         }
-//                         if ui.button("Clear Target").clicked() {
-//                             success!("Removed camera offset");
-//                             *signal = Signal::CameraAction(CameraAction::ClearPlayerTarget);
-//                         }
-//                     });
-//                 });
-//         });
-//     }
-// }

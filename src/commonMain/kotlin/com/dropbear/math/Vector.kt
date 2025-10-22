@@ -19,4 +19,6 @@ abstract class Vector<T: Number, SELF: Vector<T, SELF>> {
     abstract operator fun div(scalar: T): SELF
 
     abstract fun length(): Double
+
+    abstract fun copy(): SELF
 }

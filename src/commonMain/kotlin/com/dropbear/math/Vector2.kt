@@ -116,6 +116,10 @@ class Vector2<T: Number>(
     override fun length(): Double {
         return sqrt(x.toDouble() * x.toDouble() + y.toDouble() * y.toDouble())
     }
+
+    override fun copy(): Vector2<T> {
+        return Vector2(x, y)
+    }
 }
 
 public typealias Vector2D = Vector2<Double>

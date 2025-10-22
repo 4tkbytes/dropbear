@@ -101,6 +101,7 @@ impl Keyboard for Editor {
                     info!("Switched to Viewport::None");
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(true);
+                        let _ = window.set_cursor_grab(CursorGrabMode::None);
                     }
                 } else {
                     self.input_state.pressed_keys.insert(key);
@@ -252,88 +253,45 @@ impl Keyboard for Editor {
 }
 
 impl Mouse for Editor {
-    #[cfg(target_os = "linux")]
-    // this impl doesn't have the mouse being recentered back to the center (to be fixed), this works as a usable alternative for now
-    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove)
-        {
-            if let Some(last_pos) = self.input_state.last_mouse_pos {
-                let dx = position.x - last_pos.0;
-                let dy = position.y - last_pos.1;
-
-                if let Some(active_camera) = *self.active_camera.lock()
-                    && let Ok(mut q) = self.world.query_one::<(
-                        &mut Camera,
-                        &CameraComponent,
-                    )>(active_camera)
-                    && let Some((camera, _)) = q.get()
-                {
-                    camera.track_mouse_delta(dx, dy);
-                    self.input_state.mouse_delta = Some((dx, dy));
+    fn mouse_move(&mut self, position: PhysicalPosition<f64>, delta: Option<(f64, f64)>) {
+        if self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove) {
+            if let Some(window) = &self.window {
+                window.set_cursor_visible(false);
+                if let Err(e) = window.set_cursor_grab(CursorGrabMode::Confined)
+                    .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked)) {
+                    log_once::error_once!("Unable to grab mouse: {}", e);
                 }
             }
-            self.input_state.last_mouse_pos = Some((position.x, position.y));
-        } else {
-            if let Some(last_pos) = self.input_state.last_mouse_pos {
-                let dx = position.x - last_pos.0;
-                let dy = position.y - last_pos.1;
 
-                self.input_state.mouse_delta = Some((dx, dy));
-            }
-            self.input_state.last_mouse_pos = Some((position.x, position.y));
-        }
-
-        self.input_state.mouse_pos = (position.x, position.y);
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    // for some reason, this doesn't work on linux but works on windows (not tested on anywhere else)
-    fn mouse_move(&mut self, position: PhysicalPosition<f64>) {
-        if (self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove))
-            && let Some(window) = &self.window
-        {
-            let size = window.inner_size();
-            let center = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
-
-            let distance_from_center =
-                ((position.x - center.x).powi(2) + (position.y - center.y).powi(2)).sqrt();
-
-            if distance_from_center > 5.0 {
-                let dx = position.x - center.x;
-                let dy = position.y - center.y;
-
-                if let Some(active_camera) = *self.active_camera.lock()
-                    && let Ok(mut q) = self.world.query_one::<(
-                        &mut Camera,
-                        &CameraComponent,
-                    )>(active_camera)
-                    && let Some((camera, _)) = q.get()
-                {
-                    camera.track_mouse_delta(dx, dy);
+            if let Some(active_camera) = *self.active_camera.lock()
+                && let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent)>(active_camera)
+                && let Some((camera, _)) = q.get()
+            {
+                if let Some((dx, dy)) = delta {
+                    camera.track_mouse_delta(dx * camera.sensitivity, dy * camera.sensitivity);
                     self.input_state.mouse_delta = Some((dx, dy));
+                } else {
+                    log_once::error_once!("Unable to track mouse delta")
                 }
 
-                let _ = window.set_cursor_position(center);
             }
-
-            window.set_cursor_visible(false);
+            self.input_state.last_mouse_pos = None;
         } else {
-            if let Some(last_pos) = self.input_state.last_mouse_pos {
-                let dx = position.x - last_pos.0;
-                let dy = position.y - last_pos.1;
-
-                self.input_state.mouse_delta = Some((dx, dy));
+            if let Some(window) = &self.window {
+                window.set_cursor_visible(true);
+                if let Err(e) = window.set_cursor_grab(CursorGrabMode::None) {
+                    log_once::error_once!("Unable to release mouse grab: {}", e);
+                }
             }
-            self.input_state.last_mouse_pos = Some((position.x, position.y));
+            self.input_state.last_mouse_pos = None;
         }
 
+        self.input_state.mouse_delta = delta;
         self.input_state.mouse_pos = (position.x, position.y);
     }
 
     fn mouse_down(&mut self, button: MouseButton) {
-        {
-            self.input_state.mouse_button.insert(button);
-        }
+        self.input_state.mouse_button.insert(button);
     }
 
     fn mouse_up(&mut self, button: MouseButton) {
@@ -346,7 +304,7 @@ impl Controller for Editor {
         self.input_state
             .pressed_buttons
             .entry(id)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(button);
     }
 
