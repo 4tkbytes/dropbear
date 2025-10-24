@@ -11,6 +11,7 @@ import com.dropbear.math.Vector2D
 actual class NativeEngine {
     private var worldHandle: Long = 0L
     private var inputHandle: Long = 0L
+    private var graphicsHandle: Long = 0L
 
     actual fun getEntity(label: String): Long? {
         val result = JNINative.getEntity(worldHandle, label)
@@ -22,11 +23,20 @@ actual class NativeEngine {
     }
 
     @JvmName("init")
-    fun init(worldHandle: Long, inputHandle: Long) {
+    fun init(worldHandle: Long, inputHandle: Long, graphicsHandle: Long) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
+        this.graphicsHandle = graphicsHandle
         if (this.worldHandle < 0L) {
             println("NativeEngine: Error - Invalid world handle received!")
+            return
+        }
+        if (this.inputHandle < 0L) {
+            println("NativeEngine: Error - Invalid input handle received!")
+            return
+        }
+        if (this.graphicsHandle < 0L) {
+            println("NativeEngine: Error - Invalid graphics handle received!")
             return
         }
     }
@@ -75,7 +85,7 @@ actual class NativeEngine {
     }
 
     actual fun setCursorLocked(locked: Boolean) {
-        JNINative.setCursorLocked(inputHandle, locked)
+        JNINative.setCursorLocked(inputHandle, graphicsHandle, locked)
     }
 
     actual fun getLastMousePos(): Vector2D? {

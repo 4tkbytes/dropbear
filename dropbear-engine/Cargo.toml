@@ -36,6 +36,7 @@ rayon.workspace = true
 backtrace.workspace = true
 os_info.workspace = true
 rustc_version_runtime.workspace = true
+crossbeam-channel.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

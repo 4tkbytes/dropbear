@@ -17,6 +17,7 @@ use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use eucalyptus_core::window::poll;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -111,9 +112,7 @@ impl Scene for Editor {
             graphics.shared.window.set_title(&title);
         }
 
-        log::info!("Updating window commands");
-        eucalyptus_core::window::poll(graphics.shared.window.clone());
-        log::info!("Window commands updated");
+        poll(graphics.shared.window.clone());
 
         { // basic futurequeue spawn queue management.
             let mut completed = Vec::new();

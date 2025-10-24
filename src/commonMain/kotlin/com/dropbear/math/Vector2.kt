@@ -122,4 +122,4 @@ class Vector2<T: Number>(
     }
 }
 
-public typealias Vector2D = Vector2<Double>
+typealias Vector2D = Vector2<Double>

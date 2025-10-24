@@ -1,10 +1,8 @@
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
-
 use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 use parking_lot::Mutex;
-// use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 use crate::{
     State,
     egui_renderer::EguiRenderer,
@@ -23,6 +21,16 @@ use winit::window::Window;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
 pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");
+
+#[derive(Debug)]
+pub enum GraphicsCommand {
+    WindowCommand(WindowCommand)
+}
+
+#[derive(Debug)]
+pub enum WindowCommand {
+    WindowGrab(bool)
+}
 
 pub struct RenderContext<'a> {
     pub shared: Arc<SharedGraphicsContext>,

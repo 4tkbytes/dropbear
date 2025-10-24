@@ -18,9 +18,10 @@ import kotlin.experimental.ExperimentalNativeApi
 actual class NativeEngine {
     private var worldHandle: COpaquePointer? = null
     private var inputHandle: COpaquePointer? = null
+    private var graphicsHandle: COpaquePointer? = null
 
     @Suppress("unused")
-    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?) {
+    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?, graphicsHandle: COpaquePointer?) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
         if (this.worldHandle == null) {
@@ -28,6 +29,9 @@ actual class NativeEngine {
         }
         if (this.inputHandle == null) {
             Logger.error("NativeEngine: Error - Invalid input handle received!")
+        }
+        if (this.graphicsHandle == null) {
+            Logger.error("NativeEngine: Error - Invalid graphics handle received!")
         }
     }
 

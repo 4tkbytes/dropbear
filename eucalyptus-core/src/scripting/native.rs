@@ -4,7 +4,7 @@
 pub mod sig;
 mod exports;
 
-use crate::ptr::{InputStatePtr, WorldPtr};
+use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged};
 use libloading::{Library, Symbol};
 use std::ffi::CString;
@@ -58,9 +58,9 @@ impl NativeLibrary {
         }
     }
 
-    pub fn init(&mut self, world_ptr: WorldPtr, input_state_ptr: InputStatePtr) -> anyhow::Result<()> {
+    pub fn init(&mut self, world_ptr: WorldPtr, input_state_ptr: InputStatePtr, graphics_ptr: GraphicsPtr) -> anyhow::Result<()> {
         unsafe {
-            let result = (self.init_fn)(world_ptr, input_state_ptr);
+            let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr);
             if result != 0 {
                 anyhow::bail!("Init function failed with code: {}", result);
             }

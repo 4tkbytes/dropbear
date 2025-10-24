@@ -8,16 +8,13 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{build_jvm, BuildStatus, ScriptTarget};
+use eucalyptus_core::scripting::{build_jvm, BuildStatus};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
-use hecs::{Entity, World};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
-use eucalyptus_core::input::InputState;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -156,7 +153,6 @@ impl SignalController for Editor {
 
                     // Ctrl+Alt+P skips build process and starts running, such as if using cached jar
                     if ctrl_pressed && alt_pressed && self.input_state.pressed_keys.contains(&KeyCode::KeyP) {
-
                         if let Some(handle) = self.handle_created {
                             log::debug!("Cancelling build task due to manual intervention");
                             graphics.future_queue.cancel(&handle);
@@ -212,77 +208,8 @@ impl SignalController for Editor {
 
                         self.show_build_window = false;
 
-                        let has_player_camera_target = self
-                            .world
-                            .query::<(&Camera, &CameraComponent)>()
-                            .iter()
-                            .any(|(_, (_, comp))| comp.starting_camera);
-
-                        if has_player_camera_target {
-                            if let Err(e) = self.create_backup() {
-                                self.signal = Signal::None;
-                                fatal!("Failed to create play mode backup: {}", e);
-                            }
-
-                            self.editor_state = EditorState::Playing;
-
-                            self.switch_to_player_camera();
-
-                            let mut script_entities = Vec::new();
-                            {
-                                for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
-                                    script_entities.push((entity_id, script.clone()));
-                                }
-                            }
-
-                            let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-                            for (entity_id, script) in script_entities {
-                                for tag in script.tags {
-                                    if etag.contains_key(&tag) {
-                                        etag.get_mut(&tag).unwrap().push(entity_id);
-                                    } else {
-                                        etag.insert(tag.clone(), vec![entity_id]);
-                                    }
-                                }
-                            }
-
-                            let etag_clone = etag.clone();
-
-                            if let Err(e) = self
-                                .script_manager
-                                .init_script(etag_clone, ScriptTarget::JVM { library_path: jar_path })
-                            {
-                                fatal!("Failed to ready script manager interface because {}", e);
-                                self.signal = Signal::StopPlaying;
-                                return Err(anyhow::anyhow!(e));
-                            }
-
-                            let world_ptr = self.world.as_mut() as *mut World;
-                            let input_ptr = self.input_state.as_mut() as *mut InputState;
-
-                            if let Err(e) = self.script_manager
-                                .load_script(
-                                    world_ptr,
-                                    input_ptr,
-                                ) {
-                                fatal!(
-                                    "Failed to initialise script because {}",
-                                    e
-                                );
-                                self.signal = Signal::StopPlaying;
-                                return Err(anyhow::anyhow!(e));
-                            } else {
-                                success_without_console!(
-                                    "You are in play mode now! Press Escape to exit"
-                                );
-                                log::info!("You are in play mode now! Press Escape to exit");
-                            }
-
-                            self.signal = Signal::None;
-                        } else {
-                            self.signal = Signal::None;
-                            fatal!("Unable to build: No initial camera set");
-                        }
+                        self.load_play_mode(graphics.clone(), jar_path)?;
+                        return Ok(())
                     }
 
                     let mut local_handle_exchanged: Option<anyhow::Result<PathBuf>> = None;
@@ -409,77 +336,7 @@ impl SignalController for Editor {
                                 success!("Build completed successfully!");
                                 self.show_build_window = false;
 
-                                let has_player_camera_target = self
-                                    .world
-                                    .query::<(&Camera, &CameraComponent)>()
-                                    .iter()
-                                    .any(|(_, (_, comp))| comp.starting_camera);
-
-                                if has_player_camera_target {
-                                    if let Err(e) = self.create_backup() {
-                                        self.signal = Signal::None;
-                                        fatal!("Failed to create play mode backup: {}", e);
-                                    }
-
-                                    self.editor_state = EditorState::Playing;
-
-                                    self.switch_to_player_camera();
-
-                                    let mut script_entities = Vec::new();
-                                    {
-                                        for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
-                                            script_entities.push((entity_id, script.clone()));
-                                        }
-                                    }
-
-                                    let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-                                    for (entity_id, script) in script_entities {
-                                        for tag in script.tags {
-                                            if etag.contains_key(&tag) {
-                                                etag.get_mut(&tag).unwrap().push(entity_id);
-                                            } else {
-                                                etag.insert(tag.clone(), vec![entity_id]);
-                                            }
-                                        }
-                                    }
-
-                                    let etag_clone = etag.clone();
-
-                                    if let Err(e) = self
-                                        .script_manager
-                                        .init_script(etag_clone, ScriptTarget::JVM { library_path: path })
-                                    {
-                                        fatal!("Failed to ready script manager interface because {}", e);
-                                        self.signal = Signal::StopPlaying;
-                                        return Err(anyhow::anyhow!(e));
-                                    }
-
-                                    let world_ptr = self.world.as_mut() as *mut World;
-                                    let input_ptr = self.input_state.as_mut() as *mut InputState;
-
-                                    if let Err(e) = self.script_manager
-                                        .load_script(
-                                            world_ptr,
-                                            input_ptr,
-                                        ) {
-                                        fatal!(
-                                            "Failed to initialise script because {}",
-                                            e
-                                        );
-                                        self.signal = Signal::StopPlaying;
-                                        return Err(anyhow::anyhow!(e));
-                                    } else {
-                                        success_without_console!(
-                                            "You are in play mode now! Press Escape to exit"
-                                        );
-                                        log::info!("You are in play mode now! Press Escape to exit");
-                                    }
-
-                                    self.signal = Signal::None;
-                                } else {
-                                    self.signal = Signal::None;
-                                    fatal!("Unable to build: No initial camera set");
-                                }
+                                self.load_play_mode(graphics.clone(), path)?;
                             }
                             Err(e) => {
                                 let error_msg = format!("Build process error: {}", e);

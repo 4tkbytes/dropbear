@@ -13,7 +13,7 @@ use std::path::{PathBuf};
 use crate::{success, APP_INFO};
 use sha2::{Digest, Sha256};
 use crate::logging::{LOG_LEVEL};
-use crate::ptr::{InputStatePtr, WorldPtr};
+use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::exception::get_exception_info;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
@@ -102,7 +102,7 @@ impl JavaContext {
         })
     }
 
-    pub fn init(&mut self, world: WorldPtr, input: InputStatePtr) -> anyhow::Result<()> {
+    pub fn init(&mut self, world: WorldPtr, input: InputStatePtr, graphics: GraphicsPtr) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
@@ -123,16 +123,18 @@ impl JavaContext {
 
         let world_handle = world as jlong;
         let input_handle = input as jlong;
+        let graphics_handle = graphics as jlong;
         
-        log::trace!("Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long]", 
+        log::trace!("Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long]", 
             world_handle,
-            input_handle
+            input_handle,
+            graphics_handle,
         );
         env.call_method(
             &native_engine_obj,
             "init",
-            "(JJ)V",
-            &[JValue::Long(world_handle), JValue::Long(input_handle)],
+            "(JJJ)V",
+            &[JValue::Long(world_handle), JValue::Long(input_handle), JValue::Long(graphics_handle)],
         )?;
 
         let result = get_exception_info(&mut env);

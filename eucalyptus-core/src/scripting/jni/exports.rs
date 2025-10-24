@@ -1,4 +1,5 @@
-use crate::ptr::InputStatePtr;
+use std::sync::Arc;
+use crate::ptr::{GraphicsPtr, InputStatePtr};
 use crate::scripting::jni::utils::{create_vector3, extract_vector3, java_button_to_rust, new_float_array};
 use crate::utils::keycode_from_ordinal;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
@@ -8,9 +9,10 @@ use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
 use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
 use jni::JNIEnv;
 use dropbear_engine::camera::Camera;
+use dropbear_engine::graphics::{GraphicsCommand, SharedGraphicsContext, WindowCommand};
 use crate::camera::{CameraComponent, CameraType};
 use crate::states::{ModelProperties, Value};
-use crate::window::{WindowCommand, WINDOW_COMMANDS};
+use crate::window::GRAPHICS_COMMAND;
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -353,12 +355,13 @@ pub fn Java_com_dropbear_ffi_JNINative_isCursorLocked(
 }
 
 // JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorLocked
-//   (JNIEnv *, jclass, jlong, jboolean);
+//   (JNIEnv *, jclass, jlong, jlong, jboolean);
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     _env: JNIEnv,
     _class: JClass,
     input_handle: jlong,
+    graphics_handle: jlong,
     locked: jboolean,
 ) {
     let input = input_handle as InputStatePtr;
@@ -368,16 +371,24 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
         return;
     }
 
+    let graphics = graphics_handle as GraphicsPtr;
+
+    if graphics.is_null() {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Graphics pointer is null");
+        return;
+    }
+
     let input = unsafe { &mut *input };
+    let graphics = unsafe { &*graphics };
+
     let is_locked = locked != 0;
 
-    WINDOW_COMMANDS.lock().push(
-        WindowCommand::SetCursorGrab(is_locked)
-    );
-    println!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [DEBUG] Window command: {:?}", WINDOW_COMMANDS.lock());
+    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(is_locked))) {
+        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Unable to send window command: {}", e);
+        return;
+    }
 
     input.is_cursor_locked = is_locked;
-    println!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [DEBUG] Input state: {:?}", input);
 }
 
 // JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getLastMousePos

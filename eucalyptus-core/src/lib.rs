@@ -7,7 +7,7 @@ pub mod spawn;
 pub mod states;
 pub mod utils;
 pub mod ptr;
-mod result;
+pub mod result;
 pub mod window;
 
 pub use egui;

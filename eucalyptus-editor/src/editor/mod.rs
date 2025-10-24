@@ -11,12 +11,13 @@ use std::{
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
-use crossbeam_channel::Receiver;
+use std::path::Path;
+use crossbeam_channel::{Receiver, Sender};
 use crate::build::build;
 use crate::camera::UndoableCameraAction;
 use crate::debug;
 use dropbear_engine::future::FutureHandle;
-use dropbear_engine::graphics::{RenderContext, Shader};
+use dropbear_engine::graphics::{GraphicsCommand, RenderContext, Shader};
 use dropbear_engine::model::ModelId;
 use dropbear_engine::{
     camera::Camera,
@@ -28,18 +29,15 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::scripting::{BuildStatus, ScriptManager};
+use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
 };
 use eucalyptus_core::utils::ViewportMode;
-use eucalyptus_core::{
-    camera::{CameraComponent, CameraType, DebugCamera},
-    states::WorldLoadingStatus,
-};
+use eucalyptus_core::{camera::{CameraComponent, CameraType, DebugCamera}, states::WorldLoadingStatus, success_without_console};
 use eucalyptus_core::{fatal, info, states, success, warn};
-use hecs::World;
+use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
@@ -47,6 +45,8 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::window::CursorGrabMode;
+use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use eucalyptus_core::window::GRAPHICS_COMMAND;
 use crate::plugin::PluginRegistry;
 
 pub struct Editor {
@@ -883,6 +883,90 @@ impl Editor {
 
         self.window = Some(graphics.shared.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
+    }
+
+    pub fn load_play_mode(&mut self, graphics: Arc<SharedGraphicsContext>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let path = path.as_ref();
+        let has_player_camera_target = self
+            .world
+            .query::<(&Camera, &CameraComponent)>()
+            .iter()
+            .any(|(_, (_, comp))| comp.starting_camera);
+
+        if has_player_camera_target {
+            if let Err(e) = self.create_backup() {
+                self.signal = Signal::None;
+                fatal!("Failed to create play mode backup: {}", e);
+            }
+
+            self.editor_state = EditorState::Playing;
+
+            self.switch_to_player_camera();
+
+            let mut script_entities = Vec::new();
+            {
+                for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                    script_entities.push((entity_id, script.clone()));
+                }
+            }
+
+            let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
+            for (entity_id, script) in script_entities {
+                for tag in script.tags {
+                    if etag.contains_key(&tag) {
+                        etag.get_mut(&tag).unwrap().push(entity_id);
+                    } else {
+                        etag.insert(tag.clone(), vec![entity_id]);
+                    }
+                }
+            }
+
+            let etag_clone = etag.clone();
+
+            if let Err(e) = self
+                .script_manager
+                .init_script(etag_clone, ScriptTarget::JVM { library_path: path.to_path_buf() })
+            {
+                fatal!("Failed to ready script manager interface because {}", e);
+                self.signal = Signal::StopPlaying;
+                return Err(anyhow::anyhow!(e));
+            }
+
+            let world_ptr = self.world.as_mut() as WorldPtr;
+            let input_ptr = self.input_state.as_mut() as InputStatePtr;
+            let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as GraphicsPtr;
+
+            log::debug!("Pointers before sendoff:");
+            log::debug!("World: {:p}", world_ptr);
+            log::debug!("Input: {:p}", input_ptr);
+            log::debug!("script graphics_command: 0x{:p}, 0x{:p}", &GRAPHICS_COMMAND.0, &GRAPHICS_COMMAND.1);
+
+            if let Err(e) = self.script_manager
+                .load_script(
+                    world_ptr,
+                    input_ptr,
+                    graphics_ptr,
+                ) {
+                fatal!(
+                    "Failed to initialise script because {}",
+                    e
+                );
+                self.signal = Signal::StopPlaying;
+                return Err(anyhow::anyhow!(e));
+            } else {
+                success_without_console!(
+                    "You are in play mode now! Press Escape to exit"
+                );
+                log::info!("You are in play mode now! Press Escape to exit");
+            }
+
+            self.signal = Signal::None;
+            Ok(())
+        } else {
+            self.signal = Signal::None;
+            fatal!("Unable to build: No initial camera set");
+            Err(anyhow::anyhow!("Unable to build: No initial camera set"))
+        }
     }
 }
 

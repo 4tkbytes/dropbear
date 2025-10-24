@@ -40,6 +40,6 @@ public class JNINative {
     public static native boolean isMouseButtonPressed(long inputHandle, int ordinal);
     public static native float[] getMouseDelta(long inputHandle);
     public static native boolean isCursorLocked(long inputHandle);
-    public static native void setCursorLocked(long inputHandle, boolean locked);
+    public static native void setCursorLocked(long inputHandle, long graphicsHandle, boolean locked);
     public static native float[] getLastMousePos(long inputHandle);
 }

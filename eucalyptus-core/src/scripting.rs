@@ -4,14 +4,14 @@ pub mod native;
 use crate::input::InputState;
 use crate::scripting::jni::JavaContext;
 use hecs::{Entity};
-use libloading::Library;
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap};
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use crate::ptr::{InputStatePtr, WorldPtr};
+use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::scripting::native::NativeLibrary;
 
 pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
 
@@ -37,7 +37,7 @@ pub enum BuildStatus {
 
 pub struct ScriptManager {
     jvm: Option<JavaContext>,
-    library: Option<Library>,
+    library: Option<NativeLibrary>,
     script_target: ScriptTarget,
     entity_tag_database: HashMap<String, Vec<Entity>>,
     jvm_created: bool,
@@ -92,8 +92,7 @@ impl ScriptManager {
                 }
             }
             ScriptTarget::Native { library_path } => {
-                let library = unsafe { Library::new(library_path)? };
-                self.library = Some(library);
+                self.library = Some(NativeLibrary::new(library_path)?);
             }
             ScriptTarget::None => {
                 self.jvm = None;
@@ -110,11 +109,12 @@ impl ScriptManager {
         &mut self,
         world: WorldPtr,
         input_state: InputStatePtr,
+        graphics: GraphicsPtr,
     ) -> anyhow::Result<()> {
         match &self.script_target {
-            ScriptTarget::JVM { library_path: _ } => {
+            ScriptTarget::JVM { .. } => {
                 if let Some(jvm) = &mut self.jvm {
-                    jvm.init(world, input_state)?;
+                    jvm.init(world, input_state, graphics)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;
@@ -122,8 +122,15 @@ impl ScriptManager {
                     return Ok(());
                 }
             }
-            ScriptTarget::Native { library_path: _ } => {
-                return Err(anyhow::anyhow!("Native library loading not implemented yet"));
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.init(world, input_state, graphics)?;
+                    for tag in self.entity_tag_database.keys() {
+                        log::trace!("Loading systems for tag: {}", tag);
+                        library.load_systems(tag.to_string())?;
+                    }
+                    return Ok(());
+                }
             }
             ScriptTarget::None => {
                 return Err(anyhow::anyhow!("No script target set"));
@@ -140,17 +147,29 @@ impl ScriptManager {
         _input_state: &InputState,
         dt: f32,
     ) -> anyhow::Result<()> {
-        if matches!(self.script_target, ScriptTarget::JVM { .. })
-            && let Some(jvm) = &self.jvm
-        {
-            jvm.update_all_systems(dt)?;
-            return Ok(());
-        }
 
-        Err(anyhow::anyhow!("Native implementation not implemented yet"))
+        match self.script_target {
+            ScriptTarget::None => {
+                Err(anyhow::anyhow!("ScriptTarget is set to None. Either set to JVM or Native"))
+            }
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &self.jvm {
+                    jvm.update_all_systems(dt)?;
+                    return Ok(());
+                }
+                Err(anyhow::anyhow!("ScriptTarget is set to JVM but JVM is None"))
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.update_all(dt)?;
+                    return Ok(());
+                }
+                Err(anyhow::anyhow!("ScriptTarget is set to Native but library is None"))
+            }
+        }
     }
 
-
+    // only possible in JVM, not standard library
     pub fn reload(&mut self, world_ptr: WorldPtr) -> anyhow::Result<()> {
         if let Some(jvm) = &mut self.jvm {
             jvm.reload(world_ptr)?

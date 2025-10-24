@@ -31,6 +31,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -53,6 +54,8 @@ use log::LevelFilter;
 pub use wgpu;
 pub use winit;
 use winit::event::{DeviceEvent, DeviceId};
+use winit::window::CursorGrabMode;
+use crate::graphics::{GraphicsCommand, WindowCommand};
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -69,7 +72,7 @@ pub struct State {
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
 
-    pub window: Arc<Window>,
+    pub window: Arc<Window>, // note to self: functions can only be called in the main thread
 }
 
 impl State {
@@ -249,7 +252,7 @@ Hardware:
             );
     }
 
-    /// Asynchronously renders the scene and the egui renderer. I don't know what else to say.
+    /// Renders the scene and the egui renderer. I don't know what else to say.
     fn render(
         &mut self,
         scene_manager: &mut scene::Manager,

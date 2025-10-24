@@ -1,31 +1,34 @@
 use std::sync::Arc;
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 use winit::window::{CursorGrabMode, Window};
+use dropbear_engine::graphics::{GraphicsCommand, WindowCommand};
 
-#[derive(Debug)]
-pub enum WindowCommand {
-    SetCursorGrab(bool),
-}
-
-pub static WINDOW_COMMANDS: Lazy<Mutex<Vec<WindowCommand>>> =
-    Lazy::new(|| Mutex::new(Vec::new()));
+pub static GRAPHICS_COMMAND: Lazy<(Box<Sender<GraphicsCommand>>, Receiver<GraphicsCommand>)> = Lazy::new(|| { let (tx, rx) = unbounded::<GraphicsCommand>(); (Box::new(tx), rx) });
 
 pub fn poll(window: Arc<Window>) {
-    for cmd in WINDOW_COMMANDS.lock().drain(..) {
+    while let Ok(cmd) = GRAPHICS_COMMAND.1.try_recv() {
+        log::trace!("Received GRAPHICS_COMMAND update: {:?}", cmd);
         match cmd {
-            WindowCommand::SetCursorGrab(locked) => {
-                println!("Setting cursor grab to {}", locked);
-                if locked {
-                    window.set_cursor_visible(false);
-                    if let Err(e) = window.set_cursor_grab(CursorGrabMode::Confined)
-                        .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked)) {
-                        eprintln!("Unable to grab mouse: {}", e);
-                    }
-                } else {
-                    window.set_cursor_visible(true);
-                    if let Err(e) = window.set_cursor_grab(CursorGrabMode::None) {
-                        eprintln!("Unable to release mouse grab: {}", e);
+            GraphicsCommand::WindowCommand(w_cmd) => {
+                match w_cmd {
+                    WindowCommand::WindowGrab(is_locked) => {
+                        if is_locked {
+                            if let Err(e) = window
+                                .set_cursor_grab(CursorGrabMode::Locked)
+                                .or_else(|_| { window.set_cursor_grab(CursorGrabMode::Confined) })
+                            {
+                                log_once::warn_once!("Failed to grab cursor: {:?}", e);
+                            } else {
+                                log_once::info_once!("Grabbed cursor");
+                            }
+                        } else if let Err(e) = window
+                            .set_cursor_grab(CursorGrabMode::None)
+                        {
+                            log_once::warn_once!("Failed to release cursor: {:?}", e);
+                        } else {
+                            log_once::info_once!("Released cursor");
+                        }
                     }
                 }
             }
