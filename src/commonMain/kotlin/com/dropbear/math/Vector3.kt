@@ -149,6 +149,10 @@ class Vector3<T: Number>(
     override fun copy(): Vector3<T> {
         return Vector3(x, y, z)
     }
+
+    override fun toString(): String {
+        return "Vector3(x=$x, y=$y, z=$z)"
+    }
 }
 
 typealias Vector3D = Vector3<Double>

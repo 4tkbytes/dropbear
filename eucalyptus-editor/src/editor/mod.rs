@@ -12,12 +12,12 @@ use std::{
     time::{Duration, Instant},
 };
 use std::path::Path;
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam_channel::{Receiver};
 use crate::build::build;
 use crate::camera::UndoableCameraAction;
 use crate::debug;
 use dropbear_engine::future::FutureHandle;
-use dropbear_engine::graphics::{GraphicsCommand, RenderContext, Shader};
+use dropbear_engine::graphics::{RenderContext, Shader};
 use dropbear_engine::model::ModelId;
 use dropbear_engine::{
     camera::Camera,
@@ -885,7 +885,7 @@ impl Editor {
         self.is_world_loaded.mark_rendering_loaded();
     }
 
-    pub fn load_play_mode(&mut self, graphics: Arc<SharedGraphicsContext>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn load_play_mode(&mut self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         let path = path.as_ref();
         let has_player_camera_target = self
             .world

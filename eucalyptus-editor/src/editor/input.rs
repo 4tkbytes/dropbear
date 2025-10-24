@@ -273,7 +273,6 @@ impl Mouse for Editor {
                 } else {
                     log_once::error_once!("Unable to track mouse delta")
                 }
-
             }
             self.input_state.last_mouse_pos = None;
         } else {

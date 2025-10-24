@@ -208,7 +208,7 @@ impl SignalController for Editor {
 
                         self.show_build_window = false;
 
-                        self.load_play_mode(graphics.clone(), jar_path)?;
+                        self.load_play_mode(jar_path)?;
                         return Ok(())
                     }
 
@@ -336,7 +336,7 @@ impl SignalController for Editor {
                                 success!("Build completed successfully!");
                                 self.show_build_window = false;
 
-                                self.load_play_mode(graphics.clone(), path)?;
+                                self.load_play_mode(path)?;
                             }
                             Err(e) => {
                                 let error_msg = format!("Build process error: {}", e);

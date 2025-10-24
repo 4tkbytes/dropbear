@@ -120,6 +120,10 @@ class Vector2<T: Number>(
     override fun copy(): Vector2<T> {
         return Vector2(x, y)
     }
+
+    override fun toString(): String {
+        return "Vector2(x=$x, y=$y)"
+    }
 }
 
 typealias Vector2D = Vector2<Double>

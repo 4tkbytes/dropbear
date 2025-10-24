@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::ptr::{GraphicsPtr, InputStatePtr};
 use crate::scripting::jni::utils::{create_vector3, extract_vector3, java_button_to_rust, new_float_array};
 use crate::utils::keycode_from_ordinal;
@@ -9,10 +8,9 @@ use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
 use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
 use jni::JNIEnv;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::graphics::{GraphicsCommand, SharedGraphicsContext, WindowCommand};
+use dropbear_engine::graphics::{GraphicsCommand, WindowCommand};
 use crate::camera::{CameraComponent, CameraType};
 use crate::states::{ModelProperties, Value};
-use crate::window::GRAPHICS_COMMAND;
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -322,12 +320,12 @@ pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
     let input = input_handle as InputStatePtr;
     if input.is_null() {
         println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [ERROR] Input state pointer is null");
-        return new_float_array(&mut env, -1.0, -1.0);
+        return new_float_array(&mut env, 0.0, 0.0);
     }
 
-    let input = unsafe { &*input };
+    let input = unsafe { &mut *input };
 
-    if let Some(pos) = input.mouse_delta {
+    if let Some(pos) = input.mouse_delta.take() {
         new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
     } else {
         println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [WARN] input_state.mouse_delta returns \"(None)\". Returning (0.0, 0.0)");

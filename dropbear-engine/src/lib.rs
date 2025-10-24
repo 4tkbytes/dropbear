@@ -31,7 +31,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use crossbeam_channel::{unbounded, Receiver, Sender};
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -54,8 +53,6 @@ use log::LevelFilter;
 pub use wgpu;
 pub use winit;
 use winit::event::{DeviceEvent, DeviceId};
-use winit::window::CursorGrabMode;
-use crate::graphics::{GraphicsCommand, WindowCommand};
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -724,6 +721,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input_manager.handle_mouse_movement(position, self.delta_position);
+                self.delta_position = None;
             }
             _ => {}
         }
