@@ -178,7 +178,7 @@ impl FutureQueue {
         for (id, future) in futures_to_spawn {
             log("Spawning future with tokio");
             let handle = tokio::spawn(future);
-            
+
             // Store the task handle
             let mut reg = registry.lock();
             if let Some(entry) = reg.get_mut(&id) {
@@ -308,21 +308,24 @@ impl FutureQueue {
     /// false if the handle was not found or already completed.
     pub fn cancel(&self, handle: &FutureHandle) -> bool {
         let mut registry = self.handle_registry.lock();
-        
+
         if let Some(entry) = registry.get_mut(handle) {
-            if matches!(entry.status, FutureStatus::Completed | FutureStatus::Cancelled) {
+            if matches!(
+                entry.status,
+                FutureStatus::Completed | FutureStatus::Cancelled
+            ) {
                 return false;
             }
-            
+
             if let Some(task_handle) = entry.task_handle.take() {
                 task_handle.abort();
                 log(format!("Aborted task for handle: {:?}", handle));
             }
-            
+
             entry.status = FutureStatus::Cancelled;
             entry.receiver = None;
             entry.cached_result = None;
-            
+
             log(format!("Cancelled handle: {:?}", handle));
             true
         } else {
@@ -339,7 +342,11 @@ impl FutureQueue {
         let completed_ids: Vec<FutureHandle> = registry
             .iter()
             .filter_map(|(&id, entry)| {
-                matches!(entry.status, FutureStatus::Completed | FutureStatus::Cancelled).then_some(id)
+                matches!(
+                    entry.status,
+                    FutureStatus::Completed | FutureStatus::Cancelled
+                )
+                .then_some(id)
             })
             .collect();
 

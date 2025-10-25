@@ -1,11 +1,13 @@
 //! Deals with Kotlin/Native library loading for different platforms.
 #![allow(clippy::missing_safety_doc)]
 
-pub mod sig;
 mod exports;
+pub mod sig;
 
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
-use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged};
+use crate::scripting::native::sig::{
+    DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged,
+};
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::path::Path;
@@ -27,24 +29,18 @@ impl NativeLibrary {
         unsafe {
             let library: Library = Library::new(lib_path)?;
 
-            let init_fn: Symbol<'static, Init> = std::mem::transmute(
-                library.get::<Init>(b"dropbear_init\0")?
-            );
-            let load_systems_fn: Symbol<'static, LoadTagged> = std::mem::transmute(
-                library.get::<LoadTagged>(b"dropbear_load_systems\0")?
-            );
-            let update_all_fn: Symbol<'static, UpdateAll> = std::mem::transmute(
-                library.get::<UpdateAll>(b"dropbear_update_all\0")?
-            );
-            let update_tag_fn: Symbol<'static, UpdateTagged> = std::mem::transmute(
-                library.get::<UpdateTagged>(b"dropbear_update_tagged\0")?
-            );
-            let destroy_all_fn: Symbol<'static, DestroyAll> = std::mem::transmute(
-                library.get::<DestroyAll>(b"dropbear_destroy_all\0")?
-            );
-            let destroy_tagged_fn: Symbol<'static, DestroyTagged> = std::mem::transmute(
-                library.get::<DestroyTagged>(b"dropbear_destroy_tagged\0")?
-            );
+            let init_fn: Symbol<'static, Init> =
+                std::mem::transmute(library.get::<Init>(b"dropbear_init\0")?);
+            let load_systems_fn: Symbol<'static, LoadTagged> =
+                std::mem::transmute(library.get::<LoadTagged>(b"dropbear_load_systems\0")?);
+            let update_all_fn: Symbol<'static, UpdateAll> =
+                std::mem::transmute(library.get::<UpdateAll>(b"dropbear_update_all\0")?);
+            let update_tag_fn: Symbol<'static, UpdateTagged> =
+                std::mem::transmute(library.get::<UpdateTagged>(b"dropbear_update_tagged\0")?);
+            let destroy_all_fn: Symbol<'static, DestroyAll> =
+                std::mem::transmute(library.get::<DestroyAll>(b"dropbear_destroy_all\0")?);
+            let destroy_tagged_fn: Symbol<'static, DestroyTagged> =
+                std::mem::transmute(library.get::<DestroyTagged>(b"dropbear_destroy_tagged\0")?);
 
             Ok(Self {
                 library,
@@ -58,7 +54,12 @@ impl NativeLibrary {
         }
     }
 
-    pub fn init(&mut self, world_ptr: WorldPtr, input_state_ptr: InputStatePtr, graphics_ptr: GraphicsPtr) -> anyhow::Result<()> {
+    pub fn init(
+        &mut self,
+        world_ptr: WorldPtr,
+        input_state_ptr: InputStatePtr,
+        graphics_ptr: GraphicsPtr,
+    ) -> anyhow::Result<()> {
         unsafe {
             let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr);
             if result != 0 {

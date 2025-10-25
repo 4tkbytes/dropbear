@@ -3,6 +3,7 @@ pub mod generator;
 use std::path::PathBuf;
 use tree_sitter::{Parser, Query, QueryCursor};
 
+/// A group of manifests.
 #[derive(Debug, Clone)]
 pub struct ScriptManifest {
     items: Vec<ManifestItem>,
@@ -28,6 +29,8 @@ impl ScriptManifest {
     }
 }
 
+/// Represents a single script class. This struct contains all the necessary information to generate
+/// a manifest
 #[derive(Debug, Clone)]
 pub struct ManifestItem {
     /// Fully qualified class name
@@ -44,11 +47,13 @@ pub struct ManifestItem {
     tags: Vec<String>,
     /// Path to the source file in reference to the project root
     ///
-    /// Example: `src/commonMain/kotlin/foo/bar/Enemy.kt`
+    /// Example: `/home/tirbofish/project2/src/commonMain/kotlin/foo/bar/Enemy.kt`
     file_path: PathBuf,
 }
 
 impl ManifestItem {
+    /// Creates a new manifest item from an fqcn (fully qualified class name), simple name, tags
+    /// and file_path.
     pub fn new(fqcn: String, simple_name: String, tags: Vec<String>, file_path: PathBuf) -> Self {
         Self {
             fqcn,
@@ -75,17 +80,22 @@ impl ManifestItem {
     }
 }
 
+/// Processer for Kotlin files.
 pub struct KotlinProcessor {
+    /// Tree-sitter parser.
     parser: Parser,
 }
 
 impl KotlinProcessor {
+    /// Creates a new processor.
     pub fn new() -> anyhow::Result<Self> {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_kotlin::language())?;
         Ok(Self { parser })
     }
 
+    /// Processes the file for `@Runnable` annotations, and check if that
+    /// class inherits the `System()` abstract class.
     pub fn process_file(
         &mut self,
         source_code: &str,

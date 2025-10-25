@@ -1,16 +1,18 @@
+use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{GraphicsPtr, InputStatePtr};
-use crate::scripting::jni::utils::{create_vector3, extract_vector3, java_button_to_rust, new_float_array};
+use crate::scripting::jni::utils::{
+    create_vector3, extract_vector3, java_button_to_rust, new_float_array,
+};
+use crate::states::{ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
+use crate::window::{GraphicsCommand, WindowCommand};
+use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
-use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring, JNI_FALSE};
 use jni::JNIEnv;
-use dropbear_engine::camera::Camera;
-use crate::camera::{CameraComponent, CameraType};
-use crate::states::{ModelProperties, Value};
-use crate::window::{GraphicsCommand, WindowCommand};
+use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
+use jni::sys::{JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -23,17 +25,21 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
 ) -> jlong {
     let label_jni_result = env.get_string(&label);
     let label_str = match label_jni_result {
-        Ok(java_string) => {
-            match java_string.to_str() {
-                Ok(rust_str) => rust_str.to_string(),
-                Err(e) => {
-                    println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to convert Java string to Rust string: {}", e);
-                    return -1;
-                }
+        Ok(java_string) => match java_string.to_str() {
+            Ok(rust_str) => rust_str.to_string(),
+            Err(e) => {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to convert Java string to Rust string: {}",
+                    e
+                );
+                return -1;
             }
         },
         Err(e) => {
-            println!("[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to get string from JNI: {}", e);
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_getEntity] [ERROR] Failed to get string from JNI: {}",
+                e
+            );
             return -1;
         }
     };
@@ -103,13 +109,18 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
         ) {
             Ok(java_transform) => java_transform,
             Err(_) => {
-                println!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create Transform object");
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create Transform object"
+                );
                 JObject::null()
             }
         };
     }
 
-    println!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to query for transform value for entity: {}", entity_id);
+    println!(
+        "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to query for transform value for entity: {}",
+        entity_id
+    );
     JObject::null()
 }
 
@@ -160,23 +171,28 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
         }
     };
 
-    let position_obj: JObject = match env.get_field(&transform_obj, "position", "Lcom/dropbear/math/Vector3;") {
-        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
-        Err(_) => JObject::null(),
-    };
+    let position_obj: JObject =
+        match env.get_field(&transform_obj, "position", "Lcom/dropbear/math/Vector3;") {
+            Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+            Err(_) => JObject::null(),
+        };
 
-    let rotation_obj: JObject = match env.get_field(&transform_obj, "rotation", "Lcom/dropbear/math/Quaternion;") {
-        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
-        Err(_) => JObject::null(),
-    };
+    let rotation_obj: JObject =
+        match env.get_field(&transform_obj, "rotation", "Lcom/dropbear/math/Quaternion;") {
+            Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+            Err(_) => JObject::null(),
+        };
 
-    let scale_obj: JObject = match env.get_field(&transform_obj, "scale", "Lcom/dropbear/math/Vector3;") {
-        Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
-        Err(_) => JObject::null(),
-    };
+    let scale_obj: JObject =
+        match env.get_field(&transform_obj, "scale", "Lcom/dropbear/math/Vector3;") {
+            Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
+            Err(_) => JObject::null(),
+        };
 
     if position_obj.is_null() || rotation_obj.is_null() || scale_obj.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract position/rotation/scale objects");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract position/rotation/scale objects"
+        );
         return;
     }
 
@@ -203,10 +219,14 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
         if let Some(transform) = q.get() {
             *transform = new_transform;
         } else {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query for transform component");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query for transform component"
+            );
         }
     } else {
-        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query entity for transform component");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to query entity for transform component"
+        );
     }
 }
 
@@ -221,7 +241,9 @@ pub fn Java_com_dropbear_ffi_JNINative_printInputState(
     let input = input_handle as InputStatePtr;
 
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_printInputState] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_printInputState] [ERROR] Input state pointer is null"
+        );
         return;
     }
 
@@ -240,7 +262,9 @@ pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
 ) -> jboolean {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isKeyPressed] [ERROR] Input state pointer is null"
+        );
         return false.into();
     }
     let input = unsafe { &*input };
@@ -257,7 +281,9 @@ pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
             }
         }
         None => {
-            println!("[Java_com_dropbear_ffi_JNINative_isKeyPressed] [WARN] Ordinal keycode is invalid");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_isKeyPressed] [WARN] Ordinal keycode is invalid"
+            );
             false.into()
         }
     }
@@ -273,7 +299,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getMousePosition(
 ) -> jfloatArray {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_getMousePosition] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getMousePosition] [ERROR] Input state pointer is null"
+        );
         return new_float_array(&mut env, -1.0, -1.0);
     }
 
@@ -294,7 +322,9 @@ pub fn Java_com_dropbear_ffi_JNINative_isMouseButtonPressed(
     let input_ptr = input_handle as InputStatePtr;
 
     if input_ptr.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Input state pointer is null"
+        );
         return false as jboolean;
     }
 
@@ -304,7 +334,10 @@ pub fn Java_com_dropbear_ffi_JNINative_isMouseButtonPressed(
         let is_pressed = input.mouse_button.contains(&rust_button);
         is_pressed as jboolean
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Invalid button code: {}", button);
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_isMouseButtonPressed] [ERROR] Invalid button code: {}",
+            button
+        );
         false as jboolean
     }
 }
@@ -319,7 +352,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
 ) -> jfloatArray {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getMouseDelta] [ERROR] Input state pointer is null"
+        );
         return new_float_array(&mut env, 0.0, 0.0);
     }
 
@@ -343,7 +378,9 @@ pub fn Java_com_dropbear_ffi_JNINative_isCursorLocked(
 ) -> jboolean {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_isCursorLocked] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isCursorLocked] [ERROR] Input state pointer is null"
+        );
         return false as jboolean;
     }
 
@@ -365,14 +402,18 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     let input = input_handle as InputStatePtr;
 
     if input.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Input state pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Input state pointer is null"
+        );
         return;
     }
 
     let graphics = graphics_handle as GraphicsPtr;
 
     if graphics.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Graphics pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Graphics pointer is null"
+        );
         return;
     }
 
@@ -381,8 +422,13 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
 
     let is_locked = locked != 0;
 
-    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(is_locked))) {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Unable to send window command: {}", e);
+    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(
+        is_locked,
+    ))) {
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorLocked] [ERROR] Unable to send window command: {}",
+            e
+        );
         return;
     }
 
@@ -399,7 +445,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
 ) -> jfloatArray {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_getLastMousePos] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getLastMousePos] [ERROR] Input state pointer is null"
+        );
         return new_float_array(&mut env, 0.0, 0.0);
     }
 
@@ -423,7 +471,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
 ) -> jstring {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] World pointer is null"
+        );
         return std::ptr::null_mut();
     }
 
@@ -437,34 +487,41 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to get property name"
+            );
             return std::ptr::null_mut();
         };
         let output = props.get_property(&value);
         if let Some(output) = output {
             match output {
-                Value::String(val) => {
-                    match env.new_string(val) {
-                        Ok(string) => {
-                            string.as_raw()
-                        }
-                        Err(e) => {
-                            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to create string: {}", e);
-                            std::ptr::null_mut()
-                        }
+                Value::String(val) => match env.new_string(val) {
+                    Ok(string) => string.as_raw(),
+                    Err(e) => {
+                        eprintln!(
+                            "[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to create string: {}",
+                            e
+                        );
+                        std::ptr::null_mut()
                     }
-                }
+                },
                 _ => {
-                    println!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property is not a string");
+                    println!(
+                        "[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property is not a string"
+                    );
                     std::ptr::null_mut()
                 }
             }
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property not found");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getStringProperty] [WARN] Property not found"
+            );
             std::ptr::null_mut()
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getStringProperty] [ERROR] Failed to query entity for model properties"
+        );
         std::ptr::null_mut()
     }
 }
@@ -499,7 +556,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to get property name"
+            );
             return 650911;
         };
         let output = props.get_property(&value);
@@ -507,7 +566,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
             match output {
                 Value::Int(val) => *val as jint,
                 _ => {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property is not an int");
+                    eprintln!(
+                        "[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property is not an int"
+                    );
                     650911
                 }
             }
@@ -516,7 +577,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
             650911
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to query entity for model properties"
+        );
         650911
     }
 }
@@ -538,7 +601,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
 ) -> jlong {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] World pointer is null"
+        );
         return 6509112938;
     }
 
@@ -552,7 +617,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to get property name"
+            );
             return 0;
         };
         let output = props.get_property(&value);
@@ -560,16 +627,22 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
             match output {
                 Value::Int(val) => *val as jlong,
                 _ => {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property is not a long");
+                    eprintln!(
+                        "[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property is not a long"
+                    );
                     6509112938
                 }
             }
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property not found");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property not found"
+            );
             6509112938
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to query entity for model properties"
+        );
         6509112938
     }
 }
@@ -586,7 +659,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
 ) -> jdouble {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] World pointer is null"
+        );
         return f64::NAN;
     }
 
@@ -600,7 +675,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to get property name"
+            );
             return f64::NAN;
         };
         let output = props.get_property(&value);
@@ -608,16 +685,22 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
             match output {
                 Value::Float(val) => *val as jdouble,
                 _ => {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property is not a float");
+                    eprintln!(
+                        "[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property is not a float"
+                    );
                     f64::NAN
                 }
             }
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property not found");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property not found"
+            );
             f64::NAN
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to query entity for model properties"
+        );
         f64::NAN
     }
 }
@@ -634,7 +717,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
 ) -> jboolean {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] World pointer is null"
+        );
         return 0;
     }
 
@@ -648,24 +733,38 @@ pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to get property name"
+            );
             return 0;
         };
         let output = props.get_property(&value);
         if let Some(output) = output {
             match output {
-                Value::Bool(val) => if *val { 1 } else { 0 },
+                Value::Bool(val) => {
+                    if *val {
+                        1
+                    } else {
+                        0
+                    }
+                }
                 _ => {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property is not a bool");
+                    eprintln!(
+                        "[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property is not a bool"
+                    );
                     0
                 }
             }
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property not found");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getBoolProperty] [WARN] Property not found"
+            );
             0
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getBoolProperty] [ERROR] Failed to query entity for model properties"
+        );
         0
     }
 }
@@ -682,7 +781,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
 ) -> jfloatArray {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] World pointer is null"
+        );
         return std::ptr::null_mut();
     }
 
@@ -696,7 +797,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
             let value = str.to_string_lossy();
             value.to_string()
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to get property name");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to get property name"
+            );
             return std::ptr::null_mut();
         };
         let output = props.get_property(&value);
@@ -709,25 +812,35 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
                         if env.set_float_array_region(&arr, 0, &values).is_ok() {
                             arr.into_raw()
                         } else {
-                            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to set array region");
+                            eprintln!(
+                                "[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to set array region"
+                            );
                             std::ptr::null_mut()
                         }
                     } else {
-                        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to create float array");
+                        eprintln!(
+                            "[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to create float array"
+                        );
                         std::ptr::null_mut()
                     }
                 }
                 _ => {
-                    eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property is not a vec3");
+                    eprintln!(
+                        "[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property is not a vec3"
+                    );
                     std::ptr::null_mut()
                 }
             }
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property not found");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getVec3Property] [WARN] Property not found"
+            );
             std::ptr::null_mut()
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getVec3Property] [ERROR] Failed to query entity for model properties"
+        );
         std::ptr::null_mut()
     }
 }
@@ -745,7 +858,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
 ) {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] World pointer is null"
+        );
         return;
     }
 
@@ -757,7 +872,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
@@ -766,14 +883,18 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
     if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::String(value));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setStringProperty] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -802,15 +923,18 @@ pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
-    {
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Int(value as i64));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setIntProperty] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -827,7 +951,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
 ) {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] World pointer is null"
+        );
         return;
     }
 
@@ -839,15 +965,18 @@ pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
-    if let Ok((_, props))= world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
-    {
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Int(value));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setLongProperty] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -864,7 +993,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
 ) {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] World pointer is null"
+        );
         return;
     }
 
@@ -876,15 +1007,18 @@ pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
-    {
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Float(value));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setFloatProperty] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -901,7 +1035,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
 ) {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] World pointer is null"
+        );
         return;
     }
 
@@ -913,17 +1049,20 @@ pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to get property name"
+        );
         return;
     };
 
     let bool_value = value != 0;
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
-    {
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Bool(bool_value));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setBoolProperty] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -940,7 +1079,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
 ) {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] World pointer is null"
+        );
         return;
     }
 
@@ -959,7 +1100,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
         let value = str.to_string_lossy();
         value.to_string()
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get property name");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get property name"
+        );
         return;
     };
 
@@ -967,25 +1110,33 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
 
     if let Ok(length) = length {
         if length != 3 {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Vec3 array must have exactly 3 elements, got {}", length);
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Vec3 array must have exactly 3 elements, got {}",
+                length
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array length");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array length"
+        );
         return;
     }
 
     let mut values = [0.0f32; 3];
     if env.get_float_array_region(&array, 0, &mut values).is_err() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array region");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to get array region"
+        );
         return;
     }
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity)
-    {
+    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Vec3(values));
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to query entity for model properties");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setVec3Property] [ERROR] Failed to query entity for model properties"
+        );
     }
 }
 
@@ -1014,61 +1165,81 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
         return std::ptr::null_mut();
     };
 
-    if let Some((id, (cam, comp))) = world.query::<(&Camera, &CameraComponent)>().iter().find(|(_, (cam, _))| cam.label == label) {
+    if let Some((id, (cam, comp))) = world
+        .query::<(&Camera, &CameraComponent)>()
+        .iter()
+        .find(|(_, (cam, _))| cam.label == label)
+    {
         if matches!(comp.camera_type, CameraType::Debug) {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [WARN] Querying a CameraType::Debug is illegal, returning null");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [WARN] Querying a CameraType::Debug is illegal, returning null"
+            );
             return std::ptr::null_mut();
         }
 
         let entity_id = if let Ok(v) = env.find_class("com/dropbear/EntityId") {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to find EntityId class");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to find EntityId class"
+            );
             return std::ptr::null_mut();
         };
-        let entity_id = if let Ok(v) = env.new_object(
-            entity_id,
-            "(J)V",
-            &[JValue::Long(id.id() as i64)],
-        ) {
+        let entity_id = if let Ok(v) =
+            env.new_object(entity_id, "(J)V", &[JValue::Long(id.id() as i64)])
+        {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new entity_id object");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new entity_id object"
+            );
             return std::ptr::null_mut();
         };
 
         let label = if let Ok(v) = env.new_string(cam.label.as_str()) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new string for label");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create new string for label"
+            );
             return std::ptr::null_mut();
         };
 
         let eye = if let Ok(v) = create_vector3(&mut env, cam.eye.x, cam.eye.y, cam.eye.z) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for eye");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for eye"
+            );
             return std::ptr::null_mut();
         };
 
-        let target = if let Ok(v) = create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z) {
+        let target = if let Ok(v) =
+            create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z)
+        {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for target");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for target"
+            );
             return std::ptr::null_mut();
         };
 
         let up = if let Ok(v) = create_vector3(&mut env, cam.up.x, cam.up.y, cam.up.z) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for up");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to create vector3 for up"
+            );
             return std::ptr::null_mut();
         };
 
         let class = if let Ok(v) = env.find_class("com/dropbear/Camera") {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to locate camera class");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getCamera] [ERROR] Unable to locate camera class"
+            );
             return std::ptr::null_mut();
         };
 
@@ -1114,68 +1285,88 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
 ) -> jobject {
     let world = world_handle as *mut World;
     if world.is_null() {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] World pointer is null");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] World pointer is null"
+        );
         return std::ptr::null_mut();
     }
 
     let world = unsafe { &*world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    if let Ok(mut q) = world.query_one::<(&Camera, &CameraComponent)>(entity) && let Some((cam, comp)) = q.get() {
+    if let Ok(mut q) = world.query_one::<(&Camera, &CameraComponent)>(entity)
+        && let Some((cam, comp)) = q.get()
+    {
         if matches!(comp.camera_type, CameraType::Debug) {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [WARN] Querying a CameraType::Debug is illegal, returning null");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [WARN] Querying a CameraType::Debug is illegal, returning null"
+            );
             return std::ptr::null_mut();
         }
 
         let entity_id = if let Ok(v) = env.find_class("com/dropbear/EntityId") {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to find EntityId class");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to find EntityId class"
+            );
             return std::ptr::null_mut();
         };
-        let entity_id = if let Ok(v) = env.new_object(
-            entity_id,
-            "(J)V",
-            &[JValue::Long(entity.id() as i64)],
-        ) {
+        let entity_id = if let Ok(v) =
+            env.new_object(entity_id, "(J)V", &[JValue::Long(entity.id() as i64)])
+        {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create new entity_id object");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create new entity_id object"
+            );
             return std::ptr::null_mut();
         };
 
         let label = if let Ok(v) = env.new_string(cam.label.as_str()) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create new string for label");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create new string for label"
+            );
             return std::ptr::null_mut();
         };
 
         let eye = if let Ok(v) = create_vector3(&mut env, cam.eye.x, cam.eye.y, cam.eye.z) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for eye");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for eye"
+            );
             return std::ptr::null_mut();
         };
 
-        let target = if let Ok(v) = create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z) {
+        let target = if let Ok(v) =
+            create_vector3(&mut env, cam.target.x, cam.target.y, cam.target.z)
+        {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for target");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for target"
+            );
             return std::ptr::null_mut();
         };
 
         let up = if let Ok(v) = create_vector3(&mut env, cam.up.x, cam.up.y, cam.up.z) {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for up");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to create vector3 for up"
+            );
             return std::ptr::null_mut();
         };
 
         let class = if let Ok(v) = env.find_class("com/dropbear/Camera") {
             v
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to locate camera class");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_getAttachedCamera] [ERROR] Unable to locate camera class"
+            );
             return std::ptr::null_mut();
         };
 
@@ -1227,63 +1418,66 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
 
     let world = unsafe { &mut *world };
 
-    let entity_id_obj = if let Ok(v) = env.call_method(
-        &camera_obj,
-        "getId",
-        "()Lcom/dropbear/EntityId;",
-        &[]
-    ) {
+    let entity_id_obj = if let Ok(v) =
+        env.call_method(&camera_obj, "getId", "()Lcom/dropbear/EntityId;", &[])
+    {
         if let Ok(obj) = v.l() {
             obj
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract EntityId object");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract EntityId object"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get EntityId from camera");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get EntityId from camera"
+        );
         return;
     };
 
-    let entity_id = if let Ok(v) = env.call_method(
-        &entity_id_obj,
-        "getId",
-        "()J",
-        &[]
-    ) {
+    let entity_id = if let Ok(v) = env.call_method(&entity_id_obj, "getId", "()J", &[]) {
         if let Ok(id) = v.j() {
             id as u32
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract entity id value");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract entity id value"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to call getId on EntityId");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to call getId on EntityId"
+        );
         return;
     };
 
     let entity = unsafe { world.find_entity_from_id(entity_id) };
 
-    let eye_obj = if let Ok(v) = env.call_method(
-        &camera_obj,
-        "getEye",
-        "()Lcom/dropbear/math/Vector3;",
-        &[]
-    ) {
+    let eye_obj = if let Ok(v) =
+        env.call_method(&camera_obj, "getEye", "()Lcom/dropbear/math/Vector3;", &[])
+    {
         if let Ok(obj) = v.l() {
             obj
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract eye vector");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract eye vector"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get eye from camera");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get eye from camera"
+        );
         return;
     };
 
     let eye = if let Some(v) = extract_vector3(&mut env, &eye_obj) {
         v
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract eye vector values");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract eye vector values"
+        );
         return;
     };
 
@@ -1291,47 +1485,56 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
         &camera_obj,
         "getTarget",
         "()Lcom/dropbear/math/Vector3;",
-        &[]
+        &[],
     ) {
         if let Ok(obj) = v.l() {
             obj
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract target vector");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract target vector"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get target from camera");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get target from camera"
+        );
         return;
     };
 
     let target = if let Some(v) = extract_vector3(&mut env, &target_obj) {
         v
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract target vector values");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract target vector values"
+        );
         return;
     };
 
-    let up_obj = if let Ok(v) = env.call_method(
-        &camera_obj,
-        "getUp",
-        "()Lcom/dropbear/math/Vector3;",
-        &[]
-    ) {
+    let up_obj = if let Ok(v) =
+        env.call_method(&camera_obj, "getUp", "()Lcom/dropbear/math/Vector3;", &[])
+    {
         if let Ok(obj) = v.l() {
             obj
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract up vector");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract up vector"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get up from camera");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get up from camera"
+        );
         return;
     };
 
     let up = if let Some(v) = extract_vector3(&mut env, &up_obj) {
         v
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract up vector values");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract up vector values"
+        );
         return;
     };
 
@@ -1339,37 +1542,77 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
         if let Ok(d) = v.d() {
             d
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract fov_y");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to extract fov_y"
+            );
             return;
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get fov_y from camera");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to get fov_y from camera"
+        );
         return;
     };
 
     let znear = if let Ok(v) = env.call_method(&camera_obj, "getZnear", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     let zfar = if let Ok(v) = env.call_method(&camera_obj, "getZfar", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     let yaw = if let Ok(v) = env.call_method(&camera_obj, "getYaw", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     let pitch = if let Ok(v) = env.call_method(&camera_obj, "getPitch", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     let speed = if let Ok(v) = env.call_method(&camera_obj, "getSpeed", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     let sensitivity = if let Ok(v) = env.call_method(&camera_obj, "getSensitivity", "()D", &[]) {
-        if let Ok(d) = v.d() { d } else { return; }
-    } else { return; };
+        if let Ok(d) = v.d() {
+            d
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
 
     if let Ok(mut q) = world.query_one::<&mut Camera>(entity) {
         if let Some(cam) = q.get() {
@@ -1384,10 +1627,14 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
             cam.speed = speed;
             cam.sensitivity = sensitivity;
         } else {
-            eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Entity does not have a Camera component");
+            eprintln!(
+                "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Entity does not have a Camera component"
+            );
         }
     } else {
-        eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to query camera component");
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to query camera component"
+        );
     }
 }
 
@@ -1403,22 +1650,31 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
 ) {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null"
+        );
         return;
     }
     let input = unsafe { &mut *input };
 
     let graphics = graphics_handle as GraphicsPtr;
     if graphics.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null"
+        );
         return;
     }
     let graphics = unsafe { &*graphics };
 
     let hide = hide != JNI_FALSE;
 
-    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(hide))) {
-        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Unable to send hide cursor command: {}", e);
+    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(
+        hide,
+    ))) {
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Unable to send hide cursor command: {}",
+            e
+        );
     }
 
     input.is_cursor_hidden = hide;
@@ -1434,7 +1690,9 @@ pub fn Java_com_dropbear_ffi_JNINative_isCursorHidden(
 ) -> jboolean {
     let input = input_handle as InputStatePtr;
     if input.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_isCursorHidden] [ERROR] Input state pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isCursorHidden] [ERROR] Input state pointer is null"
+        );
         return false.into();
     }
     let input = unsafe { &*input };

@@ -1,8 +1,8 @@
-use std::ffi::{c_char, CStr};
-use dropbear_engine::entity::{AdoptedEntity, Transform};
 use crate::ptr::InputStatePtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::utils::keycode_from_ordinal;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
+use std::ffi::{CStr, c_char};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_get_entity(
@@ -16,7 +16,7 @@ pub unsafe extern "C" fn dropbear_get_entity(
             return -1;
         }
 
-        let world =  &*world_ptr;
+        let world = &*world_ptr;
 
         let label_str = match CStr::from_ptr(label).to_str() {
             Ok(s) => s,
@@ -31,7 +31,9 @@ pub unsafe extern "C" fn dropbear_get_entity(
         for (id, entity) in world.query::<&AdoptedEntity>().iter() {
             if entity.model.label == label_str {
                 #[allow(unused_assignments)]
-                { hit = true; }
+                {
+                    hit = true;
+                }
                 *out_entity = id.id() as i64;
                 log::debug!("Found entity with label: {:?}", label_str);
                 return 0;
@@ -39,7 +41,10 @@ pub unsafe extern "C" fn dropbear_get_entity(
         }
 
         if !hit {
-            println!("[dropbear_get_entity] [ERROR] Entity with label '{:?}' not found", label_str);
+            println!(
+                "[dropbear_get_entity] [ERROR] Entity with label '{:?}' not found",
+                label_str
+            );
             -3
         } else {
             DropbearNativeError::UnknownError as i32
@@ -78,7 +83,9 @@ pub unsafe extern "C" fn dropbear_get_transform(
             }
         }
         Err(_) => {
-            eprintln!("[dropbear_get_transform] [ERROR] Failed to query entity for Transform component");
+            eprintln!(
+                "[dropbear_get_transform] [ERROR] Failed to query entity for Transform component"
+            );
             -2
         }
     }
@@ -106,14 +113,12 @@ pub unsafe extern "C" fn dropbear_set_transform(
         Err(_) => {
             eprintln!("[dropbear_set_transform] [ERROR] Failed to insert transform component");
             -6
-        },
+        }
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dropbear_print_input_state(
-    input_state_ptr: InputStatePtr,
-) {
+pub unsafe extern "C" fn dropbear_print_input_state(input_state_ptr: InputStatePtr) {
     if input_state_ptr.is_null() {
         eprintln!("[dropbear_print_inputstate] [ERROR] Input state pointer is null");
         return;
@@ -152,4 +157,3 @@ pub unsafe extern "C" fn dropbear_is_key_pressed(
         }
     }
 }
-

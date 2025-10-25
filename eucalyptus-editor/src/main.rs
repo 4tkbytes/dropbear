@@ -2,12 +2,12 @@
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{scene, WindowConfiguration};
+use dropbear_engine::{WindowConfiguration, scene};
+use eucalyptus_core::APP_INFO;
+use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::{fs, path::PathBuf, rc::Rc};
-use eucalyptus_editor::{build, editor, menu};
-use eucalyptus_core::APP_INFO;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

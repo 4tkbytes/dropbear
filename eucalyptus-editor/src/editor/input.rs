@@ -43,7 +43,6 @@ impl Keyboard for Editor {
         //
         // }
 
-
         match key {
             KeyCode::KeyG => {
                 if self.is_viewport_focused && !is_playing {
@@ -78,7 +77,7 @@ impl Keyboard for Editor {
             KeyCode::Delete => {
                 if !is_playing {
                     if let Some((_, tab)) = self.dock_state.find_active_focused()
-                        &&matches!(tab, EditorTab::ModelEntityList)
+                        && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if self.selected_entity.is_some() {
                             self.signal = Signal::Delete;
@@ -127,12 +126,14 @@ impl Keyboard for Editor {
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
                     if let Some((_, tab)) = self.dock_state.find_active_focused()
-                         && matches!(tab, EditorTab::ModelEntityList)
+                        && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
                             let query = self
                                 .world
-                                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
+                                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(
+                                    *entity,
+                                );
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
                                     let s_entity = SceneEntity {
@@ -151,8 +152,8 @@ impl Keyboard for Editor {
                                     log::debug!("Copied selected entity");
                                 } else {
                                     warn!(
-                                    "Unable to copy entity: Unable to fetch world entity properties"
-                                );
+                                        "Unable to copy entity: Unable to fetch world entity properties"
+                                    );
                                 }
                             } else {
                                 warn!("Unable to copy entity: Unable to obtain lock");
@@ -257,14 +258,18 @@ impl Mouse for Editor {
         if self.is_viewport_focused && matches!(self.viewport_mode, ViewportMode::CameraMove) {
             if let Some(window) = &self.window {
                 window.set_cursor_visible(false);
-                if let Err(e) = window.set_cursor_grab(CursorGrabMode::Confined)
-                    .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked)) {
+                if let Err(e) = window
+                    .set_cursor_grab(CursorGrabMode::Confined)
+                    .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                {
                     log_once::error_once!("Unable to grab mouse: {}", e);
                 }
             }
 
             if let Some(active_camera) = *self.active_camera.lock()
-                && let Ok(mut q) = self.world.query_one::<(&mut Camera, &CameraComponent)>(active_camera)
+                && let Ok(mut q) = self
+                    .world
+                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
                 && let Some((camera, _)) = q.get()
             {
                 if let Some((dx, dy)) = delta {

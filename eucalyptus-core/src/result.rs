@@ -1,5 +1,5 @@
-use std::ptr;
 use jni::objects::{JClass, JObject, JString};
+use std::ptr;
 
 /// Trait used by the `jni` crate for easier error matching.
 #[allow(dead_code)]

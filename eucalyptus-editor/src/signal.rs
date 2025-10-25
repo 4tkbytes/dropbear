@@ -8,9 +8,9 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{build_jvm, BuildStatus};
+use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value, PROJECT};
+use eucalyptus_core::states::{ModelProperties, PROJECT, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -108,7 +108,7 @@ impl SignalController for Editor {
                     log::debug!("Starting build process");
                     let (tx, rx) = crossbeam_channel::unbounded();
                     self.progress_rx = Some(rx);
-                    
+
                     self.build_logs.clear();
                     self.build_progress = 0.0;
                     self.show_build_window = true;
@@ -122,11 +122,14 @@ impl SignalController for Editor {
                     let project_root = project_root.to_path_buf();
                     let status_tx = tx.clone();
 
-                    let handle = graphics.future_queue.push(async move {
-                        build_jvm(project_root, status_tx).await
-                    });
+                    let handle = graphics
+                        .future_queue
+                        .push(async move { build_jvm(project_root, status_tx).await });
 
-                    log::debug!("Pushed future to future_queue, received handle: {:?}", handle);
+                    log::debug!(
+                        "Pushed future to future_queue, received handle: {:?}",
+                        handle
+                    );
 
                     self.handle_created = Some(handle);
 
@@ -141,9 +144,9 @@ impl SignalController for Editor {
                         .pressed_keys
                         .contains(&KeyCode::ControlLeft)
                         || self
-                        .input_state
-                        .pressed_keys
-                        .contains(&KeyCode::ControlRight);
+                            .input_state
+                            .pressed_keys
+                            .contains(&KeyCode::ControlRight);
                     #[cfg(target_os = "macos")]
                     let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
                         || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
@@ -152,7 +155,10 @@ impl SignalController for Editor {
                         || self.input_state.pressed_keys.contains(&KeyCode::AltRight);
 
                     // Ctrl+Alt+P skips build process and starts running, such as if using cached jar
-                    if ctrl_pressed && alt_pressed && self.input_state.pressed_keys.contains(&KeyCode::KeyP) {
+                    if ctrl_pressed
+                        && alt_pressed
+                        && self.input_state.pressed_keys.contains(&KeyCode::KeyP)
+                    {
                         if let Some(handle) = self.handle_created {
                             log::debug!("Cancelling build task due to manual intervention");
                             graphics.future_queue.cancel(&handle);
@@ -166,16 +172,26 @@ impl SignalController for Editor {
                         };
                         let libs_dir = project_root.join("build").join("libs");
                         if !libs_dir.exists() {
-                            let err = "Build succeeded but 'build/libs' directory is missing".to_string();
+                            let err =
+                                "Build succeeded but 'build/libs' directory is missing".to_string();
                             return Err(anyhow::anyhow!(err));
                         }
 
                         let jar_files: Vec<PathBuf> = std::fs::read_dir(&libs_dir)?
                             .filter_map(|entry| entry.ok().map(|e| e.path()))
                             .filter(|path| {
-                                path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("jar"))
-                                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-sources")
-                                    && !path.file_name().unwrap_or_default().to_string_lossy().contains("-javadoc")
+                                path.extension()
+                                    .map_or(false, |ext| ext.eq_ignore_ascii_case("jar"))
+                                    && !path
+                                        .file_name()
+                                        .unwrap_or_default()
+                                        .to_string_lossy()
+                                        .contains("-sources")
+                                    && !path
+                                        .file_name()
+                                        .unwrap_or_default()
+                                        .to_string_lossy()
+                                        .contains("-javadoc")
                             })
                             .collect();
 
@@ -184,13 +200,11 @@ impl SignalController for Editor {
                             return Err(anyhow::anyhow!(err));
                         }
 
-                        let fat_jar = jar_files
-                            .iter()
-                            .find(|path| {
-                                path.file_name()
-                                    .and_then(|n| n.to_str())
-                                    .map_or(false, |name| name.contains("-all"))
-                            });
+                        let fat_jar = jar_files.iter().find(|path| {
+                            path.file_name()
+                                .and_then(|n| n.to_str())
+                                .map_or(false, |name| name.contains("-all"))
+                        });
 
                         let jar_path = if let Some(fat) = fat_jar {
                             fat.clone()
@@ -198,8 +212,7 @@ impl SignalController for Editor {
                             jar_files
                                 .into_iter()
                                 .max_by_key(|path| {
-                                    std::fs::metadata(path).map(|m| m.len())
-                                        .unwrap_or(0)
+                                    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
                                 })
                                 .unwrap()
                         };
@@ -209,7 +222,7 @@ impl SignalController for Editor {
                         self.show_build_window = false;
 
                         self.load_play_mode(jar_path)?;
-                        return Ok(())
+                        return Ok(());
                     }
 
                     let mut local_handle_exchanged: Option<anyhow::Result<PathBuf>> = None;
@@ -227,7 +240,8 @@ impl SignalController for Editor {
                                     self.build_progress = (self.build_progress + 0.01).min(0.9);
                                 }
                                 BuildStatus::Completed => {
-                                    self.build_logs.push("Build completed successfully!".to_string());
+                                    self.build_logs
+                                        .push("Build completed successfully!".to_string());
                                     self.build_progress = 1.0;
                                     success_without_console!("Build completed");
                                     log::info!("Build completed successfully!");
@@ -248,7 +262,7 @@ impl SignalController for Editor {
                                 BuildStatus::Failed(e) => {
                                     let error_msg = format!("Build failed: {}", e);
                                     self.build_logs.push(error_msg.clone());
-                                    
+
                                     self.build_progress = 0.0;
                                     fatal!("Failed to build gradle: {}", e);
                                 }
@@ -316,7 +330,7 @@ impl SignalController for Editor {
                                 log::warn!("Cancelling build task due to window close");
                                 graphics.future_queue.cancel(&handle);
                             }
-                            
+
                             self.show_build_window = false;
                             self.handle_created = None;
                             self.progress_rx = None;
@@ -372,7 +386,7 @@ impl SignalController for Editor {
                                     ui.add_space(10.0);
                                     ui.separator();
                                     ui.add_space(10.0);
-                                    
+
                                     egui::ScrollArea::both()
                                         .auto_shrink([false, false])
                                         .max_height(300.0)
@@ -381,18 +395,18 @@ impl SignalController for Editor {
                                                 egui::TextEdit::multiline(&mut error_log.as_str())
                                                     .font(egui::TextStyle::Monospace)
                                                     .desired_width(f32::INFINITY)
-                                                    .desired_rows(20)
+                                                    .desired_rows(20),
                                             );
                                         });
-                                    
+
                                     ui.add_space(10.0);
-                                    
+
                                     if ui.button("Close").clicked() {
                                         close_clicked = true;
                                     }
                                 });
                             });
-                        
+
                         if !window_open || close_clicked {
                             self.show_build_error_window = false;
                         }

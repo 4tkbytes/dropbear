@@ -15,9 +15,7 @@ use egui_toast_fork::Toasts;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
-pub static LOG_LEVEL: Lazy<Mutex<LogLevel>> = Lazy::new(|| {
-    Mutex::new(LogLevel::default())
-});
+pub static LOG_LEVEL: Lazy<Mutex<LogLevel>> = Lazy::new(|| Mutex::new(LogLevel::default()));
 
 #[derive(Default)]
 /// LogLevel as shown in LogLevel.kt in the dropbear engine jar library
@@ -27,7 +25,7 @@ pub enum LogLevel {
     #[default]
     INFO,
     WARN,
-    ERROR
+    ERROR,
 }
 
 impl Display for LogLevel {

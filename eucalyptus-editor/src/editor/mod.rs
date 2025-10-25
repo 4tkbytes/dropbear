@@ -5,17 +5,11 @@ pub mod scene;
 
 pub(crate) use crate::editor::dock::*;
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-    sync::{Arc, LazyLock},
-    time::{Duration, Instant},
-};
-use std::path::Path;
-use crossbeam_channel::{Receiver};
 use crate::build::build;
 use crate::camera::UndoableCameraAction;
 use crate::debug;
+use crate::plugin::PluginRegistry;
+use crossbeam_channel::Receiver;
 use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::{RenderContext, Shader};
 use dropbear_engine::model::ModelId;
@@ -29,25 +23,35 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::input::InputState;
+use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{
     CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
     SceneEntity, ScriptComponent,
 };
 use eucalyptus_core::utils::ViewportMode;
-use eucalyptus_core::{camera::{CameraComponent, CameraType, DebugCamera}, states::WorldLoadingStatus, success_without_console};
+use eucalyptus_core::window::GRAPHICS_COMMAND;
+use eucalyptus_core::{
+    camera::{CameraComponent, CameraType, DebugCamera},
+    states::WorldLoadingStatus,
+    success_without_console,
+};
 use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
+use std::path::Path;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
-use winit::{keyboard::KeyCode, window::Window};
 use winit::window::CursorGrabMode;
-use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
-use eucalyptus_core::window::GRAPHICS_COMMAND;
-use crate::plugin::PluginRegistry;
+use winit::{keyboard::KeyCode, window::Window};
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -126,11 +130,7 @@ impl Editor {
             surface.split_right(NodeIndex::root(), 0.25, vec![EditorTab::ModelEntityList]);
         let [_old, _] =
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
-        let [_old, _] = surface.split_below(
-            right,
-            0.5,
-            vec![EditorTab::AssetViewer],
-        );
+        let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
         // this shit doesn't work :(
         // nvm it works
@@ -685,13 +685,15 @@ impl Editor {
         }
 
         if let Some(backup) = &self.play_mode_backup {
-            for (entity_id, original_transform, original_properties, original_script) in
+            for (entity_id, original_transform, _original_properties, original_script) in
                 &backup.entities
             {
                 if let Ok(mut transform) = self.world.get::<&mut Transform>(*entity_id) {
                     *transform = *original_transform;
                 }
 
+                // not backing up anymore because i think people would prefer if there was no
+                // property backup at all
                 // if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
                 //     *properties = original_properties.clone();
                 // }
@@ -718,7 +720,8 @@ impl Editor {
                     *camera = original_camera.clone();
                 }
 
-                if let Ok(mut camera_component) = self.world.get::<&mut CameraComponent>(*entity_id) {
+                if let Ok(mut camera_component) = self.world.get::<&mut CameraComponent>(*entity_id)
+                {
                     *camera_component = original_camera_component.clone();
                 }
             }
@@ -923,10 +926,12 @@ impl Editor {
 
             let etag_clone = etag.clone();
 
-            if let Err(e) = self
-                .script_manager
-                .init_script(etag_clone, ScriptTarget::JVM { library_path: path.to_path_buf() })
-            {
+            if let Err(e) = self.script_manager.init_script(
+                etag_clone,
+                ScriptTarget::JVM {
+                    library_path: path.to_path_buf(),
+                },
+            ) {
                 fatal!("Failed to ready script manager interface because {}", e);
                 self.signal = Signal::StopPlaying;
                 return Err(anyhow::anyhow!(e));
@@ -939,24 +944,21 @@ impl Editor {
             log::debug!("Pointers before sendoff:");
             log::debug!("World: {:p}", world_ptr);
             log::debug!("Input: {:p}", input_ptr);
-            log::debug!("script graphics_command: 0x{:p}, 0x{:p}", &GRAPHICS_COMMAND.0, &GRAPHICS_COMMAND.1);
+            log::debug!(
+                "script graphics_command: 0x{:p}, 0x{:p}",
+                &GRAPHICS_COMMAND.0,
+                &GRAPHICS_COMMAND.1
+            );
 
-            if let Err(e) = self.script_manager
-                .load_script(
-                    world_ptr,
-                    input_ptr,
-                    graphics_ptr,
-                ) {
-                fatal!(
-                    "Failed to initialise script because {}",
-                    e
-                );
+            if let Err(e) = self
+                .script_manager
+                .load_script(world_ptr, input_ptr, graphics_ptr)
+            {
+                fatal!("Failed to initialise script because {}", e);
                 self.signal = Signal::StopPlaying;
                 return Err(anyhow::anyhow!(e));
             } else {
-                success_without_console!(
-                    "You are in play mode now! Press Escape to exit"
-                );
+                success_without_console!("You are in play mode now! Press Escape to exit");
                 log::info!("You are in play mode now! Press Escape to exit");
             }
 
@@ -1235,7 +1237,9 @@ impl UndoableAction {
                 for (_i, comp) in &mut world.query::<&mut CameraComponent>() {
                     comp.starting_camera = false;
                 }
-                if let Ok((cam, comp)) = world.query_one_mut::<(&Camera, &mut CameraComponent)>(*old) {
+                if let Ok((cam, comp)) =
+                    world.query_one_mut::<(&Camera, &mut CameraComponent)>(*old)
+                {
                     comp.starting_camera = true;
                     log::debug!("Reverted starting camera back to true for '{}'", cam.label);
                 }
@@ -1281,11 +1285,7 @@ pub struct PlayModeBackup {
         ModelProperties,
         Option<ScriptComponent>,
     )>,
-    camera_data: Vec<(
-        hecs::Entity,
-        Camera,
-        CameraComponent,
-    )>,
+    camera_data: Vec<(hecs::Entity, Camera, CameraComponent)>,
 }
 
 pub enum EditorState {

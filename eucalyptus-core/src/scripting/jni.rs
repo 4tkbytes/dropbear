@@ -5,16 +5,16 @@ pub mod exception;
 mod exports;
 mod utils;
 
-use std::fs;
-use jni::objects::{GlobalRef, JClass, JValue};
-use jni::sys::{jlong};
-use jni::{InitArgsBuilder, JNIVersion, JavaVM};
-use std::path::{PathBuf};
-use crate::{success, APP_INFO};
-use sha2::{Digest, Sha256};
-use crate::logging::{LOG_LEVEL};
+use crate::logging::LOG_LEVEL;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::exception::get_exception_info;
+use crate::{APP_INFO, success};
+use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
+use jni::sys::jlong;
+use jni::{InitArgsBuilder, JNIVersion, JavaVM};
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::PathBuf;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 
@@ -63,7 +63,10 @@ impl JavaContext {
         };
 
         if should_update {
-            log::info!("Writing (or updating) Host library JAR to {:?}.", host_jar_path);
+            log::info!(
+                "Writing (or updating) Host library JAR to {:?}.",
+                host_jar_path
+            );
             fs::write(&host_jar_path, LIBRARY_PATH)?;
             log::info!("Host library JAR written to {:?}.", host_jar_path);
 
@@ -75,16 +78,11 @@ impl JavaContext {
 
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
-            .option(format!(
-                "-Djava.class.path={}",
-                host_jar_path.display()
-            ));
+            .option(format!("-Djava.class.path={}", host_jar_path.display()));
 
         #[cfg(feature = "editor")]
-        let jvm_args = jvm_args
-            .option(
-                "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741"
-            );
+        let jvm_args =
+            jvm_args.option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741");
 
         let jvm_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_args)?;
@@ -102,7 +100,12 @@ impl JavaContext {
         })
     }
 
-    pub fn init(&mut self, world: WorldPtr, input: InputStatePtr, graphics: GraphicsPtr) -> anyhow::Result<()> {
+    pub fn init(
+        &mut self,
+        world: WorldPtr,
+        input: InputStatePtr,
+        graphics: GraphicsPtr,
+    ) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
         if let Some(old_ref) = self.dropbear_engine_class.take() {
@@ -119,13 +122,16 @@ impl JavaContext {
         let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         let world_handle = world as jlong;
         let input_handle = input as jlong;
         let graphics_handle = graphics as jlong;
-        
-        log::trace!("Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long]", 
+
+        log::trace!(
+            "Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long]",
             world_handle,
             input_handle,
             graphics_handle,
@@ -134,11 +140,17 @@ impl JavaContext {
             &native_engine_obj,
             "init",
             "(JJJ)V",
-            &[JValue::Long(world_handle), JValue::Long(input_handle), JValue::Long(graphics_handle)],
+            &[
+                JValue::Long(world_handle),
+                JValue::Long(input_handle),
+                JValue::Long(graphics_handle),
+            ],
         )?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         let dropbear_class: JClass = env.find_class("com/dropbear/DropbearEngine")?;
         log::trace!("Creating DropbearEngine constructor with arg (NativeEngine_object)");
@@ -149,7 +161,9 @@ impl JavaContext {
         )?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         log::trace!("Creating new global ref for DropbearEngine");
         let engine_global_ref = env.new_global_ref(dropbear_obj)?;
@@ -158,33 +172,43 @@ impl JavaContext {
         let jar_path_jstring = env.new_string(self.jar_path.to_string_lossy())?;
         let log_level_str = { LOG_LEVEL.lock().to_string() };
         let log_level_enum_class = env.find_class("com/dropbear/logging/LogLevel")?;
-        let log_level_enum_instance = env.get_static_field(
-            log_level_enum_class,
-            log_level_str,
-            "Lcom/dropbear/logging/LogLevel;"
-        )?.l()?;
+        let log_level_enum_instance = env
+            .get_static_field(
+                log_level_enum_class,
+                log_level_str,
+                "Lcom/dropbear/logging/LogLevel;",
+            )?
+            .l()?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
         let log_writer_obj = env.new_object(std_out_writer_class, "()V", &[])?;
 
         log::trace!("Locating \"com/dropbear/host/SystemManager\" class");
         let system_manager_class: JClass = env.find_class("com/dropbear/host/SystemManager")?;
-        log::trace!("Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)");
+        log::trace!(
+            "Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)"
+        );
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         let log_target_jstring = env.new_string("dropbear_rust_host")?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         let system_manager_obj = env.new_object(
             system_manager_class,
-            "(Ljava/lang/String;Ljava/lang/Object;Lcom/dropbear/logging/LogWriter;Lcom/dropbear/logging/LogLevel;Ljava/lang/String;)V",
+            "(Ljava/lang/String;Lcom/dropbear/DropbearEngine;Lcom/dropbear/logging/LogWriter;Lcom/dropbear/logging/LogLevel;Ljava/lang/String;)V",
             &[
                 JValue::Object(&jar_path_jstring),
                 JValue::Object(engine_global_ref.as_obj()),
@@ -195,20 +219,27 @@ impl JavaContext {
         )?;
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         log::trace!("Creating new global ref for SystemManager");
         let manager_global_ref = env.new_global_ref(system_manager_obj)?;
         self.system_manager_instance = Some(manager_global_ref);
 
         let result = get_exception_info(&mut env);
-        if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+        if result.is_some() {
+            return Err(anyhow::anyhow!("{}", result.unwrap()));
+        }
 
         Ok(())
     }
 
     pub fn reload(&mut self, _world: WorldPtr) -> anyhow::Result<()> {
-        log::info!("Reloading JAR using SystemManager: {}", self.jar_path.display());
+        log::info!(
+            "Reloading JAR using SystemManager: {}",
+            self.jar_path.display()
+        );
 
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
@@ -223,7 +254,9 @@ impl JavaContext {
             )?;
 
             let result = get_exception_info(&mut env);
-            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+            if result.is_some() {
+                return Err(anyhow::anyhow!("{}", result.unwrap()));
+            }
         } else {
             log::warn!("SystemManager instance not found during reload.");
             // self.init(world)?;
@@ -239,7 +272,10 @@ impl JavaContext {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
-            log::trace!("Calling SystemManager.loadSystemsForTag() with tag: {}", tag);
+            log::trace!(
+                "Calling SystemManager.loadSystemsForTag() with tag: {}",
+                tag
+            );
             let tag_jstring = env.new_string(tag)?;
             env.call_method(
                 manager_ref,
@@ -249,11 +285,16 @@ impl JavaContext {
             )?;
 
             let result = get_exception_info(&mut env);
-            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+            if result.is_some() {
+                return Err(anyhow::anyhow!("{}", result.unwrap()));
+            }
 
             log::debug!("Loaded systems for tag: {}", tag);
         } else {
-            return Err(anyhow::anyhow!("SystemManager not initialised when loading systems for tag: {}", tag));
+            return Err(anyhow::anyhow!(
+                "SystemManager not initialised when loading systems for tag: {}",
+                tag
+            ));
         }
         Ok(())
     }
@@ -271,11 +312,15 @@ impl JavaContext {
             )?;
 
             let result = get_exception_info(&mut env);
-            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+            if result.is_some() {
+                return Err(anyhow::anyhow!("{}", result.unwrap()));
+            }
 
             log_once::trace_once!("Updated all systems with dt: {}", dt);
         } else {
-            return Err(anyhow::anyhow!("SystemManager not initialised when updating systems."));
+            return Err(anyhow::anyhow!(
+                "SystemManager not initialised when updating systems."
+            ));
         }
         Ok(())
     }
@@ -284,7 +329,11 @@ impl JavaContext {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
-            log::trace!("Calling SystemManager.updateSystemsByTag() with tag: {}, dt: {}", tag, dt);
+            log::trace!(
+                "Calling SystemManager.updateSystemsByTag() with tag: {}, dt: {}",
+                tag,
+                dt
+            );
             let tag_jstring = env.new_string(tag)?;
             env.call_method(
                 manager_ref,
@@ -294,13 +343,74 @@ impl JavaContext {
             )?;
 
             let result = get_exception_info(&mut env);
-            if result.is_some() { return Err(anyhow::anyhow!("{}", result.unwrap())); }
+            if result.is_some() {
+                return Err(anyhow::anyhow!("{}", result.unwrap()));
+            }
 
             log::debug!("Updated systems for tag: {} with dt: {}", tag, dt);
         } else {
-            return Err(anyhow::anyhow!("SystemManager not initialised when updating systems for tag: {}", tag));
+            return Err(anyhow::anyhow!(
+                "SystemManager not initialised when updating systems for tag: {}",
+                tag
+            ));
         }
         Ok(())
+    }
+
+    pub fn update_systems_for_entities(
+        &self,
+        tag: &str,
+        entity_ids: &[i64],
+        dt: f32,
+    ) -> anyhow::Result<()> {
+        if let Some(ref manager_ref) = self.system_manager_instance {
+            let mut env = self.jvm.attach_current_thread()?;
+
+            log::trace!(
+                "Calling SystemManager.updateSystemsForEntities() with tag: {}, count: {}, dt: {}",
+                tag,
+                entity_ids.len(),
+                dt
+            );
+
+            let tag_jstring = env.new_string(tag)?;
+            let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
+            let entity_array_raw = entity_array.as_raw();
+            if !entity_ids.is_empty() {
+                env.set_long_array_region(entity_array, 0, entity_ids)?;
+            }
+            let entity_array_obj =
+                unsafe { JObject::from_raw(entity_array_raw.cast::<jni::sys::_jobject>()) };
+
+            env.call_method(
+                manager_ref,
+                "updateSystemsForEntities",
+                "(Ljava/lang/String;[JF)V",
+                &[
+                    JValue::Object(&tag_jstring),
+                    JValue::Object(&entity_array_obj),
+                    JValue::Float(dt),
+                ],
+            )?;
+
+            let result = get_exception_info(&mut env);
+            if result.is_some() {
+                return Err(anyhow::anyhow!(result.unwrap()));
+            }
+
+            log::debug!(
+                "Updated systems for tag: {} across {} entities with dt: {}",
+                tag,
+                entity_ids.len(),
+                dt
+            );
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when updating systems for tag: {}",
+                tag
+            ))
+        }
     }
 
     pub fn get_system_count_for_tag(&self, tag: &str) -> anyhow::Result<i32> {
@@ -317,11 +427,16 @@ impl JavaContext {
             )?;
 
             let exception = get_exception_info(&mut env);
-            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
+            if exception.is_some() {
+                return Err(anyhow::anyhow!("{}", exception.unwrap()));
+            }
 
             Ok(result.i()?)
         } else {
-            Err(anyhow::anyhow!("SystemManager not initialised when getting system count for tag: {}", tag))
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when getting system count for tag: {}",
+                tag
+            ))
         }
     }
 
@@ -339,11 +454,16 @@ impl JavaContext {
             )?;
 
             let exception = get_exception_info(&mut env);
-            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
+            if exception.is_some() {
+                return Err(anyhow::anyhow!("{}", exception.unwrap()));
+            }
 
             Ok(result.z()?)
         } else {
-            Err(anyhow::anyhow!("SystemManager not initialised when checking for systems for tag: {}", tag))
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when checking for systems for tag: {}",
+                tag
+            ))
         }
     }
 
@@ -352,19 +472,18 @@ impl JavaContext {
             let mut env = self.jvm.attach_current_thread()?;
 
             log::trace!("Calling SystemManager.getTotalSystemCount()");
-            let result = env.call_method(
-                manager_ref,
-                "getTotalSystemCount",
-                "()I",
-                &[],
-            )?;
+            let result = env.call_method(manager_ref, "getTotalSystemCount", "()I", &[])?;
 
             let exception = get_exception_info(&mut env);
-            if exception.is_some() { return Err(anyhow::anyhow!("{}", exception.unwrap())); }
+            if exception.is_some() {
+                return Err(anyhow::anyhow!("{}", exception.unwrap()));
+            }
 
             Ok(result.i()?)
         } else {
-            Err(anyhow::anyhow!("SystemManager not initialised when getting total system count."))
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when getting total system count."
+            ))
         }
     }
 

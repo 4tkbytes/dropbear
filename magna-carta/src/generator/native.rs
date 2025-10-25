@@ -1,8 +1,8 @@
 use crate::ScriptManifest;
 use crate::generator::Generator;
-use std::fmt::Write;
-use std::collections::HashMap;
 use chrono::Utc;
+use std::collections::HashMap;
+use std::fmt::Write;
 
 pub struct KotlinNativeGenerator;
 
@@ -25,7 +25,9 @@ impl Generator for KotlinNativeGenerator {
         writeln!(output, "package com.dropbear.decl")?;
         writeln!(output)?;
 
-        writeln!(output, r#"
+        writeln!(
+            output,
+            r#"
 import com.dropbear.DropbearEngine
 import com.dropbear.System
 import com.dropbear.ffi.NativeEngine
@@ -33,7 +35,8 @@ import com.dropbear.logging.Logger
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlin.experimental.ExperimentalNativeApi
-        "#)?;
+        "#
+        )?;
         writeln!(output)?;
 
         let mut imported_classes = Vec::new();
@@ -56,12 +59,16 @@ import kotlin.experimental.ExperimentalNativeApi
                 continue;
             }
             for tag in item.tags() {
-                tag_map.entry(tag.clone()).or_default().push(simple_name.to_string());
+                tag_map
+                    .entry(tag.clone())
+                    .or_default()
+                    .push(simple_name.to_string());
             }
         }
 
-
-        writeln!(output, r#"
+        writeln!(
+            output,
+            r#"
 object ScriptManager {{
     private var dropbearEngine: DropbearEngine? = null
     private val scriptsByTag: MutableMap<String, MutableList<System>> = mutableMapOf()
@@ -167,10 +174,14 @@ object ScriptManager {{
             return -1
         }}
     }}
-            "#)?;
+            "#
+        )?;
         // getScriptFactories (generated)
         {
-            writeln!(output, "  private fun getScriptFactories(tag: String): List<() -> System> {{")?;
+            writeln!(
+                output,
+                "  private fun getScriptFactories(tag: String): List<() -> System> {{"
+            )?;
             writeln!(output, "       return when (tag) {{")?;
 
             for (tag, classes) in &tag_map {
@@ -194,7 +205,9 @@ object ScriptManager {{
 
         writeln!(output, "}}")?;
 
-        writeln!(output, r#"
+        writeln!(
+            output,
+            r#"
 @CName("dropbear_init")
 fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?, graphicsPtr: COpaquePointer?): Int {{
     return ScriptManager.init(worldPtr, inputStatePtr, graphicsPtr)
@@ -228,7 +241,8 @@ fun dropbear_destroy(tag: String?): Int {{
 fun dropbear_destroy_all(): Int {{
     return ScriptManager.destroyAll()
 }}
-        "#)?;
+        "#
+        )?;
 
         Ok(output)
     }

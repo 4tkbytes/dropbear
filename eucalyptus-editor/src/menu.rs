@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use dropbear_engine::{
     future::{FutureHandle, FutureQueue},
     graphics::RenderContext,
@@ -117,9 +117,14 @@ impl MainMenu {
                         "setting_config" => {
                             let project_root = path.clone();
 
-                            let src_script_path = project_root.join("src/commonMain/kotlin/Script.kt");
+                            let src_script_path =
+                                project_root.join("src/commonMain/kotlin/Script.kt");
                             let domain_path = project_domain.clone().replace('.', "/");
-                            let dest_script_path = project_root.join(format!("src/commonMain/kotlin/{}/{}/Script.kt", domain_path, project_name.to_lowercase()));
+                            let dest_script_path = project_root.join(format!(
+                                "src/commonMain/kotlin/{}/{}/Script.kt",
+                                domain_path,
+                                project_name.to_lowercase()
+                            ));
 
                             if let Some(parent) = dest_script_path.parent() {
                                 fs::create_dir_all(parent)?;
@@ -129,7 +134,11 @@ impl MainMenu {
 
                             let mut content = fs::read_to_string(&dest_script_path)?;
 
-                            let package_declaration = format!("package {}.{}\n\n", project_domain.clone(), project_name.clone().to_lowercase());
+                            let package_declaration = format!(
+                                "package {}.{}\n\n",
+                                project_domain.clone(),
+                                project_name.clone().to_lowercase()
+                            );
                             content = package_declaration + &content;
 
                             fs::write(&dest_script_path, content)?;
@@ -149,9 +158,16 @@ impl MainMenu {
                             log::debug!("Cloning gradle template from GitHub");
                             let url = "https://github.com/4tkbytes/eucalyptus-gradle-template";
 
-                            fs::create_dir_all(path).context("Failed to create project directory")?;
+                            fs::create_dir_all(path)
+                                .context("Failed to create project directory")?;
 
-                            let temp_clone_path = path.with_file_name(format!("{}.clone_tmp", path.file_name().unwrap_or_default().to_str().unwrap_or_default()));
+                            let temp_clone_path = path.with_file_name(format!(
+                                "{}.clone_tmp",
+                                path.file_name()
+                                    .unwrap_or_default()
+                                    .to_str()
+                                    .unwrap_or_default()
+                            ));
 
                             Repository::clone(url, &temp_clone_path)?;
 

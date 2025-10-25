@@ -1,11 +1,11 @@
+use dropbear_engine::gilrs::{Button, GamepadId};
+use std::sync::Arc;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
-use std::sync::Arc;
-use winit::{event::MouseButton, keyboard::KeyCode};
 use winit::window::Window;
-use dropbear_engine::gilrs::{Button, GamepadId};
+use winit::{event::MouseButton, keyboard::KeyCode};
 
 #[derive(Clone, Debug)]
 pub struct InputState {

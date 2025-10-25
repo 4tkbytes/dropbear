@@ -2,12 +2,12 @@ pub mod camera;
 pub mod dropbear;
 pub mod input;
 pub mod logging;
+pub mod ptr;
+pub mod result;
 pub mod scripting;
 pub mod spawn;
 pub mod states;
 pub mod utils;
-pub mod ptr;
-pub mod result;
 pub mod window;
 
 pub use egui;

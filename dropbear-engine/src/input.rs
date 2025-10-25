@@ -137,7 +137,11 @@ impl Manager {
         }
     }
 
-    pub fn handle_mouse_movement(&mut self, position: PhysicalPosition<f64>, mouse_delta: Option<(f64, f64)>) {
+    pub fn handle_mouse_movement(
+        &mut self,
+        position: PhysicalPosition<f64>,
+        mouse_delta: Option<(f64, f64)>,
+    ) {
         self.mouse_position = position;
         for (name, handler) in self.mouse_handlers.iter_mut() {
             if self.active_handlers.contains(name) {

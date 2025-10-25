@@ -1,5 +1,5 @@
-use winit::keyboard::KeyCode;
 use crate::states::Node;
+use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
 

@@ -1,14 +1,14 @@
-use std::{fs, path::PathBuf, sync::Arc, time::Instant};
-use egui::{Context, TextureId};
-use glam::{DMat4, DQuat, DVec3, Mat3};
-use image::GenericImageView;
-use parking_lot::Mutex;
 use crate::{
     State,
     egui_renderer::EguiRenderer,
     model::{self, Vertex},
 };
 use dropbear_future_queue::FutureQueue;
+use egui::{Context, TextureId};
+use glam::{DMat4, DQuat, DVec3, Mat3};
+use image::GenericImageView;
+use parking_lot::Mutex;
+use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
     CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass,

@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
-use magna_carta::{KotlinProcessor, ScriptManifest};
 use magna_carta::generator::{Generator, jvm::KotlinJVMGenerator, native::KotlinNativeGenerator};
+use magna_carta::{KotlinProcessor, ScriptManifest};
 use std::fs;
 use std::path::PathBuf;
 
@@ -11,13 +11,20 @@ struct Cli {
     #[arg(short, long, help = "Input directory containing Kotlin source files")]
     input: PathBuf,
 
-    #[arg(short, long, help = "Output directory for generated files (ignored if --stdout is used)")]
+    #[arg(
+        short,
+        long,
+        help = "Output directory for generated files (ignored if --stdout is used)"
+    )]
     output: Option<PathBuf>,
 
     #[arg(short, long, help = "Target platform")]
     target: Target,
 
-    #[arg(long, help = "Print generated manifest to stdout instead of writing to file")]
+    #[arg(
+        long,
+        help = "Print generated manifest to stdout instead of writing to file"
+    )]
     stdout: bool,
 
     #[arg(long, help = "Print manifest raw")]
@@ -33,15 +40,20 @@ enum Target {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    if !cli.stdout && cli.output.is_none() {
-        return Err(anyhow::anyhow!("--output is required unless --stdout is used"));
+    if !cli.raw || (cli.stdout && cli.output.is_some()) {
+        return Err(anyhow::anyhow!(
+            "No output given. --stdout, --output <target> or --raw must be used."
+        ));
     }
 
     let mut processor = KotlinProcessor::new()?;
     let mut manifest = ScriptManifest::new();
 
     if !cli.input.exists() {
-        return Err(anyhow::anyhow!("Input directory does not exist: {:?}", cli.input));
+        return Err(anyhow::anyhow!(
+            "Input directory does not exist: {:?}",
+            cli.input
+        ));
     }
 
     visit_kotlin_files(&cli.input, &mut processor, &mut manifest)?;
@@ -63,6 +75,8 @@ fn main() -> anyhow::Result<()> {
 
     if cli.stdout {
         print!("{}", generated_content);
+    } else if cli.raw && !(cli.stdout || cli.output.is_some()) {
+        return Ok(());
     } else {
         let output_dir = cli.output.unwrap();
         fs::create_dir_all(&output_dir)?;
@@ -73,7 +87,11 @@ fn main() -> anyhow::Result<()> {
         };
         let output_path = output_dir.join(filename);
         fs::write(&output_path, generated_content)?;
-        println!("Generated {:?} manifest at: {}", cli.target, output_path.display());
+        println!(
+            "Generated {:?} manifest at: {}",
+            cli.target,
+            output_path.display()
+        );
     }
 
     println!("Found {} script classes", manifest.items().len());

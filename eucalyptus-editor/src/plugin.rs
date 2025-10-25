@@ -1,20 +1,21 @@
+use crate::editor::Editor;
+use app_dirs2::AppDataType;
+use egui::Ui;
+use eucalyptus_core::APP_INFO;
+use eucalyptus_core::states::PluginInfo;
+use indexmap::IndexMap;
+use libloading as lib;
 use std::fs::ReadDir;
 use std::path::PathBuf;
 use std::time::Instant;
-use app_dirs2::AppDataType;
-use egui::Ui;
-use indexmap::IndexMap;
-use eucalyptus_core::{APP_INFO};
-use libloading as lib;
-use eucalyptus_core::states::PluginInfo;
-use crate::editor::Editor;
 
 pub trait EditorPlugin: Send + Sync {
     fn id(&self) -> &str;
     fn display_name(&self) -> &str;
     fn ui(&mut self, ui: &mut Ui, editor: &mut Editor);
     fn tab_title(&self) -> &str;
-    fn context_menu(&mut self, _ui: &mut Ui, _editor: &mut Editor) { /* No context */ }
+    fn context_menu(&mut self, _ui: &mut Ui, _editor: &mut Editor) { /* No context */
+    }
 }
 
 pub type PluginConstructor = fn() -> Box<dyn EditorPlugin>;
@@ -58,7 +59,7 @@ impl PluginRegistry {
         self.plugins
             .values()
             .map(|p| PluginInfo {
-                display_name: p.display_name().to_string()
+                display_name: p.display_name().to_string(),
             })
             .collect()
     }
@@ -83,15 +84,21 @@ impl PluginRegistry {
                         let ext_str = ext.to_str().unwrap_or("");
 
                         if !self.is_valid_extension_for_platform(ext_str) {
-                            log::warn!("Skipping plugin {} - incompatible extension for this platform",
-                                     path.display());
+                            log::warn!(
+                                "Skipping plugin {} - incompatible extension for this platform",
+                                path.display()
+                            );
                             continue;
                         }
 
                         match self.load_plugin_from_file(&path) {
                             Ok(plugin) => {
                                 log::info!("Successfully loaded plugin: {}", path.display());
-                                log::debug!("Plugin {} loaded in {:?}", path.display(), now.elapsed());
+                                log::debug!(
+                                    "Plugin {} loaded in {:?}",
+                                    path.display(),
+                                    now.elapsed()
+                                );
                                 self.register(plugin);
                             }
                             Err(e) => {
@@ -128,9 +135,7 @@ impl PluginRegistry {
     fn load_plugin_from_file(&mut self, path: &PathBuf) -> anyhow::Result<Box<dyn EditorPlugin>> {
         let library = unsafe { lib::Library::new(path)? };
 
-        let constructor: lib::Symbol<PluginConstructor> = unsafe {
-            library.get(b"create_plugin")?
-        };
+        let constructor: lib::Symbol<PluginConstructor> = unsafe { library.get(b"create_plugin")? };
 
         let plugin = constructor();
 

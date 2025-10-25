@@ -1,8 +1,8 @@
 use crate::ScriptManifest;
 use crate::generator::Generator;
-use std::fmt::Write;
-use std::collections::HashMap;
 use chrono::Utc;
+use std::collections::HashMap;
+use std::fmt::Write;
 
 pub struct KotlinJVMGenerator;
 
@@ -42,12 +42,18 @@ impl Generator for KotlinJVMGenerator {
                 continue;
             }
             for tag in item.tags() {
-                tag_map.entry(tag.clone()).or_default().push(simple_name.to_string());
+                tag_map
+                    .entry(tag.clone())
+                    .or_default()
+                    .push(simple_name.to_string());
             }
         }
 
         writeln!(output, "object RunnableRegistry {{")?;
-        writeln!(output, "    private val tagRegistry = mutableMapOf<String, MutableList<() -> com.dropbear.System>>()")?;
+        writeln!(
+            output,
+            "    private val tagRegistry = mutableMapOf<String, MutableList<() -> com.dropbear.System>>()"
+        )?;
         writeln!(output)?;
 
         writeln!(output, "    init {{")?;
@@ -80,7 +86,10 @@ impl Generator for KotlinJVMGenerator {
             output,
             "    fun getScriptFactories(tag: String): List<() -> com.dropbear.System> {{"
         )?;
-        writeln!(output, "        return tagRegistry[tag]?.toList() ?: emptyList()")?;
+        writeln!(
+            output,
+            "        return tagRegistry[tag]?.toList() ?: emptyList()"
+        )?;
         writeln!(output, "    }}")?;
         writeln!(output)?;
 

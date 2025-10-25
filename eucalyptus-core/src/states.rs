@@ -1103,26 +1103,24 @@ impl SceneConfig {
                     Ok(())
                 }
                 ResourceReferenceType::Plane => {
-                    let width = entity_config
-                        .properties
-                        .get_float("width")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property or it's not a float"))?;
+                    let width = entity_config.properties.get_float("width").ok_or_else(|| {
+                        anyhow::anyhow!("Entity has no width property or it's not a float")
+                    })?;
 
                     let height = entity_config
                         .properties
                         .get_float("height")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property or it's not a float"))?;
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Entity has no height property or it's not a float")
+                        })?;
 
-                    let tiles_x = entity_config
-                        .properties
-                        .get_int("tiles_x")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property or it's not an int"))?;
+                    let tiles_x = entity_config.properties.get_int("tiles_x").ok_or_else(|| {
+                        anyhow::anyhow!("Entity has no tiles_x property or it's not an int")
+                    })?;
 
-                    let tiles_z = entity_config
-                        .properties
-                        .get_int("tiles_z")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property or it's not an int"))?;
-
+                    let tiles_z = entity_config.properties.get_int("tiles_z").ok_or_else(|| {
+                        anyhow::anyhow!("Entity has no tiles_z property or it's not an int")
+                    })?;
 
                     let label_clone = entity_config.label.clone();
                     let width_val = width as f32;
@@ -1179,7 +1177,6 @@ impl SceneConfig {
                             ))
                             // }
                         } else {
-
                             world.spawn((
                                 plane,
                                 transform,

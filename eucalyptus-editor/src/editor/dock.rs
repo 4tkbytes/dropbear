@@ -2,23 +2,23 @@ use super::*;
 use crate::editor::ViewportMode;
 use std::{collections::HashSet, sync::LazyLock};
 
-use eucalyptus_core::APP_INFO;
 use crate::editor::component::InspectableComponent;
+use crate::plugin::PluginRegistry;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_engine::{
     entity::Transform,
     lighting::{Light, LightComponent},
 };
 use egui;
-use egui::{CollapsingHeader};
-use egui_dock_fork::{TabViewer};
+use egui::CollapsingHeader;
+use egui_dock_fork::TabViewer;
 use egui_extras;
+use eucalyptus_core::APP_INFO;
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{File, Node, RESOURCES, ResourceType};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
-use crate::plugin::PluginRegistry;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -204,11 +204,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     let active_cam = self.active_camera.lock();
                     if let Some(active_camera) = *active_cam {
                         {
-                            if let Ok(mut q) =
-                                self.world.query_one::<(
-                                    &Camera,
-                                    &CameraComponent,
-                                )>(active_camera)
+                            if let Ok(mut q) = self
+                                .world
+                                .query_one::<(&Camera, &CameraComponent)>(active_camera)
                             {
                                 if let Some((camera, _)) = q.get() {
                                     if let Some(click_pos) =
@@ -913,10 +911,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     if local_set_initial_camera {
                         for (id, comp) in self.world.query::<&mut CameraComponent>().iter() {
                             comp.starting_camera = false;
-                            self.undo_stack.push(UndoableAction::RemoveStartingCamera(id))
+                            self.undo_stack
+                                .push(UndoableAction::RemoveStartingCamera(id))
                         }
 
-                        if let Ok(comp) = self.world.query_one_mut::<&mut CameraComponent>(*entity) {
+                        if let Ok(comp) = self.world.query_one_mut::<&mut CameraComponent>(*entity)
+                        {
                             success!("This camera is currently set as the initial camera");
                             comp.starting_camera = true;
                         }
@@ -1112,7 +1112,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             let editor = unsafe { &mut *self.editor };
-                            if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(dock_info) {
+                            if let Some((_, plugin)) =
+                                self.plugin_registry.plugins.get_index_mut(dock_info)
+                            {
                                 plugin.context_menu(ui, editor);
                             } else {
                                 ui.colored_label(

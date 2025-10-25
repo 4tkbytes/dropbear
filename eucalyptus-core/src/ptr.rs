@@ -1,7 +1,7 @@
-use crossbeam_channel::Sender;
-use hecs::World;
 use crate::input::InputState;
 use crate::window::GraphicsCommand;
+use crossbeam_channel::Sender;
+use hecs::World;
 
 pub type WorldPtr = *mut World;
 pub type InputStatePtr = *mut InputState;

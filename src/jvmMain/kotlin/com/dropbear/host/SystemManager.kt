@@ -1,14 +1,17 @@
 package com.dropbear.host
 
-import com.dropbear.logging.Logger
+import com.dropbear.DropbearEngine
+import com.dropbear.System
 import com.dropbear.logging.LogLevel
 import com.dropbear.logging.LogWriter
+import com.dropbear.logging.Logger
 import com.dropbear.logging.StdoutWriter
+import kotlin.collections.emptyList
 
 @Suppress("UNUSED")
 class SystemManager(
     jarPath: String,
-    private val engine: Any,
+    private val engine: DropbearEngine,
     logWriter: LogWriter? = null,
     logLevel: LogLevel? = null,
     logTarget: String = "unset"
@@ -16,7 +19,7 @@ class SystemManager(
     private val hotSwapUtility = HotSwapUtility(jarPath, "com.dropbear.decl.RunnableRegistry")
     private var registryInstance: Any? = null
     private var registryClass: Class<*>? = null
-    private val activeSystems = mutableMapOf<String, MutableList<Any>>()
+    private val activeSystems = mutableMapOf<String, MutableList<System>>()
 
     init {
         val writerToUse = logWriter ?: StdoutWriter()
@@ -41,18 +44,30 @@ class SystemManager(
     fun loadSystemsForTag(tag: String) {
         Logger.debug("Loading systems for tag: $tag")
         val instantiateMethod = registryClass?.getMethod("instantiateScripts", String::class.java)
-        val systems = instantiateMethod?.invoke(registryInstance, tag) as List<*>
+        val systems = instantiateMethod?.invoke(registryInstance, tag) as? List<*>
 
-        val loadedSystems = mutableListOf<Any>()
-        val engineClass = engine.javaClass
+        val loadedSystems = mutableListOf<System>()
 
-        for (system in systems) {
-            system?.let {
-                val loadMethod = it.javaClass.getMethod("load", engineClass)
-                loadMethod.invoke(it, engine)
-                loadedSystems.add(it)
-                Logger.trace("Loaded system: ${it.javaClass.name} for tag: $tag")
+        if (systems != null) {
+            for (system in systems) {
+                val typed = system as? System
+                if (typed == null) {
+                    Logger.warn("Skipping script instance that does not extend com.dropbear.System: ${system?.javaClass?.name}")
+                    continue
+                }
+
+                try {
+                    typed.attachEngine(engine)
+                    typed.clearCurrentEntity()
+                    typed.load(engine)
+                    loadedSystems.add(typed)
+                    Logger.trace("Loaded system: ${typed.javaClass.name} for tag: $tag")
+                } catch (ex: Exception) {
+                    Logger.error("Failed to load system ${typed.javaClass.name}: ${ex.message}")
+                }
             }
+        } else {
+            Logger.warn("No systems found for tag: $tag")
         }
 
         activeSystems[tag] = loadedSystems
@@ -61,32 +76,56 @@ class SystemManager(
 
     fun updateAllSystems(deltaTime: Float) {
         Logger.trace("Updating all systems")
-        val engineClass = engine.javaClass
-
-        for ((_, systems) in activeSystems) {
-            for (system in systems) {
-                val updateMethod = system.javaClass.getMethod(
-                    "update",
-                    engineClass,
-                    Float::class.javaPrimitiveType
-                )
-                updateMethod.invoke(system, engine, deltaTime)
-            }
+        for ((tag, systems) in activeSystems) {
+            updateSystemsInternal(tag, systems, deltaTime)
         }
     }
 
     fun updateSystemsByTag(tag: String, deltaTime: Float) {
         Logger.trace("Updating systems for tag: $tag")
         val systems = activeSystems[tag] ?: return
-        val engineClass = engine.javaClass
+        updateSystemsInternal(tag, systems, deltaTime)
+    }
+
+    fun updateSystemsForEntities(tag: String, entityIds: LongArray, deltaTime: Float) {
+        Logger.trace("Updating systems for tag: $tag with ${entityIds.size} entities")
+        val systems = activeSystems[tag] ?: return
+
+        if (systems.isEmpty()) {
+            return
+        }
+
+        if (entityIds.isEmpty()) {
+            updateSystemsInternal(tag, systems, deltaTime)
+            return
+        }
+
+        for (entityId in entityIds) {
+            for (system in systems) {
+                try {
+                    system.attachEngine(engine)
+                    system.setCurrentEntity(entityId)
+                    system.update(engine, deltaTime)
+                } catch (ex: Exception) {
+                    Logger.error("Failed to update system ${system.javaClass.name} for entity $entityId: ${ex.message}")
+                }
+            }
+        }
 
         for (system in systems) {
-            val updateMethod = system.javaClass.getMethod(
-                "update",
-                engineClass,
-                Float::class.javaPrimitiveType
-            )
-            updateMethod.invoke(system, engine, deltaTime)
+            system.clearCurrentEntity()
+        }
+    }
+
+    private fun updateSystemsInternal(tag: String, systems: List<System>, deltaTime: Float) {
+        for (system in systems) {
+            try {
+                system.attachEngine(engine)
+                system.clearCurrentEntity()
+                system.update(engine, deltaTime)
+            } catch (ex: Exception) {
+                Logger.error("Failed to update system ${system.javaClass.name} for tag $tag: ${ex.message}")
+            }
         }
     }
 
@@ -112,19 +151,13 @@ class SystemManager(
         activeSystems.clear()
     }
 
-    fun getSystemCount(tag: String): Int {
-        return activeSystems[tag]?.size ?: 0
-    }
+    fun getSystemCount(tag: String): Int = activeSystems[tag]?.size ?: 0
 
-    fun getTotalSystemCount(): Int {
-        return activeSystems.values.sumOf { it.size }
-    }
+    fun getTotalSystemCount(): Int = activeSystems.values.sumOf { it.size }
 
-    fun getActiveTags(): Set<String> {
-        return activeSystems.keys.toSet()
-    }
+    fun getActiveTags(): Set<String> = activeSystems.keys.toSet()
 
-    fun hasSystemsForTag(tag: String): Boolean {
-        return activeSystems.containsKey(tag) && activeSystems[tag]?.isNotEmpty() == true
-    }
+    fun hasSystemsForTag(tag: String): Boolean = activeSystems[tag]?.isNotEmpty() == true
 }
+
+

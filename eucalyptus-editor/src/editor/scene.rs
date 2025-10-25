@@ -11,13 +11,13 @@ use dropbear_engine::{
 };
 use eucalyptus_core::logging;
 use eucalyptus_core::states::WorldLoadingStatus;
+use eucalyptus_core::window::poll;
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-use eucalyptus_core::window::poll;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -101,30 +101,35 @@ impl Scene for Editor {
             }
         }
 
-        { // title to projects name
-            let project_title = {
-                PROJECT.read().project_name.clone()
-            };
-            let title = format!("{} | Version {} on commit {}",
-                                project_title,
-                                env!("CARGO_PKG_VERSION"),
-                                env!("GIT_HASH"));
+        {
+            // title to projects name
+            let project_title = { PROJECT.read().project_name.clone() };
+            let title = format!(
+                "{} | Version {} on commit {}",
+                project_title,
+                env!("CARGO_PKG_VERSION"),
+                env!("GIT_HASH")
+            );
             graphics.shared.window.set_title(&title);
         }
 
         poll(graphics.shared.window.clone());
 
-        { // basic futurequeue spawn queue management.
+        {
+            // basic futurequeue spawn queue management.
             let mut completed = Vec::new();
             for (i, handle) in self.light_spawn_queue.iter().enumerate() {
-                if let Some(l) = graphics.shared.future_queue.exchange_owned_as::<Light>(handle) {
-                    self.world.spawn(
-                        (
-                            l,
-                            LightComponent::default(),
-                            Transform::default(),
-                            ModelProperties::default(),
-                        ));
+                if let Some(l) = graphics
+                    .shared
+                    .future_queue
+                    .exchange_owned_as::<Light>(handle)
+                {
+                    self.world.spawn((
+                        l,
+                        LightComponent::default(),
+                        Transform::default(),
+                        ModelProperties::default(),
+                    ));
                     success!("Spawned light successfully");
                     completed.push(i);
                 }
@@ -135,7 +140,7 @@ impl Scene for Editor {
                 self.light_spawn_queue.remove(i);
             }
         }
-        
+
         if !self.plugin_registry.plugins_loaded {
             if let Err(e) = self.plugin_registry.load_plugins() {
                 fatal!("Failed to load plugins: {}", e);
@@ -157,11 +162,10 @@ impl Scene for Editor {
 
             let world_ptr = self.world.as_mut() as *mut World;
 
-            if let Err(e) = self.script_manager.update_script(
-                world_ptr,
-                &self.input_state,
-                dt,
-            ) {
+            if let Err(e) = unsafe { self
+                .script_manager
+                .update_script(world_ptr, &self.input_state, dt) }
+            {
                 fatal!("Failed to update script: {}", e);
                 self.signal = Signal::StopPlaying;
             }

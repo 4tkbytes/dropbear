@@ -166,7 +166,9 @@ impl InspectableComponent for ModelProperties {
                     }
 
                     if let Some((id, new_key)) = to_rename {
-                        if let Some(property) = self.custom_properties.iter_mut().find(|p| p.id == id) {
+                        if let Some(property) =
+                            self.custom_properties.iter_mut().find(|p| p.id == id)
+                        {
                             property.key = new_key;
                         } else {
                             warn!("Failed to rename property: id not found");

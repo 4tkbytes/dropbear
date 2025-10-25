@@ -720,14 +720,20 @@ impl ApplicationHandler for App {
                     .handle_mouse_input(button, button_state.is_pressed());
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.input_manager.handle_mouse_movement(position, self.delta_position);
+                self.input_manager
+                    .handle_mouse_movement(position, self.delta_position);
                 self.delta_position = None;
             }
             _ => {}
         }
     }
 
-    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
         #[allow(clippy::single_match)]
         match event {
             DeviceEvent::MouseMotion { delta } => {
