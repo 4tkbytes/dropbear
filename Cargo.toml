@@ -73,13 +73,14 @@ default-features = false
 features = ["png"]
 
 [profile.dev]
-opt-level = 0
+opt-level = 1
 debug = true
 codegen-units = 16
 incremental = true
 lto = false
-# it takes way too long to exit out
-panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 3
 
 # [profile.release]
 # opt-level = 3

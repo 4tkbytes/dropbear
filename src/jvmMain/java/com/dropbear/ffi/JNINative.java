@@ -42,4 +42,6 @@ public class JNINative {
     public static native boolean isCursorLocked(long inputHandle);
     public static native void setCursorLocked(long inputHandle, long graphicsHandle, boolean locked);
     public static native float[] getLastMousePos(long inputHandle);
+    public static native boolean isCursorHidden(long inputHandle);
+    public static native void setCursorHidden(long inputHandle, long graphicsHandle, boolean hidden);
 }

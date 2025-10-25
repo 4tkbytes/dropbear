@@ -276,11 +276,15 @@ impl Mouse for Editor {
             }
             self.input_state.last_mouse_pos = None;
         } else {
-            if let Some(window) = &self.window {
-                window.set_cursor_visible(true);
-                if let Err(e) = window.set_cursor_grab(CursorGrabMode::None) {
-                    log_once::error_once!("Unable to release mouse grab: {}", e);
+            if !matches!(self.editor_state, EditorState::Playing) {
+                if let Some(window) = &self.window {
+                    window.set_cursor_visible(true);
+                    if let Err(e) = window.set_cursor_grab(CursorGrabMode::None) {
+                        log_once::error_once!("Unable to release mouse grab: {}", e);
+                    }
                 }
+            } else {
+                // if it is in play mode, cursor grab would be defined in the user script
             }
             self.input_state.last_mouse_pos = None;
         }

@@ -22,16 +22,6 @@ use winit::window::Window;
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
 pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");
 
-#[derive(Debug)]
-pub enum GraphicsCommand {
-    WindowCommand(WindowCommand)
-}
-
-#[derive(Debug)]
-pub enum WindowCommand {
-    WindowGrab(bool)
-}
-
 pub struct RenderContext<'a> {
     pub shared: Arc<SharedGraphicsContext>,
     pub frame: FrameGraphicsContext<'a>,

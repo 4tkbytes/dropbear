@@ -21,6 +21,7 @@ pub struct InputState {
     pub pressed_keys: HashSet<KeyCode>,
     pub mouse_delta: Option<(f64, f64)>,
     pub is_cursor_locked: bool,
+    pub is_cursor_hidden: bool,
 
     /// This is not used, the mouse delta and/or the mouse position is used instead
     pub last_mouse_pos: Option<(f64, f64)>,
@@ -48,6 +49,7 @@ impl InputState {
             double_press_threshold: Duration::from_millis(300),
             mouse_delta: None,
             is_cursor_locked: false,
+            is_cursor_hidden: false,
             last_mouse_pos: Default::default(),
             connected_gamepads: Default::default(),
             pressed_buttons: Default::default(),

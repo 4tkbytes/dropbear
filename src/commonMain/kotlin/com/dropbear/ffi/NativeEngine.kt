@@ -60,6 +60,8 @@ expect class NativeEngine {
     fun getMouseDelta(): Vector2D?
     fun isCursorLocked(): Boolean
     fun setCursorLocked(locked: Boolean)
+    fun isCursorHidden(): Boolean
+    fun setCursorHidden(hidden: Boolean)
     fun getLastMousePos(): Vector2D?
 //    fun getConnectedGamepads(): List<Gamepad>
 

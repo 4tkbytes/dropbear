@@ -37,6 +37,14 @@ class InputState(private val engine: DropbearEngine) {
         return engine.native.getLastMousePos() ?: Vector2D(0.0, 0.0)
     }
 
+    fun isCursorHidden(): Boolean {
+        return engine.native.isCursorHidden()
+    }
+
+    fun setCursorHidden(hidden: Boolean) {
+        return engine.native.setCursorHidden(hidden)
+    }
+
     fun getConnectedGamepads(): List<Gamepad> {
         TODO("Not yet implemented")
 //        return engine.native.getConnectedGamepads()

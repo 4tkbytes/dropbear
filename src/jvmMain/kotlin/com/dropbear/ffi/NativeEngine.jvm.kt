@@ -11,6 +11,16 @@ import com.dropbear.math.Vector2D
 actual class NativeEngine {
     private var worldHandle: Long = 0L
     private var inputHandle: Long = 0L
+
+    /**
+     * The handle/pointer to the graphics queue.
+     *
+     * Contrary-to-belief, this is different from the `Arc<SharedGraphicsContext>` handle
+     * as such in the game engine, but rather a pointer to a static variable called `GRAPHICS_COMMANDS`.
+     *
+     * Since winit (the windowing library) requires all commands to be done on the main thread, this variable
+     * allows for "commands" to be sent over and processed on the main thread with the crossbeam_channels library.
+     */
     private var graphicsHandle: Long = 0L
 
     actual fun getEntity(label: String): Long? {
@@ -155,5 +165,13 @@ actual class NativeEngine {
 
     actual fun setCamera(camera: Camera) {
         JNINative.setCamera(worldHandle, camera)
+    }
+
+    actual fun isCursorHidden(): Boolean {
+        return JNINative.isCursorHidden(inputHandle)
+    }
+
+    actual fun setCursorHidden(hidden: Boolean) {
+        JNINative.setCursorHidden(inputHandle, graphicsHandle, hidden)
     }
 }

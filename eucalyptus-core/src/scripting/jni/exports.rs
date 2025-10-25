@@ -5,12 +5,12 @@ use dropbear_engine::entity::{AdoptedEntity, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
+use jni::sys::{jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring, JNI_FALSE};
 use jni::JNIEnv;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::graphics::{GraphicsCommand, WindowCommand};
 use crate::camera::{CameraComponent, CameraType};
 use crate::states::{ModelProperties, Value};
+use crate::window::{GraphicsCommand, WindowCommand};
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 //   (JNIEnv *, jclass, jlong, jstring);
@@ -328,7 +328,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
     if let Some(pos) = input.mouse_delta.take() {
         new_float_array(&mut env, pos.0 as f32, pos.1 as f32)
     } else {
-        println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [WARN] input_state.mouse_delta returns \"(None)\". Returning (0.0, 0.0)");
+        // println!("[Java_com_dropbear_ffi_JNINative_getMouseDelta] [WARN] input_state.mouse_delta returns \"(None)\". Returning (0.0, 0.0)");
         new_float_array(&mut env, 0.0, 0.0)
     }
 }
@@ -1379,5 +1379,60 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
         }
     } else {
         eprintln!("[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Unable to query camera component");
+    }
+}
+
+// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorHidden
+//   (JNIEnv *, jclass, jlong, jlong, jboolean);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
+    _env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+    graphics_handle: jlong,
+    hide: jboolean,
+) {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null");
+        return;
+    }
+    let input = unsafe { &mut *input };
+
+    let graphics = graphics_handle as GraphicsPtr;
+    if graphics.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null");
+        return;
+    }
+    let graphics = unsafe { &*graphics };
+
+    let hide = hide != JNI_FALSE;
+
+    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(hide))) {
+        println!("[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Unable to send hide cursor command: {}", e);
+    }
+
+    input.is_cursor_hidden = hide;
+}
+
+// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorHidden
+//   (JNIEnv *, jclass, jlong);
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isCursorHidden(
+    _env: JNIEnv,
+    _class: JClass,
+    input_handle: jlong,
+) -> jboolean {
+    let input = input_handle as InputStatePtr;
+    if input.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_isCursorHidden] [ERROR] Input state pointer is null");
+        return false.into();
+    }
+    let input = unsafe { &*input };
+
+    if input.is_cursor_hidden {
+        true.into()
+    } else {
+        false.into()
     }
 }

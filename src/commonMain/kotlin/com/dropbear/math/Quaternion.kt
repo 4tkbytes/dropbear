@@ -3,6 +3,7 @@
 package com.dropbear.math
 
 import kotlin.jvm.JvmField
+import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -91,5 +92,33 @@ class Quaternion<T: Number>(
         val roll = atan2(sinRoll, cosRoll)
 
         return Vector3D(pitch, yaw, roll)
+    }
+
+    fun slerp(other: Quaternion<Double>, t: Double): Quaternion<Double> {
+        var dot = x.toDouble() * other.x + y.toDouble() * other.y + z.toDouble() * other.z + w.toDouble() * other.w
+        dot = min(1.0, max(-1.0, dot))
+
+        if (dot > 0.9995) {
+            return Quaternion(
+                x.toDouble() + t * (other.x - x.toDouble()),
+                y.toDouble() + t * (other.y - y.toDouble()),
+                z.toDouble() + t * (other.z - z.toDouble()),
+                w.toDouble() + t * (other.w - w.toDouble())
+            ).normalized()
+        }
+
+        val theta0 = acos(dot)
+        val sinTheta0 = sin(theta0)
+        val theta = theta0 * t
+        val sinTheta = sin(theta)
+        val s0 = cos(theta) - dot * sinTheta / sinTheta0
+        val s1 = sinTheta / sinTheta0
+
+        return Quaternion(
+            x.toDouble() * s0 + other.x * s1,
+            y.toDouble() * s0 + other.y * s1,
+            z.toDouble() * s0 + other.z * s1,
+            w.toDouble() * s0 + other.w * s1
+        ).normalized()
     }
 }

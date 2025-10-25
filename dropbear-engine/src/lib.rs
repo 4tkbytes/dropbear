@@ -507,7 +507,7 @@ impl App {
                     Some(app_name.replace('-', "_").as_str()),
                     LevelFilter::Debug,
                 )
-                .filter(Some("eucalyptus_core"), LevelFilter::Trace)
+                .filter(Some("eucalyptus_core"), LevelFilter::Debug)
                 .init();
 
             // setup panic

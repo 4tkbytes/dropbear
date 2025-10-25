@@ -314,4 +314,11 @@ actual class NativeEngine {
 
     actual fun setCamera(camera: Camera) {
     }
+
+    actual fun isCursorHidden(): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setCursorHidden(hidden: Boolean) {
+    }
 }
