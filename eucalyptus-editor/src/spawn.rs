@@ -59,23 +59,29 @@ impl PendingSpawnController for Editor {
                         }
                         ResourceReferenceType::Plane => {
                             let get_float = |key: &str| -> anyhow::Result<f32> {
-                                let val =
-                                    properties.custom_properties.get(key).ok_or_else(|| {
+                                let val = properties
+                                    .custom_properties
+                                    .iter()
+                                    .find(|p| p.key == key)
+                                    .ok_or_else(|| {
                                         anyhow::anyhow!("Entity has no {} property", key)
                                     })?;
-                                match val {
-                                    Value::Float(f) => Ok(*f as f32),
+                                match val.value {
+                                    Value::Float(f) => Ok(f as f32),
                                     _ => Err(anyhow::anyhow!("{} is not a float", key)),
                                 }
                             };
 
                             let get_int = |key: &str| -> anyhow::Result<u32> {
-                                let val =
-                                    properties.custom_properties.get(key).ok_or_else(|| {
+                                let val = properties
+                                    .custom_properties
+                                    .iter()
+                                    .find(|p| p.key == key)
+                                    .ok_or_else(|| {
                                         anyhow::anyhow!("Entity has no {} property", key)
                                     })?;
-                                match val {
-                                    Value::Int(i) => Ok(*i as u32),
+                                match val.value {
+                                    Value::Int(i) => Ok(i as u32),
                                     _ => Err(anyhow::anyhow!("{} is not an int", key)),
                                 }
                             };

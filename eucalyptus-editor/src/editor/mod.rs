@@ -692,9 +692,9 @@ impl Editor {
                     *transform = *original_transform;
                 }
 
-                if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
-                    *properties = original_properties.clone();
-                }
+                // if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
+                //     *properties = original_properties.clone();
+                // }
 
                 let has_script = self.world.get::<&ScriptComponent>(*entity_id).is_ok();
                 match (has_script, original_script) {

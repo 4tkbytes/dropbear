@@ -5,7 +5,7 @@ use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{AdoptedEntity, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
-use eucalyptus_core::states::{ModelProperties, ScriptComponent, Value};
+use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::Vec3;
 use hecs::Entity;
@@ -78,24 +78,21 @@ impl InspectableComponent for ModelProperties {
                     ui.label(RichText::new("Action"));
                     ui.end_row();
 
-                    let mut to_delete: Option<String> = None;
-                    let mut to_rename: Option<(String, String)> = None;
+                    let mut to_delete: Option<u64> = None;
+                    let mut to_rename: Option<(u64, String)> = None;
 
-                    let keys: Vec<String> = self.custom_properties.keys().cloned().collect();
-                    for (i, key) in keys.into_iter().enumerate() {
-                        let val = self.custom_properties.get_mut(&key).unwrap();
-
-                        let mut edited_key = key.clone();
+                    for (_i, property) in self.custom_properties.iter_mut().enumerate() {
+                        let mut edited_key = property.key.clone();
                         ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
 
-                        if edited_key != key {
-                            to_rename = Some((key.clone(), edited_key));
+                        if edited_key != property.key {
+                            to_rename = Some((property.id, edited_key));
                         }
 
-                        let current_type = ValueType::from(&mut *val);
+                        let current_type = ValueType::from(&mut property.value);
                         let mut selected_type = current_type;
 
-                        ComboBox::from_id_salt(format!("type_{}_{}", i, key))
+                        ComboBox::from_id_salt(format!("type_{}", property.id))
                             .selected_text(format!("{:?}", selected_type))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
@@ -110,7 +107,7 @@ impl InspectableComponent for ModelProperties {
                             });
 
                         if selected_type != current_type {
-                            *val = match selected_type {
+                            property.value = match selected_type {
                                 ValueType::String => Value::String(String::new()),
                                 ValueType::Float => Value::Float(0.0),
                                 ValueType::Int => Value::Int(0),
@@ -132,7 +129,7 @@ impl InspectableComponent for ModelProperties {
                             }
                         };
 
-                        match val {
+                        match &mut property.value {
                             Value::String(s) => {
                                 ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
                             }
@@ -157,26 +154,22 @@ impl InspectableComponent for ModelProperties {
                         }
 
                         if ui.button("🗑️").clicked() {
-                            log::debug!("Trashing {}", key);
-                            to_delete = Some(key);
+                            log::debug!("Trashing {}", property.key);
+                            to_delete = Some(property.id);
                         }
 
                         ui.end_row();
                     }
 
-                    if let Some(key) = to_delete {
-                        self.custom_properties.remove(&key);
+                    if let Some(id) = to_delete {
+                        self.custom_properties.retain(|p| p.id != id);
                     }
 
-                    if let Some((old_key, new_key)) = to_rename {
-                        if new_key.is_empty() {
-                            warn!("Skipping rename to empty key");
-                        } else if old_key != new_key {
-                            if let Some(val) = self.custom_properties.remove(&old_key) {
-                                self.custom_properties.insert(new_key, val);
-                            } else {
-                                warn!("Failed to rename property: old key not found");
-                            }
+                    if let Some((id, new_key)) = to_rename {
+                        if let Some(property) = self.custom_properties.iter_mut().find(|p| p.id == id) {
+                            property.key = new_key;
+                        } else {
+                            warn!("Failed to rename property: id not found");
                         }
                     }
 
@@ -184,11 +177,16 @@ impl InspectableComponent for ModelProperties {
                         log::debug!("Inserting new default value");
                         let mut new_key = String::from("new_property");
                         let mut counter = 1;
-                        while self.custom_properties.contains_key(&new_key) {
+                        while self.custom_properties.iter().any(|p| p.key == new_key) {
                             new_key = format!("new_property_{}", counter);
                             counter += 1;
                         }
-                        self.custom_properties.insert(new_key, Value::default());
+                        self.custom_properties.push(Property {
+                            id: self.next_id,
+                            key: new_key,
+                            value: Value::default(),
+                        });
+                        self.next_id += 1;
                     }
                 });
             });

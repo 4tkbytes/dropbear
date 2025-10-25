@@ -108,19 +108,39 @@ actual class NativeEngine {
     }
 
     actual fun getIntProperty(entityHandle: Long, label: String): Int? {
-        return JNINative.getIntProperty(worldHandle, entityHandle, label)
+        val result = JNINative.getIntProperty(worldHandle, entityHandle, label)
+        return if (result == 650911) {
+            null
+        } else {
+            result
+        }
     }
 
     actual fun getLongProperty(entityHandle: Long, label: String): Long? {
-        return JNINative.getLongProperty(worldHandle, entityHandle, label)
+        val result = JNINative.getLongProperty(worldHandle, entityHandle, label)
+        return if (result == 6509112938) {
+            null
+        } else {
+            result
+        }
     }
 
     actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
-        return JNINative.getFloatProperty(worldHandle, entityHandle, label).toFloat()
+        val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
+        return if (result.isNaN()) {
+            null
+        } else {
+            result.toFloat()
+        }
     }
 
     actual fun getDoubleProperty(entityHandle: Long, label: String): Double? {
-        return JNINative.getFloatProperty(worldHandle, entityHandle, label)
+        val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
+        return if (result.isNaN()) {
+            null
+        } else {
+            result
+        }
     }
 
     actual fun getBoolProperty(entityHandle: Long, label: String): Boolean? {

@@ -709,18 +709,11 @@ impl SignalController for Editor {
                     crate::editor::PendingSpawn2::Plane => {
                         let transform = Transform::new();
                         let mut props = ModelProperties::new();
-                        props
-                            .custom_properties
-                            .insert("width".to_string(), Value::Float(500.0));
-                        props
-                            .custom_properties
-                            .insert("height".to_string(), Value::Float(200.0));
-                        props
-                            .custom_properties
-                            .insert("tiles_x".to_string(), Value::Int(500));
-                        props
-                            .custom_properties
-                            .insert("tiles_z".to_string(), Value::Int(200));
+                        props.add_property("width".to_string(), Value::Float(500.0));
+                        props.add_property("height".to_string(), Value::Float(200.0));
+                        props.add_property("tiles_x".to_string(), Value::Int(500));
+                        props.add_property("tiles_z".to_string(), Value::Int(200));
+
                         push_pending_spawn(PendingSpawn {
                             asset_path: ResourceReference::from_reference(
                                 ResourceReferenceType::Plane,

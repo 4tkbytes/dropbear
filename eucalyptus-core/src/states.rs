@@ -698,7 +698,15 @@ pub struct SceneEntity {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ModelProperties {
-    pub custom_properties: HashMap<String, Value>,
+    pub custom_properties: Vec<Property>,
+    pub next_id: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Property {
+    pub id: u64,
+    pub key: String,
+    pub value: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -732,16 +740,52 @@ impl Display for Value {
 impl ModelProperties {
     pub fn new() -> Self {
         Self {
-            custom_properties: HashMap::new(),
+            custom_properties: Vec::new(),
+            next_id: 0,
         }
     }
 
     pub fn set_property(&mut self, key: String, value: Value) {
-        self.custom_properties.insert(key, value);
+        if let Some(prop) = self.custom_properties.iter_mut().find(|p| p.key == key) {
+            prop.value = value;
+        } else {
+            self.custom_properties.push(Property {
+                id: self.next_id,
+                key,
+                value,
+            });
+            self.next_id += 1;
+        }
     }
 
     pub fn get_property(&self, key: &str) -> Option<&Value> {
-        self.custom_properties.get(key)
+        self.custom_properties
+            .iter()
+            .find(|p| p.key == key)
+            .map(|p| &p.value)
+    }
+
+    pub fn get_float(&self, key: &str) -> Option<f64> {
+        match self.get_property(key)? {
+            Value::Float(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    pub fn get_int(&self, key: &str) -> Option<i64> {
+        match self.get_property(key)? {
+            Value::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn add_property(&mut self, key: String, value: Value) {
+        self.custom_properties.push(Property {
+            id: self.next_id,
+            key,
+            value,
+        });
+        self.next_id += 1;
     }
 
     pub fn show_value_editor(ui: &mut Ui, value: &mut Value) -> bool {
@@ -918,7 +962,7 @@ impl SceneConfig {
 
                     let adopted =
                         AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
-                            .await;
+                            .await?;
                     let transform = entity_config.transform;
 
                     let _entity = if let Some(camera_config) = &entity_config.camera {
@@ -950,17 +994,6 @@ impl SceneConfig {
                             let script = ScriptComponent {
                                 tags: script_config.tags.clone(),
                             };
-                            // if let (Some(target_label), Some(offset)) = (
-                            //     &camera_config.follow_target_entity_label,
-                            //     &camera_config.follow_offset,
-                            // ) {
-                            //     let follow_target = CameraFollowTarget {
-                            //         follow_target: target_label.clone(),
-                            //         offset: DVec3::from_array(*offset),
-                            //     };
-                            //     world.spawn((adopted, transform, script, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            // } else {
-                            // }
                             world.spawn((
                                 adopted,
                                 transform,
@@ -970,17 +1003,6 @@ impl SceneConfig {
                                 camera_component,
                             ))
                         } else {
-                            // if let (Some(target_label), Some(offset)) = (
-                            //     &camera_config.follow_target_entity_label,
-                            //     &camera_config.follow_offset,
-                            // ) {
-                            //     let follow_target = CameraFollowTarget {
-                            //         follow_target: target_label.clone(),
-                            //         offset: DVec3::from_array(*offset),
-                            //     };
-                            //     world.spawn((adopted, transform, entity_config.properties.clone(), camera, camera_component, follow_target))
-                            // } else {
-                            // }
                             world.spawn((
                                 adopted,
                                 transform,
@@ -1083,46 +1105,30 @@ impl SceneConfig {
                 ResourceReferenceType::Plane => {
                     let width = entity_config
                         .properties
-                        .custom_properties
-                        .get("width")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property"))?;
-                    let width = match width {
-                        Value::Float(width) => width,
-                        _ => panic!("Entity has a width property that is not a float"),
-                    };
+                        .get_float("width")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no width property or it's not a float"))?;
+
                     let height = entity_config
                         .properties
-                        .custom_properties
-                        .get("height")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property"))?;
-                    let height = match height {
-                        Value::Float(height) => height,
-                        _ => panic!("Entity has a height property that is not a float"),
-                    };
+                        .get_float("height")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no height property or it's not a float"))?;
+
                     let tiles_x = entity_config
                         .properties
-                        .custom_properties
-                        .get("tiles_x")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property"))?;
-                    let tiles_x = match tiles_x {
-                        Value::Int(tiles_x) => tiles_x,
-                        _ => panic!("Entity has a tiles_x property that is not an int"),
-                    };
+                        .get_int("tiles_x")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_x property or it's not an int"))?;
+
                     let tiles_z = entity_config
                         .properties
-                        .custom_properties
-                        .get("tiles_z")
-                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property"))?;
-                    let tiles_z = match tiles_z {
-                        Value::Int(tiles_z) => tiles_z,
-                        _ => panic!("Entity has a tiles_z property that is not an int"),
-                    };
+                        .get_int("tiles_z")
+                        .ok_or_else(|| anyhow::anyhow!("Entity has no tiles_z property or it's not an int"))?;
+
 
                     let label_clone = entity_config.label.clone();
-                    let width_val = *width as f32;
-                    let height_val = *height as f32;
-                    let tiles_x_val = *tiles_x as u32;
-                    let tiles_z_val = *tiles_z as u32;
+                    let width_val = width as f32;
+                    let height_val = height as f32;
+                    let tiles_x_val = tiles_x as u32;
+                    let tiles_z_val = tiles_z as u32;
 
                     let plane = PlaneBuilder::new()
                         .with_size(width_val, height_val)
@@ -1277,21 +1283,7 @@ impl SceneConfig {
                 camera_type: camera_config.camera_type,
                 starting_camera: camera_config.starting_camera,
             };
-
-            // if let (Some(target_label), Some(offset)) = (
-            //     &camera_config.follow_target_entity_label,
-            //     &camera_config.follow_offset,
-            // ) {
-            //     let follow_target = CameraFollowTarget {
-            //         follow_target: target_label.clone(),
-            //         offset: DVec3::from_array(*offset),
-            //     };
-            //     { world.spawn((camera, component, follow_target)); }
-            // } else {
-            {
-                world.spawn((camera, component));
-            }
-            // }
+            world.spawn((camera, component));
         }
 
         {

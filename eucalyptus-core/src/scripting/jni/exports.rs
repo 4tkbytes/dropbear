@@ -195,7 +195,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
 
     let new_transform = Transform {
         position: DVec3::new(px, py, pz),
-        rotation: DQuat::from_axis_angle(DVec3::new(rx, ry, rz), rw),
+        rotation: DQuat::from_xyzw(rx, ry, rz, rw),
         scale: DVec3::new(sx, sy, sz),
     };
 
@@ -400,7 +400,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
     let input = input_handle as InputStatePtr;
     if input.is_null() {
         println!("[Java_com_dropbear_ffi_JNINative_getLastMousePos] [ERROR] Input state pointer is null");
-        return new_float_array(&mut env, -1.0, -1.0);
+        return new_float_array(&mut env, 0.0, 0.0);
     }
 
     let input = unsafe { &*input };
@@ -471,6 +471,10 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
 
 // JNIEXPORT jint JNICALL Java_com_dropbear_ffi_JNINative_getIntProperty
 //   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// Fetches a [`jint`]/[`i32`] value from a key value.
+///
+/// If the value does not exist, it will return `650911`, a randomly generated number
+/// that is extremely specific that no one would be sane enough to use this as a property.
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
     mut env: JNIEnv,
@@ -482,7 +486,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
     let world = world_handle as *mut World;
     if world.is_null() {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] World pointer is null");
-        return 0;
+        return 650911;
     }
 
     let world = unsafe { &mut *world };
@@ -496,7 +500,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
             value.to_string()
         } else {
             eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to get property name");
-            return 0;
+            return 650911;
         };
         let output = props.get_property(&value);
         if let Some(output) = output {
@@ -504,21 +508,26 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
                 Value::Int(val) => *val as jint,
                 _ => {
                     eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property is not an int");
-                    0
+                    650911
                 }
             }
         } else {
             eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [WARN] Property not found");
-            0
+            650911
         }
     } else {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getIntProperty] [ERROR] Failed to query entity for model properties");
-        0
+        650911
     }
 }
 
 // JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLongProperty
 //   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// Gets a [`jlong`]/[`i64`] property.
+///
+/// If the value doesn't exist, it will return this value: `6509112938`. This is a random number
+/// from a generator I got, and it is such a specific number that no one would ever have this number
+/// in one of their properties.
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
     mut env: JNIEnv,
@@ -530,7 +539,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
     let world = world_handle as *mut World;
     if world.is_null() {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] World pointer is null");
-        return 0;
+        return 6509112938;
     }
 
     let world = unsafe { &mut *world };
@@ -552,16 +561,16 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
                 Value::Int(val) => *val as jlong,
                 _ => {
                     eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property is not a long");
-                    0
+                    6509112938
                 }
             }
         } else {
             eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [WARN] Property not found");
-            0
+            6509112938
         }
     } else {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getLongProperty] [ERROR] Failed to query entity for model properties");
-        0
+        6509112938
     }
 }
 
@@ -578,7 +587,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
     let world = world_handle as *mut World;
     if world.is_null() {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] World pointer is null");
-        return 0.0;
+        return f64::NAN;
     }
 
     let world = unsafe { &mut *world };
@@ -592,7 +601,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
             value.to_string()
         } else {
             eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to get property name");
-            return 0.0;
+            return f64::NAN;
         };
         let output = props.get_property(&value);
         if let Some(output) = output {
@@ -600,16 +609,16 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
                 Value::Float(val) => *val as jdouble,
                 _ => {
                     eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property is not a float");
-                    0.0
+                    f64::NAN
                 }
             }
         } else {
             eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [WARN] Property not found");
-            0.0
+            f64::NAN
         }
     } else {
         eprintln!("[Java_com_dropbear_ffi_JNINative_getFloatProperty] [ERROR] Failed to query entity for model properties");
-        0.0
+        f64::NAN
     }
 }
 
