@@ -10,33 +10,30 @@ use crate::camera::UndoableCameraAction;
 use crate::debug;
 use crate::plugin::PluginRegistry;
 use crossbeam_channel::Receiver;
-use dropbear_engine::future::FutureHandle;
-use dropbear_engine::graphics::{RenderContext, Shader};
-use dropbear_engine::model::ModelId;
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
-    graphics::SharedGraphicsContext,
+    graphics::{RenderContext, Shader, SharedGraphicsContext},
     lighting::{Light, LightManager},
     scene::SceneCommand,
+    model::ModelId,
+    future::FutureHandle,
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
-use eucalyptus_core::input::InputState;
-use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
-use eucalyptus_core::scripting::{BuildStatus, ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{
-    CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
-    SceneEntity, ScriptComponent,
-};
-use eucalyptus_core::utils::ViewportMode;
-use eucalyptus_core::window::GRAPHICS_COMMAND;
 use eucalyptus_core::{
+    fatal, info, states, success, warn, success_without_console,
     camera::{CameraComponent, CameraType, DebugCamera},
-    states::WorldLoadingStatus,
-    success_without_console,
+    window::GRAPHICS_COMMAND,
+    utils::ViewportMode,
+    states::{
+        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
+        SceneEntity, ScriptComponent, WorldLoadingStatus,
+    },
+    scripting::{BuildStatus, ScriptManager, ScriptTarget},
+    ptr::{GraphicsPtr, InputStatePtr, WorldPtr},
+    input::InputState
 };
-use eucalyptus_core::{fatal, info, states, success, warn};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use std::path::Path;
@@ -52,6 +49,7 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
+use crate::graphics::OutlineShader;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -60,6 +58,7 @@ pub struct Editor {
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
     pub render_pipeline: Option<RenderPipeline>,
+    pub outline_pipeline: Option<OutlineShader>,
     pub light_manager: LightManager,
     pub color: Color,
 
@@ -75,7 +74,8 @@ pub struct Editor {
     pub pending_scene_switch: bool,
 
     pub gizmo: Gizmo,
-    pub(crate) selected_entity: Option<hecs::Entity>,
+    pub previously_selected_entity: Option<hecs::Entity>,
+    pub selected_entity: Option<hecs::Entity>,
     pub viewport_mode: ViewportMode,
 
     pub(crate) signal: Signal,
@@ -174,6 +174,7 @@ impl Editor {
             project_path: Arc::new(Mutex::new(None)),
             pending_scene_switch: false,
             gizmo: Gizmo::default(),
+            previously_selected_entity: None,
             selected_entity: None,
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
@@ -200,6 +201,7 @@ impl Editor {
             show_build_error_window: false,
             plugin_registry,
             dock_state_shared: None,
+            outline_pipeline: None,
         })
     }
 
@@ -868,6 +870,10 @@ impl Editor {
                         camera,
                         Some("Light Pipeline"),
                     );
+
+                    let outline_shader = OutlineShader::init(graphics.shared.clone(), camera.layout());
+                    self.outline_pipeline = Some(outline_shader);
+
                 } else {
                     log_once::warn_once!(
                         "Unable to fetch the query result of camera: {:?}",

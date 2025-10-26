@@ -242,7 +242,7 @@ impl<'a> RenderContext<'a> {
     }
 }
 
-// A nice little struct that stored basic information about a WGPU shader.
+/// A nice little struct that stored basic information about a WGPU shader.
 pub struct Shader {
     pub label: String,
     pub module: ShaderModule,
@@ -823,7 +823,7 @@ pub struct InstanceRaw {
 }
 
 impl InstanceRaw {
-    fn desc() -> VertexBufferLayout<'static> {
+    pub fn desc() -> VertexBufferLayout<'static> {
         VertexBufferLayout {
             array_stride: size_of::<InstanceRaw>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,

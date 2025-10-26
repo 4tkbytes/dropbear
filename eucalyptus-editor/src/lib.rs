@@ -7,3 +7,4 @@ pub mod plugin;
 pub mod signal;
 pub mod spawn;
 pub mod utils;
+pub mod graphics;

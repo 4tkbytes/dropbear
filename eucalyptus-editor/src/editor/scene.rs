@@ -197,6 +197,20 @@ impl Scene for Editor {
 
         let _ = self.run_signal(graphics.shared.clone());
 
+        if let Some(e) = self.previously_selected_entity
+            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e)
+            && let Some(entity) = q.get()
+        {
+            entity.is_selected = false
+        }
+        
+        if let Some(e) = self.selected_entity 
+            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e) 
+            && let Some(entity) = q.get()
+        {
+            entity.is_selected = true
+        }
+
         let current_size = graphics.shared.viewport_texture.size;
         self.size = current_size;
 
@@ -247,6 +261,7 @@ impl Scene for Editor {
         }
 
         self.input_state.window = self.window.clone();
+        self.previously_selected_entity = self.selected_entity;
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {
@@ -297,7 +312,7 @@ impl Scene for Editor {
                         entities
                     };
 
-                    {
+                    { // light cube rendering
                         let mut render_pass = graphics.clear_colour(color);
                         if let Some(light_pipeline) = &self.light_manager.pipeline {
                             render_pass.set_pipeline(light_pipeline);
@@ -335,18 +350,35 @@ impl Scene for Editor {
                             };
 
                             if let Some(model) = model_opt {
-                                {
+                                let instance_buffer = graphics
+                                    .shared
+                                    .device
+                                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                        label: Some("Batched Instance Buffer"),
+                                        contents: bytemuck::cast_slice(&instances),
+                                        usage: wgpu::BufferUsages::VERTEX,
+                                    });
+
+                                // outline rendering
+                                let has_selected = entities.iter()
+                                    .any(|e| e.model.id == model_ptr && e.is_selected);
+
+                                if has_selected && self.outline_pipeline.is_some() {
+                                    let mut render_pass = graphics.continue_pass();
+                                    render_pass.set_pipeline(&self.outline_pipeline.as_ref().unwrap().pipeline);
+                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                    render_pass.draw_model_instanced(
+                                        &model,
+                                        0..instances.len() as u32,
+                                        camera.bind_group(),
+                                        &self.outline_pipeline.as_ref().unwrap().bind_group,
+                                    );
+                                }
+
+                                { // normal model rendering
                                     let mut render_pass = graphics.continue_pass();
                                     render_pass.set_pipeline(pipeline);
 
-                                    let instance_buffer = graphics
-                                        .shared
-                                        .device
-                                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                            label: Some("Batched Instance Buffer"),
-                                            contents: bytemuck::cast_slice(&instances),
-                                            usage: wgpu::BufferUsages::VERTEX,
-                                        });
                                     render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
                                     render_pass.draw_model_instanced(
                                         &model,

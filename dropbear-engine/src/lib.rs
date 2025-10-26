@@ -12,6 +12,7 @@ pub mod procedural;
 pub mod resources;
 pub mod scene;
 pub mod utils;
+pub mod colour;
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
