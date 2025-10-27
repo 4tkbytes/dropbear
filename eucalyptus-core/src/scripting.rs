@@ -78,10 +78,15 @@ impl ScriptManager {
             lib_path: None,
         };
 
-        let jvm = JavaContext::new()?;
-        result.jvm = Some(jvm);
-        result.jvm_created = true;
-        log::debug!("Created new JVM instance");
+
+        #[cfg(feature = "jvm")]
+        // using this feature is automatically supported by the "editor" feature flag
+        { // JavaContext will only be created if developer explicitly specifies.
+            let jvm = JavaContext::new()?;
+            result.jvm = Some(jvm);
+            result.jvm_created = true;
+            log::debug!("Created new JVM instance");
+        }
 
         Ok(result)
     }

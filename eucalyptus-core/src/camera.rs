@@ -21,7 +21,7 @@ impl CameraComponent {
     pub fn new() -> Self {
         Self {
             speed: 5.0,
-            sensitivity: 0.002,
+            sensitivity: 0.1,
             fov_y: 60.0,
             camera_type: CameraType::Normal,
             starting_camera: false,
