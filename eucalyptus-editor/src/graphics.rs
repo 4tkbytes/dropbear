@@ -12,6 +12,7 @@ pub const OUTLINE_SHADER: &str = include_str!("../../resources/shaders/outline.w
 pub struct OutlineUniform {
     pub outline_width: f32,
     pub outline_color: [f32; 4],
+    pub _padding: [f32; 3],
 }
 
 impl Default for OutlineUniform {
@@ -19,15 +20,7 @@ impl Default for OutlineUniform {
         Self {
             outline_width: 0.02,
             outline_color: Colour::ORANGE.to_raw_vec4(),
-        }
-    }
-}
-
-impl OutlineUniform {
-    pub fn new() -> Self {
-        Self {
-            outline_width: 0.0,
-            outline_color: [0.0, 0.0, 0.0, 0.0],
+            _padding: [0.0, 0.0, 0.0]
         }
     }
 }
@@ -62,7 +55,7 @@ impl OutlineShader {
             });
         log::trace!("Created outline bind group layout");
 
-        let uniform = OutlineUniform::new();
+        let uniform = OutlineUniform::default();
         let uniform_buffer = graphics.create_uniform(uniform, Some("Outline Uniform"));
 
         let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {

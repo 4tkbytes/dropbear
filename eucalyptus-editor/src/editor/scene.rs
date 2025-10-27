@@ -364,15 +364,27 @@ impl Scene for Editor {
                                     .any(|e| e.model.id == model_ptr && e.is_selected);
 
                                 if has_selected && self.outline_pipeline.is_some() {
+                                    let outline = self.outline_pipeline.as_ref().unwrap();
                                     let mut render_pass = graphics.continue_pass();
-                                    render_pass.set_pipeline(&self.outline_pipeline.as_ref().unwrap().pipeline);
+                                    render_pass.set_pipeline(&outline.pipeline);
+
+                                    render_pass.set_bind_group(0, &outline.bind_group, &[]);
+                                    render_pass.set_bind_group(1, camera.bind_group(), &[]);
+
                                     render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                                    render_pass.draw_model_instanced(
-                                        &model,
-                                        0..instances.len() as u32,
-                                        camera.bind_group(),
-                                        &self.outline_pipeline.as_ref().unwrap().bind_group,
-                                    );
+
+                                    for mesh in &model.meshes {
+                                        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                        render_pass.set_index_buffer(
+                                            mesh.index_buffer.slice(..),
+                                            wgpu::IndexFormat::Uint32,
+                                        );
+                                        render_pass.draw_indexed(
+                                            0..mesh.num_elements,
+                                            0,
+                                            0..instances.len() as u32,
+                                        );
+                                    }
                                 }
 
                                 { // normal model rendering

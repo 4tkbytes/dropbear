@@ -653,11 +653,11 @@ impl ApplicationHandler for App {
                 let total_frame_time = frame_start.elapsed();
                 self.delta_time = total_frame_time.as_secs_f32();
 
-                if self.delta_time > 0.0 {
-                    let fps = (1.0 / self.delta_time).round() as u32;
-                    let new_title = format!("{} | FPS: {}", self.config.title, fps);
-                    state.window.set_title(&new_title);
-                }
+                // if self.delta_time > 0.0 {
+                //     let fps = (1.0 / self.delta_time).round() as u32;
+                //     let new_title = format!("{} | FPS: {}", self.config.title, fps);
+                //     state.window.set_title(&new_title);
+                // }
 
                 state.window.request_redraw();
                 self.future_queue.cleanup();
@@ -722,8 +722,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input_manager
-                    .handle_mouse_movement(position, self.delta_position);
-                self.delta_position = None;
+                    .handle_mouse_movement(position, None);
             }
             _ => {}
         }
@@ -738,8 +737,10 @@ impl ApplicationHandler for App {
         #[allow(clippy::single_match)]
         match event {
             DeviceEvent::MouseMotion { delta } => {
-                // log::debug!("Mouse motion: {:?}", delta);
-                self.delta_position = Some(delta)
+                self.delta_position = Some(delta);
+                self.input_manager
+                    .handle_mouse_movement(self.input_manager.get_mouse_position(), Some(delta));
+                // println!("Delta found: [{},{}]", delta.0, delta.1);
             }
             _ => {}
         }

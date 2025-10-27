@@ -259,8 +259,11 @@ impl Mouse for Editor {
             if let Some(window) = &self.window {
                 window.set_cursor_visible(false);
                 if let Err(e) = window
-                    .set_cursor_grab(CursorGrabMode::Confined)
-                    .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                    .set_cursor_grab(CursorGrabMode::Locked)
+                    .or_else(|_| {
+                        log_once::warn_once!("Using cursor grab fallback: CursorGrabMode::Locked");
+                        window.set_cursor_grab(CursorGrabMode::Confined)
+                    })
                 {
                     log_once::error_once!("Unable to grab mouse: {}", e);
                 }
@@ -276,10 +279,20 @@ impl Mouse for Editor {
                     camera.track_mouse_delta(dx * camera.sensitivity, dy * camera.sensitivity);
                     self.input_state.mouse_delta = Some((dx, dy));
                 } else {
-                    log_once::error_once!("Unable to track mouse delta")
+                    log_once::warn_once!("Unable to track mouse delta, attempting fallback");
+                    // fallback for mouse tracking
+                    if let Some(old_mouse_pos) = self.input_state.last_mouse_pos {
+                        let dx = position.x - old_mouse_pos.0;
+                        let dy = position.y - old_mouse_pos.1;
+                        camera.track_mouse_delta(dx * camera.sensitivity, dy * camera.sensitivity);
+                        self.input_state.mouse_delta = Some((dx, dy));
+                        log_once::debug_once!("Fallback mouse tracking used");
+                    } else {
+                        log_once::error_once!("Unable to track mouse delta, fallback failed");
+                    }
                 }
             }
-            self.input_state.last_mouse_pos = None;
+            self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
         } else {
             if !matches!(self.editor_state, EditorState::Playing) {
                 if let Some(window) = &self.window {
@@ -291,7 +304,7 @@ impl Mouse for Editor {
             } else {
                 // if it is in play mode, cursor grab would be defined in the user script
             }
-            self.input_state.last_mouse_pos = None;
+            self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
         }
 
         self.input_state.mouse_delta = delta;
