@@ -2,7 +2,7 @@
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{WindowConfiguration, scene};
+use dropbear_engine::{WindowConfiguration, scene, MutableWindowConfiguration};
 use eucalyptus_core::APP_INFO;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
@@ -133,8 +133,10 @@ async fn main() -> anyhow::Result<()> {
                     env!("CARGO_PKG_VERSION"),
                     env!("GIT_HASH")
                 ),
-                windowed_mode: dropbear_engine::WindowedModes::Maximised,
-                max_fps: dropbear_engine::App::NO_FPS_CAP,
+                window_config: MutableWindowConfiguration {
+                    windowed_mode: dropbear_engine::WindowedModes::Maximised,
+                    max_fps: dropbear_engine::App::NO_FPS_CAP,
+                },
                 app_info: APP_INFO,
             };
 

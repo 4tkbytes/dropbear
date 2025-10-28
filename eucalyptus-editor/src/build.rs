@@ -13,7 +13,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     let build_dir = project_path
         .parent()
         .ok_or(anyhow::anyhow!("Unable to get parent"))?
-        .join(".build");
+        .join("build");
 
     // check health
     println!("Checking health (checking if commands exist)");
@@ -94,7 +94,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     let output_dir = project_path
         .parent()
         .ok_or(anyhow::anyhow!("Unable to get parent"))?
-        .join(".build")
+        .join("build")
         .join("package");
     std::fs::create_dir_all(&output_dir)?;
 
@@ -106,7 +106,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     let eupak_source = project_path
         .parent()
         .ok_or(anyhow::anyhow!("Unable to get parent"))?
-        .join(".build")
+        .join("build")
         .join("output")
         .join(format!("{}.eupak", project_name));
     let eupak_dest = output_dir.join(format!("{}.eupak", project_name));
@@ -145,7 +145,7 @@ pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Resu
     let zip_path = project_path
         .parent()
         .ok_or(anyhow::anyhow!("Unable to get parent"))?
-        .join(".build")
+        .join("build")
         .join(format!("{}.zip", project_name));
     create_zip_package(&output_dir, &zip_path)?;
 
@@ -351,7 +351,7 @@ pub fn build(
     };
     log::info!(" > Copied scene data");
 
-    let build_dir = project_path.parent().unwrap().join(".build").join("output");
+    let build_dir = project_path.parent().unwrap().join("build").join("output");
     fs::create_dir_all(&build_dir)?;
     log::info!(" > Created build dir");
 

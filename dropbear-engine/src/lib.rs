@@ -32,6 +32,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use std::path::Path;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
@@ -51,6 +52,8 @@ pub use dropbear_future_queue as future;
 use dropbear_future_queue::FutureQueue;
 pub use gilrs;
 use log::LevelFilter;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
 pub use wgpu;
 pub use winit;
 use winit::event::{DeviceEvent, DeviceId};
@@ -394,7 +397,7 @@ impl App {
             input_manager: input::Manager::new(),
             delta_time: 1.0 / 60.0,
             next_frame_time: None,
-            target_fps: config.max_fps,
+            target_fps: config.window_config.max_fps,
             // default settings for now
             gilrs: GilrsBuilder::new().build().unwrap(),
             future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
@@ -580,14 +583,14 @@ impl ApplicationHandler for App {
         let mut window_attributes =
             Window::default_attributes().with_title(self.config.title.clone());
 
-        if self.config.windowed_mode.is_windowed() {
-            if let Some((width, height)) = self.config.windowed_mode.windowed_size() {
+        if self.config.window_config.windowed_mode.is_windowed() {
+            if let Some((width, height)) = self.config.window_config.windowed_mode.windowed_size() {
                 window_attributes =
                     window_attributes.with_inner_size(PhysicalSize::new(width, height));
             }
-        } else if self.config.windowed_mode.is_maximised() {
+        } else if self.config.window_config.windowed_mode.is_maximised() {
             window_attributes = window_attributes.with_maximized(true);
-        } else if self.config.windowed_mode.is_fullscreen() {
+        } else if self.config.window_config.windowed_mode.is_fullscreen() {
             window_attributes = window_attributes
                 .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
@@ -675,7 +678,7 @@ impl ApplicationHandler for App {
                     && key_state.is_pressed()
                     && let Some(state) = &self.state
                 {
-                    match self.config.windowed_mode {
+                    match self.config.window_config.windowed_mode {
                         WindowedModes::Windowed(_, _) => {
                             if state.window.fullscreen().is_some() {
                                 state.window.set_fullscreen(None);
@@ -753,20 +756,37 @@ impl ApplicationHandler for App {
 /// That's all it does. And it can also display. But that's about it.
 #[derive(Debug, Clone)]
 pub struct WindowConfiguration {
-    pub windowed_mode: WindowedModes,
     pub title: String,
-    /// This reads from a config file.
-    /// This will read from a client config file under {exe}/client.props, and on game exit will save the properties to the file.
-    ///
-    /// As of right now, it has not been implemented yet :(
-    // TODO: Implement config reading.
-    // pub read_from_config: Option<String>,
-    pub max_fps: u32,
+    pub window_config: MutableWindowConfiguration,
     pub app_info: AppInfo,
 }
 
+/// Window configuration that contains values that can be serialized into files/mutated by the user.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MutableWindowConfiguration {
+    pub max_fps: u32,
+    pub windowed_mode: WindowedModes,
+}
+
+impl MutableWindowConfiguration {
+    /// Loads a [`MutableWindowConfiguration`] from the specified file.
+    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let contents: String = std::fs::read_to_string(path)?;
+        let str: MutableWindowConfiguration = ron::from_str::<MutableWindowConfiguration>(&contents)?;
+        Ok(str)
+    }
+
+    /// Writes the [`MutableWindowConfiguration`] to the specified file.
+    ///
+    /// It is recommended to save it with the prefix `.eucuc` (**Euc**alytus **U**ser **C**onfig)
+    pub fn to_file(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        std::fs::write(path, ron::ser::to_string_pretty(self, PrettyConfig::default())?)?;
+        Ok(())
+    }
+}
+
 /// An enum displaying the different modes on initial startup
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 pub enum WindowedModes {
     Windowed(u32, u32),
     Maximised,
@@ -803,8 +823,8 @@ impl WindowedModes {
 
 impl Display for WindowConfiguration {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if self.windowed_mode.is_windowed() {
-            if let Some((width, height)) = self.windowed_mode.windowed_size() {
+        if self.window_config.windowed_mode.is_windowed() {
+            if let Some((width, height)) = self.window_config.windowed_mode.windowed_size() {
                 write!(
                     f,
                     "width: {}, height: {}, title: {}",
@@ -813,9 +833,9 @@ impl Display for WindowConfiguration {
             } else {
                 write!(f, "yo how the fuck you get to here huh???")
             }
-        } else if self.windowed_mode.is_maximised() {
+        } else if self.window_config.windowed_mode.is_maximised() {
             write!(f, "window is maximised: title: {}", self.title)
-        } else if self.windowed_mode.is_fullscreen() {
+        } else if self.window_config.windowed_mode.is_fullscreen() {
             write!(f, "window is fullscreen: title: {}", self.title)
         } else {
             write!(
