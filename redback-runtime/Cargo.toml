@@ -1,0 +1,16 @@
+[package]
+name = "redback-runtime"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+dropbear-engine = { path = "../dropbear-engine" }
+eucalyptus-core = { path = "../eucalyptus-core" }
+
+anyhow.workspace = true
+log = "0.4.27"
+app_dirs2.workspace = true
+tokio.workspace = true
