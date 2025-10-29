@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 use dropbear_engine::colour::Colour;
-use dropbear_engine::graphics::{InstanceRaw, Shader, SharedGraphicsContext, Texture};
+use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext, Texture};
 use dropbear_engine::model::{ModelVertex, Vertex};
-
-pub const OUTLINE_SHADER: &str = include_str!("../../resources/shaders/outline.wgsl");
+use dropbear_engine::shader::Shader;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -34,7 +33,7 @@ pub struct OutlineShader {
 
 impl OutlineShader {
     pub fn init(graphics: Arc<SharedGraphicsContext>, camera_layout: &wgpu::BindGroupLayout) -> Self {
-        let shader = Shader::new(graphics.clone(), OUTLINE_SHADER, Some("outline_shader"));
+        let shader = Shader::new(graphics.clone(), dropbear_engine::shader::shader_wesl::OUTLINE_SHADER, Some("outline_shader"));
         log::trace!("Created outline shader");
 
         let bind_group_layout =

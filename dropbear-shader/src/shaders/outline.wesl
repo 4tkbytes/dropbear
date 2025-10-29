@@ -1,19 +1,8 @@
-struct CameraUniform {
-    view_pos: vec4<f32>,
-    view_proj: mat4x4<f32>,
-};
-
 @group(1) @binding(0)
-var<uniform> camera: CameraUniform;
-
-struct OutlineUniform {
-    outline_width: f32,
-    outline_color: vec4<f32>,
-//    _padding: vec3<f32>,
-};
+var<uniform> camera: package::input::CameraUniform;
 
 @group(0) @binding(0)
-var<uniform> outline: OutlineUniform;
+var<uniform> outline: package::input::OutlineUniform;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,

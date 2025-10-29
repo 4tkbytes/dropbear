@@ -14,9 +14,6 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-// why tf do you exist? oh well :shrug:
-pub const TEMPLATE_SCRIPT: &str = include_str!("../../resources/scripting/kotlin/Template.kt");
-
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone)]
 pub enum ScriptTarget {

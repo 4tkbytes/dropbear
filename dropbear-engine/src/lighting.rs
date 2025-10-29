@@ -2,8 +2,8 @@ use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
-    RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction,
+    DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout,
 };
 
 use crate::attenuation::{Attenuation, RANGE_50};
@@ -12,9 +12,9 @@ use crate::model::{LazyModel, LazyType};
 use crate::{
     camera::Camera,
     entity::Transform,
-    graphics::Shader,
     model::{self, Model, Vertex},
 };
+use crate::shader::Shader;
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -584,7 +584,7 @@ impl LightManager {
         camera: &Camera,
         label: Option<&str>,
     ) {
-        use crate::graphics::Shader;
+        use crate::shader::Shader;
 
         let shader = Shader::new(graphics.clone(), shader_contents, label);
 

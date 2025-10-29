@@ -13,26 +13,26 @@ use crossbeam_channel::Receiver;
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
-    graphics::{RenderContext, Shader, SharedGraphicsContext},
-    lighting::{Light, LightManager},
-    scene::SceneCommand,
-    model::ModelId,
     future::FutureHandle,
+    graphics::{RenderContext, SharedGraphicsContext},
+    lighting::{Light, LightManager},
+    model::ModelId,
+    scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{
-    fatal, info, states, success, warn, success_without_console,
-    camera::{CameraComponent, CameraType, DebugCamera},
-    window::GRAPHICS_COMMAND,
-    utils::ViewportMode,
+    camera::{CameraComponent, CameraType, DebugCamera}, fatal, info, input::InputState, ptr::{GraphicsPtr, InputStatePtr, WorldPtr}, scripting::{BuildStatus, ScriptManager, ScriptTarget},
+    states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
-        SceneEntity, ScriptComponent, WorldLoadingStatus,
+        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent,
+        WorldLoadingStatus, PROJECT, SCENES,
     },
-    scripting::{BuildStatus, ScriptManager, ScriptTarget},
-    ptr::{GraphicsPtr, InputStatePtr, WorldPtr},
-    input::InputState
+    success,
+    success_without_console,
+    utils::ViewportMode,
+    warn,
+    window::GRAPHICS_COMMAND
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;
@@ -49,6 +49,7 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
+use dropbear_engine::shader::Shader;
 use crate::graphics::OutlineShader;
 
 pub struct Editor {
@@ -838,9 +839,10 @@ impl Editor {
     ///
     /// **Note**: To be ran AFTER [`Editor::load_project_config`]
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: &mut RenderContext<'a>) {
+        log::debug!("Contents of viewport shader: \n{:#?}", dropbear_engine::shader::shader_wesl::SHADER_SHADER);
         let shader = Shader::new(
             graphics.shared.clone(),
-            include_str!("../../../resources/shaders/shader.wgsl"),
+            dropbear_engine::shader::shader_wesl::SHADER_SHADER,
             Some("viewport_shader"),
         );
 
@@ -864,16 +866,17 @@ impl Editor {
                     );
                     self.render_pipeline = Some(pipeline);
 
+                    log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
                     self.light_manager.create_render_pipeline(
                         graphics.shared.clone(),
-                        include_str!("../../../resources/shaders/light.wgsl"),
+                        dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
                         camera,
                         Some("Light Pipeline"),
                     );
 
+                    log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
                     let outline_shader = OutlineShader::init(graphics.shared.clone(), camera.layout());
                     self.outline_pipeline = Some(outline_shader);
-
                 } else {
                     log_once::warn_once!(
                         "Unable to fetch the query result of camera: {:?}",

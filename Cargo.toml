@@ -1,12 +1,12 @@
 [workspace]
 package.version = "0.1.2"
 package.edition = "2024"
-package.license-file = "LICENSE.md"
+package.license = "MIT OR Apache-2.0"
 package.repository = "https://github.com/4tkbytes/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
-members = [ "dropbear-engine", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
+members = [ "dropbear-engine", "dropbear-shader", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
 
 
 [workspace.dependencies]
@@ -38,7 +38,6 @@ log = "0.4"
 log-once = "0.4"
 model_to_image = "0.1.1"
 once_cell = "1.21"
-open = "5"
 parking_lot = {version = "0.12", features = ["deadlock_detection"] }
 rfd = "0.15.4"
 ron = "0.11"
@@ -51,7 +50,6 @@ winit = { version = "0.30", features = [] }
 zip = "5.1"
 walkdir = "2.3"
 rayon = "1.11"
-reqwest = { version = "0.11", features = ["stream"] }
 backtrace = "0.3"
 gltf = "1"
 os_info = "3.12"
@@ -61,10 +59,8 @@ tree-sitter = "0.22"
 tree-sitter-kotlin = "0.3.8"
 libloading = "0.8"
 indexmap = "2.11"
-rand = "0.9"
-num_enum = "0.7"
 sha2 = "0.10"
-stdext = "0.3"
+wesl = "0.2"
 
 [workspace.dependencies.image]
 version = "0.25"
