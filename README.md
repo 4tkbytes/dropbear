@@ -9,6 +9,7 @@ If you might have not realised, all the crates/projects names are after Australi
 ## Projects
 
 - [dropbear-engine](https://github.com/4tkbytes/dropbear/tree/main/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
+- [dropbear-shader](https://github.com/4tkbytes/dropbear/tree/main/dropbear-shader) contains WESL shaders for users to import
 - [eucalyptus-editor](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
 - [eucalyptus-core](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
 - [redback-runtime](https://github.com/4tkbytes/dropbear/tree/main/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
@@ -104,7 +105,7 @@ Yeah, yeah, go ahead and contribute. Make sure it works, and its not spam, and a
 
 # Licensing
 
-In the case someone actually makes something with my engine and distributes it, the projects (meaning **dropbear-engine**,
-**eucalyptus** and **redback-runtime**) must abide by the license in [LICENSE.md](LICENSE.md).
+All projects made in this repository is under the license of MIT or Apache 2.0 depending on your choice. 
 
-The **dropbear_future-queue** rust library is available under the `MIT` license, which can be used by anyone.
+It is recommended that you give us (the engine) credit, as it allows for more community support. This could be
+in the form of a credit scene or in the splash screen. 

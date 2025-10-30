@@ -359,6 +359,19 @@ impl Scene for Editor {
                                         usage: wgpu::BufferUsages::VERTEX,
                                     });
 
+                                { // normal model rendering
+                                    let mut render_pass = graphics.continue_pass();
+                                    render_pass.set_pipeline(pipeline);
+
+                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                    render_pass.draw_model_instanced(
+                                        &model,
+                                        0..instances.len() as u32,
+                                        camera.bind_group(),
+                                        self.light_manager.bind_group(),
+                                    );
+                                }
+
                                 // outline rendering
                                 let has_selected = entities.iter()
                                     .any(|e| e.model.id == model_ptr && e.is_selected);
@@ -385,19 +398,6 @@ impl Scene for Editor {
                                             0..instances.len() as u32,
                                         );
                                     }
-                                }
-
-                                { // normal model rendering
-                                    let mut render_pass = graphics.continue_pass();
-                                    render_pass.set_pipeline(pipeline);
-
-                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                                    render_pass.draw_model_instanced(
-                                        &model,
-                                        0..instances.len() as u32,
-                                        camera.bind_group(),
-                                        self.light_manager.bind_group(),
-                                    );
                                 }
                                 log_once::debug_once!("Rendered {:?}", model_ptr);
                             } else {

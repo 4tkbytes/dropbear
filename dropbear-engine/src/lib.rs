@@ -13,6 +13,7 @@ pub mod resources;
 pub mod scene;
 pub mod utils;
 pub mod colour;
+pub mod shader;
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
@@ -45,18 +46,19 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
+use dropbear_future_queue::FutureQueue;
+use log::LevelFilter;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
+use winit::event::{DeviceEvent, DeviceId};
 
 use crate::{egui_renderer::EguiRenderer, graphics::Texture};
 
 pub use dropbear_future_queue as future;
-use dropbear_future_queue::FutureQueue;
 pub use gilrs;
-use log::LevelFilter;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
 pub use wgpu;
 pub use winit;
-use winit::event::{DeviceEvent, DeviceId};
+
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {

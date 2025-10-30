@@ -1,28 +1,19 @@
 // Main shader for standard objects.
-const MAX_LIGHTS: u32 = 8;
+import package::config::MAX_LIGHTS;
 
-struct CameraUniform {
-    view_pos: vec4<f32>,
-    view_proj: mat4x4<f32>,
+import package::input::{
+    CameraUniform,
+    Light,
+    LightArray,
 };
+
+@group(0) @binding(0)
+var t_diffuse: texture_2d<f32>;
+@group(0) @binding(1)
+var s_diffuse: sampler;
+
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
-
-struct Light {
-    position: vec4<f32>, // x, y, z, unused
-    direction: vec4<f32>, // x, y, z, unused
-    color: vec4<f32>, // r, g, b, light_type (0, 1, 2)
-    constant: f32,
-    lin: f32, // linear
-    quadratic: f32,
-    cutoff: f32,
-}
-
-struct LightArray {
-    _lights: array<Light, MAX_LIGHTS>,
-    light_count: u32,
-    ambient_strength: f32,
-}
 
 @group(2) @binding(0)
 var<uniform> light_array: LightArray;
@@ -75,11 +66,6 @@ fn vs_main(
     out.clip_position = camera.view_proj * world_position;
     return out;
 }
-
-@group(0) @binding(0)
-var t_diffuse: texture_2d<f32>;
-@group(0) @binding(1)
-var s_diffuse: sampler;
 
 fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>) -> vec3<f32> {
     let light_dir = normalize(light.position.xyz - world_pos);
@@ -190,16 +176,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         // light type is color.w
         if light.color.w == 0.0 {
+            // dir
             final_color += directional_light(light, world_normal, view_dir, tex_color.xyz);
         } else if light.color.w == 1.0 {
             // point
             final_color += point_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
         } else if light.color.w == 2.0 {
+            // spot
             final_color += spot_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
         }
     }
 
-    // Combine ambient and lighting
     final_color = (total_ambient * tex_color.xyz) + final_color;
 
     return vec4<f32>(final_color, tex_color.a);

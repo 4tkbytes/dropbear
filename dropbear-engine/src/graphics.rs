@@ -1,7 +1,7 @@
 use crate::{
-    State,
     egui_renderer::EguiRenderer,
     model::{self, Vertex},
+    State,
 };
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
@@ -10,14 +10,15 @@ use image::GenericImageView;
 use parking_lot::Mutex;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
-    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass,
-    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, ShaderModule, StencilState,
-    SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor, VertexBufferLayout,
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color,
+    CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue,
+    RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler,
+    StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages,
+    TextureView, TextureViewDescriptor,
+    VertexBufferLayout,
 };
 use winit::window::Window;
+use crate::shader::Shader;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
 pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");
@@ -239,37 +240,6 @@ impl<'a> RenderContext<'a> {
                 timestamp_writes: None,
             })
             .forget_lifetime()
-    }
-}
-
-/// A nice little struct that stored basic information about a WGPU shader.
-pub struct Shader {
-    pub label: String,
-    pub module: ShaderModule,
-}
-
-impl Shader {
-    pub fn new(
-        graphics: Arc<SharedGraphicsContext>,
-        shader_file_contents: &str,
-        label: Option<&str>,
-    ) -> Self {
-        let module = graphics
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label,
-                source: wgpu::ShaderSource::Wgsl(shader_file_contents.into()),
-            });
-
-        log::debug!("Created new shader under the label: {:?}", label);
-
-        Self {
-            label: match label {
-                Some(label) => label.into(),
-                None => "shader".into(),
-            },
-            module,
-        }
     }
 }
 

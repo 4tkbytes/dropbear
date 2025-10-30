@@ -26,13 +26,13 @@ pub struct EditorTabViewer<'a> {
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
     pub world: &'a mut World,
-    pub selected_entity: &'a mut Option<hecs::Entity>,
+    pub selected_entity: &'a mut Option<Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
     pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
     pub editor_mode: &'a mut EditorState,
-    pub active_camera: &'a mut Arc<Mutex<Option<hecs::Entity>>>,
+    pub active_camera: &'a mut Arc<Mutex<Option<Entity>>>,
     pub plugin_registry: &'a mut PluginRegistry,
     // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
     pub editor: *mut Editor,
@@ -511,7 +511,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             "Model thumbnail [{}] does not exist, generating one now",
                                                             name
                                                         );
-                                                        let mut model = match model_to_image::ModelToImageBuilder::new(path)
+                                                        let project_path = { PROJECT.read().project_path.clone() };
+                                                        let path = ResourceReference::from_path(path).unwrap().to_project_path(project_path).unwrap();
+                                                        let mut model = match model_to_image::ModelToImageBuilder::new(&path)
                                                             .with_size((600, 600))
                                                             .build() {
                                                             Ok(v) => v,
