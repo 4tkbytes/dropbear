@@ -1,8 +1,12 @@
+// outline.wgsl
+import package::input::CameraUniform;
+import package::input::OutlineUniform;
+
 @group(1) @binding(0)
-var<uniform> camera: package::input::CameraUniform;
+var<uniform> camera: CameraUniform;
 
 @group(0) @binding(0)
-var<uniform> outline: package::input::OutlineUniform;
+var<uniform> outline: OutlineUniform;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -13,17 +17,17 @@ struct InstanceInput {
     @location(9) normal_matrix_0: vec3<f32>,
     @location(10) normal_matrix_1: vec3<f32>,
     @location(11) normal_matrix_2: vec3<f32>,
-};
+}
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @location(1) tex_coords: vec2<f32>, // unused, but must match vertex layout
     @location(2) normal: vec3<f32>,
-};
+}
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-};
+}
 
 @vertex
 fn vs_main(
@@ -36,23 +40,26 @@ fn vs_main(
         instance.model_matrix_2,
         instance.model_matrix_3,
     );
+
     let normal_matrix = mat3x3<f32>(
         instance.normal_matrix_0,
         instance.normal_matrix_1,
         instance.normal_matrix_2,
     );
 
+    // Transform normal to world space
     let world_normal = normalize(normal_matrix * model.normal);
-    let expanded_position = model.position + model.normal * outline.outline_width;
-    let world_position = model_matrix * vec4<f32>(expanded_position, 1.0);
+
+    // Extrude position in WORLD SPACE
+    let world_position = (model_matrix * vec4<f32>(model.position, 1.0)).xyz;
+    let expanded_world_position = world_position + world_normal * outline.outline_width;
 
     var out: VertexOutput;
-    out.clip_position = camera.view_proj * world_position;
-
+    out.clip_position = camera.view_proj * vec4<f32>(expanded_world_position, 1.0);
     return out;
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return outline.outline_color;
+fn fs_main() -> @location(0) vec4<f32> {
+    return outline.outline_color; // Use the uniform color!
 }

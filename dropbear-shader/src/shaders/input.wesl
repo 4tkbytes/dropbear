@@ -8,7 +8,6 @@ struct CameraUniform {
 struct OutlineUniform {
     outline_width: f32,
     outline_color: vec4<f32>,
-//    _padding: vec3<f32>,
 };
 
 struct Light {
