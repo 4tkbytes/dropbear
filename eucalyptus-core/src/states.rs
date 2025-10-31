@@ -34,6 +34,57 @@ pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceC
 
 pub static SCENES: Lazy<RwLock<Vec<SceneConfig>>> = Lazy::new(|| RwLock::new(Vec::new()));
 
+/// Removes a scene with the provided name from the in-memory scene cache.
+/// Returns `true` when a scene was removed and `false` when no matching scene existed.
+pub fn unload_scene(scene_name: &str) -> bool {
+    let mut scenes = SCENES.write();
+    let initial_len = scenes.len();
+    scenes.retain(|scene| scene.scene_name != scene_name);
+    let removed = scenes.len() != initial_len;
+
+    if removed {
+        log::info!("Unloaded scene '{}' from memory", scene_name);
+    } else {
+        log::debug!("Scene '{}' was not loaded; nothing to unload", scene_name);
+    }
+
+    removed
+}
+
+/// Reads a scene configuration from disk based on the active project's path.
+pub fn load_scene(scene_name: &str) -> anyhow::Result<SceneConfig> {
+    let scene_path = {
+        let project = PROJECT.read();
+        if project.project_path.as_os_str().is_empty() {
+            return Err(anyhow::anyhow!("Project path is not set; cannot load scenes"));
+        }
+
+        project
+            .project_path
+            .join("scenes")
+            .join(format!("{}.eucs", scene_name))
+    };
+
+    let scene = SceneConfig::read_from(&scene_path)?;
+    log::info!("Loaded scene '{}' from {}", scene_name, scene_path.display());
+    Ok(scene)
+}
+
+/// Reloads a scene into the in-memory cache by unloading any existing copy first.
+pub fn load_scene_into_memory(scene_name: &str) -> anyhow::Result<()> {
+    unload_scene(scene_name);
+
+    let scene = load_scene(scene_name)?;
+    {
+        let mut scenes = SCENES.write();
+        scenes.insert(0, scene);
+    }
+
+    log::info!("Scene '{}' loaded into memory", scene_name);
+
+    Ok(())
+}
+
 /// The root config file, responsible for building and other metadata.
 ///
 /// # Location

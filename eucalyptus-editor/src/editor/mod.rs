@@ -16,7 +16,7 @@ use dropbear_engine::{
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
     lighting::{Light, LightManager},
-    model::ModelId,
+    model::{ModelId, MODEL_CACHE},
     scene::SceneCommand,
 };
 use egui::{self, Context};
@@ -25,7 +25,8 @@ use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera}, fatal, info, input::InputState, ptr::{GraphicsPtr, InputStatePtr, WorldPtr}, scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneEntity, ScriptComponent,
+        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneConfig, SceneEntity,
+        ScriptComponent,
         WorldLoadingStatus, PROJECT, SCENES,
     },
     success,
@@ -36,9 +37,11 @@ use eucalyptus_core::{
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;
+use rfd::FileDialog;
 use std::path::Path;
 use std::{
     collections::{HashMap, HashSet},
+    fs,
     path::PathBuf,
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
@@ -119,6 +122,13 @@ pub struct Editor {
     pub plugin_registry: PluginRegistry,
 
     pub dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
+
+    // scene creation
+    open_new_scene_window: bool,
+    new_scene_name: String,
+    current_scene_name: Option<String>,
+    pending_scene_load: Option<PendingSceneLoad>,
+    pending_scene_creation: Option<String>,
 }
 
 impl Editor {
@@ -203,6 +213,11 @@ impl Editor {
             plugin_registry,
             dock_state_shared: None,
             outline_pipeline: None,
+            open_new_scene_window: false,
+            new_scene_name: String::new(),
+            current_scene_name: None,
+            pending_scene_load: None,
+            pending_scene_creation: None,
         })
     }
 
@@ -503,15 +518,228 @@ impl Editor {
         Ok(())
     }
 
+    fn queue_scene_load_by_name(&mut self, scene_name: &str) -> anyhow::Result<()> {
+        if scene_name.trim().is_empty() {
+            return Err(anyhow::anyhow!("Scene name cannot be empty"));
+        }
+
+        if let Some(current) = self.current_scene_name.as_deref() {
+            states::unload_scene(current);
+        }
+
+        let scene = states::load_scene(scene_name)?;
+
+        {
+            let mut scenes = SCENES.write();
+            scenes.retain(|existing| existing.scene_name != scene.scene_name);
+            scenes.insert(0, scene.clone());
+        }
+
+        log::info!("Scene '{}' staged for loading", scene.scene_name);
+
+        self.current_scene_name = Some(scene.scene_name.clone());
+        self.pending_scene_load = Some(PendingSceneLoad { scene });
+
+        Ok(())
+    }
+
+    fn cleanup_scene_resources(&mut self, graphics: &mut RenderContext) {
+        if let Some(handle) = self.world_load_handle.take() {
+            graphics.shared.future_queue.cancel(&handle);
+        }
+
+        self.light_spawn_queue.clear();
+        self.progress_tx = None;
+        self.world_receiver = None;
+        self.current_state = WorldLoadingStatus::Idle;
+
+        self.world.clear();
+        self.selected_entity = None;
+        self.previously_selected_entity = None;
+        self.active_camera.lock().take();
+
+        self.render_pipeline = None;
+        self.outline_pipeline = None;
+        self.texture_id = None;
+        self.light_manager = LightManager::new();
+
+        {
+            let mut cache = MODEL_CACHE.lock();
+            cache.clear();
+        }
+    }
+
+    fn start_async_scene_load(&mut self, scene: SceneConfig, graphics: &mut RenderContext) {
+        self.cleanup_scene_resources(graphics);
+
+        let (progress_sender, progress_receiver) =
+            tokio::sync::mpsc::unbounded_channel::<WorldLoadingStatus>();
+        self.progress_tx = Some(progress_receiver);
+        self.current_state = WorldLoadingStatus::Idle;
+
+        let (world_sender, world_receiver) = oneshot::channel();
+        self.world_receiver = Some(world_receiver);
+
+        self.is_world_loaded = IsWorldLoadedYet::new();
+        self.is_world_loaded.mark_scene_loaded();
+
+        let graphics_shared = graphics.shared.clone();
+        let active_camera = self.active_camera.clone();
+        let scene_name = scene.scene_name.clone();
+
+        let handle = graphics.shared.future_queue.push(async move {
+            let mut temp_world = World::new();
+
+            let load_result = scene
+                .load_into_world(
+                    &mut temp_world,
+                    graphics_shared.clone(),
+                    Some(progress_sender.clone()),
+                )
+                .await;
+
+            match load_result {
+                Ok(active_entity) => {
+                    let mut camera_lock = active_camera.lock();
+                    *camera_lock = Some(active_entity);
+                }
+                Err(err) => {
+                    log::error!("Failed to load scene '{}': {}", scene_name, err);
+                }
+            }
+
+            let _ = progress_sender.send(WorldLoadingStatus::Completed);
+
+            if world_sender.send(temp_world).is_err() {
+                log::error!("Failed to deliver loaded world for scene '{}'", scene_name);
+            }
+        });
+
+        self.world_load_handle = Some(handle);
+    }
+
+    fn create_new_scene(&mut self, name: &str) -> anyhow::Result<()> {
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(anyhow::anyhow!("Scene name cannot be empty"));
+        }
+
+        if trimmed_name.contains('/') || trimmed_name.contains('\\') || trimmed_name.contains(':') {
+            return Err(anyhow::anyhow!(
+                "Scene name cannot contain path separator characters"
+            ));
+        }
+
+        let scene_name_owned = trimmed_name.to_string();
+
+        let project_root = {
+            let cfg = PROJECT.read();
+            cfg.project_path.clone()
+        };
+
+        if project_root.as_os_str().is_empty() {
+            return Err(anyhow::anyhow!("Project path is not set"));
+        }
+
+        let scenes_dir = project_root.join("scenes");
+        if !scenes_dir.exists() {
+            fs::create_dir_all(&scenes_dir)?;
+        }
+
+        let target_path = scenes_dir.join(format!("{}.eucs", scene_name_owned));
+        if target_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Scene '{}' already exists",
+                scene_name_owned
+            ));
+        }
+
+        let scene_config = SceneConfig::new(scene_name_owned.clone(), &target_path);
+        scene_config.write_to(&project_root)?;
+
+        self.queue_scene_load_by_name(&scene_name_owned)?;
+        success!("Created scene '{}'", scene_name_owned);
+        Ok(())
+    }
+
+    fn open_scene_from_path(&mut self, path: PathBuf) -> anyhow::Result<()> {
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("eucs"))
+            != Some(true)
+        {
+            return Err(anyhow::anyhow!("Selected file is not an .eucs scene"));
+        }
+
+        let project_root = {
+            let cfg = PROJECT.read();
+            cfg.project_path.clone()
+        };
+
+        if project_root.as_os_str().is_empty() {
+            return Err(anyhow::anyhow!("Project path is not set"));
+        }
+
+        let scenes_dir = project_root.join("scenes");
+        if !path.starts_with(&scenes_dir) {
+            return Err(anyhow::anyhow!(
+                "Scene '{}' is outside of the current project",
+                path.display()
+            ));
+        }
+
+        let scene_name = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .ok_or_else(|| anyhow::anyhow!("Scene file name is invalid"))?;
+
+        self.queue_scene_load_by_name(scene_name)?;
+        info!("Queued scene '{}' for loading", scene_name);
+        Ok(())
+    }
+
     pub fn show_ui(&mut self, ctx: &Context) {
+        if let Some(scene_name) = self.pending_scene_creation.take() {
+            let result = self.create_new_scene(scene_name.as_str());
+            self.new_scene_name.clear();
+            if let Err(e) = result {
+                fatal!("Failed to create scene '{}': {}", scene_name, e);
+            }
+        }
+
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui
-                        .button("Main Menu (New + Open + Editor Settings)")
-                        .clicked()
-                    {
-                        self.scene_command = SceneCommand::SwitchScene("main_menu".into());
+                    // if ui
+                    //     .button("Main Menu (New + Open + Editor Settings)")
+                    //     .clicked()
+                    // {
+                    //     self.scene_command = SceneCommand::SwitchScene("main_menu".into());
+                    // }
+
+                    if ui.button("New Scene").clicked() {
+                        self.open_new_scene_window = true;
+                    }
+
+                    if ui.button("Open Scene").clicked() {
+                        let scenes_dir = {
+                            let project = PROJECT.read();
+                            project.project_path.join("scenes")
+                        };
+
+                        let mut dialog = FileDialog::new();
+                        if scenes_dir.exists() {
+                            dialog = dialog.set_directory(&scenes_dir);
+                        }
+
+                        let dialog = dialog.add_filter("Eucalyptus Scenes", &["eucs"]);
+
+                        if let Some(path) = dialog.pick_file() {
+                            if let Err(e) = self.open_scene_from_path(path) {
+                                fatal!("Failed to open scene: {}", e);
+                            }
+                        }
                     }
 
                     if ui.button("Save").clicked() {
@@ -679,6 +907,29 @@ impl Editor {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
             self.pending_scene_switch = false;
         }
+
+        let mut open_flag = self.open_new_scene_window;
+        let mut close_requested = false;
+        if open_flag {
+            egui::Window::new("New Scene")
+                .open(&mut open_flag)
+                .show(ctx, |ui| {
+                    ui.vertical(|ui| {
+                        ui.label("Name: ");
+                        ui.text_edit_singleline(&mut self.new_scene_name);
+                        if ui.button("Create").clicked() {
+                            self.pending_scene_creation = Some(self.new_scene_name.clone());
+                            close_requested = true;
+                        }
+                    });
+                });
+        }
+
+        if close_requested {
+            open_flag = false;
+        }
+
+        self.open_new_scene_window = open_flag;
     }
 
     /// Restores transform components back to its original state before PlayMode.
@@ -839,7 +1090,7 @@ impl Editor {
     ///
     /// **Note**: To be ran AFTER [`Editor::load_project_config`]
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: &mut RenderContext<'a>) {
-        log::debug!("Contents of viewport shader: \n{:#?}", dropbear_engine::shader::shader_wesl::SHADER_SHADER);
+        // log::debug!("Contents of viewport shader: \n{:#?}", dropbear_engine::shader::shader_wesl::SHADER_SHADER);
         let shader = Shader::new(
             graphics.shared.clone(),
             dropbear_engine::shader::shader_wesl::SHADER_SHADER,
@@ -866,7 +1117,7 @@ impl Editor {
                     );
                     self.render_pipeline = Some(pipeline);
 
-                    log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
+                    // log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
                     self.light_manager.create_render_pipeline(
                         graphics.shared.clone(),
                         dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
@@ -874,7 +1125,7 @@ impl Editor {
                         Some("Light Pipeline"),
                     );
 
-                    log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
+                    // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
                     let outline_shader = OutlineShader::init(graphics.shared.clone(), camera.layout());
                     self.outline_pipeline = Some(outline_shader);
                 } else {
@@ -1301,6 +1552,10 @@ pub enum EditorState {
     Editing,
     Building,
     Playing,
+}
+
+struct PendingSceneLoad {
+    scene: SceneConfig,
 }
 
 pub enum PendingSpawn2 {

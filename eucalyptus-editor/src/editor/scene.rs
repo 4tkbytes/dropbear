@@ -21,6 +21,11 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
+        self.current_scene_name = {
+            let scenes = SCENES.read();
+            scenes.first().map(|scene| scene.scene_name.clone())
+        };
+
         let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();
         let (tx2, rx2) = oneshot::channel::<World>();
         self.progress_tx = Some(rx);
@@ -59,6 +64,10 @@ impl Scene for Editor {
     }
 
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
+        if let Some(request) = self.pending_scene_load.take() {
+            self.start_async_scene_load(request.scene, graphics);
+        }
+
         if let Some(mut receiver) = self.world_receiver.take() {
             self.show_project_loading_window(&graphics.shared.get_egui_context());
             if let Ok(loaded_world) = receiver.try_recv() {
@@ -372,33 +381,33 @@ impl Scene for Editor {
                                     );
                                 }
 
-                                // outline rendering
-                                let has_selected = entities.iter()
-                                    .any(|e| e.model.id == model_ptr && e.is_selected);
-
-                                if has_selected && self.outline_pipeline.is_some() {
-                                    let outline = self.outline_pipeline.as_ref().unwrap();
-                                    let mut render_pass = graphics.continue_pass();
-                                    render_pass.set_pipeline(&outline.pipeline);
-
-                                    render_pass.set_bind_group(0, &outline.bind_group, &[]);
-                                    render_pass.set_bind_group(1, camera.bind_group(), &[]);
-
-                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-
-                                    for mesh in &model.meshes {
-                                        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                        render_pass.set_index_buffer(
-                                            mesh.index_buffer.slice(..),
-                                            wgpu::IndexFormat::Uint32,
-                                        );
-                                        render_pass.draw_indexed(
-                                            0..mesh.num_elements,
-                                            0,
-                                            0..instances.len() as u32,
-                                        );
-                                    }
-                                }
+                                // // outline rendering
+                                // let has_selected = entities.iter()
+                                //     .any(|e| e.model.id == model_ptr && e.is_selected);
+                                //
+                                // if has_selected && self.outline_pipeline.is_some() {
+                                //     let outline = self.outline_pipeline.as_ref().unwrap();
+                                //     let mut render_pass = graphics.continue_pass();
+                                //     render_pass.set_pipeline(&outline.pipeline);
+                                //
+                                //     render_pass.set_bind_group(0, &outline.bind_group, &[]);
+                                //     render_pass.set_bind_group(1, camera.bind_group(), &[]);
+                                //
+                                //     render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                //
+                                //     for mesh in &model.meshes {
+                                //         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                //         render_pass.set_index_buffer(
+                                //             mesh.index_buffer.slice(..),
+                                //             wgpu::IndexFormat::Uint32,
+                                //         );
+                                //         render_pass.draw_indexed(
+                                //             0..mesh.num_elements,
+                                //             0,
+                                //             0..instances.len() as u32,
+                                //         );
+                                //     }
+                                // }
                                 log_once::debug_once!("Rendered {:?}", model_ptr);
                             } else {
                                 log_once::error_once!("No such MODEL as {:?}", model_ptr);
