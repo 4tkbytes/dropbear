@@ -259,11 +259,50 @@ actual class NativeEngine {
     }
 
     actual fun getStringProperty(entityHandle: Long, label: String): String? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val bufferSize = 256
+            val output = allocArray<ByteVar>(bufferSize)
+
+            // warning: this could potentially cause a buffer overflow idk
+            val result = dropbear_get_string_property(
+                world.reinterpret(),
+                entityHandle,
+                label,
+                output,
+                bufferSize
+            )
+
+            if (result == 0) {
+                val string = output.toKString()
+                return string
+            } else {
+                println("getStringProperty failed with code: $result")
+                return null
+            }
+        }
     }
 
     actual fun getIntProperty(entityHandle: Long, label: String): Int? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val output = alloc<IntVar>()
+
+            val result = dropbear_get_int_property(
+                world.reinterpret(),
+                entityHandle,
+                label,
+                output.ptr,
+            )
+
+            if (result == 0) {
+                val string = output.value
+                return string
+            } else {
+                println("getIntProperty failed with code: $result")
+                return null
+            }
+        }
     }
 
     actual fun getLongProperty(entityHandle: Long, label: String): Long? {

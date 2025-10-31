@@ -8,7 +8,6 @@ package.readme = "README.md"
 resolver = "3"
 members = [ "dropbear-engine", "dropbear-shader", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
 
-
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
 app_dirs2 = "2.5"
