@@ -150,15 +150,25 @@ impl Default for LightComponent {
 }
 
 impl LightComponent {
+    pub fn default_direction() -> DVec3 {
+        let dir = DVec3::new(-0.35, -1.0, -0.25);
+        dir.normalize()
+    }
+
     pub fn new(
         colour: DVec3,
         light_type: LightType,
         intensity: f32,
         attenuation: Option<Attenuation>,
     ) -> Self {
+        let direction = match light_type {
+            LightType::Directional | LightType::Spot => Self::default_direction(),
+            LightType::Point => DVec3::ZERO,
+        };
+
         Self {
             position: Default::default(),
-            direction: Default::default(),
+            direction,
             colour,
             light_type,
             intensity,

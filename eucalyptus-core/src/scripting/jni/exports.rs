@@ -1253,13 +1253,13 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
                 JValue::Object(&target),
                 JValue::Object(&up),
                 JValue::Double(cam.aspect),
-                JValue::Double(cam.fov_y),
+                JValue::Double(cam.settings.fov_y),
                 JValue::Double(cam.znear),
                 JValue::Double(cam.zfar),
                 JValue::Double(cam.yaw),
                 JValue::Double(cam.pitch),
-                JValue::Double(cam.speed),
-                JValue::Double(cam.sensitivity),
+                JValue::Double(cam.settings.speed),
+                JValue::Double(cam.settings.sensitivity),
             ],
         ) {
             v
@@ -1380,13 +1380,13 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
                 JValue::Object(&target),
                 JValue::Object(&up),
                 JValue::Double(cam.aspect),
-                JValue::Double(cam.fov_y),
+                JValue::Double(cam.settings.fov_y),
                 JValue::Double(cam.znear),
                 JValue::Double(cam.zfar),
                 JValue::Double(cam.yaw),
                 JValue::Double(cam.pitch),
-                JValue::Double(cam.speed),
-                JValue::Double(cam.sensitivity),
+                JValue::Double(cam.settings.speed),
+                JValue::Double(cam.settings.sensitivity),
             ],
         ) {
             v
@@ -1619,13 +1619,13 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
             cam.eye = eye.as_dvec3();
             cam.target = target.as_dvec3();
             cam.up = up.as_dvec3();
-            cam.fov_y = fov_y;
+            cam.settings.fov_y = fov_y;
             cam.znear = znear;
             cam.zfar = zfar;
             cam.yaw = yaw;
             cam.pitch = pitch;
-            cam.speed = speed;
-            cam.sensitivity = sensitivity;
+            cam.settings.speed = speed;
+            cam.settings.sensitivity = sensitivity;
         } else {
             eprintln!(
                 "[Java_com_dropbear_ffi_JNINative_setCamera] [ERROR] Entity does not have a Camera component"

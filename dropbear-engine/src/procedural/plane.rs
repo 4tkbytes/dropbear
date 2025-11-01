@@ -144,9 +144,7 @@ impl PlaneBuilder {
             id: ModelId(hash),
         });
 
-        MODEL_CACHE
-            .lock()
-            .insert(label, Arc::clone(&model));
+        MODEL_CACHE.lock().insert(label, Arc::clone(&model));
 
         let handle = LoadedModel::new(model);
         Ok(MeshRenderer::from_handle(handle))

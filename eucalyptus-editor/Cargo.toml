@@ -37,6 +37,8 @@ tokio.workspace = true
 crossbeam-channel.workspace = true
 libloading.workspace = true
 indexmap.workspace = true
+open.workspace = true
+rustc_version_runtime.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

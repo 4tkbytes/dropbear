@@ -10,7 +10,7 @@ use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{ModelProperties, PROJECT, ScriptComponent, Value};
+use eucalyptus_core::states::{EditorTab, ModelProperties, PROJECT, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -259,12 +259,18 @@ impl SignalController for Editor {
                                         self.editor_state = EditorState::Editing;
                                     }
                                 }
-                                BuildStatus::Failed(e) => {
-                                    let error_msg = format!("Build failed: {}", e);
+                                BuildStatus::Failed(_e) => {
+                                    let error_msg = format!("Build failed, check logs");
                                     self.build_logs.push(error_msg.clone());
 
                                     self.build_progress = 0.0;
-                                    fatal!("Failed to build gradle: {}", e);
+                                    fatal!("Failed to build gradle, check logs");
+
+                                    self.signal = Signal::None;
+                                    self.show_build_window = false;
+                                    self.editor_state = EditorState::Editing;
+                                    self.dock_state
+                                        .push_to_focused_leaf(EditorTab::ErrorConsole);
                                 }
                             }
                         }

@@ -1,9 +1,6 @@
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::{
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use crate::{
     graphics::{Instance, SharedGraphicsContext},

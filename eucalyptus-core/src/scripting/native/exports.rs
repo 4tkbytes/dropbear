@@ -829,13 +829,13 @@ pub unsafe extern "C" fn dropbear_get_camera(
             };
 
             (*out_camera).aspect = cam.aspect;
-            (*out_camera).fov_y = cam.fov_y;
+            (*out_camera).fov_y = cam.settings.fov_y;
             (*out_camera).znear = cam.znear;
             (*out_camera).zfar = cam.zfar;
             (*out_camera).yaw = cam.yaw;
             (*out_camera).pitch = cam.pitch;
-            (*out_camera).speed = cam.speed;
-            (*out_camera).sensitivity = cam.sensitivity;
+            (*out_camera).speed = cam.settings.speed;
+            (*out_camera).sensitivity = cam.settings.sensitivity;
         }
 
         return 0;
@@ -897,13 +897,13 @@ pub unsafe extern "C" fn dropbear_get_attached_camera(
                     };
 
                     (*out_camera).aspect = cam.aspect;
-                    (*out_camera).fov_y = cam.fov_y;
+                    (*out_camera).fov_y = cam.settings.fov_y;
                     (*out_camera).znear = cam.znear;
                     (*out_camera).zfar = cam.zfar;
                     (*out_camera).yaw = cam.yaw;
                     (*out_camera).pitch = cam.pitch;
-                    (*out_camera).speed = cam.speed;
-                    (*out_camera).sensitivity = cam.sensitivity;
+                    (*out_camera).speed = cam.settings.speed;
+                    (*out_camera).sensitivity = cam.settings.sensitivity;
                 }
 
                 0
@@ -955,13 +955,13 @@ pub unsafe extern "C" fn dropbear_set_camera(
             );
 
             cam.aspect = cam_data.aspect;
-            cam.fov_y = cam_data.fov_y;
+            cam.settings.fov_y = cam_data.fov_y;
             cam.znear = cam_data.znear;
             cam.zfar = cam_data.zfar;
             cam.yaw = cam_data.yaw;
             cam.pitch = cam_data.pitch;
-            cam.speed = cam_data.speed;
-            cam.sensitivity = cam_data.sensitivity;
+            cam.settings.speed = cam_data.speed;
+            cam.settings.sensitivity = cam_data.sensitivity;
 
             0
         }

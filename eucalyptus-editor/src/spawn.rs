@@ -46,12 +46,8 @@ impl PendingSpawnController for Editor {
                                 _guard.project_path.clone()
                             };
                             let resource = path.join("resources").join(file);
-                            MeshRenderer::from_path(
-                                graphics_clone,
-                                resource,
-                                Some(&asset_name),
-                            )
-                            .await
+                            MeshRenderer::from_path(graphics_clone, resource, Some(&asset_name))
+                                .await
                         }
                         ResourceReferenceType::Bytes(bytes) => {
                             let model = Model::load_from_memory(

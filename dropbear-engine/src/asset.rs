@@ -4,10 +4,10 @@ use dashmap::DashMap;
 
 use crate::model::{Material, MaterialComponent, Mesh, MeshComponent};
 
-/// A typedef for a Asset handle. 
-pub type Handle = u64; 
+/// A typedef for a Asset handle.
+pub type Handle = u64;
 
-/// A cache that holds all the assets loaded at that moment in time. 
+/// A cache that holds all the assets loaded at that moment in time.
 pub struct AssetCache {
     materials: DashMap<MaterialComponent, Arc<Material>>,
     meshes: DashMap<MeshComponent, Arc<Mesh>>,
@@ -21,10 +21,14 @@ impl AssetCache {
         }
     }
 
-    /// Fetches the material based off the handle. 
-    /// 
-    /// If it doesn't exist, it will run the loader as a function. 
-    pub fn get_or_load_material<F>(&self, handle: MaterialComponent, loader: F) -> anyhow::Result<Arc<Material>>
+    /// Fetches the material based off the handle.
+    ///
+    /// If it doesn't exist, it will run the loader as a function.
+    pub fn get_or_load_material<F>(
+        &self,
+        handle: MaterialComponent,
+        loader: F,
+    ) -> anyhow::Result<Arc<Material>>
     where
         F: FnOnce() -> anyhow::Result<Material>,
     {
@@ -43,8 +47,8 @@ impl AssetCache {
         }
     }
 
-    /// Fetches the model based off the handle. 
-    /// 
+    /// Fetches the model based off the handle.
+    ///
     /// If it doesn't exist, it will run the loader as a function.
     pub fn get_or_load_mesh<F>(&self, handle: MeshComponent, loader: F) -> anyhow::Result<Arc<Mesh>>
     where
