@@ -7,7 +7,7 @@ use crate::states::{ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::JNIEnv;
@@ -53,8 +53,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
 
     let world = unsafe { &mut *world };
 
-    for (id, entity) in world.query::<&AdoptedEntity>().iter() {
-        if entity.model.label == label_str {
+    for (id, renderer) in world.query::<&MeshRenderer>().iter() {
+        if renderer.handle().label == label_str {
             return id.id() as jlong;
         }
     }
@@ -81,7 +81,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
 
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &Transform)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &Transform)>(entity)
         && let Some((_, transform)) = q.get()
     {
         let new_transform = *transform;
@@ -479,7 +479,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -548,7 +548,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -609,7 +609,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -667,7 +667,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -725,7 +725,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -789,7 +789,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-    if let Ok(mut q) = world.query_one::<(&AdoptedEntity, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -889,7 +889,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::String(value));
     } else {
         eprintln!(
@@ -929,7 +929,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Int(value as i64));
     } else {
         eprintln!(
@@ -971,7 +971,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Int(value));
     } else {
         eprintln!(
@@ -1013,7 +1013,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Float(value));
     } else {
         eprintln!(
@@ -1057,7 +1057,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
 
     let bool_value = value != 0;
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Bool(bool_value));
     } else {
         eprintln!(
@@ -1131,7 +1131,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
         return;
     }
 
-    if let Ok((_, props)) = world.query_one_mut::<(&AdoptedEntity, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
         props.set_property(key, Value::Vec3(values));
     } else {
         eprintln!(

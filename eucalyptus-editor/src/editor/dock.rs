@@ -9,7 +9,7 @@ use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_engine::{
-    entity::Transform,
+    entity::{MeshRenderer, Transform},
     lighting::{Light, LightComponent},
 };
 use egui;
@@ -298,7 +298,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             {
                                                 for (entity_id, (transform, _)) in self
                                                     .world
-                                                    .query::<(&Transform, &AdoptedEntity)>()
+                                                    .query::<(&Transform, &MeshRenderer)>()
                                                     .iter()
                                                 {
                                                     entity_count += 1;
@@ -745,7 +745,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if let Some(entity) = self.selected_entity {
                     let mut local_set_initial_camera = false;
                     if let Ok(mut q) = self.world.query_one::<(
-                        &mut AdoptedEntity,
+                        &mut MeshRenderer,
                         Option<&mut Transform>,
                         Option<&mut ModelProperties>,
                         Option<&mut ScriptComponent>,
@@ -781,7 +781,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -793,7 +793,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -894,7 +894,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -991,7 +991,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         // Option<&mut CameraFollowTarget>,
                     )>(*entity)
                         && let Some((camera, camera_component)) = q.get()
-                        && self.world.get::<&AdoptedEntity>(*entity).is_err()
+                        && self.world.get::<&MeshRenderer>(*entity).is_err()
                     {
                         ui.vertical(|ui| {
                             camera.inspect(
@@ -1193,7 +1193,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log::debug!("Add Component clicked");
                         if let Some(entity) = self.selected_entity {
                             {
-                                if let Ok(mut q) = self.world.query_one::<&AdoptedEntity>(*entity)
+                                if let Ok(mut q) = self.world.query_one::<&MeshRenderer>(*entity)
                                     && q.get().is_some()
                                 {
                                     log::debug!("Queried selected entity, it is an entity");
@@ -1207,7 +1207,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     && q.get().is_some()
                                 {
                                     log::debug!("Queried selected entity, it is a light");
-                                    *self.signal = Signal::AddComponent(*entity, EntityType::Light);
+                                    *self.signal =
+                                        Signal::AddComponent(*entity, EntityType::Light);
                                 }
                             }
                         } else {

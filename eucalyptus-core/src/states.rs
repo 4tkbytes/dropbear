@@ -2,7 +2,7 @@ use crate::camera::{CameraComponent, CameraType};
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
 use dropbear_engine::camera::{Camera, CameraBuilder};
-use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
@@ -560,15 +560,15 @@ impl EntityNode {
         let mut nodes = Vec::new();
         let mut handled = std::collections::HashSet::new();
 
-        for (id, (script, _transform, adopted)) in world
+        for (id, (script, _transform, renderer)) in world
             .query::<(
                 &ScriptComponent,
                 &dropbear_engine::entity::Transform,
-                &dropbear_engine::entity::AdoptedEntity,
+                &dropbear_engine::entity::MeshRenderer,
             )>()
             .iter()
         {
-            let name = adopted.model.label.clone();
+            let name = renderer.handle().label.clone();
             let mut children = vec![
                 EntityNode::Entity {
                     id,
@@ -586,7 +586,7 @@ impl EntityNode {
                 children.push(EntityNode::Camera {
                     id,
                     name: camera.label.clone(),
-                    camera_type: component.camera_type,
+                            camera_type: component.camera_type,
                 });
             }
 
@@ -599,17 +599,17 @@ impl EntityNode {
         }
 
         // Handle single entities (and potentially cameras)
-        for (id, (_, adopted)) in world
+        for (id, (_, renderer)) in world
             .query::<(
                 &dropbear_engine::entity::Transform,
-                &dropbear_engine::entity::AdoptedEntity,
+                &dropbear_engine::entity::MeshRenderer,
             )>()
             .iter()
         {
             if handled.contains(&id) {
                 continue;
             }
-            let name = adopted.model.label.clone();
+            let name = renderer.handle().label.clone();
 
             // Check if this entity has camera components
             if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
@@ -655,9 +655,9 @@ impl EntityNode {
             handled.insert(id);
         }
 
-        // Handle standalone cameras (cameras without AdoptedEntity - like viewport cameras)
+        // Handle standalone cameras (cameras without MeshRenderer - like viewport cameras)
         for (entity, (camera, component)) in world.query::<(&Camera, &CameraComponent)>().iter() {
-            if world.get::<&AdoptedEntity>(entity).is_err() {
+            if world.get::<&MeshRenderer>(entity).is_err() {
                 nodes.push(EntityNode::Camera {
                     id: entity,
                     name: camera.label.clone(),
@@ -1016,10 +1016,11 @@ impl SceneConfig {
                         reference
                     );
 
-                    let adopted =
-                        AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
+                    let mut renderer =
+                        MeshRenderer::from_path(graphics.clone(), &path, Some(&entity_config.label))
                             .await?;
                     let transform = entity_config.transform;
+                    renderer.update(&transform);
 
                     let _entity = if let Some(camera_config) = &entity_config.camera {
                         let camera = Camera::new(
@@ -1051,7 +1052,7 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
@@ -1060,7 +1061,7 @@ impl SceneConfig {
                             ))
                         } else {
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 entity_config.properties.clone(),
                                 camera,
@@ -1071,9 +1072,9 @@ impl SceneConfig {
                         let script = ScriptComponent {
                             tags: script_config.tags.clone(),
                         };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()))
+                        world.spawn((renderer, transform, script, entity_config.properties.clone()))
                     } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()))
+                        world.spawn((renderer, transform, entity_config.properties.clone()))
                     };
 
                     Ok(())
@@ -1088,9 +1089,10 @@ impl SceneConfig {
                         Some(&entity_config.label),
                     )
                     .await?;
-                    let adopted = AdoptedEntity::adopt(graphics.clone(), model.get());
+                    let mut renderer = MeshRenderer::from_handle(model);
 
                     let transform = entity_config.transform;
+                    renderer.update(&transform);
 
                     let _entity = if let Some(camera_config) = &entity_config.camera {
                         // Entity has camera components
@@ -1123,7 +1125,7 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
@@ -1132,7 +1134,7 @@ impl SceneConfig {
                             ))
                         } else {
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 entity_config.properties.clone(),
                                 camera,
@@ -1146,13 +1148,13 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
                             ))
                         } else {
-                            world.spawn((adopted, transform, entity_config.properties.clone()))
+                            world.spawn((renderer, transform, entity_config.properties.clone()))
                         }
                     };
 

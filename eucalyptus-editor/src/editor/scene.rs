@@ -4,7 +4,7 @@ use crate::spawn::PendingSpawnController;
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
-    entity::{AdoptedEntity, Transform},
+    entity::{MeshRenderer, Transform},
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
@@ -207,14 +207,14 @@ impl Scene for Editor {
         let _ = self.run_signal(graphics.shared.clone());
 
         if let Some(e) = self.previously_selected_entity
-            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e)
+            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
             && let Some(entity) = q.get()
         {
             entity.is_selected = false
         }
 
         if let Some(e) = self.selected_entity
-            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e)
+            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
             && let Some(entity) = q.get()
         {
             entity.is_selected = true
@@ -248,9 +248,9 @@ impl Scene for Editor {
 
         {
             {
-                let query = self.world.query_mut::<(&mut AdoptedEntity, &Transform)>();
-                for (_, (entity, transform)) in query {
-                    entity.update(graphics.shared.clone(), transform);
+                let query = self.world.query_mut::<(&mut MeshRenderer, &Transform)>();
+                for (_, (renderer, transform)) in query {
+                    renderer.update(transform);
                 }
             }
 
@@ -314,9 +314,9 @@ impl Scene for Editor {
 
                     let entities = {
                         let mut entities = Vec::new();
-                        let mut entity_query = self.world.query::<&AdoptedEntity>();
-                        for (_, entity) in entity_query.iter() {
-                            entities.push(entity.clone());
+                        let mut entity_query = self.world.query::<&MeshRenderer>();
+                        for (_, renderer) in entity_query.iter() {
+                            entities.push(renderer.clone());
                         }
                         entities
                     };
@@ -343,9 +343,9 @@ impl Scene for Editor {
                     }
 
                     let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-                    for entity in &entities {
-                        let model_ptr = entity.model.id;
-                        let instance_raw = entity.instance.to_raw();
+                    for renderer in &entities {
+                        let model_ptr = renderer.model_id();
+                        let instance_raw = renderer.instance.to_raw();
                         model_batches
                             .entry(model_ptr)
                             .or_default()
@@ -384,7 +384,7 @@ impl Scene for Editor {
 
                                 // // outline rendering
                                 // let has_selected = entities.iter()
-                                //     .any(|e| e.model.id == model_ptr && e.is_selected);
+                                //     .any(|e| e.model_id() == model_ptr && e.is_selected);
                                 //
                                 // if has_selected && self.outline_pipeline.is_some() {
                                 //     let outline = self.outline_pipeline.as_ref().unwrap();

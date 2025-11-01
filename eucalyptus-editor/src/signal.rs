@@ -2,7 +2,7 @@ use crate::editor::{
     ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction,
 };
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
@@ -435,9 +435,9 @@ impl SignalController for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(mut q) = self.world.query_one::<&AdoptedEntity>(*entity) {
-                            if let Some(e) = q.get() {
-                                let label = e.model.label.clone();
+                        if let Ok(mut q) = self.world.query_one::<&MeshRenderer>(*entity) {
+                            if let Some(renderer) = q.get() {
+                                let label = renderer.handle().label.clone();
                                 egui::Window::new(format!("Add component for {}", label))
                                     .title_bar(true)
                                     .open(&mut show)
@@ -683,13 +683,13 @@ impl SignalController for Editor {
                 log::debug!("====================");
                 let mut counter = 0;
                 for e in self.world.iter() {
-                    if let Some(entity) = e.get::<&AdoptedEntity>() {
+                    if let Some(renderer) = e.get::<&MeshRenderer>() {
                         log::info!(
                             "Model: {:?} with u32 id: {:?}",
-                            entity.model.label,
+                            renderer.handle().label,
                             e.entity().id()
                         );
-                        log::info!("  |-> Using model: {:?}", entity.model.id);
+                        log::info!("  |-> Using model: {:?}", renderer.model_id());
                     }
 
                     if let Some(entity) = e.get::<&Light>() {

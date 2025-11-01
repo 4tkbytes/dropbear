@@ -1,6 +1,6 @@
 use super::*;
 use dropbear_engine::{
-    entity::{AdoptedEntity, Transform},
+    entity::{MeshRenderer, Transform},
     input::{Controller, Keyboard, Mouse},
 };
 use eucalyptus_core::success_without_console;
@@ -131,14 +131,14 @@ impl Keyboard for Editor {
                         if let Some(entity) = &self.selected_entity {
                             let query = self
                                 .world
-                                .query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(
+                                .query_one::<(&MeshRenderer, &Transform, &ModelProperties)>(
                                     *entity,
                                 );
                             if let Ok(mut q) = query {
-                                if let Some((e, t, props)) = q.get() {
+                                if let Some((renderer, t, props)) = q.get() {
                                     let s_entity = SceneEntity {
-                                        model_path: e.model.path.clone(),
-                                        label: e.model.label.clone(),
+                                        model_path: renderer.handle().path.clone(),
+                                        label: renderer.handle().label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,

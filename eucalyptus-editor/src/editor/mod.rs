@@ -14,7 +14,7 @@ use crossbeam_channel::Receiver;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
     camera::Camera,
-    entity::{AdoptedEntity, Transform},
+    entity::{MeshRenderer, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
     lighting::{Light, LightManager},
@@ -254,10 +254,10 @@ impl Editor {
         scene.lights.clear();
         scene.cameras.clear();
 
-        for (id, (adopted, transform, properties, script)) in self
+        for (id, (renderer, transform, properties, script)) in self
             .world
             .query::<(
-                &AdoptedEntity,
+                &MeshRenderer,
                 Option<&Transform>,
                 &ModelProperties,
                 Option<&ScriptComponent>,
@@ -279,8 +279,8 @@ impl Editor {
             };
 
             let scene_entity = SceneEntity {
-                model_path: adopted.model.path.clone(),
-                label: adopted.model.label.clone(),
+                model_path: renderer.handle().path.clone(),
+                label: renderer.handle().label.clone(),
                 transform,
                 properties: properties.clone(),
                 script: script.cloned(),
@@ -289,7 +289,7 @@ impl Editor {
             };
 
             scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", adopted.model.label);
+            log::debug!("Pushed entity: {}", renderer.handle().label);
         }
 
         for (id, (light_component, transform, light)) in self
@@ -314,7 +314,7 @@ impl Editor {
         }
 
         for (id, (camera, component)) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
-            if self.world.get::<&AdoptedEntity>(id).is_err() {
+            if self.world.get::<&MeshRenderer>(id).is_err() {
                 let camera_config = CameraConfig::from_ecs_camera(camera, component);
                 scene.cameras.push(camera_config);
                 log::debug!("Pushed standalone camera into cameras: {}", camera.label);
@@ -793,12 +793,12 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
+                            let query = self.world.query_one::<(&MeshRenderer, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
                                     let s_entity = states::SceneEntity {
-                                        model_path: e.model.path.clone(),
-                                        label: e.model.label.clone(),
+                                        model_path: e.handle().path.clone(),
+                                        label: e.handle().label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
@@ -996,7 +996,7 @@ impl Editor {
 
         for (entity_id, (_, transform, properties)) in self
             .world
-            .query::<(&AdoptedEntity, &Transform, &ModelProperties)>()
+            .query::<(&MeshRenderer, &Transform, &ModelProperties)>()
             .iter()
         {
             let script = self
@@ -1381,9 +1381,9 @@ impl UndoableAction {
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
                 EntityType::Entity => {
-                    if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            Arc::make_mut(&mut adopted.model).label = original_label.clone();
+                    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(*entity) {
+                        if let Some(renderer) = q.get() {
+                            renderer.make_model_mut().label = original_label.clone();
                             log::debug!(
                                 "Reverted label for entity {:?} to '{}'",
                                 entity,

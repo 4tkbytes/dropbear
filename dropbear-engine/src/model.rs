@@ -54,6 +54,11 @@ impl LoadedModel {
     pub fn get(&self) -> Arc<Model> {
         Arc::clone(&self.inner)
     }
+
+    /// Provides mutable access to the underlying model data, cloning if shared.
+    pub fn make_mut(&mut self) -> &mut Model {
+        Arc::make_mut(&mut self.inner)
+    }
 }
 
 impl std::ops::Deref for LoadedModel {

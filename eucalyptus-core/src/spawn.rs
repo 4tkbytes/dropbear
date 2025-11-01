@@ -23,7 +23,7 @@ pub struct PendingSpawn {
     pub properties: ModelProperties,
     /// An optional future handle to an object.
     ///
-    /// If one is specified, it is assumed that the returned object is an [`AdoptedEntity`](dropbear_engine::entity::AdoptedEntity).
+    /// If one is specified, it is assumed that the returned object is a [`MeshRenderer`](dropbear_engine::entity::MeshRenderer).
     ///
     /// If one is NOT specified, it will be created based off the information provided. It is **recommended** to set it to [`None`].
     pub handle: Option<FutureHandle>,

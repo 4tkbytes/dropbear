@@ -4,8 +4,10 @@ use dashmap::DashMap;
 
 use crate::model::{Material, MaterialComponent, Mesh, MeshComponent};
 
+/// A typedef for a Asset handle. 
 pub type Handle = u64; 
 
+/// A cache that holds all the assets loaded at that moment in time. 
 pub struct AssetCache {
     materials: DashMap<MaterialComponent, Arc<Material>>,
     meshes: DashMap<MeshComponent, Arc<Mesh>>,
@@ -21,7 +23,7 @@ impl AssetCache {
 
     /// Fetches the material based off the handle. 
     /// 
-    /// If it doesn't exist, it will run the loader as a function and store the mesh from there. 
+    /// If it doesn't exist, it will run the loader as a function. 
     pub fn get_or_load_material<F>(&self, handle: MaterialComponent, loader: F) -> anyhow::Result<Arc<Material>>
     where
         F: FnOnce() -> anyhow::Result<Material>,
@@ -41,21 +43,18 @@ impl AssetCache {
         }
     }
 
-    /// Fetches the mesh based off the handle. 
+    /// Fetches the model based off the handle. 
     /// 
-    /// If it doesn't exist, it will run the loader as a function and store the mesh from there. 
+    /// If it doesn't exist, it will run the loader as a function.
     pub fn get_or_load_mesh<F>(&self, handle: MeshComponent, loader: F) -> anyhow::Result<Arc<Mesh>>
     where
         F: FnOnce() -> anyhow::Result<Mesh>,
     {
-        log::debug!("Searching for mesh {:?}", handle);
         if let Some(existing) = self.meshes.get(&handle) {
-            log::debug!("Found existing mesh");
             return Ok(existing.clone());
         }
 
         let mesh = Arc::new(loader()?);
-        log::debug!("Created new mesh");
 
         match self.meshes.entry(handle) {
             dashmap::mapref::entry::Entry::Occupied(entry) => Ok(entry.get().clone()),

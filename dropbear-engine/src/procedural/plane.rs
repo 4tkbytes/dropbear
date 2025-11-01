@@ -1,16 +1,17 @@
-use crate::entity::AdoptedEntity;
+//! A straight plane (and some components). Thats it.
+//!
+//! Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
+//! my old game engine made in C sharp, where this is the plane "algorithm".
+
+use crate::entity::MeshRenderer;
 use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::model::{MODEL_CACHE, Material, Mesh, Model, ModelId, ModelVertex};
+use crate::model::{LoadedModel, MODEL_CACHE, Material, Mesh, Model, ModelId, ModelVertex};
 use crate::utils::{ResourceReference, ResourceReferenceType};
 use std::hash::{DefaultHasher, Hash, Hasher};
-/// A straight plane (and some components). Thats it.
-///
-/// Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
-/// my old game engine made in C sharp, where this is the plane "algorithm".
 use std::sync::Arc;
 use wgpu::{AddressMode, util::DeviceExt};
 
-/// Creates a plane in the form of an AdoptedEntity.
+/// Creates a plane wrapped in a [`MeshRenderer`](crate::entity::MeshRenderer).
 pub struct PlaneBuilder {
     width: f32,
     height: f32,
@@ -51,7 +52,7 @@ impl PlaneBuilder {
         graphics: Arc<SharedGraphicsContext>,
         texture_bytes: &[u8],
         label: Option<&str>,
-    ) -> anyhow::Result<AdoptedEntity> {
+    ) -> anyhow::Result<MeshRenderer> {
         let label = if let Some(label) = label {
             label.to_string()
         } else {
@@ -99,7 +100,8 @@ impl PlaneBuilder {
 
         if let Some(cached_model) = MODEL_CACHE.lock().get(&label) {
             log::debug!("Model loaded from cache: {:?}", label);
-            return Ok(AdoptedEntity::adopt(graphics, Arc::clone(cached_model)));
+            let handle = LoadedModel::new(Arc::clone(cached_model));
+            return Ok(MeshRenderer::from_handle(handle));
         }
 
         let vertex_buffer = graphics
@@ -146,6 +148,7 @@ impl PlaneBuilder {
             .lock()
             .insert(label, Arc::clone(&model));
 
-        Ok(AdoptedEntity::adopt(graphics, model))
+        let handle = LoadedModel::new(model);
+        Ok(MeshRenderer::from_handle(handle))
     }
 }

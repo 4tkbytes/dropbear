@@ -2,14 +2,13 @@
 
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
 use eucalyptus_core::warn;
 use glam::{DVec3, Vec3};
 use hecs::Entity;
-use std::sync::Arc;
 use std::time::Instant;
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
@@ -640,7 +639,7 @@ impl InspectableComponent for ScriptComponent {
     }
 }
 
-impl InspectableComponent for AdoptedEntity {
+impl InspectableComponent for MeshRenderer {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -655,12 +654,12 @@ impl InspectableComponent for AdoptedEntity {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
 
-                let resp = ui.text_edit_singleline(&mut Arc::make_mut(&mut self.model).label);
+                let resp = ui.text_edit_singleline(&mut self.make_model_mut().label);
 
                 if resp.changed() {
                     if cfg.old_label_entity.is_none() {
                         cfg.old_label_entity = Some(*entity);
-                        cfg.label_original = Some(self.model.label.clone());
+                        cfg.label_original = Some(self.handle().label.clone());
                     }
                     cfg.label_last_edit = Some(Instant::now());
                 }
