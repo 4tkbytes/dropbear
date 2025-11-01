@@ -3,6 +3,7 @@
 
 mod exports;
 pub mod sig;
+mod types;
 
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::native::sig::{
@@ -120,6 +121,8 @@ pub enum DropbearNativeError {
     NoSuchComponent = -4,
     NoSuchEntity = -5,
     WorldInsertError = -6,
+    /// When the graphics queue fails to send its message to the receiver
+    SendError = -7,
 
     InvalidUTF8 = -108,
     /// A generic error when the library doesn't know what happened or cannot find a

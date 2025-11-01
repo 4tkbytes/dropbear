@@ -97,10 +97,10 @@ int dropbear_get_mouse_position(const InputState* input_state_ptr, float* out_x,
 int dropbear_is_mouse_button_pressed(const InputState* input_state_ptr, int button_code, int* out_pressed);
 int dropbear_get_mouse_delta(const InputState* input_state_ptr, float* out_delta_x, float* out_delta_y);
 int dropbear_is_cursor_locked(const InputState* input_state_ptr, int* out_locked);
-int dropbear_set_cursor_locked(const InputState* input_state_ptr, int locked);
+int dropbear_set_cursor_locked(const GraphicsCommandQueue* graphics_ptr, const InputState* input_state_ptr, int locked);
 int dropbear_get_last_mouse_pos(const InputState* input_state_ptr, float* out_x, float* out_y);
 int dropbear_is_cursor_hidden(const InputState* input_state_ptr, int* out_hidden);
-int dropbear_set_cursor_hidden(const InputState* input_state_ptr, int hidden);
+int dropbear_set_cursor_hidden(const GraphicsCommandQueue* graphics_ptr, const InputState* input_state_ptr, int hidden);
 
 // camera
 int dropbear_get_camera(const World* world_ptr, const char* label, NativeCamera* out_camera);

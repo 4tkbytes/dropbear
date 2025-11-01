@@ -1,4 +1,3 @@
-use crate::camera::DebugCamera;
 use crate::camera::{CameraComponent, CameraType};
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
@@ -1403,7 +1402,7 @@ impl SceneConfig {
                         });
                     }
                     let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
-                    let component = DebugCamera::new();
+                    let component = crate::camera::DebugCamera::new();
                     let camera_entity = { world.spawn((camera, component)) };
                     Ok(camera_entity)
                 }

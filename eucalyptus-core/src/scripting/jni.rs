@@ -8,7 +8,7 @@ mod utils;
 use crate::logging::LOG_LEVEL;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::exception::get_exception_info;
-use crate::{APP_INFO, success};
+use crate::{APP_INFO};
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIVersion, JavaVM};
@@ -88,7 +88,7 @@ impl JavaContext {
         let jvm = JavaVM::new(jvm_args)?;
 
         #[cfg(feature = "editor")]
-        success!("JDB debugger enabled on localhost:6741");
+        crate::success!("JDB debugger enabled on localhost:6741");
 
         log::info!("Created JVM instance");
 

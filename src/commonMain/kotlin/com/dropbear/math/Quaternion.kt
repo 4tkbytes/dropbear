@@ -91,16 +91,19 @@ class Quaternion<T: Number>(
 
     fun <T : Number> rotateX(angleRadians: T): Quaternion<T> {
         val halfAngle = angleRadians.toDouble() * 0.5
+        @Suppress("UNCHECKED_CAST")
         return Quaternion(sin(halfAngle), 0.0, 0.0, cos(halfAngle)) as Quaternion<T>
     }
 
     fun <T: Number> rotateY(angleRadians: T): Quaternion<T> {
         val halfAngle = angleRadians.toDouble() * 0.5
+        @Suppress("UNCHECKED_CAST")
         return Quaternion(0.0, sin(halfAngle), 0.0, cos(halfAngle)) as Quaternion<T>
     }
 
     fun <T: Number> rotateZ(angleRadians: T): Quaternion<T> {
         val halfAngle = angleRadians.toDouble() * 0.5
+        @Suppress("UNCHECKED_CAST")
         return Quaternion(0.0, 0.0, sin(halfAngle), cos(halfAngle)) as Quaternion<T>
     }
 

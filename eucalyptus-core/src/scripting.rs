@@ -66,6 +66,7 @@ impl ScriptManager {
     /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new 
     /// JVM instance.
     pub fn new() -> anyhow::Result<Self> {
+        #[allow(unused_mut)]
         let mut result = Self {
             jvm: None,
             library: None,
