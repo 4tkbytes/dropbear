@@ -171,10 +171,10 @@ impl Scene for Editor {
 
             let world_ptr = self.world.as_mut() as *mut World;
 
-            if let Err(e) = unsafe { self
-                .script_manager
-                .update_script(world_ptr, &self.input_state, dt) }
-            {
+            if let Err(e) = unsafe {
+                self.script_manager
+                    .update_script(world_ptr, &self.input_state, dt)
+            } {
                 fatal!("Failed to update script: {}", e);
                 self.signal = Signal::StopPlaying;
             }
@@ -212,9 +212,9 @@ impl Scene for Editor {
         {
             entity.is_selected = false
         }
-        
-        if let Some(e) = self.selected_entity 
-            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e) 
+
+        if let Some(e) = self.selected_entity
+            && let Ok(mut q) = self.world.query_one::<&mut AdoptedEntity>(e)
             && let Some(entity) = q.get()
         {
             entity.is_selected = true
@@ -321,7 +321,8 @@ impl Scene for Editor {
                         entities
                     };
 
-                    { // light cube rendering
+                    {
+                        // light cube rendering
                         let mut render_pass = graphics.clear_colour(color);
                         if let Some(light_pipeline) = &self.light_manager.pipeline {
                             render_pass.set_pipeline(light_pipeline);
@@ -359,16 +360,16 @@ impl Scene for Editor {
                             };
 
                             if let Some(model) = model_opt {
-                                let instance_buffer = graphics
-                                    .shared
-                                    .device
-                                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                let instance_buffer = graphics.shared.device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
                                         label: Some("Batched Instance Buffer"),
                                         contents: bytemuck::cast_slice(&instances),
                                         usage: wgpu::BufferUsages::VERTEX,
-                                    });
+                                    },
+                                );
 
-                                { // normal model rendering
+                                {
+                                    // normal model rendering
                                     let mut render_pass = graphics.continue_pass();
                                     render_pass.set_pipeline(pipeline);
 

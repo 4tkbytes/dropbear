@@ -135,7 +135,7 @@ pub struct AdoptedEntity {
     pub instance_buffer: Option<Buffer>,
     pub dirty: bool,
     last_frame_rendered: Option<u64>,
-    pub is_selected: bool
+    pub is_selected: bool,
 }
 
 impl AdoptedEntity {

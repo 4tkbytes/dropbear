@@ -25,7 +25,10 @@ fn main() {
         .build_artifact()
         .expect("failed to build artifact");
 
-    wesl::Wesl::new("src/shaders").build_artifact(&"package::light".parse().unwrap(), "dropbear_light");
-    wesl::Wesl::new("src/shaders").build_artifact(&"package::shader".parse().unwrap(), "dropbear_shader");
-    wesl::Wesl::new("src/shaders").build_artifact(&"package::outline".parse().unwrap(), "dropbear_outline");
+    wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::light".parse().unwrap(), "dropbear_light");
+    wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::shader".parse().unwrap(), "dropbear_shader");
+    wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::outline".parse().unwrap(), "dropbear_outline");
 }

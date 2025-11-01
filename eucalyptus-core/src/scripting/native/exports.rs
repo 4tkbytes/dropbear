@@ -1,15 +1,15 @@
+use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{GraphicsPtr, InputStatePtr};
 use crate::scripting::native::DropbearNativeError;
-use crate::utils::keycode_from_ordinal;
-use dropbear_engine::entity::{AdoptedEntity, Transform};
-use std::ffi::{CStr, c_char};
-use glam::{DQuat, DVec3};
-use hecs::World;
-use dropbear_engine::camera::Camera;
-use crate::camera::{CameraComponent, CameraType};
 use crate::scripting::native::types::{NativeCamera, NativeTransform, Vector3D};
 use crate::states::{ModelProperties, Value};
+use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
+use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::{AdoptedEntity, Transform};
+use glam::{DQuat, DVec3};
+use hecs::World;
+use std::ffi::{CStr, c_char};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_get_entity(
@@ -103,7 +103,11 @@ pub unsafe extern "C" fn dropbear_set_transform(
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
     let rust_transform = Transform {
-        position: DVec3::new(transform.position_x, transform.position_y, transform.position_z),
+        position: DVec3::new(
+            transform.position_x,
+            transform.position_y,
+            transform.position_z,
+        ),
         rotation: DQuat::from_xyzw(
             transform.rotation_x,
             transform.rotation_y,
@@ -153,12 +157,18 @@ pub unsafe extern "C" fn dropbear_get_string_property(
                     let bytes = val.as_bytes();
                     let copy_len = std::cmp::min(bytes.len(), (out_value_max_length - 1) as usize);
                     unsafe {
-                        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_value as *mut u8, copy_len);
+                        std::ptr::copy_nonoverlapping(
+                            bytes.as_ptr(),
+                            out_value as *mut u8,
+                            copy_len,
+                        );
                         *out_value.add(copy_len) = 0; // null terminator
                     }
                     0
                 } else {
-                    eprintln!("[dropbear_get_string_property] [WARN] Property not found or wrong type");
+                    eprintln!(
+                        "[dropbear_get_string_property] [WARN] Property not found or wrong type"
+                    );
                     -3
                 }
             } else {
@@ -362,7 +372,12 @@ pub unsafe extern "C" fn dropbear_get_vec3_property(
     out_y: *mut f32,
     out_z: *mut f32,
 ) -> i32 {
-    if world_ptr.is_null() || label.is_null() || out_x.is_null() || out_y.is_null() || out_z.is_null() {
+    if world_ptr.is_null()
+        || label.is_null()
+        || out_x.is_null()
+        || out_y.is_null()
+        || out_z.is_null()
+    {
         return -1;
     }
 
@@ -744,7 +759,12 @@ pub unsafe extern "C" fn dropbear_set_cursor_locked(
 
     input.is_cursor_locked = locked != 0;
 
-    if graphics.send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(input.is_cursor_locked))).is_err() {
+    if graphics
+        .send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(
+            input.is_cursor_locked,
+        )))
+        .is_err()
+    {
         DropbearNativeError::SendError as i32
     } else {
         0
@@ -778,9 +798,7 @@ pub unsafe extern "C" fn dropbear_get_camera(
         .find(|(_, (cam, _))| cam.label == label_str)
     {
         if matches!(comp.camera_type, CameraType::Debug) {
-            eprintln!(
-                "[dropbear_get_camera] [WARN] Querying a CameraType::Debug is illegal"
-            );
+            eprintln!("[dropbear_get_camera] [WARN] Querying a CameraType::Debug is illegal");
             return -5;
         }
 
@@ -1011,7 +1029,12 @@ pub unsafe extern "C" fn dropbear_set_cursor_hidden(
     let graphics = unsafe { &*(queue_ptr as GraphicsPtr) };
     input.is_cursor_hidden = hidden != 0;
 
-    if graphics.send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(input.is_cursor_hidden))).is_err() {
+    if graphics
+        .send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(
+            input.is_cursor_hidden,
+        )))
+        .is_err()
+    {
         DropbearNativeError::SendError as i32
     } else {
         DropbearNativeError::Success as i32

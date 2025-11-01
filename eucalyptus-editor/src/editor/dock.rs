@@ -1,6 +1,9 @@
 use super::*;
 use crate::editor::ViewportMode;
-use std::{collections::HashSet, sync::LazyLock};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::LazyLock,
+};
 
 use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
@@ -103,6 +106,7 @@ pub struct StaticallyKept {
     pub(crate) transform_original_transform: Option<Transform>,
 
     pub(crate) transform_in_progress: bool,
+    pub(crate) transform_rotation_cache: HashMap<hecs::Entity, glam::DVec3>,
 }
 
 impl<'a> TabViewer for EditorTabViewer<'a> {
@@ -511,8 +515,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             "Model thumbnail [{}] does not exist, generating one now",
                                                             name
                                                         );
-                                                        let project_path = { PROJECT.read().project_path.clone() };
-                                                        let path = ResourceReference::from_path(path).unwrap().to_project_path(project_path).unwrap();
+                                                        let project_path =
+                                                            { PROJECT.read().project_path.clone() };
+                                                        let path =
+                                                            ResourceReference::from_path(path)
+                                                                .unwrap()
+                                                                .to_project_path(project_path)
+                                                                .unwrap();
                                                         let mut model = match model_to_image::ModelToImageBuilder::new(&path)
                                                             .with_size((600, 600))
                                                             .build() {

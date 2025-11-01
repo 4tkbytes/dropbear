@@ -27,13 +27,23 @@ impl Colour {
     }
 
     pub fn to_raw_vec4(&self) -> [f32; 4] {
-        [self.r as f32 / 255.0, self.g as f32 / 255.0, self.b as f32 / 255.0, self.a as f32 / 255.0]
+        [
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
+        ]
     }
-    
+
     pub fn to_vec4(&self) -> Vec4 {
-        Vec4::new(self.r as f32 / 255.0, self.g as f32 / 255.0, self.b as f32 / 255.0, self.a as f32 / 255.0)
+        Vec4::new(
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
+        )
     }
-    
+
     pub fn to_hex(&self) -> u32 {
         ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
@@ -49,4 +59,3 @@ impl From<Vec4> for Colour {
         }
     }
 }
-

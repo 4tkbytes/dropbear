@@ -8,32 +8,36 @@ pub(crate) use crate::editor::dock::*;
 use crate::build::build;
 use crate::camera::UndoableCameraAction;
 use crate::debug;
+use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crossbeam_channel::Receiver;
+use dropbear_engine::shader::Shader;
 use dropbear_engine::{
     camera::Camera,
     entity::{AdoptedEntity, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
     lighting::{Light, LightManager},
-    model::{ModelId, MODEL_CACHE},
+    model::{MODEL_CACHE, ModelId},
     scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{
-    camera::{CameraComponent, CameraType, DebugCamera}, fatal, info, input::InputState, ptr::{GraphicsPtr, InputStatePtr, WorldPtr}, scripting::{BuildStatus, ScriptManager, ScriptTarget},
+    camera::{CameraComponent, CameraType, DebugCamera},
+    fatal, info,
+    input::InputState,
+    ptr::{GraphicsPtr, InputStatePtr, WorldPtr},
+    scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, SceneConfig, SceneEntity,
-        ScriptComponent,
-        WorldLoadingStatus, PROJECT, SCENES,
+        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
+        SceneConfig, SceneEntity, ScriptComponent, WorldLoadingStatus,
     },
-    success,
-    success_without_console,
+    success, success_without_console,
     utils::ViewportMode,
     warn,
-    window::GRAPHICS_COMMAND
+    window::GRAPHICS_COMMAND,
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;
@@ -52,8 +56,6 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::shader::Shader;
-use crate::graphics::OutlineShader;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -1126,7 +1128,8 @@ impl Editor {
                     );
 
                     // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
-                    let outline_shader = OutlineShader::init(graphics.shared.clone(), camera.layout());
+                    let outline_shader =
+                        OutlineShader::init(graphics.shared.clone(), camera.layout());
                     self.outline_pipeline = Some(outline_shader);
                 } else {
                     log_once::warn_once!(

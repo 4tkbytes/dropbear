@@ -1,6 +1,7 @@
 pub mod attenuation;
 pub mod buffer;
 pub mod camera;
+pub mod colour;
 pub mod egui_renderer;
 pub mod entity;
 pub mod graphics;
@@ -11,33 +12,37 @@ pub mod panic;
 pub mod procedural;
 pub mod resources;
 pub mod scene;
-pub mod utils;
-pub mod colour;
 pub mod shader;
+pub mod utils;
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
 use chrono::Local;
 use colored::Colorize;
+use dropbear_future_queue::FutureQueue;
 use egui::TextureId;
 use egui_wgpu::ScreenDescriptor;
 use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
+use log::LevelFilter;
 use parking_lot::Mutex;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
 use spin_sleep::SpinSleeper;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use std::path::Path;
 use wgpu::{
     BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
     TextureFormat,
 };
+use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -46,11 +51,6 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
-use dropbear_future_queue::FutureQueue;
-use log::LevelFilter;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
-use winit::event::{DeviceEvent, DeviceId};
 
 use crate::{egui_renderer::EguiRenderer, graphics::Texture};
 
@@ -58,7 +58,6 @@ pub use dropbear_future_queue as future;
 pub use gilrs;
 pub use wgpu;
 pub use winit;
-
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
@@ -726,8 +725,7 @@ impl ApplicationHandler for App {
                     .handle_mouse_input(button, button_state.is_pressed());
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.input_manager
-                    .handle_mouse_movement(position, None);
+                self.input_manager.handle_mouse_movement(position, None);
             }
             _ => {}
         }
@@ -774,7 +772,8 @@ impl MutableWindowConfiguration {
     /// Loads a [`MutableWindowConfiguration`] from the specified file.
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let contents: String = std::fs::read_to_string(path)?;
-        let str: MutableWindowConfiguration = ron::from_str::<MutableWindowConfiguration>(&contents)?;
+        let str: MutableWindowConfiguration =
+            ron::from_str::<MutableWindowConfiguration>(&contents)?;
         Ok(str)
     }
 
@@ -782,7 +781,10 @@ impl MutableWindowConfiguration {
     ///
     /// It is recommended to save it with the prefix `.eucuc` (**Euc**alytus **U**ser **C**onfig)
     pub fn to_file(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        std::fs::write(path, ron::ser::to_string_pretty(self, PrettyConfig::default())?)?;
+        std::fs::write(
+            path,
+            ron::ser::to_string_pretty(self, PrettyConfig::default())?,
+        )?;
         Ok(())
     }
 }

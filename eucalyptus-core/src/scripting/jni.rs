@@ -5,10 +5,10 @@ pub mod exception;
 mod exports;
 mod utils;
 
+use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::exception::get_exception_info;
-use crate::{APP_INFO};
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIVersion, JavaVM};

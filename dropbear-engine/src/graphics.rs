@@ -1,7 +1,8 @@
+use crate::shader::Shader;
 use crate::{
+    State,
     egui_renderer::EguiRenderer,
     model::{self, Vertex},
-    State,
 };
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
@@ -10,15 +11,14 @@ use image::GenericImageView;
 use parking_lot::Mutex;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color,
-    CommandEncoder, CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue,
-    RenderPass, RenderPassDepthStencilAttachment, RenderPipeline, Sampler,
-    StencilState, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages,
-    TextureView, TextureViewDescriptor,
+    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
+    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass,
+    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, StencilState, SurfaceConfiguration,
+    TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
     VertexBufferLayout,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::window::Window;
-use crate::shader::Shader;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
 pub const NO_MODEL: &[u8] = include_bytes!("../../resources/models/error.glb");

@@ -1,7 +1,7 @@
 //! Deals with shaders, including WESL shaders
+use crate::graphics::SharedGraphicsContext;
 use std::sync::Arc;
 use wgpu::ShaderModule;
-use crate::graphics::SharedGraphicsContext;
 
 pub use dropbear_shader as shader_wesl;
 

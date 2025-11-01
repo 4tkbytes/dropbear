@@ -2,7 +2,7 @@
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{WindowConfiguration, scene, MutableWindowConfiguration};
+use dropbear_engine::{MutableWindowConfiguration, WindowConfiguration, scene};
 use eucalyptus_core::APP_INFO;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;

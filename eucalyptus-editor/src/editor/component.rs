@@ -7,7 +7,7 @@ use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
 use eucalyptus_core::warn;
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use hecs::Entity;
 use std::sync::Arc;
 use std::time::Instant;
@@ -56,6 +56,15 @@ impl From<&mut Value> for ValueType {
             Value::Vec3(_) => ValueType::Vec3,
         }
     }
+}
+
+fn wrap_angle_degrees(angle: f64) -> f64 {
+    (angle + 180.0).rem_euclid(360.0) - 180.0
+}
+
+fn reconcile_angle(angle: f64, reference: f64) -> f64 {
+    let delta = wrap_angle_degrees(angle - reference);
+    wrap_angle_degrees(reference + delta)
 }
 
 impl InspectableComponent for ModelProperties {
@@ -305,25 +314,42 @@ impl InspectableComponent for Transform {
                         ui.label("Rotation:");
                     });
 
+                    let cached_rotation = cfg.transform_rotation_cache.get(entity).copied();
+
+                    let mut rotation_deg: DVec3 = if cfg.transform_in_progress {
+                        cached_rotation.unwrap_or_else(|| {
+                            let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
+                            DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
+                        })
+                    } else {
+                        let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
+                        let mut degrees =
+                            DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees());
+
+                        if let Some(prev) = cached_rotation {
+                            degrees.x = reconcile_angle(degrees.x, prev.x);
+                            degrees.y = reconcile_angle(degrees.y, prev.y);
+                            degrees.z = reconcile_angle(degrees.z, prev.z);
+                        }
+
+                        degrees.x = wrap_angle_degrees(degrees.x);
+                        degrees.y = wrap_angle_degrees(degrees.y);
+                        degrees.z = wrap_angle_degrees(degrees.z);
+
+                        cfg.transform_rotation_cache.insert(*entity, degrees);
+                        degrees
+                    };
+
                     let mut rotation_changed = false;
-                    let (mut x_rot, mut y_rot, mut z_rot) =
-                        self.rotation.to_euler(glam::EulerRot::XYZ);
 
                     ui.horizontal(|ui| {
                         ui.label("X:");
                         let response = ui.add(
-                            egui::Slider::new(
-                                &mut x_rot,
-                                -std::f64::consts::PI..=std::f64::consts::PI,
-                            )
-                            .step_by(0.01)
-                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                            .custom_parser(|s| {
-                                s.trim_end_matches('°')
-                                    .parse::<f64>()
-                                    .ok()
-                                    .map(|v| v.to_radians())
-                            }),
+                            egui::DragValue::new(&mut rotation_deg.x)
+                                .speed(0.5)
+                                .suffix("°")
+                                .range(-180.0..=180.0)
+                                .fixed_decimals(2),
                         );
 
                         if response.drag_started() {
@@ -353,18 +379,11 @@ impl InspectableComponent for Transform {
                     ui.horizontal(|ui| {
                         ui.label("Y:");
                         let response = ui.add(
-                            egui::Slider::new(
-                                &mut y_rot,
-                                -std::f64::consts::PI..=std::f64::consts::PI,
-                            )
-                            .step_by(0.01)
-                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                            .custom_parser(|s| {
-                                s.trim_end_matches('°')
-                                    .parse::<f64>()
-                                    .ok()
-                                    .map(|v| v.to_radians())
-                            }),
+                            egui::DragValue::new(&mut rotation_deg.y)
+                                .speed(0.5)
+                                .suffix("°")
+                                .range(-180.0..=180.0)
+                                .fixed_decimals(2),
                         );
 
                         if response.drag_started() {
@@ -394,18 +413,11 @@ impl InspectableComponent for Transform {
                     ui.horizontal(|ui| {
                         ui.label("Z:");
                         let response = ui.add(
-                            egui::Slider::new(
-                                &mut z_rot,
-                                -std::f64::consts::PI..=std::f64::consts::PI,
-                            )
-                            .step_by(0.01)
-                            .custom_formatter(|n, _| format!("{:.1}°", n.to_degrees()))
-                            .custom_parser(|s| {
-                                s.trim_end_matches('°')
-                                    .parse::<f64>()
-                                    .ok()
-                                    .map(|v| v.to_radians())
-                            }),
+                            egui::DragValue::new(&mut rotation_deg.z)
+                                .speed(0.5)
+                                .suffix("°")
+                                .range(-180.0..=180.0)
+                                .fixed_decimals(2),
                         );
 
                         if response.drag_started() {
@@ -433,11 +445,21 @@ impl InspectableComponent for Transform {
                     });
 
                     if rotation_changed {
-                        self.rotation =
-                            glam::DQuat::from_euler(glam::EulerRot::XYZ, x_rot, y_rot, z_rot);
+                        rotation_deg.x = wrap_angle_degrees(rotation_deg.x);
+                        rotation_deg.y = wrap_angle_degrees(rotation_deg.y);
+                        rotation_deg.z = wrap_angle_degrees(rotation_deg.z);
+
+                        cfg.transform_rotation_cache.insert(*entity, rotation_deg);
+                        self.rotation = glam::DQuat::from_euler(
+                            glam::EulerRot::YXZ,
+                            rotation_deg.x.to_radians(),
+                            rotation_deg.y.to_radians(),
+                            rotation_deg.z.to_radians(),
+                        );
                     }
                     if ui.button("Reset Rotation").clicked() {
                         self.rotation = glam::DQuat::IDENTITY;
+                        cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
                     }
                     ui.add_space(5.0);
 

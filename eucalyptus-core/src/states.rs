@@ -55,7 +55,9 @@ pub fn load_scene(scene_name: &str) -> anyhow::Result<SceneConfig> {
     let scene_path = {
         let project = PROJECT.read();
         if project.project_path.as_os_str().is_empty() {
-            return Err(anyhow::anyhow!("Project path is not set; cannot load scenes"));
+            return Err(anyhow::anyhow!(
+                "Project path is not set; cannot load scenes"
+            ));
         }
 
         project
@@ -65,7 +67,11 @@ pub fn load_scene(scene_name: &str) -> anyhow::Result<SceneConfig> {
     };
 
     let scene = SceneConfig::read_from(&scene_path)?;
-    log::info!("Loaded scene '{}' from {}", scene_name, scene_path.display());
+    log::info!(
+        "Loaded scene '{}' from {}",
+        scene_name,
+        scene_path.display()
+    );
     Ok(scene)
 }
 

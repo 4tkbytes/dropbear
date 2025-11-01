@@ -18,14 +18,14 @@ use tokio::process::Command;
 #[derive(Default, Clone)]
 pub enum ScriptTarget {
     #[default]
-    /// The default target. Using this will always return an error. 
+    /// The default target. Using this will always return an error.
     None,
     /// JVM target. This will load the script into a dropbear hosted JVM instance.  
     JVM {
         /// Path to the JAR file. This is the file that will be loaded into the JVM.
         library_path: PathBuf,
     },
-    /// Native target. This will load the library_path of this enum. 
+    /// Native target. This will load the library_path of this enum.
     Native {
         /// Path to the library. This is the file that will be loaded into the JVM.
         library_path: PathBuf,
@@ -33,7 +33,7 @@ pub enum ScriptTarget {
 }
 
 /// An enum representing the status of the build process.
-/// 
+///
 /// This is used for cross-thread [`crossbeam_channel::unbounded`] channels
 #[derive(Debug, Clone)]
 pub enum BuildStatus {
@@ -44,26 +44,26 @@ pub enum BuildStatus {
 }
 
 pub struct ScriptManager {
-    /// The JVM instance. This is only set if the [`ScriptTarget`] is [`ScriptTarget::JVM`]. 
+    /// The JVM instance. This is only set if the [`ScriptTarget`] is [`ScriptTarget::JVM`].
     jvm: Option<JavaContext>,
-    /// The library instance. This is only set if the [`ScriptTarget`] is [`ScriptTarget::Native`]. 
+    /// The library instance. This is only set if the [`ScriptTarget`] is [`ScriptTarget::Native`].
     library: Option<NativeLibrary>,
-    /// The target of the script. This can be either a JVM or a native library (or None, but why 
+    /// The target of the script. This can be either a JVM or a native library (or None, but why
     /// would you set it as that?)
     script_target: ScriptTarget,
     /// The entity tag database. This is a map of tag<->list of entities.
     entity_tag_database: HashMap<String, Vec<Entity>>,
-    /// Whether or not the JVM has been created. 
-    /// 
-    /// This bool is required as the JNI specifications only allow for one JVM per process. 
+    /// Whether or not the JVM has been created.
+    ///
+    /// This bool is required as the JNI specifications only allow for one JVM per process.
     jvm_created: bool,
-    /// The path to the library. This is set if the [`ScriptTarget`] is [`ScriptTarget::Native`] or 
+    /// The path to the library. This is set if the [`ScriptTarget`] is [`ScriptTarget::Native`] or
     /// [`ScriptTarget::JVM`]
     lib_path: Option<PathBuf>,
 }
 
 impl ScriptManager {
-    /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new 
+    /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new
     /// JVM instance.
     pub fn new() -> anyhow::Result<Self> {
         #[allow(unused_mut)]
@@ -76,10 +76,10 @@ impl ScriptManager {
             lib_path: None,
         };
 
-
         #[cfg(feature = "jvm")]
         // using this feature is automatically supported by the "editor" feature flag
-        { // JavaContext will only be created if developer explicitly specifies.
+        {
+            // JavaContext will only be created if developer explicitly specifies.
             let jvm = JavaContext::new()?;
             result.jvm = Some(jvm);
             result.jvm_created = true;
@@ -90,11 +90,11 @@ impl ScriptManager {
     }
 
     /// Initialises the library by loading it into memory or into the JVM depending on the
-    /// target. 
-    /// 
+    /// target.
+    ///
     /// This function required a [`HashMap<String, Vec<Entity>>`], which has a tag<->list of entities
-    /// link. It is stored in memory until the script is reinitialised. 
-    /// 
+    /// link. It is stored in memory until the script is reinitialised.
+    ///
     /// This function is only required to be run once at the start of the session.
     pub fn init_script(
         &mut self,
@@ -140,15 +140,15 @@ impl ScriptManager {
     }
 
     /// Loads and initialises the script for the specified script target.
-    /// 
+    ///
     /// This function only needs to be called once at the start of the session.
-    /// 
+    ///
     /// # ScriptTarget behaviours
     /// - [`ScriptTarget::JVM`] - This initialises the JVM by setting specific contexts such
-    ///   as necessary pointer/handles with [`JavaContext::load_systems_for_tag`]. After it 
-    ///   loads each system for each tag. 
-    /// - [`ScriptTarget::Native`] - This initialises the library using [`NativeLibrary::init`]. 
-    ///   After it loads the necessary system with the tag. 
+    ///   as necessary pointer/handles with [`JavaContext::load_systems_for_tag`]. After it
+    ///   loads each system for each tag.
+    /// - [`ScriptTarget::Native`] - This initialises the library using [`NativeLibrary::init`].
+    ///   After it loads the necessary system with the tag.
     /// - [`ScriptTarget::None`] - This returns an [`Err`], as no script target would have been
     ///   set.
     pub fn load_script(
@@ -186,22 +186,22 @@ impl ScriptManager {
         Err(anyhow::anyhow!("Invalid script target configuration"))
     }
 
-    /// Updates the script as loaded into [`ScriptManager`]. 
-    /// 
+    /// Updates the script as loaded into [`ScriptManager`].
+    ///
     /// This function needs to be called every frame.
-    /// 
+    ///
     /// # ScriptTarget behaviours
-    /// - [`ScriptTarget::JVM`] - This runs [`JavaContext::update_all_systems`] if the database is 
-    ///   empty, [`JavaContext::update_systems_for_tag`] if there are tags but no entities, and 
-    ///   [`JavaContext::update_systems_for_entities`] if there are entities. 
-    /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is 
-    ///   empty, [`NativeLibrary::update_systems_for_tag`] if there are tags but no entities, and 
-    ///   [`NativeLibrary::update_systems_for_entities`] if there are entities. 
+    /// - [`ScriptTarget::JVM`] - This runs [`JavaContext::update_all_systems`] if the database is
+    ///   empty, [`JavaContext::update_systems_for_tag`] if there are tags but no entities, and
+    ///   [`JavaContext::update_systems_for_entities`] if there are entities.
+    /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is
+    ///   empty, [`NativeLibrary::update_systems_for_tag`] if there are tags but no entities, and
+    ///   [`NativeLibrary::update_systems_for_entities`] if there are entities.
     /// - [`ScriptTarget::None`] - This returns an error.
-    /// 
+    ///
     /// # Safety
-    /// This function is marked unsafe because clippy forced me to, but also 
-    /// world is rebuilt from the pointer. 
+    /// This function is marked unsafe because clippy forced me to, but also
+    /// world is rebuilt from the pointer.
     pub unsafe fn update_script(
         &mut self,
         _world: WorldPtr,
@@ -253,13 +253,13 @@ impl ScriptManager {
     }
 
     /// Reloads the .jar file by unloading the previous classes and reloading them back in,
-    /// allowing for hot reloading. 
-    /// 
+    /// allowing for hot reloading.
+    ///
     /// # ScriptTarget behaviours
-    /// - [`ScriptTarget::JVM`] - This target is the only target that allows this function. 
-    /// - [`ScriptTarget::Native`] - This target does not do anything, but does not result in an 
+    /// - [`ScriptTarget::JVM`] - This target is the only target that allows this function.
+    /// - [`ScriptTarget::Native`] - This target does not do anything, but does not result in an
     ///   error (returns [`Ok`])
-    /// - [`ScriptTarget::None`] - This target does not do anything, but does not result in an 
+    /// - [`ScriptTarget::None`] - This target does not do anything, but does not result in an
     ///   error (returns [`Ok`])
     pub fn reload(&mut self, world_ptr: WorldPtr) -> anyhow::Result<()> {
         if let Some(jvm) = &mut self.jvm {
@@ -268,7 +268,7 @@ impl ScriptManager {
         Ok(())
     }
 
-    /// Rebuilds the ScriptManagers entity database by parsing a [`World`]. 
+    /// Rebuilds the ScriptManagers entity database by parsing a [`World`].
     fn rebuild_entity_tag_database(&mut self, world: &World) {
         let mut new_map: HashMap<String, Vec<Entity>> = HashMap::new();
 

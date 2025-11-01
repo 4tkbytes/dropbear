@@ -1,4 +1,4 @@
-# dropbear-futurequeue
+# dropbear_future-queue
 
 A helper queue for polling futures in single threaded systems such as in winit.
 

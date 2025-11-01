@@ -2,19 +2,19 @@ use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction,
-    DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout,
+    BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
+    RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
 
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{LazyModel, LazyType};
+use crate::shader::Shader;
 use crate::{
     camera::Camera,
     entity::Transform,
     model::{self, Model, Vertex},
 };
-use crate::shader::Shader;
 
 pub const MAX_LIGHTS: usize = 8;
 
