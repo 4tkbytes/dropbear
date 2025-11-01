@@ -1,8 +1,8 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::utils::PROTO_TEXTURE;
 use chrono::Utc;
-use dropbear_engine::camera::{Camera, CameraBuilder};
-use dropbear_engine::entity::{AdoptedEntity, Transform};
+use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
@@ -10,7 +10,7 @@ use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::Ui;
 use egui_dock_fork::DockState;
-use glam::DVec3;
+use glam::{DQuat, DVec3};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use rayon::prelude::*;
@@ -560,15 +560,15 @@ impl EntityNode {
         let mut nodes = Vec::new();
         let mut handled = std::collections::HashSet::new();
 
-        for (id, (script, _transform, adopted)) in world
+        for (id, (script, _transform, renderer)) in world
             .query::<(
                 &ScriptComponent,
                 &dropbear_engine::entity::Transform,
-                &dropbear_engine::entity::AdoptedEntity,
+                &dropbear_engine::entity::MeshRenderer,
             )>()
             .iter()
         {
-            let name = adopted.model.label.clone();
+            let name = renderer.handle().label.clone();
             let mut children = vec![
                 EntityNode::Entity {
                     id,
@@ -599,17 +599,17 @@ impl EntityNode {
         }
 
         // Handle single entities (and potentially cameras)
-        for (id, (_, adopted)) in world
+        for (id, (_, renderer)) in world
             .query::<(
                 &dropbear_engine::entity::Transform,
-                &dropbear_engine::entity::AdoptedEntity,
+                &dropbear_engine::entity::MeshRenderer,
             )>()
             .iter()
         {
             if handled.contains(&id) {
                 continue;
             }
-            let name = adopted.model.label.clone();
+            let name = renderer.handle().label.clone();
 
             // Check if this entity has camera components
             if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
@@ -655,9 +655,9 @@ impl EntityNode {
             handled.insert(id);
         }
 
-        // Handle standalone cameras (cameras without AdoptedEntity - like viewport cameras)
+        // Handle standalone cameras (cameras without MeshRenderer - like viewport cameras)
         for (entity, (camera, component)) in world.query::<(&Camera, &CameraComponent)>().iter() {
-            if world.get::<&AdoptedEntity>(entity).is_err() {
+            if world.get::<&MeshRenderer>(entity).is_err() {
                 nodes.push(EntityNode::Camera {
                     id: entity,
                     name: camera.label.clone(),
@@ -706,8 +706,8 @@ impl Default for CameraConfig {
             // follow_offset: None,
             label: String::new(),
             camera_type: CameraType::Normal,
-            speed: default.speed as f32,
-            sensitivity: default.sensitivity as f32,
+            speed: default.settings.speed as f32,
+            sensitivity: default.settings.sensitivity as f32,
             starting_camera: false,
         }
     }
@@ -726,11 +726,11 @@ impl CameraConfig {
             camera_type: component.camera_type,
             up: camera.up.to_array(),
             aspect: camera.aspect,
-            fov: camera.fov_y as f32,
+            fov: camera.settings.fov_y as f32,
             near: camera.znear as f32,
             far: camera.zfar as f32,
-            speed: component.speed as f32,
-            sensitivity: component.sensitivity as f32,
+            speed: component.settings.speed as f32,
+            sensitivity: component.settings.sensitivity as f32,
             // follow_target_entity_label: follow_target.map(|target| target.follow_target.clone()),
             // follow_offset: follow_target.map(|target| target.offset.to_array()),
             starting_camera: component.starting_camera,
@@ -1016,10 +1016,14 @@ impl SceneConfig {
                         reference
                     );
 
-                    let adopted =
-                        AdoptedEntity::new(graphics.clone(), &path, Some(&entity_config.label))
-                            .await?;
+                    let mut renderer = MeshRenderer::from_path(
+                        graphics.clone(),
+                        &path,
+                        Some(&entity_config.label),
+                    )
+                    .await?;
                     let transform = entity_config.transform;
+                    renderer.update(&transform);
 
                     let _entity = if let Some(camera_config) = &entity_config.camera {
                         let camera = Camera::new(
@@ -1029,19 +1033,23 @@ impl SceneConfig {
                                 target: DVec3::from_array(camera_config.target),
                                 up: DVec3::from_array(camera_config.up),
                                 aspect: camera_config.aspect,
-                                fov_y: camera_config.fov as f64,
                                 znear: camera_config.near as f64,
                                 zfar: camera_config.far as f64,
-                                speed: camera_config.speed as f64,
-                                sensitivity: camera_config.sensitivity as f64,
+                                settings: CameraSettings::new(
+                                    camera_config.speed as f64,
+                                    camera_config.sensitivity as f64,
+                                    camera_config.fov as f64,
+                                ),
                             },
                             Some(&camera_config.label),
                         );
 
                         let camera_component = CameraComponent {
-                            speed: camera_config.speed as f64,
-                            sensitivity: camera_config.sensitivity as f64,
-                            fov_y: camera_config.fov as f64,
+                            settings: CameraSettings::new(
+                                camera_config.speed as f64,
+                                camera_config.sensitivity as f64,
+                                camera_config.fov as f64,
+                            ),
                             camera_type: camera_config.camera_type,
                             starting_camera: camera_config.starting_camera,
                         };
@@ -1051,7 +1059,7 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
@@ -1060,7 +1068,7 @@ impl SceneConfig {
                             ))
                         } else {
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 entity_config.properties.clone(),
                                 camera,
@@ -1071,9 +1079,14 @@ impl SceneConfig {
                         let script = ScriptComponent {
                             tags: script_config.tags.clone(),
                         };
-                        world.spawn((adopted, transform, script, entity_config.properties.clone()))
+                        world.spawn((
+                            renderer,
+                            transform,
+                            script,
+                            entity_config.properties.clone(),
+                        ))
                     } else {
-                        world.spawn((adopted, transform, entity_config.properties.clone()))
+                        world.spawn((renderer, transform, entity_config.properties.clone()))
                     };
 
                     Ok(())
@@ -1088,9 +1101,10 @@ impl SceneConfig {
                         Some(&entity_config.label),
                     )
                     .await?;
-                    let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
+                    let mut renderer = MeshRenderer::from_handle(model);
 
                     let transform = entity_config.transform;
+                    renderer.update(&transform);
 
                     let _entity = if let Some(camera_config) = &entity_config.camera {
                         // Entity has camera components
@@ -1101,19 +1115,23 @@ impl SceneConfig {
                                 target: DVec3::from_array(camera_config.target),
                                 up: DVec3::from_array(camera_config.up),
                                 aspect: camera_config.aspect,
-                                fov_y: camera_config.fov as f64,
                                 znear: camera_config.near as f64,
                                 zfar: camera_config.far as f64,
-                                speed: camera_config.speed as f64,
-                                sensitivity: camera_config.sensitivity as f64,
+                                settings: CameraSettings::new(
+                                    camera_config.speed as f64,
+                                    camera_config.sensitivity as f64,
+                                    camera_config.fov as f64,
+                                ),
                             },
                             Some(&camera_config.label),
                         );
 
                         let camera_component = CameraComponent {
-                            speed: camera_config.speed as f64,
-                            sensitivity: camera_config.sensitivity as f64,
-                            fov_y: camera_config.fov as f64,
+                            settings: CameraSettings::new(
+                                camera_config.speed as f64,
+                                camera_config.sensitivity as f64,
+                                camera_config.fov as f64,
+                            ),
                             camera_type: camera_config.camera_type,
                             starting_camera: camera_config.starting_camera,
                         };
@@ -1123,7 +1141,7 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
@@ -1132,7 +1150,7 @@ impl SceneConfig {
                             ))
                         } else {
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 entity_config.properties.clone(),
                                 camera,
@@ -1146,13 +1164,13 @@ impl SceneConfig {
                                 tags: script_config.tags.clone(),
                             };
                             world.spawn((
-                                adopted,
+                                renderer,
                                 transform,
                                 script,
                                 entity_config.properties.clone(),
                             ))
                         } else {
-                            world.spawn((adopted, transform, entity_config.properties.clone()))
+                            world.spawn((renderer, transform, entity_config.properties.clone()))
                         }
                     };
 
@@ -1201,19 +1219,23 @@ impl SceneConfig {
                                 target: DVec3::from_array(camera_config.target),
                                 up: DVec3::from_array(camera_config.up),
                                 aspect: camera_config.aspect,
-                                fov_y: camera_config.fov as f64,
                                 znear: camera_config.near as f64,
                                 zfar: camera_config.far as f64,
-                                speed: camera_config.speed as f64,
-                                sensitivity: camera_config.sensitivity as f64,
+                                settings: CameraSettings::new(
+                                    camera_config.speed as f64,
+                                    camera_config.sensitivity as f64,
+                                    camera_config.fov as f64,
+                                ),
                             },
                             Some(&camera_config.label),
                         );
 
                         let camera_component = CameraComponent {
-                            speed: camera_config.speed as f64,
-                            sensitivity: camera_config.sensitivity as f64,
-                            fov_y: camera_config.fov as f64,
+                            settings: CameraSettings::new(
+                                camera_config.speed as f64,
+                                camera_config.sensitivity as f64,
+                                camera_config.fov as f64,
+                            ),
                             camera_type: camera_config.camera_type,
                             starting_camera: camera_config.starting_camera,
                         };
@@ -1320,19 +1342,23 @@ impl SceneConfig {
                     target: DVec3::from_array(camera_config.target),
                     up: DVec3::from_array(camera_config.up),
                     aspect: camera_config.aspect,
-                    fov_y: camera_config.fov as f64,
                     znear: camera_config.near as f64,
                     zfar: camera_config.far as f64,
-                    speed: camera_config.speed as f64,
-                    sensitivity: camera_config.sensitivity as f64,
+                    settings: CameraSettings::new(
+                        camera_config.speed as f64,
+                        camera_config.sensitivity as f64,
+                        camera_config.fov as f64,
+                    ),
                 },
                 Some(&camera_config.label),
             );
 
             let component = CameraComponent {
-                speed: camera_config.speed as f64,
-                sensitivity: camera_config.sensitivity as f64,
-                fov_y: camera_config.fov as f64,
+                settings: CameraSettings::new(
+                    camera_config.speed as f64,
+                    camera_config.sensitivity as f64,
+                    camera_config.fov as f64,
+                ),
                 camera_type: camera_config.camera_type,
                 starting_camera: camera_config.starting_camera,
             };
@@ -1360,8 +1386,12 @@ impl SceneConfig {
                     });
                 }
                 let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
+                let light_direction = LightComponent::default_direction();
+                let rotation =
+                    DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
                 let trans = Transform {
                     position: glam::DVec3::new(2.0, 4.0, 2.0),
+                    rotation,
                     ..Default::default()
                 };
                 let light =
@@ -1484,6 +1514,7 @@ pub enum EditorTab {
     ResourceInspector, // left side,
     ModelEntityList,   // right side,
     Viewport,          // middle,
+    ErrorConsole,
     Plugin(usize),
 }
 

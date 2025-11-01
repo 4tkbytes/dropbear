@@ -1,12 +1,10 @@
-use dropbear_engine::camera::Camera;
+use dropbear_engine::camera::{Camera, CameraSettings};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct CameraComponent {
-    pub speed: f64,
-    pub sensitivity: f64,
-    pub fov_y: f64,
+    pub settings: CameraSettings,
     pub camera_type: CameraType,
     pub starting_camera: bool,
 }
@@ -20,18 +18,14 @@ impl Default for CameraComponent {
 impl CameraComponent {
     pub fn new() -> Self {
         Self {
-            speed: 5.0,
-            sensitivity: 0.1,
-            fov_y: 60.0,
+            settings: CameraSettings::new(5.0, 0.1, 60.0),
             camera_type: CameraType::Normal,
             starting_camera: false,
         }
     }
 
     pub fn update(&mut self, camera: &mut Camera) {
-        camera.speed = self.speed;
-        camera.sensitivity = self.sensitivity;
-        camera.fov_y = self.fov_y;
+        camera.settings = self.settings;
     }
 
     // setting camera offset is just adding the CameraFollowTarget struct

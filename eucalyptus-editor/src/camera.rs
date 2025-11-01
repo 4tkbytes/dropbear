@@ -103,7 +103,7 @@ impl InspectableComponent for CameraComponent {
                     if !matches!(self.camera_type, CameraType::Player) {
                         egui::ComboBox::from_id_salt(
                             "i aint r kelly the way i take the piss ; \
-                        but im mj coz my shots don't eva miss",
+                        but im mj, my shots don't eva miss",
                         )
                         .selected_text(format!("{:?}", self.camera_type))
                         .show_ui(ui, |ui| {
@@ -119,7 +119,7 @@ impl InspectableComponent for CameraComponent {
                     ui.horizontal(|ui| {
                         ui.label("Speed:");
                         ui.add(
-                            egui::DragValue::new(&mut self.speed)
+                            egui::DragValue::new(&mut self.settings.speed)
                                 .speed(0.1)
                                 .range(0.1..=20.0),
                         );
@@ -128,7 +128,7 @@ impl InspectableComponent for CameraComponent {
                     ui.horizontal(|ui| {
                         ui.label("Sensitivity:");
                         ui.add(
-                            egui::DragValue::new(&mut self.sensitivity)
+                            egui::DragValue::new(&mut self.settings.sensitivity)
                                 .speed(0.0001)
                                 .range(0.0001..=1.0),
                         );
@@ -136,7 +136,9 @@ impl InspectableComponent for CameraComponent {
 
                     ui.horizontal(|ui| {
                         ui.label("FOV:");
-                        ui.add(egui::Slider::new(&mut self.fov_y, 10.0..=120.0).suffix("°"));
+                        ui.add(
+                            egui::Slider::new(&mut self.settings.fov_y, 10.0..=120.0).suffix("°"),
+                        );
                     });
                 });
         });

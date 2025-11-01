@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use glam::{DMat4, DQuat, DVec3, Mat4};
+use serde::{Deserialize, Serialize};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages,
@@ -19,6 +20,30 @@ pub const OPENGL_TO_WGPU_MATRIX: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.5, 1.0],
 ];
 
+/// Shared tuning data for camera movement and projection.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CameraSettings {
+    pub speed: f64,
+    pub sensitivity: f64,
+    pub fov_y: f64,
+}
+
+impl CameraSettings {
+    pub const fn new(speed: f64, sensitivity: f64, fov_y: f64) -> Self {
+        Self {
+            speed,
+            sensitivity,
+            fov_y,
+        }
+    }
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self::new(1.0, 0.1, 45.0)
+    }
+}
+
 /// The basic values of a Camera.
 #[derive(Default, Debug, Clone)]
 pub struct Camera {
@@ -33,8 +58,6 @@ pub struct Camera {
     pub up: DVec3,
     /// Aspect ratio
     pub aspect: f64,
-    /// FOV of camera
-    pub fov_y: f64,
     /// Near buffer?
     pub znear: f64,
     /// Far buffer?
@@ -44,17 +67,15 @@ pub struct Camera {
     /// Pitch (rotation)
     pub pitch: f64,
 
+    /// Tuning values that control movement and projection
+    pub settings: CameraSettings,
+
     /// Uniform/interface for Rust and the GPU
     pub uniform: CameraUniform,
     buffer: Option<Buffer>,
 
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
-
-    /// Speed of the camera
-    pub speed: f64,
-    /// Sensitivity of the mouse for the camera
-    pub sensitivity: f64,
 
     /// View matrix
     pub view_mat: DMat4,
@@ -68,11 +89,9 @@ pub struct CameraBuilder {
     pub target: DVec3,
     pub up: DVec3,
     pub aspect: f64,
-    pub fov_y: f64,
     pub znear: f64,
     pub zfar: f64,
-    pub speed: f64,
-    pub sensitivity: f64,
+    pub settings: CameraSettings,
 }
 
 impl Camera {
@@ -88,17 +107,15 @@ impl Camera {
             target: builder.target,
             up: builder.up,
             aspect: builder.aspect,
-            fov_y: builder.fov_y,
             znear: builder.znear,
             zfar: builder.zfar,
             uniform,
             buffer: None,
             layout: None,
             bind_group: None,
-            speed: builder.speed,
             yaw: 0.0,
             pitch: 0.0,
-            sensitivity: builder.sensitivity,
+            settings: builder.settings,
             label: if let Some(l) = label {
                 l.to_string()
             } else {
@@ -123,11 +140,9 @@ impl Camera {
                 target: DVec3::new(0.0, 0.0, 0.0),
                 up: DVec3::Y,
                 aspect: (graphics.screen_size.0 / graphics.screen_size.1).into(),
-                fov_y: 45.0,
                 znear: 0.1,
                 zfar: 100.0,
-                speed: 1.0,
-                sensitivity: 0.002,
+                settings: CameraSettings::new(1.0, 0.002, 45.0),
             },
             label,
         )
@@ -166,7 +181,7 @@ impl Camera {
         log::debug!("  Eye: {:?}", camera.eye);
         log::debug!("  Target: {:?}", camera.target);
         log::debug!("  Up: {:?}", camera.up);
-        log::debug!("  FOV Y: {}", camera.fov_y);
+        log::debug!("  FOV Y: {}", camera.settings.fov_y);
         log::debug!("  Aspect: {}", camera.aspect);
         log::debug!("  Z Near: {}", camera.znear);
         log::debug!("  Proj Mat finite: {}", camera.proj_mat.is_finite());
@@ -176,7 +191,7 @@ impl Camera {
     fn build_vp(&mut self) -> DMat4 {
         let view = DMat4::look_at_lh(self.eye, self.target, self.up);
         let proj = DMat4::perspective_infinite_reverse_lh(
-            self.fov_y.to_radians(),
+            self.settings.fov_y.to_radians(),
             self.aspect,
             self.znear,
         );
@@ -237,45 +252,45 @@ impl Camera {
 
     pub fn move_forwards(&mut self) {
         let forward = (self.target - self.eye).normalize();
-        self.eye += forward * self.speed;
-        self.target += forward * self.speed;
+        self.eye += forward * self.settings.speed;
+        self.target += forward * self.settings.speed;
     }
 
     pub fn move_back(&mut self) {
         let forward = (self.target - self.eye).normalize();
-        self.eye -= forward * self.speed;
-        self.target -= forward * self.speed;
+        self.eye -= forward * self.settings.speed;
+        self.target -= forward * self.settings.speed;
     }
 
     pub fn move_right(&mut self) {
         let forward = (self.target - self.eye).normalize();
         // LH: right = up.cross(forward)
         let right = self.up.cross(forward).normalize();
-        self.eye += right * self.speed;
-        self.target += right * self.speed;
+        self.eye += right * self.settings.speed;
+        self.target += right * self.settings.speed;
     }
 
     pub fn move_left(&mut self) {
         let forward = (self.target - self.eye).normalize();
         let right = self.up.cross(forward).normalize();
-        self.eye -= right * self.speed;
-        self.target -= right * self.speed;
+        self.eye -= right * self.settings.speed;
+        self.target -= right * self.settings.speed;
     }
 
     pub fn move_up(&mut self) {
         let up = self.up.normalize();
-        self.eye += up * self.speed;
-        self.target += up * self.speed;
+        self.eye += up * self.settings.speed;
+        self.target += up * self.settings.speed;
     }
 
     pub fn move_down(&mut self) {
         let up = self.up.normalize();
-        self.eye -= up * self.speed;
-        self.target -= up * self.speed;
+        self.eye -= up * self.settings.speed;
+        self.target -= up * self.settings.speed;
     }
 
     pub fn track_mouse_delta(&mut self, dx: f64, dy: f64) {
-        let sensitivity = self.sensitivity;
+        let sensitivity = self.settings.sensitivity;
         self.yaw -= dx * sensitivity;
         self.pitch -= dy * sensitivity;
         let max_pitch = std::f64::consts::FRAC_PI_2 - 0.01;

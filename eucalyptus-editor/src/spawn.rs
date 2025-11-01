@@ -1,5 +1,5 @@
 use crate::editor::Editor;
-use dropbear_engine::entity::AdoptedEntity;
+use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
@@ -46,7 +46,8 @@ impl PendingSpawnController for Editor {
                                 _guard.project_path.clone()
                             };
                             let resource = path.join("resources").join(file);
-                            AdoptedEntity::new(graphics_clone, resource, Some(&asset_name)).await
+                            MeshRenderer::from_path(graphics_clone, resource, Some(&asset_name))
+                                .await
                         }
                         ResourceReferenceType::Bytes(bytes) => {
                             let model = Model::load_from_memory(
@@ -55,7 +56,7 @@ impl PendingSpawnController for Editor {
                                 Some(&asset_name),
                             )
                             .await?;
-                            Ok(AdoptedEntity::adopt(graphics_clone, model).await)
+                            Ok(MeshRenderer::from_handle(model))
                         }
                         ResourceReferenceType::Plane => {
                             let get_float = |key: &str| -> anyhow::Result<f32> {
@@ -110,7 +111,7 @@ impl PendingSpawnController for Editor {
                 log_once::debug_once!("Handle located");
                 if let Some(result) = queue.exchange_owned(handle) {
                     log_once::debug_once!("Loading done, located result");
-                    if let Ok(r) = result.downcast::<anyhow::Result<AdoptedEntity>>() {
+                    if let Ok(r) = result.downcast::<anyhow::Result<MeshRenderer>>() {
                         log_once::debug_once!("Result has been successfully downcasted");
                         match Arc::try_unwrap(r) {
                             Ok(entity) => match entity {

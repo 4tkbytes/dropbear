@@ -14,7 +14,7 @@ use crossbeam_channel::Receiver;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
     camera::Camera,
-    entity::{AdoptedEntity, Transform},
+    entity::{MeshRenderer, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
     lighting::{Light, LightManager},
@@ -23,6 +23,7 @@ use dropbear_engine::{
 };
 use egui::{self, Context};
 use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
+use eucalyptus_core::APP_INFO;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -131,6 +132,9 @@ pub struct Editor {
     current_scene_name: Option<String>,
     pending_scene_load: Option<PendingSceneLoad>,
     pending_scene_creation: Option<String>,
+
+    // about
+    show_about: bool,
 }
 
 impl Editor {
@@ -220,6 +224,7 @@ impl Editor {
             current_scene_name: None,
             pending_scene_load: None,
             pending_scene_creation: None,
+            show_about: false,
         })
     }
 
@@ -254,10 +259,10 @@ impl Editor {
         scene.lights.clear();
         scene.cameras.clear();
 
-        for (id, (adopted, transform, properties, script)) in self
+        for (id, (renderer, transform, properties, script)) in self
             .world
             .query::<(
-                &AdoptedEntity,
+                &MeshRenderer,
                 Option<&Transform>,
                 &ModelProperties,
                 Option<&ScriptComponent>,
@@ -279,8 +284,8 @@ impl Editor {
             };
 
             let scene_entity = SceneEntity {
-                model_path: adopted.model.path.clone(),
-                label: adopted.model.label.clone(),
+                model_path: renderer.handle().path.clone(),
+                label: renderer.handle().label.clone(),
                 transform,
                 properties: properties.clone(),
                 script: script.cloned(),
@@ -289,7 +294,7 @@ impl Editor {
             };
 
             scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", adopted.model.label);
+            log::debug!("Pushed entity: {}", renderer.handle().label);
         }
 
         for (id, (light_component, transform, light)) in self
@@ -314,7 +319,7 @@ impl Editor {
         }
 
         for (id, (camera, component)) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
-            if self.world.get::<&AdoptedEntity>(id).is_err() {
+            if self.world.get::<&MeshRenderer>(id).is_err() {
                 let camera_config = CameraConfig::from_ecs_camera(camera, component);
                 scene.cameras.push(camera_config);
                 log::debug!("Pushed standalone camera into cameras: {}", camera.label);
@@ -753,6 +758,15 @@ impl Editor {
                         }
                         success!("Successfully saved project");
                     }
+                    if ui.button("Reveal project").clicked() {
+                        let project_path = {
+                            PROJECT.read().project_path.clone()
+                        };
+                        match open::that(project_path) {
+                            Ok(()) => info!("Revealed project"),
+                            Err(e) => warn!("Unable to open project: {}", e),
+                        }
+                    }
                     if ui.button("Project Settings").clicked() {};
                     if matches!(self.editor_state, EditorState::Playing) {
                         if ui.button("Stop").clicked() {
@@ -793,12 +807,12 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(&AdoptedEntity, &Transform, &ModelProperties)>(*entity);
+                            let query = self.world.query_one::<(&MeshRenderer, &Transform, &ModelProperties)>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((e, t, props)) = q.get() {
                                     let s_entity = states::SceneEntity {
-                                        model_path: e.model.path.clone(),
-                                        label: e.model.label.clone(),
+                                        model_path: e.handle().path.clone(),
+                                        label: e.handle().label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
@@ -852,12 +866,42 @@ impl Editor {
                     if ui_window.button("Open Viewport").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
+                    if ui_window.button("Open Error Console").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::ErrorConsole);
+                    }
+                    if self.plugin_registry.plugins.len() == 0 {
+                        ui_window.label(
+                            egui::RichText::new("No plugins ")
+                                .color(ui_window.visuals().weak_text_color())
+                        );
+                    }
                     for (i, (_, plugin)) in self.plugin_registry.plugins.iter().enumerate() {
                         if ui_window.button(format!("Open {}", plugin.display_name())).clicked() {
                             self.dock_state.push_to_focused_leaf(EditorTab::Plugin(i));
                         }
                     }
                 });
+
+                ui.menu_button("Help", |ui| {
+                    if ui.button("Show AppData folder").clicked() {
+                        match app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO) {
+                            Ok(val) => {
+                                match open::that(&val) {
+                                    Ok(()) => info!("Opened logs folder"),
+                                    Err(e) => fatal!("Unable to open {}: {}", val.display(), e)
+                                }
+                            },
+                            Err(e) => {
+                                fatal!("Unable to show logs: {}", e);
+                            },
+                        };
+                    }
+
+                    if ui.button("About").clicked() {
+                        self.show_about = true
+                    }
+                });
+
                 {
                     let cfg = PROJECT.read();
                     if cfg.editor_settings.is_debug_menu_shown {
@@ -889,6 +933,7 @@ impl Editor {
                         editor_mode: &mut self.editor_state,
                         plugin_registry: &mut self.plugin_registry,
                         editor: editor_ptr,
+                        build_logs: &mut self.build_logs,
                     },
                 );
         });
@@ -904,6 +949,47 @@ impl Editor {
                 self.pending_scene_switch = true;
             },
         );
+
+        egui::Window::new("About")
+            .resizable(false)
+            .collapsible(false)
+            .open(&mut self.show_about)
+            .show(&ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(8.0);
+
+                    ui.heading("eucalyptus editor");
+                    ui.label(egui::RichText::new("Built on the dropbear engine").weak());
+
+                    ui.add_space(12.0);
+
+                    ui.label("Made with love by 4tkbytes ♥️");
+
+                    ui.add_space(12.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Check out the repository at");
+                        if ui.label("https://github.com/4tkbytes/dropbear").clicked() {
+                            let _ = open::that("https://github.com/4tkbytes/dropbear");
+                        }
+                    });
+
+                    ui.add_space(12.0);
+
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Built on commit {} with rustc {}",
+                            env!("GIT_HASH"),
+                            rustc_version_runtime::version_meta().short_version_string
+                        ))
+                        .weak()
+                        .italics()
+                        .small(),
+                    );
+
+                    ui.add_space(8.0);
+                });
+            });
 
         if self.pending_scene_switch {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
@@ -996,7 +1082,7 @@ impl Editor {
 
         for (entity_id, (_, transform, properties)) in self
             .world
-            .query::<(&AdoptedEntity, &Transform, &ModelProperties)>()
+            .query::<(&MeshRenderer, &Transform, &ModelProperties)>()
             .iter()
         {
             let script = self
@@ -1229,6 +1315,7 @@ impl Editor {
             Ok(())
         } else {
             self.signal = Signal::None;
+            self.editor_state = EditorState::Editing;
             fatal!("Unable to build: No initial camera set");
             Err(anyhow::anyhow!("Unable to build: No initial camera set"))
         }
@@ -1381,9 +1468,9 @@ impl UndoableAction {
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
                 EntityType::Entity => {
-                    if let Ok(mut q) = world.query_one::<&mut AdoptedEntity>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            Arc::make_mut(&mut adopted.model).label = original_label.clone();
+                    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(*entity) {
+                        if let Some(renderer) = q.get() {
+                            renderer.make_model_mut().label = original_label.clone();
                             log::debug!(
                                 "Reverted label for entity {:?} to '{}'",
                                 entity,
@@ -1462,7 +1549,7 @@ impl UndoableAction {
                             world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             && let Some((cam, comp)) = q.get()
                         {
-                            comp.speed = *speed;
+                            comp.settings.speed = *speed;
                             comp.update(cam);
                         }
                     }
@@ -1471,7 +1558,7 @@ impl UndoableAction {
                             world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             && let Some((cam, comp)) = q.get()
                         {
-                            comp.sensitivity = *sensitivity;
+                            comp.settings.sensitivity = *sensitivity;
                             comp.update(cam);
                         }
                     }
@@ -1480,7 +1567,7 @@ impl UndoableAction {
                             world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                             && let Some((cam, comp)) = q.get()
                         {
-                            comp.fov_y = *fov;
+                            comp.settings.fov_y = *fov;
                             comp.update(cam);
                         }
                     }

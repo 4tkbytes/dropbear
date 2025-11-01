@@ -2,6 +2,7 @@ use super::*;
 use crate::editor::ViewportMode;
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::LazyLock,
 };
 
@@ -9,11 +10,10 @@ use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_engine::{
-    entity::Transform,
+    entity::{MeshRenderer, Transform},
     lighting::{Light, LightComponent},
 };
-use egui;
-use egui::CollapsingHeader;
+use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock_fork::TabViewer;
 use egui_extras;
 use eucalyptus_core::APP_INFO;
@@ -37,6 +37,7 @@ pub struct EditorTabViewer<'a> {
     pub editor_mode: &'a mut EditorState,
     pub active_camera: &'a mut Arc<Mutex<Option<Entity>>>,
     pub plugin_registry: &'a mut PluginRegistry,
+    pub build_logs: &'a mut Vec<String>,
     // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
     pub editor: *mut Editor,
 }
@@ -125,6 +126,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     "Unknown Plugin Name".into()
                 }
             }
+            EditorTab::ErrorConsole => "Error Console".into(),
         }
     }
 
@@ -231,7 +233,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         );
 
                                         let proj_matrix = glam::DMat4::perspective_lh(
-                                            camera.fov_y.to_radians(),
+                                            camera.settings.fov_y.to_radians(),
                                             camera.aspect,
                                             camera.znear,
                                             camera.zfar,
@@ -298,7 +300,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             {
                                                 for (entity_id, (transform, _)) in self
                                                     .world
-                                                    .query::<(&Transform, &AdoptedEntity)>()
+                                                    .query::<(&Transform, &MeshRenderer)>()
                                                     .iter()
                                                 {
                                                     entity_count += 1;
@@ -745,7 +747,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if let Some(entity) = self.selected_entity {
                     let mut local_set_initial_camera = false;
                     if let Ok(mut q) = self.world.query_one::<(
-                        &mut AdoptedEntity,
+                        &mut MeshRenderer,
                         Option<&mut Transform>,
                         Option<&mut ModelProperties>,
                         Option<&mut ScriptComponent>,
@@ -781,7 +783,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -793,7 +795,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -894,7 +896,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut Arc::make_mut(&mut e.model).label,
+                                    &mut e.make_model_mut().label,
                                 );
                             }
 
@@ -991,7 +993,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         // Option<&mut CameraFollowTarget>,
                     )>(*entity)
                         && let Some((camera, camera_component)) = q.get()
-                        && self.world.get::<&AdoptedEntity>(*entity).is_err()
+                        && self.world.get::<&MeshRenderer>(*entity).is_err()
                     {
                         ui.vertical(|ui| {
                             camera.inspect(
@@ -1067,6 +1069,141 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     );
                 }
             }
+            EditorTab::ErrorConsole => {
+                enum ErrorLevel {
+                    Warn,
+                    Error,
+                }
+
+                struct ConsoleItem {
+                    id: u64,
+                    error_level: ErrorLevel,
+                    msg: String,
+                    file_location: Option<PathBuf>,
+                    line_ref: Option<String>,
+                }
+
+                fn analyse_error(log: &Vec<String>) -> Vec<ConsoleItem> {
+                    fn parse_compiler_location(
+                        line: &str,
+                    ) -> Option<(ErrorLevel, PathBuf, String)> {
+                        let trimmed = line.trim_start();
+                        let (error_level, rest) =
+                            if let Some(r) = trimmed.strip_prefix("e: file:///") {
+                                (ErrorLevel::Error, r)
+                            } else if let Some(r) = trimmed.strip_prefix("w: file:///") {
+                                (ErrorLevel::Warn, r)
+                            } else {
+                                return None;
+                            };
+
+                        let location = rest.split_whitespace().next()?;
+
+                        let mut segments = location.rsplitn(3, ':');
+                        let column = segments.next()?;
+                        let row = segments.next()?;
+                        let path = segments.next()?;
+
+                        Some((error_level, PathBuf::from(path), format!("{row}:{column}")))
+                    }
+
+                    let mut list: Vec<ConsoleItem> = Vec::new();
+                    let index = 0;
+                    for line in log {
+                        if line.contains("The required library") {
+                            list.push(ConsoleItem {
+                                error_level: ErrorLevel::Error,
+                                msg: line.clone(),
+                                file_location: None,
+                                line_ref: None,
+                                id: index + 1,
+                            });
+                        }
+
+                        if let Some((error_level, path, loc)) = parse_compiler_location(line) {
+                            list.push(ConsoleItem {
+                                error_level,
+                                msg: line.clone(),
+                                file_location: Some(path),
+                                line_ref: Some(loc),
+                                id: index + 1,
+                            });
+                        }
+
+                        // thats it for now
+                    }
+                    list
+                }
+
+                let logs = analyse_error(&self.build_logs);
+
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if logs.is_empty() {
+                            ui.label("Build output will appear here once available.");
+                            return;
+                        }
+
+                        for item in &logs {
+                            let (bg_color, text_color) = match item.error_level {
+                                ErrorLevel::Error => (
+                                    egui::Color32::from_rgb(60, 20, 20),
+                                    egui::Color32::from_rgb(255, 200, 200),
+                                ),
+                                ErrorLevel::Warn => (
+                                    egui::Color32::from_rgb(40, 40, 10),
+                                    egui::Color32::from_rgb(255, 255, 200),
+                                ),
+                            };
+
+                            let available_width = ui.available_width();
+                            let frame = egui::Frame::new()
+                                .inner_margin(Margin::symmetric(8, 6))
+                                .fill(bg_color)
+                                .stroke(egui::Stroke::new(1.0, text_color));
+
+                            let response = frame
+                                .show(ui, |ui| {
+                                    ui.set_width(available_width - 10.0);
+                                    ui.horizontal(|ui| {
+                                        ui.label(RichText::new(&item.msg).color(text_color));
+                                    });
+                                })
+                                .response;
+
+                            if response.clicked() {
+                                log::debug!("Log item clicked: {}", &item.id);
+                                if let (Some(path), Some(loc)) =
+                                    (&item.file_location, &item.line_ref)
+                                {
+                                    let location_arg = format!("{}:{}", path.display(), loc);
+
+                                    match std::process::Command::new("code")
+                                        .args(["-g", &location_arg])
+                                        .spawn()
+                                        .map(|_| ())
+                                    {
+                                        Ok(()) => {
+                                            log::info!(
+                                                "Launched Visual Studio Code at the error: {}",
+                                                &location_arg
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                "Failed to open '{}' in VS Code: {}",
+                                                location_arg, e
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
+                            ui.add_space(4.0);
+                        }
+                    });
+            }
         }
 
         let mut menu_action: Option<EditorTabMenuAction> = None;
@@ -1116,6 +1253,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             if ui.selectable_label(false, "Viewport Option").clicked() {
                                 menu_action = Some(EditorTabMenuAction::ViewportOption);
                             }
+                        }
+                        EditorTab::ErrorConsole => {
+                            ui.set_min_width(150.0);
+                            ui.label("No actions available");
                         }
                         EditorTab::Plugin(dock_info) => {
                             if self.editor.is_null() {
@@ -1193,7 +1334,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log::debug!("Add Component clicked");
                         if let Some(entity) = self.selected_entity {
                             {
-                                if let Ok(mut q) = self.world.query_one::<&AdoptedEntity>(*entity)
+                                if let Ok(mut q) = self.world.query_one::<&MeshRenderer>(*entity)
                                     && q.get().is_some()
                                 {
                                     log::debug!("Queried selected entity, it is an entity");

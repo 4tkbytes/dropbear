@@ -1,3 +1,4 @@
+pub mod asset;
 pub mod attenuation;
 pub mod buffer;
 pub mod camera;

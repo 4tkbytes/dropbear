@@ -1,15 +1,10 @@
-use futures::executor::block_on;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use wgpu::{Buffer, util::DeviceExt};
+use std::{path::Path, sync::Arc};
 
 use crate::{
     graphics::{Instance, SharedGraphicsContext},
-    model::{LazyModel, LazyType, Model},
+    model::{LoadedModel, Model, ModelId},
 };
 
 /// A type that represents a position, rotation and scale of an entity
@@ -78,151 +73,64 @@ impl Transform {
     }
 }
 
-/// Creates a new adopted entity in a lazy method. It fetches the data first (which can be done on a separate
-/// thread). After, the [`LazyAdoptedEntity::poke()`] function can be called to convert the Lazy to a Real adopted entity.
-#[derive(Default)]
-pub struct LazyAdoptedEntity {
-    lazy_model: LazyModel,
-    #[allow(dead_code)]
-    label: String,
-}
-
-impl LazyAdoptedEntity {
-    /// Create a LazyAdoptedEntity from a file path (can be run on background thread)
-    pub async fn from_file(path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let buffer = std::fs::read(path)?;
-        Self::from_memory(buffer, label).await
-    }
-
-    /// Create a LazyAdoptedEntity from memory buffer (can be run on background thread)
-    pub async fn from_memory(
-        buffer: impl AsRef<[u8]>,
-        label: Option<&str>,
-    ) -> anyhow::Result<Self> {
-        let lazy_model = Model::lazy_load(buffer, label).await?;
-        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-
-        Ok(Self {
-            lazy_model,
-            label: label_str,
-        })
-    }
-
-    /// Create a LazyAdoptedEntity from an existing LazyModel
-    pub fn from_lazy_model(lazy_model: LazyModel, label: Option<&str>) -> Self {
-        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-        Self {
-            lazy_model,
-            label: label_str,
-        }
-    }
-}
-
-impl LazyType for LazyAdoptedEntity {
-    type T = AdoptedEntity;
-
-    fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
-        let model = self.lazy_model.poke(graphics.clone())?;
-        Ok(block_on(AdoptedEntity::adopt(graphics, model)))
-    }
-}
-
 #[derive(Clone)]
-pub struct AdoptedEntity {
-    pub model: Arc<Model>,
-    pub previous_matrix: DMat4,
+pub struct MeshRenderer {
+    handle: LoadedModel,
     pub instance: Instance,
-    pub instance_buffer: Option<Buffer>,
-    pub dirty: bool,
-    last_frame_rendered: Option<u64>,
+    pub previous_matrix: DMat4,
     pub is_selected: bool,
 }
 
-impl AdoptedEntity {
-    pub async fn new(
+impl MeshRenderer {
+    pub async fn from_path(
         graphics: Arc<SharedGraphicsContext>,
         path: impl AsRef<Path>,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let model = Model::load(graphics.clone(), &path, label).await?;
-        Ok(Self::adopt(graphics, model).await)
+        let handle = Model::load(graphics, &path, label).await?;
+        Ok(Self::from_handle(handle))
     }
 
-    pub async fn adopt(graphics: Arc<SharedGraphicsContext>, model: Model) -> Self {
-        let label = model.label.clone();
-        let instance = Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE);
-        let initial_matrix = DMat4::IDENTITY; // Default; update in new() if transform provided
-        let instance_raw = instance.to_raw();
-        let instance_buffer =
-            graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(&label),
-                    contents: bytemuck::cast_slice(&[instance_raw]),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
-
+    pub fn from_handle(handle: LoadedModel) -> Self {
         Self {
-            model: Arc::new(model),
-            instance,
-            instance_buffer: Some(instance_buffer),
-            previous_matrix: initial_matrix,
-            dirty: true,
-            last_frame_rendered: None,
+            handle,
+            instance: Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE),
+            previous_matrix: DMat4::IDENTITY,
             is_selected: false,
         }
     }
 
-    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, transform: &Transform) {
+    pub fn model(&self) -> Arc<Model> {
+        self.handle.get()
+    }
+
+    pub fn model_id(&self) -> ModelId {
+        self.handle.id()
+    }
+
+    pub fn handle(&self) -> &LoadedModel {
+        &self.handle
+    }
+
+    pub fn handle_mut(&mut self) -> &mut LoadedModel {
+        &mut self.handle
+    }
+
+    pub fn make_model_mut(&mut self) -> &mut Model {
+        self.handle.make_mut()
+    }
+
+    pub fn update(&mut self, transform: &Transform) {
         let current_matrix = transform.matrix();
         if self.previous_matrix != current_matrix {
             self.instance = Instance::from_matrix(current_matrix);
-            let instance_raw = self.instance.to_raw();
-            if let Some(buffer) = &self.instance_buffer {
-                graphics
-                    .queue
-                    .write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
-            }
             self.previous_matrix = current_matrix;
         }
     }
 
-    pub fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
-    pub fn is_dirty(&self) -> bool {
-        self.dirty
-    }
-
-    pub fn flush_to_gpu(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        if self.dirty {
-            let instance_raw = self.instance.to_raw();
-            if let Some(buffer) = &self.instance_buffer {
-                graphics
-                    .queue
-                    .write_buffer(buffer, 0, bytemuck::cast_slice(&[instance_raw]));
-            }
-            self.dirty = false;
-        }
-    }
-
-    pub fn mark_rendered(&mut self, frame_number: u64) {
-        self.last_frame_rendered = Some(frame_number);
-    }
-
-    pub fn was_recently_rendered(&self, current_frame: u64, max_frames_ago: u64) -> bool {
-        if let Some(last_frame) = self.last_frame_rendered {
-            current_frame - last_frame <= max_frames_ago
-        } else {
-            false
-        }
-    }
-
-    pub fn get_instance_buffer(&mut self, graphics: Arc<SharedGraphicsContext>) -> Option<&Buffer> {
-        self.flush_to_gpu(graphics);
-        self.instance_buffer.as_ref()
+    pub fn set_handle(&mut self, handle: LoadedModel) {
+        self.handle = handle;
     }
 }
 
