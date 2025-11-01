@@ -55,7 +55,7 @@ impl PendingSpawnController for Editor {
                                 Some(&asset_name),
                             )
                             .await?;
-                            Ok(AdoptedEntity::adopt(graphics_clone, model).await)
+                            Ok(AdoptedEntity::adopt(graphics_clone, model.get()))
                         }
                         ResourceReferenceType::Plane => {
                             let get_float = |key: &str| -> anyhow::Result<f32> {

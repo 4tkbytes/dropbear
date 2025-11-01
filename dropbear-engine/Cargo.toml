@@ -39,6 +39,7 @@ backtrace.workspace = true
 os_info.workspace = true
 rustc_version_runtime.workspace = true
 ron.workspace = true
+dashmap.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

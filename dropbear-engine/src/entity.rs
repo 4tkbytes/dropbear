@@ -1,15 +1,14 @@
-use futures::executor::block_on;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 use wgpu::{Buffer, util::DeviceExt};
 
 use crate::{
     graphics::{Instance, SharedGraphicsContext},
-    model::{LazyModel, LazyType, Model},
+    model::Model,
 };
 
 /// A type that represents a position, rotation and scale of an entity
@@ -78,55 +77,6 @@ impl Transform {
     }
 }
 
-/// Creates a new adopted entity in a lazy method. It fetches the data first (which can be done on a separate
-/// thread). After, the [`LazyAdoptedEntity::poke()`] function can be called to convert the Lazy to a Real adopted entity.
-#[derive(Default)]
-pub struct LazyAdoptedEntity {
-    lazy_model: LazyModel,
-    #[allow(dead_code)]
-    label: String,
-}
-
-impl LazyAdoptedEntity {
-    /// Create a LazyAdoptedEntity from a file path (can be run on background thread)
-    pub async fn from_file(path: &PathBuf, label: Option<&str>) -> anyhow::Result<Self> {
-        let buffer = std::fs::read(path)?;
-        Self::from_memory(buffer, label).await
-    }
-
-    /// Create a LazyAdoptedEntity from memory buffer (can be run on background thread)
-    pub async fn from_memory(
-        buffer: impl AsRef<[u8]>,
-        label: Option<&str>,
-    ) -> anyhow::Result<Self> {
-        let lazy_model = Model::lazy_load(buffer, label).await?;
-        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-
-        Ok(Self {
-            lazy_model,
-            label: label_str,
-        })
-    }
-
-    /// Create a LazyAdoptedEntity from an existing LazyModel
-    pub fn from_lazy_model(lazy_model: LazyModel, label: Option<&str>) -> Self {
-        let label_str = label.unwrap_or("LazyAdoptedEntity").to_string();
-        Self {
-            lazy_model,
-            label: label_str,
-        }
-    }
-}
-
-impl LazyType for LazyAdoptedEntity {
-    type T = AdoptedEntity;
-
-    fn poke(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::T> {
-        let model = self.lazy_model.poke(graphics.clone())?;
-        Ok(block_on(AdoptedEntity::adopt(graphics, model)))
-    }
-}
-
 #[derive(Clone)]
 pub struct AdoptedEntity {
     pub model: Arc<Model>,
@@ -145,11 +95,11 @@ impl AdoptedEntity {
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let model = Model::load(graphics.clone(), &path, label).await?;
-        Ok(Self::adopt(graphics, model).await)
+        let model_handle = Model::load(graphics.clone(), &path, label).await?;
+        Ok(Self::adopt(graphics, model_handle.get()))
     }
 
-    pub async fn adopt(graphics: Arc<SharedGraphicsContext>, model: Model) -> Self {
+    pub fn adopt(graphics: Arc<SharedGraphicsContext>, model: Arc<Model>) -> Self {
         let label = model.label.clone();
         let instance = Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE);
         let initial_matrix = DMat4::IDENTITY; // Default; update in new() if transform provided
@@ -164,7 +114,7 @@ impl AdoptedEntity {
                 });
 
         Self {
-            model: Arc::new(model),
+            model,
             instance,
             instance_buffer: Some(instance_buffer),
             previous_matrix: initial_matrix,

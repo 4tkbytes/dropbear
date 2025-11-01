@@ -1088,7 +1088,7 @@ impl SceneConfig {
                         Some(&entity_config.label),
                     )
                     .await?;
-                    let adopted = AdoptedEntity::adopt(graphics.clone(), model).await;
+                    let adopted = AdoptedEntity::adopt(graphics.clone(), model.get());
 
                     let transform = entity_config.transform;
 
