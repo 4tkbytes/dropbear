@@ -10,7 +10,7 @@ use egui::Context;
 use std::fmt::{Display, Formatter};
 
 #[cfg(feature = "editor")]
-use egui_toast_fork::Toasts;
+use egui_toast::Toasts;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -62,7 +62,7 @@ pub fn render(context: &Context) {
 ///
 /// This is useful for when there is a fatal error like a missing file cannot be found.
 ///
-/// This macro creates a toast under the [`egui_toast_fork::ToastKind::Error`] and logs
+/// This macro creates a toast under the [`egui_toast::ToastKind::Error`] and logs
 /// with [`log::error!`]
 #[macro_export]
 macro_rules! fatal {
@@ -72,16 +72,16 @@ macro_rules! fatal {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
                 kind: ToastKind::Error,
-                options: egui_toast_fork::ToastOptions::default()
+                options: egui_toast::ToastOptions::default()
                     .duration_in_seconds(3.0)
                     .show_progress(true),
-                style: egui_toast_fork::ToastStyle::default(),
+                style: egui_toast::ToastStyle::default(),
             });
         }
     }};
@@ -91,7 +91,7 @@ macro_rules! fatal {
 ///
 /// This is useful for when loading a save is successful.
 ///
-/// This macro creates a toast under the [`egui_toast_fork::ToastKind::Success`] and logs
+/// This macro creates a toast under the [`egui_toast::ToastKind::Success`] and logs
 /// with [`log::info!`]
 #[macro_export]
 macro_rules! success {
@@ -101,16 +101,16 @@ macro_rules! success {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                     text: _msg.into(),
                     kind: ToastKind::Success,
-                    options: egui_toast_fork::ToastOptions::default()
+                    options: egui_toast::ToastOptions::default()
                         .duration_in_seconds(3.0)
                         .show_progress(true),
-                    style: egui_toast_fork::ToastStyle::default(),
+                    style: egui_toast::ToastStyle::default(),
                 });
             };
         }
@@ -121,7 +121,7 @@ macro_rules! success {
 ///
 /// This is useful for when there is a non-fatal error like unable to copy.
 ///
-/// This macro creates a toast under the [`egui_toast_fork::ToastKind::Warning`] and logs
+/// This macro creates a toast under the [`egui_toast::ToastKind::Warning`] and logs
 /// with [`log::warn!`]
 #[macro_export]
 macro_rules! warn {
@@ -131,16 +131,16 @@ macro_rules! warn {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                     text: _msg.into(),
                     kind: ToastKind::Warning,
-                    options: egui_toast_fork::ToastOptions::default()
+                    options: egui_toast::ToastOptions::default()
                         .duration_in_seconds(3.0)
                         .show_progress(true),
-                    style: egui_toast_fork::ToastStyle::default(),
+                    style: egui_toast::ToastStyle::default(),
                 });
         }
     }};
@@ -150,7 +150,7 @@ macro_rules! warn {
 ///
 /// This is useful for notifying the user of a change, where it doesn't have to be important.
 ///
-/// This macro creates a toast under the [`egui_toast_fork::ToastKind::Info`] and logs
+/// This macro creates a toast under the [`egui_toast::ToastKind::Info`] and logs
 /// with [`log::debug!`]
 #[macro_export]
 macro_rules! info {
@@ -160,16 +160,16 @@ macro_rules! info {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
                 kind: ToastKind::Info,
-                options: egui_toast_fork::ToastOptions::default()
+                options: egui_toast::ToastOptions::default()
                     .duration_in_seconds(1.0)
                     .show_progress(false),
-                style: egui_toast_fork::ToastStyle::default(),
+                style: egui_toast::ToastStyle::default(),
             });
         }
     }};
@@ -182,7 +182,7 @@ macro_rules! info {
 ///
 /// Its feature-heavy counterpart would be [`crate::success!`].
 ///
-/// It creates a toast under [`egui_toast_fork::ToastKind::Info`].
+/// It creates a toast under [`egui_toast::ToastKind::Info`].
 #[macro_export]
 macro_rules! info_without_console {
     ($($arg:tt)*) => {
@@ -190,16 +190,16 @@ macro_rules! info_without_console {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
                 kind: ToastKind::Info,
-                options: egui_toast_fork::ToastOptions::default()
+                options: egui_toast::ToastOptions::default()
                     .duration_in_seconds(1.0)
                     .show_progress(false),
-                style: egui_toast_fork::ToastStyle::default(),
+                style: egui_toast::ToastStyle::default(),
             });
         }
     };
@@ -212,7 +212,7 @@ macro_rules! info_without_console {
 ///
 /// Its feature-heavy counterpart would be [`crate::success!`].
 ///
-/// It creates a toast under [`egui_toast_fork::ToastKind::Success`].
+/// It creates a toast under [`egui_toast::ToastKind::Success`].
 #[macro_export]
 macro_rules! success_without_console {
     ($($arg:tt)*) => {
@@ -220,16 +220,16 @@ macro_rules! success_without_console {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
                 kind: ToastKind::Success,
-                options: egui_toast_fork::ToastOptions::default()
+                options: egui_toast::ToastOptions::default()
                     .duration_in_seconds(3.0)
                     .show_progress(true),
-                style: egui_toast_fork::ToastStyle::default(),
+                style: egui_toast::ToastStyle::default(),
             });
         }
     };
@@ -242,7 +242,7 @@ macro_rules! success_without_console {
 ///
 /// Its feature-heavy counterpart would be [`crate::warn!`].
 ///
-/// It creates a toast under [`egui_toast_fork::ToastKind::Warning`].
+/// It creates a toast under [`egui_toast::ToastKind::Warning`].
 #[macro_export]
 macro_rules! warn_without_console {
     ($($arg:tt)*) => {
@@ -250,16 +250,16 @@ macro_rules! warn_without_console {
 
         #[cfg(feature = "editor")]
         {
-            use egui_toast_fork::{Toast, ToastKind};
+            use egui_toast::{Toast, ToastKind};
             use $crate::logging::GLOBAL_TOASTS;
             let mut toasts = GLOBAL_TOASTS.lock();
             toasts.add(Toast {
                 text: _msg.into(),
                 kind: ToastKind::Warning,
-                options: egui_toast_fork::ToastOptions::default()
+                options: egui_toast::ToastOptions::default()
                     .duration_in_seconds(3.0)
                     .show_progress(true),
-                style: egui_toast_fork::ToastStyle::default(),
+                style: egui_toast::ToastStyle::default(),
             });
         }
     };

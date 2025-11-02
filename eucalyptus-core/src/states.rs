@@ -9,7 +9,7 @@ use dropbear_engine::model::Model;
 use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::Ui;
-use egui_dock_fork::DockState;
+use egui_dock::DockState;
 use glam::{DQuat, DVec3};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;

@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::scene::SceneCommand;
 use egui::Context;
-use egui_toast_fork::{Toast, ToastOptions, Toasts};
+use egui_toast::{Toast, ToastOptions, Toasts};
 use eucalyptus_core::states::{PROJECT, ProjectConfig};
 use eucalyptus_core::utils::ProjectProgress;
 use git2::Repository;
@@ -199,7 +199,7 @@ pub fn open_project(
             Err(e) => {
                 if e.to_string().contains("missing field") {
                     toast.add(Toast {
-                        kind: egui_toast_fork::ToastKind::Error,
+                        kind: egui_toast::ToastKind::Error,
                         text: "Project version is not up to date.".into(),
                         options: ToastOptions::default()
                             .duration_in_seconds(5.0)

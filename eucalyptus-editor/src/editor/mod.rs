@@ -22,7 +22,7 @@ use dropbear_engine::{
     scene::SceneCommand,
 };
 use egui::{self, Context};
-use egui_dock_fork::{DockArea, DockState, NodeIndex, Style};
+use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},

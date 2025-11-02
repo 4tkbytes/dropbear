@@ -6,7 +6,7 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use egui::{self, FontId, Frame, RichText};
-use egui_toast_fork::{ToastOptions, Toasts};
+use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::states::{PROJECT, ProjectConfig};
 use git2::Repository;
 use log::{self, debug};
@@ -366,8 +366,8 @@ impl Scene for MainMenu {
                             &e.to_string()
                         };
 
-                        self.toast.add(egui_toast_fork::Toast {
-                            kind: egui_toast_fork::ToastKind::Error,
+                        self.toast.add(egui_toast::Toast {
+                            kind: egui_toast::ToastKind::Error,
                             text: error_msg.to_string().into(),
                             options: ToastOptions::default()
                                 .duration_in_seconds(8.0)

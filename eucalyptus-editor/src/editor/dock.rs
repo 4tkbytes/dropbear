@@ -14,7 +14,7 @@ use dropbear_engine::{
     lighting::{Light, LightComponent},
 };
 use egui::{self, CollapsingHeader, Margin, RichText};
-use egui_dock_fork::TabViewer;
+use egui_dock::TabViewer;
 use egui_extras;
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
