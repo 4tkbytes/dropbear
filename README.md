@@ -25,7 +25,7 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Build
 
-To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time.
+To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time or scroll through Instagram Reels (you could get a nice doomscroll in).
 
 With Unix systems (macOS not tested), you will have to download a couple of dependencies if building locally:
 

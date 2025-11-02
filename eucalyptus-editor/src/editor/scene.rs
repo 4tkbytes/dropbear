@@ -269,6 +269,8 @@ impl Scene for Editor {
                 .update(graphics.shared.clone(), &self.world);
         }
 
+        self.nerd_stats.update(dt);
+
         self.input_state.window = self.window.clone();
         self.previously_selected_entity = self.selected_entity;
     }
@@ -288,6 +290,7 @@ impl Scene for Editor {
         {
             self.show_ui(&graphics.shared.get_egui_context());
         }
+        self.nerd_stats.show(&graphics.shared.get_egui_context());
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());

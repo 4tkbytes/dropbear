@@ -62,6 +62,8 @@ sha2 = "0.10"
 wesl = "0.2"
 dashmap = "6.1"
 open = "5.3"
+egui_plot = "0.34"
+memory-stats = "1.2"
 
 [workspace.dependencies.image]
 version = "0.25"

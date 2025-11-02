@@ -1,3 +1,4 @@
+pub mod stats;
 pub mod build;
 pub mod camera;
 pub mod debug;

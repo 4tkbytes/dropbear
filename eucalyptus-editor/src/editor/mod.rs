@@ -10,6 +10,7 @@ use crate::camera::UndoableCameraAction;
 use crate::debug;
 use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
+use crate::stats::NerdStats;
 use crossbeam_channel::Receiver;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
@@ -135,6 +136,7 @@ pub struct Editor {
 
     // about
     show_about: bool,
+    nerd_stats: NerdStats,
 }
 
 impl Editor {
@@ -225,6 +227,7 @@ impl Editor {
             pending_scene_load: None,
             pending_scene_creation: None,
             show_about: false,
+            nerd_stats: NerdStats::default(),
         })
     }
 
@@ -895,6 +898,10 @@ impl Editor {
                                 fatal!("Unable to show logs: {}", e);
                             },
                         };
+                    }
+
+                    if ui.button("Nerdy Stuff").clicked() {
+                        self.show_nerdy_stuff = true
                     }
 
                     if ui.button("About").clicked() {
