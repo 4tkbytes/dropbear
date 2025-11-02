@@ -16,6 +16,8 @@ pub mod scene;
 pub mod shader;
 pub mod utils;
 
+pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
+
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
 use chrono::Local;
@@ -39,10 +41,8 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use wgpu::{
-    BindGroupLayout, Device, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError,
-    TextureFormat,
-};
+use std::sync::{OnceLock};
+use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -105,6 +105,7 @@ impl State {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
+                experimental_features: unsafe { ExperimentalFeatures::enabled() },
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
@@ -151,6 +152,8 @@ Hardware:
             info.driver_info,
         );
         let surface_caps = surface.get_capabilities(&adapter);
+
+        WGPU_BACKEND.set(format!("{}", info.backend)).unwrap();
 
         let surface_format = surface_caps
             .formats

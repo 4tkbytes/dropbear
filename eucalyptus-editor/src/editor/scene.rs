@@ -269,7 +269,7 @@ impl Scene for Editor {
                 .update(graphics.shared.clone(), &self.world);
         }
 
-        self.nerd_stats.update(dt);
+        self.nerd_stats.update(dt, self.world.len());
 
         self.input_state.window = self.window.clone();
         self.previously_selected_entity = self.selected_entity;

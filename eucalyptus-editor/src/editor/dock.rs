@@ -651,7 +651,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                             let image_response = card_ui.add_sized(
                                                 [image_size, image_size],
-                                                egui::ImageButton::new(image.clone()).frame(false),
+                                                egui::Button::image(image.clone()).frame(false),
                                             );
 
                                             let is_hovered = card_response.hovered() || image_response.hovered() || state.dragged;

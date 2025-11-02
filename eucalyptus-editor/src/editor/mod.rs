@@ -901,7 +901,7 @@ impl Editor {
                     }
 
                     if ui.button("Nerdy Stuff").clicked() {
-                        self.show_nerdy_stuff = true
+                        self.nerd_stats.show_window = true
                     }
 
                     if ui.button("About").clicked() {
@@ -985,7 +985,7 @@ impl Editor {
 
                     ui.label(
                         egui::RichText::new(format!(
-                            "Built on commit {} with rustc {}",
+                            "Built on commit {} with {}",
                             env!("GIT_HASH"),
                             rustc_version_runtime::version_meta().short_version_string
                         ))

@@ -1,6 +1,6 @@
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-use egui_wgpu::{Renderer, ScreenDescriptor, wgpu};
+use egui_wgpu::{Renderer, ScreenDescriptor, wgpu, RendererOptions};
 use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -37,12 +37,16 @@ impl EguiRenderer {
             None,
             Some(2 * 1024), // default dimension is 2048
         );
+        let options = RendererOptions {
+            msaa_samples,
+            depth_stencil_format: output_depth_format,
+            dithering: true,
+            predictable_texture_filtering: false,
+        };
         let egui_renderer = Renderer::new(
             device,
             output_color_format,
-            output_depth_format,
-            msaa_samples,
-            true,
+            options,
         );
 
         EguiRenderer {
@@ -99,6 +103,7 @@ impl EguiRenderer {
         let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: window_surface_view,
+                depth_slice: None,
                 resolve_target: None,
                 ops: egui_wgpu::wgpu::Operations {
                     load: egui_wgpu::wgpu::LoadOp::Load,

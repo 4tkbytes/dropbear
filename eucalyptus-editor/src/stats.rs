@@ -1,10 +1,15 @@
 use std::{collections::VecDeque, time::Instant};
 
-use egui::{Context, RichText};
+use egui::{Color32, Context, RichText};
+use egui_plot::{Legend, Line, Plot, PlotPoints};
+use dropbear_engine::WGPU_BACKEND;
+
+pub const EGUI_VERSION: &str = "0.33";
+pub const WGPU_VERSION: &str = "27";
 
 /// Statistics for checking performance of the editor. 
 pub struct NerdStats {
-    show_window: bool,
+    pub show_window: bool,
 
     fps_history: VecDeque<[f64; 2]>,
     frame_times: VecDeque<f64>,
@@ -21,6 +26,7 @@ pub struct NerdStats {
     min_fps: f32,
     max_fps: f32,
     avg_fps: f32,
+    entity_count: u32,
 }
 
 impl Default for NerdStats {
@@ -38,13 +44,14 @@ impl Default for NerdStats {
             max_fps: 0.0,
             avg_fps: 0.0,
             show_window: false,
+            entity_count: 0,
         }
     }
 }
 
 impl NerdStats {
     /// Updates all information in [`NerdStats`] with the deltatime provided by the scene
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, entity_count: u32) {
         self.total_frames += 1;
         let elapsed = self.start_time.elapsed().as_secs_f64();
         
@@ -54,33 +61,31 @@ impl NerdStats {
             self.frame_times.pop_front();
         }
         
-        if self.last_fps_update.elapsed().as_secs_f32() >= 0.1 {
-            if dt > 0.0 {
-                self.current_fps = 1.0 / dt;
-                
-                self.min_fps = self.min_fps.min(self.current_fps);
-                self.max_fps = self.max_fps.max(self.current_fps);
-                
-                if !self.frame_times.is_empty() {
-                    let avg_frame_time: f64 = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
-                    self.avg_fps = (1.0 / avg_frame_time) as f32;
-                }
-                
-                self.fps_history.push_back([elapsed, self.current_fps as f64]);
-                if self.fps_history.len() > 300 {
-                    self.fps_history.pop_front();
-                }
-                
-                self.frame_time_history.push_back([elapsed, frame_time_ms]);
-                if self.frame_time_history.len() > 300 {
-                    self.frame_time_history.pop_front();
-                }
-                
-                self.last_fps_update = Instant::now();
+        if self.last_fps_update.elapsed().as_secs_f32() >= 0.1 && dt > 0.0 {
+            self.current_fps = 1.0 / dt;
+
+            self.min_fps = self.min_fps.min(self.current_fps);
+            self.max_fps = self.max_fps.max(self.current_fps);
+
+            if !self.frame_times.is_empty() {
+                let avg_frame_time: f64 = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
+                self.avg_fps = (1.0 / avg_frame_time) as f32;
             }
+
+            self.fps_history.push_back([elapsed, self.current_fps as f64]);
+            if self.fps_history.len() > 300 {
+                self.fps_history.pop_front();
+            }
+
+            self.frame_time_history.push_back([elapsed, frame_time_ms]);
+            if self.frame_time_history.len() > 300 {
+                self.frame_time_history.pop_front();
+            }
+
+            self.last_fps_update = Instant::now();
         }
-        
-        if self.total_frames % 30 == 0 {
+
+        if self.total_frames.is_multiple_of(30) {
             let memory_mb = if let Some(usage) = memory_stats::memory_stats() {
                 (usage.physical_mem / 1024 / 1024) as f64
             } else {
@@ -92,6 +97,7 @@ impl NerdStats {
                 self.memory_history.pop_front();
             }
         }
+        self.entity_count = entity_count;
     }
 
     /// Resets statistics to their defaults
@@ -107,18 +113,19 @@ impl NerdStats {
 
     /// Shows the egui window
     pub fn show(&mut self, ctx: &Context) {
-        egui::Window::new("Nerdy Stuff 🤓")
+        let mut show_window = self.show_window.clone();
+        egui::Window::new("Nerdy Statistics")
             .resizable(true)
             .collapsible(false)
             .default_size([600.0, 500.0])
-            .open(show_nerdy_stuff)
+            .open(&mut show_window)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
                         ui.heading("Performance Monitor");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Reset Stats").clicked() {
-                                stats.reset_stats();
+                                self.reset_stats();
                             }
                         });
                     });
@@ -128,15 +135,15 @@ impl NerdStats {
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Current FPS").strong());
-                            let fps_color = if stats.current_fps >= 60.0 {
+                            let fps_color = if self.current_fps >= 60.0 {
                                 Color32::GREEN
-                            } else if stats.current_fps >= 30.0 {
+                            } else if self.current_fps >= 30.0 {
                                 Color32::YELLOW
                             } else {
                                 Color32::RED
                             };
                             ui.label(
-                                RichText::new(format!("{:.1}", stats.current_fps))
+                                RichText::new(format!("{:.1}", self.current_fps))
                                     .size(24.0)
                                     .color(fps_color)
                             );
@@ -147,7 +154,7 @@ impl NerdStats {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Frame Time").strong());
                             ui.label(
-                                RichText::new(format!("{:.2} ms", 1000.0 / stats.current_fps.max(1.0)))
+                                RichText::new(format!("{:.2} ms", 1000.0 / self.current_fps.max(1.0)))
                                     .size(24.0)
                             );
                         });
@@ -157,7 +164,17 @@ impl NerdStats {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Avg FPS").strong());
                             ui.label(
-                                RichText::new(format!("{:.1}", stats.avg_fps))
+                                RichText::new(format!("{:.1}", self.avg_fps))
+                                    .size(24.0)
+                            );
+                        });
+
+                        ui.separator();
+
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Entity Count").strong());
+                            ui.label(
+                                RichText::new(format!("{} entities", self.entity_count))
                                     .size(24.0)
                             );
                         });
@@ -166,13 +183,13 @@ impl NerdStats {
                     ui.add_space(5.0);
                     
                     ui.horizontal(|ui| {
-                        ui.label(format!("Min: {:.1} fps", stats.min_fps));
+                        ui.label(format!("Min: {:.1} fps", self.min_fps));
                         ui.separator();
-                        ui.label(format!("Max: {:.1} fps", stats.max_fps));
+                        ui.label(format!("Max: {:.1} fps", self.max_fps));
                         ui.separator();
-                        ui.label(format!("Total Frames: {}", stats.total_frames));
+                        ui.label(format!("Total Frames: {}", self.total_frames));
                         ui.separator();
-                        ui.label(format!("Uptime: {:.1}s", stats.start_time.elapsed().as_secs_f32()));
+                        ui.label(format!("Uptime: {:.1}s", self.start_time.elapsed().as_secs_f32()));
                     });
                     
                     ui.separator();
@@ -184,26 +201,27 @@ impl NerdStats {
                         .show_grid([false, true])
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
-                            if !stats.fps_history.is_empty() {
-                                let points: Vec<[f64; 2]> = stats.fps_history.iter().cloned().collect();
+                            if !self.fps_history.is_empty() {
+                                let points: Vec<[f64; 2]> = self.fps_history.iter().cloned().collect();
                                 plot_ui.line(
-                                    Line::new(PlotPoints::from(points))
+                                    Line::new("fps", PlotPoints::from(points))
                                         .color(Color32::from_rgb(100, 200, 100))
                                         .name("FPS")
                                 );
+
+                                let first = self.fps_history.front().copied();
+                                let last = self.fps_history.back().copied();
                                 
-                                if let Some(first) = stats.fps_history.front() {
-                                    if let Some(last) = stats.fps_history.back() {
-                                        plot_ui.line(
-                                            Line::new(PlotPoints::from(vec![
-                                                [first[0], 60.0],
-                                                [last[0], 60.0]
-                                            ]))
-                                            .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
-                                            .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                            .name("60 FPS Target")
-                                        );
-                                    }
+                                if let Some(first) = first && let Some(last) = last {
+                                    plot_ui.line(
+                                        Line::new("60 fps target", PlotPoints::from(vec![
+                                            [*first.get(0).unwrap(), 60.0],
+                                            [*last.get(0).unwrap(), 60.0]
+                                        ]))
+                                        .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
+                                        .style(egui_plot::LineStyle::Dashed { length: 5.0 })
+                                        .name("60 FPS Target")
+                                    );
                                 }
                             }
                         });
@@ -217,26 +235,28 @@ impl NerdStats {
                         .show_grid([false, true])
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
-                            if !stats.frame_time_history.is_empty() {
-                                let points: Vec<[f64; 2]> = stats.frame_time_history.iter().cloned().collect();
+                            if !self.frame_time_history.is_empty() {
+                                let points: Vec<[f64; 2]> = self.frame_time_history.iter().cloned().collect();
                                 plot_ui.line(
-                                    Line::new(PlotPoints::from(points))
+                                    Line::new("frametime", PlotPoints::from(points))
                                         .color(Color32::from_rgb(100, 150, 255))
                                         .name("Frame Time (ms)")
                                 );
+
+                                let first = self.frame_time_history.front().copied();
+                                let last = self.frame_time_history.back().copied();
                                 
-                                if let Some(first) = stats.frame_time_history.front() {
-                                    if let Some(last) = stats.frame_time_history.back() {
-                                        plot_ui.line(
-                                            Line::new(PlotPoints::from(vec![
-                                                [first[0], 16.67],
-                                                [last[0], 16.67]
-                                            ]))
-                                            .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
-                                            .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                            .name("16.67ms (60 FPS)")
-                                        );
-                                    }
+                                if let Some(first) = first && let Some(last) = last
+                                {
+                                    plot_ui.line(
+                                        Line::new("frametime_base", PlotPoints::from(vec![
+                                            [*first.get(0).unwrap(), 16.67],
+                                            [*last.get(0).unwrap(), 16.67]
+                                        ]))
+                                        .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
+                                        .style(egui_plot::LineStyle::Dashed { length: 5.0 })
+                                        .name("16.67ms (60 FPS)")
+                                    );
                                 }
                             }
                         });
@@ -250,10 +270,10 @@ impl NerdStats {
                         .show_grid([false, true])
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
-                            if !stats.memory_history.is_empty() {
-                                let points: Vec<[f64; 2]> = stats.memory_history.iter().cloned().collect();
+                            if !self.memory_history.is_empty() {
+                                let points: Vec<[f64; 2]> = self.memory_history.iter().cloned().collect();
                                 plot_ui.line(
-                                    Line::new(PlotPoints::from(points))
+                                    Line::new("memory", PlotPoints::from(points))
                                         .color(Color32::from_rgb(255, 150, 100))
                                         .name("Memory (MB)")
                                 );
@@ -264,11 +284,11 @@ impl NerdStats {
                     ui.collapsing("System Information", |ui| {
                         ui.horizontal(|ui| {
                             ui.label("egui version:");
-                            ui.label(egui::VERSION);
+                            ui.label(EGUI_VERSION);
                         });
                         ui.horizontal(|ui| {
                             ui.label("Backend:");
-                            ui.label("wgpu");
+                            ui.label(WGPU_BACKEND.get().unwrap());
                         });
                         ui.horizontal(|ui| {
                             ui.label("OS:");
@@ -281,5 +301,9 @@ impl NerdStats {
                     });
                 });
             });
+
+        if show_window != self.show_window {
+            self.show_window = show_window;
+        }
     }
 }
