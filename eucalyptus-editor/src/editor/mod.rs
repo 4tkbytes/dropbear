@@ -251,13 +251,25 @@ impl Editor {
     pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
         let mut scenes = SCENES.write();
 
-        let scene_index = if scenes.is_empty() {
+        if scenes.is_empty() {
             return Err(anyhow::anyhow!("No scenes loaded to save"));
-        } else {
-            0
-        };
+        }
 
-        let scene = &mut scenes[scene_index];
+        let target_scene_name = self
+            .current_scene_name
+            .clone()
+            .or_else(|| scenes.first().map(|scene| scene.scene_name.clone()))
+            .ok_or_else(|| anyhow::anyhow!("Unable to determine active scene"))?;
+
+        let scene = scenes
+            .iter_mut()
+            .find(|scene| scene.scene_name == target_scene_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Active scene '{}' is not loaded",
+                    target_scene_name
+                )
+            })?;
         scene.entities.clear();
         scene.lights.clear();
         scene.cameras.clear();
@@ -338,8 +350,47 @@ impl Editor {
         Ok(())
     }
 
+    fn persist_active_scene_to_disk(&self) -> anyhow::Result<()> {
+        let target_scene_name = self
+            .current_scene_name
+            .clone()
+            .or_else(|| {
+                let scenes = SCENES.read();
+                scenes.first().map(|scene| scene.scene_name.clone())
+            });
+
+        let Some(scene_name) = target_scene_name else {
+            return Ok(());
+        };
+
+        let scene_clone = {
+            let scenes = SCENES.read();
+            scenes
+                .iter()
+                .find(|scene| scene.scene_name == scene_name)
+                .cloned()
+        };
+
+        let Some(scene_clone) = scene_clone else {
+            log::warn!(
+                "Attempted to persist scene '{}' but it is not loaded",
+                scene_name
+            );
+            return Ok(());
+        };
+
+        let project_path = {
+            let project = PROJECT.read();
+            project.project_path.clone()
+        };
+
+        scene_clone.write_to(&project_path)?;
+        Ok(())
+    }
+
     pub fn save_project_config(&mut self) -> anyhow::Result<()> {
         self.save_current_scene()?;
+        self.persist_active_scene_to_disk()?;
 
         {
             let mut config = PROJECT.write();
@@ -348,14 +399,6 @@ impl Editor {
         }
 
         {
-            let (scene_clone, project_path) = {
-                let scenes = SCENES.read();
-                let project = PROJECT.read();
-                (scenes[0].clone(), project.project_path.clone())
-            };
-
-            scene_clone.write_to(&project_path)?;
-
             let mut config = PROJECT.write();
             config.write_to_all()?;
         }
@@ -466,9 +509,21 @@ impl Editor {
             }
         }
 
+        let last_scene = {
+            let config = PROJECT.read();
+            config.last_opened_scene.clone()
+        };
+
         let first_scene_opt = {
             let scenes = SCENES.read();
-            scenes.first().cloned()
+            if let Some(scene_name) = last_scene {
+                scenes
+                    .iter()
+                    .find(|scene| scene.scene_name == scene_name)
+                    .cloned()
+            } else {
+                scenes.first().cloned()
+            }
         };
 
         {
@@ -533,6 +588,19 @@ impl Editor {
             return Err(anyhow::anyhow!("Scene name cannot be empty"));
         }
 
+        let should_persist_current = self.current_scene_name.is_some()
+            && self.is_world_loaded.is_fully_loaded()
+            && self.world.len() > 0
+            && {
+                let scenes = SCENES.read();
+                !scenes.is_empty()
+            };
+
+        if should_persist_current {
+            self.save_current_scene()?;
+            self.persist_active_scene_to_disk()?;
+        }
+
         if let Some(current) = self.current_scene_name.as_deref() {
             states::unload_scene(current);
         }
@@ -543,6 +611,12 @@ impl Editor {
             let mut scenes = SCENES.write();
             scenes.retain(|existing| existing.scene_name != scene.scene_name);
             scenes.insert(0, scene.clone());
+        }
+
+        {
+            let mut project = PROJECT.write();
+            project.last_opened_scene = Some(scene.scene_name.clone());
+            project.write_to_all()?;
         }
 
         log::info!("Scene '{}' staged for loading", scene.scene_name);

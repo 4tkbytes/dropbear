@@ -22,8 +22,17 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
         self.current_scene_name = {
-            let scenes = SCENES.read();
-            scenes.first().map(|scene| scene.scene_name.clone())
+            let last_opened = {
+                let project = PROJECT.read();
+                project.last_opened_scene.clone()
+            };
+
+            if let Some(scene_name) = last_opened {
+                Some(scene_name)
+            } else {
+                let scenes = SCENES.read();
+                scenes.first().map(|scene| scene.scene_name.clone())
+            }
         };
 
         let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();

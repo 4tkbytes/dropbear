@@ -104,6 +104,8 @@ pub struct ProjectConfig {
     pub dock_layout: Option<DockState<EditorTab>>,
     #[serde(default)]
     pub editor_settings: EditorSettings,
+    #[serde(default)]
+    pub last_opened_scene: Option<String>,
 }
 
 impl ProjectConfig {
@@ -120,6 +122,7 @@ impl ProjectConfig {
             date_last_accessed,
             editor_settings: Default::default(),
             dock_layout: None,
+            last_opened_scene: None,
         };
         let _ = result.load_config_to_memory();
         result
@@ -260,7 +263,24 @@ impl ProjectConfig {
             let default_scene =
                 SceneConfig::new("Default".to_string(), scene_folder.join("default.eucs"));
             default_scene.write_to(&project_root)?;
+            self.last_opened_scene = Some(default_scene.scene_name.clone());
             scene_configs.push(default_scene);
+        }
+
+        if let Some(ref last_scene_name) = self.last_opened_scene {
+            if let Some(pos) = scene_configs
+                .iter()
+                .position(|scene| &scene.scene_name == last_scene_name)
+            {
+                if pos != 0 {
+                    let scene = scene_configs.remove(pos);
+                    scene_configs.insert(0, scene);
+                }
+            } else if let Some(first) = scene_configs.first() {
+                self.last_opened_scene = Some(first.scene_name.clone());
+            }
+        } else if let Some(first) = scene_configs.first() {
+            self.last_opened_scene = Some(first.scene_name.clone());
         }
 
         Ok(())

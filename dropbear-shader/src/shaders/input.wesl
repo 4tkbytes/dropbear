@@ -1,4 +1,4 @@
-import package::config;
+const MAX_LIGHTS: u32 = 8;
 
 struct CameraUniform {
     view_pos: vec4<f32>,
