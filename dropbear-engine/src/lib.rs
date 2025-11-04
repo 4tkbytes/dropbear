@@ -36,13 +36,16 @@ use spin_sleep::SpinSleeper;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
+use std::sync::OnceLock;
 use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use std::sync::{OnceLock};
-use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use wgpu::{
+    BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration,
+    SurfaceError, TextureFormat,
+};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,

@@ -339,17 +339,17 @@ pub fn build(
     project_config.load_config_to_memory()?;
     log::info!(" > Loading config to memory");
 
-    let source_config = {
-        let source_guard = SOURCE.read();
-        source_guard.clone()
-    };
-    log::info!(" > Copied source config");
-
     let scene_data = {
         let scenes_guard = SCENES.read();
         scenes_guard.clone()
     };
     log::info!(" > Copied scene data");
+
+    let source_config = {
+        let source_guard = SOURCE.read();
+        source_guard.clone()
+    };
+    log::info!(" > Captured source config");
 
     let build_dir = project_path.parent().unwrap().join("build").join("output");
     fs::create_dir_all(&build_dir)?;

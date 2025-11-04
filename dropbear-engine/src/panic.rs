@@ -49,5 +49,7 @@ pub fn set_hook() {
             "Additional crash info (backtrace): \n{:#?}",
             backtrace::Backtrace::new()
         );
+
+        std::process::exit(1);
     }));
 }

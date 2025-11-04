@@ -3,6 +3,7 @@ use dropbear_engine::{
     entity::{MeshRenderer, Transform},
     input::{Controller, Keyboard, Mouse},
 };
+use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -129,21 +130,23 @@ impl Keyboard for Editor {
                         && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self
-                                .world
-                                .query_one::<(&MeshRenderer, &Transform, &ModelProperties)>(
-                                    *entity,
-                                );
+                            let query = self.world.query_one::<(
+                                &Label,
+                                &MeshRenderer,
+                                &Transform,
+                                &ModelProperties,
+                            )>(*entity);
                             if let Ok(mut q) = query {
-                                if let Some((renderer, t, props)) = q.get() {
+                                if let Some((label, renderer, t, props)) = q.get() {
                                     let s_entity = SceneEntity {
                                         model_path: renderer.handle().path.clone(),
-                                        label: renderer.handle().label.clone(),
+                                        label: label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
-                                        entity_id: None,
                                         camera: None,
+                                        children: None,
+                                        entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);
 

@@ -1,6 +1,6 @@
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-use egui_wgpu::{Renderer, ScreenDescriptor, wgpu, RendererOptions};
+use egui_wgpu::{Renderer, RendererOptions, ScreenDescriptor, wgpu};
 use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -43,11 +43,7 @@ impl EguiRenderer {
             dithering: true,
             predictable_texture_filtering: false,
         };
-        let egui_renderer = Renderer::new(
-            device,
-            output_color_format,
-            options,
-        );
+        let egui_renderer = Renderer::new(device, output_color_format, options);
 
         EguiRenderer {
             state: egui_state,

@@ -6,7 +6,7 @@ use dropbear_engine::model::Model;
 use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::ResourceReferenceType;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
-use eucalyptus_core::states::{PROJECT, Value};
+use eucalyptus_core::states::{Label, PROJECT, Value};
 use eucalyptus_core::success;
 use eucalyptus_core::utils::PROTO_TEXTURE;
 use std::sync::Arc;
@@ -118,6 +118,7 @@ impl PendingSpawnController for Editor {
                                 Ok(entity) => {
                                     log::debug!("Entity loaded");
                                     self.world.spawn((
+                                        Label::from(spawn.asset_name.clone()),
                                         entity,
                                         spawn.transform,
                                         spawn.properties.clone(),

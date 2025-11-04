@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor::ViewportMode;
+use crate::editor::{ViewportMode, console_error::{ConsoleItem, ErrorLevel}};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -18,7 +18,7 @@ use egui_dock::TabViewer;
 use egui_extras;
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{File, Node, RESOURCES, ResourceType};
+use eucalyptus_core::states::{File, Label, Node, RESOURCES, ResourceType};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
@@ -691,7 +691,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                         } else {
                                                             ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| {
                                                                 log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
-                                                                Default::default() 
+                                                                Default::default()
                                                             })
                                                         },
                                                     };
@@ -747,6 +747,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if let Some(entity) = self.selected_entity {
                     let mut local_set_initial_camera = false;
                     if let Ok(mut q) = self.world.query_one::<(
+                        &mut Label,
                         &mut MeshRenderer,
                         Option<&mut Transform>,
                         Option<&mut ModelProperties>,
@@ -757,6 +758,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     )>(*entity)
                     {
                         if let Some((
+                            label,
                             e,
                             transform,
                             _props,
@@ -773,7 +775,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 ui,
                                 self.undo_stack,
                                 self.signal,
-                                &mut String::new(),
+                                label.as_mut_string(),
                             );
                             // transform
                             if let Some(t) = transform {
@@ -783,7 +785,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut e.make_model_mut().label,
+                                    label.as_mut_string(),
                                 );
                             }
 
@@ -795,7 +797,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut e.make_model_mut().label,
+                                    label.as_mut_string(),
                                 );
                             }
 
@@ -896,7 +898,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    &mut e.make_model_mut().label,
+                                    label.as_mut_string(),
                                 );
                             }
 
@@ -1070,19 +1072,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
             }
             EditorTab::ErrorConsole => {
-                enum ErrorLevel {
-                    Warn,
-                    Error,
-                }
-
-                struct ConsoleItem {
-                    id: u64,
-                    error_level: ErrorLevel,
-                    msg: String,
-                    file_location: Option<PathBuf>,
-                    line_ref: Option<String>,
-                }
-
                 fn analyse_error(log: &Vec<String>) -> Vec<ConsoleItem> {
                     fn parse_compiler_location(
                         line: &str,

@@ -10,7 +10,7 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use eucalyptus_core::logging;
-use eucalyptus_core::states::WorldLoadingStatus;
+use eucalyptus_core::states::{Label, WorldLoadingStatus};
 use eucalyptus_core::window::poll;
 use log;
 use parking_lot::Mutex;
@@ -142,7 +142,9 @@ impl Scene for Editor {
                     .future_queue
                     .exchange_owned_as::<Light>(handle)
                 {
+                    let label_component = Label::from(l.label.clone());
                     self.world.spawn((
+                        label_component,
                         l,
                         LightComponent::default(),
                         Transform::default(),

@@ -1,4 +1,3 @@
-pub mod stats;
 pub mod build;
 pub mod camera;
 pub mod debug;
@@ -8,4 +7,5 @@ pub mod menu;
 pub mod plugin;
 pub mod signal;
 pub mod spawn;
+pub mod stats;
 pub mod utils;

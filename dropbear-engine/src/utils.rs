@@ -15,7 +15,9 @@ use std::path::{Path, PathBuf};
 /// ));
 /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Decode, bincode::Encode,
+)]
 pub enum ResourceReferenceType {
     /// The default type; Specifies there being no resource reference type.
     /// Typically creates errors, so watch out!

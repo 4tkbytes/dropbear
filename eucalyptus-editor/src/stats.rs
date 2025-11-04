@@ -1,13 +1,13 @@
 use std::{collections::VecDeque, time::Instant};
 
+use dropbear_engine::WGPU_BACKEND;
 use egui::{Color32, Context, RichText};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
-use dropbear_engine::WGPU_BACKEND;
 
 pub const EGUI_VERSION: &str = "0.33";
 pub const WGPU_VERSION: &str = "27";
 
-/// Statistics for checking performance of the editor. 
+/// Statistics for checking performance of the editor.
 pub struct NerdStats {
     pub show_window: bool,
 
@@ -15,14 +15,14 @@ pub struct NerdStats {
     frame_times: VecDeque<f64>,
     last_fps_update: Instant,
     current_fps: f32,
-    
+
     frame_time_history: VecDeque<[f64; 2]>,
-    
+
     memory_history: VecDeque<[f64; 2]>,
-    
+
     start_time: Instant,
     total_frames: u64,
-    
+
     min_fps: f32,
     max_fps: f32,
     avg_fps: f32,
@@ -54,13 +54,13 @@ impl NerdStats {
     pub fn update(&mut self, dt: f32, entity_count: u32) {
         self.total_frames += 1;
         let elapsed = self.start_time.elapsed().as_secs_f64();
-        
+
         let frame_time_ms = (dt * 1000.0) as f64;
         self.frame_times.push_back(dt as f64);
         if self.frame_times.len() > 60 {
             self.frame_times.pop_front();
         }
-        
+
         if self.last_fps_update.elapsed().as_secs_f32() >= 0.1 && dt > 0.0 {
             self.current_fps = 1.0 / dt;
 
@@ -68,11 +68,13 @@ impl NerdStats {
             self.max_fps = self.max_fps.max(self.current_fps);
 
             if !self.frame_times.is_empty() {
-                let avg_frame_time: f64 = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
+                let avg_frame_time: f64 =
+                    self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
                 self.avg_fps = (1.0 / avg_frame_time) as f32;
             }
 
-            self.fps_history.push_back([elapsed, self.current_fps as f64]);
+            self.fps_history
+                .push_back([elapsed, self.current_fps as f64]);
             if self.fps_history.len() > 300 {
                 self.fps_history.pop_front();
             }
@@ -91,7 +93,7 @@ impl NerdStats {
             } else {
                 0.0
             };
-            
+
             self.memory_history.push_back([elapsed, memory_mb]);
             if self.memory_history.len() > 300 {
                 self.memory_history.pop_front();
@@ -129,9 +131,9 @@ impl NerdStats {
                             }
                         });
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Current FPS").strong());
@@ -145,28 +147,28 @@ impl NerdStats {
                             ui.label(
                                 RichText::new(format!("{:.1}", self.current_fps))
                                     .size(24.0)
-                                    .color(fps_color)
+                                    .color(fps_color),
                             );
                         });
-                        
+
                         ui.separator();
-                        
+
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Frame Time").strong());
                             ui.label(
-                                RichText::new(format!("{:.2} ms", 1000.0 / self.current_fps.max(1.0)))
-                                    .size(24.0)
+                                RichText::new(format!(
+                                    "{:.2} ms",
+                                    1000.0 / self.current_fps.max(1.0)
+                                ))
+                                .size(24.0),
                             );
                         });
-                        
+
                         ui.separator();
-                        
+
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Avg FPS").strong());
-                            ui.label(
-                                RichText::new(format!("{:.1}", self.avg_fps))
-                                    .size(24.0)
-                            );
+                            ui.label(RichText::new(format!("{:.1}", self.avg_fps)).size(24.0));
                         });
 
                         ui.separator();
@@ -174,14 +176,13 @@ impl NerdStats {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Entity Count").strong());
                             ui.label(
-                                RichText::new(format!("{} entities", self.entity_count))
-                                    .size(24.0)
+                                RichText::new(format!("{} entities", self.entity_count)).size(24.0),
                             );
                         });
                     });
-                    
+
                     ui.add_space(5.0);
-                    
+
                     ui.horizontal(|ui| {
                         ui.label(format!("Min: {:.1} fps", self.min_fps));
                         ui.separator();
@@ -189,11 +190,14 @@ impl NerdStats {
                         ui.separator();
                         ui.label(format!("Total Frames: {}", self.total_frames));
                         ui.separator();
-                        ui.label(format!("Uptime: {:.1}s", self.start_time.elapsed().as_secs_f32()));
+                        ui.label(format!(
+                            "Uptime: {:.1}s",
+                            self.start_time.elapsed().as_secs_f32()
+                        ));
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.label(RichText::new("FPS Over Time").strong());
                     Plot::new("fps_plot")
                         .height(150.0)
@@ -202,32 +206,38 @@ impl NerdStats {
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
                             if !self.fps_history.is_empty() {
-                                let points: Vec<[f64; 2]> = self.fps_history.iter().cloned().collect();
+                                let points: Vec<[f64; 2]> =
+                                    self.fps_history.iter().cloned().collect();
                                 plot_ui.line(
                                     Line::new("fps", PlotPoints::from(points))
                                         .color(Color32::from_rgb(100, 200, 100))
-                                        .name("FPS")
+                                        .name("FPS"),
                                 );
 
                                 let first = self.fps_history.front().copied();
                                 let last = self.fps_history.back().copied();
-                                
-                                if let Some(first) = first && let Some(last) = last {
+
+                                if let Some(first) = first
+                                    && let Some(last) = last
+                                {
                                     plot_ui.line(
-                                        Line::new("60 fps target", PlotPoints::from(vec![
-                                            [*first.get(0).unwrap(), 60.0],
-                                            [*last.get(0).unwrap(), 60.0]
-                                        ]))
+                                        Line::new(
+                                            "60 fps target",
+                                            PlotPoints::from(vec![
+                                                [*first.get(0).unwrap(), 60.0],
+                                                [*last.get(0).unwrap(), 60.0],
+                                            ]),
+                                        )
                                         .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
                                         .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                        .name("60 FPS Target")
+                                        .name("60 FPS Target"),
                                     );
                                 }
                             }
                         });
-                    
+
                     ui.add_space(5.0);
-                    
+
                     ui.label(RichText::new("Frame Time").strong());
                     Plot::new("frame_time_plot")
                         .height(150.0)
@@ -236,33 +246,38 @@ impl NerdStats {
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
                             if !self.frame_time_history.is_empty() {
-                                let points: Vec<[f64; 2]> = self.frame_time_history.iter().cloned().collect();
+                                let points: Vec<[f64; 2]> =
+                                    self.frame_time_history.iter().cloned().collect();
                                 plot_ui.line(
                                     Line::new("frametime", PlotPoints::from(points))
                                         .color(Color32::from_rgb(100, 150, 255))
-                                        .name("Frame Time (ms)")
+                                        .name("Frame Time (ms)"),
                                 );
 
                                 let first = self.frame_time_history.front().copied();
                                 let last = self.frame_time_history.back().copied();
-                                
-                                if let Some(first) = first && let Some(last) = last
+
+                                if let Some(first) = first
+                                    && let Some(last) = last
                                 {
                                     plot_ui.line(
-                                        Line::new("frametime_base", PlotPoints::from(vec![
-                                            [*first.get(0).unwrap(), 16.67],
-                                            [*last.get(0).unwrap(), 16.67]
-                                        ]))
+                                        Line::new(
+                                            "frametime_base",
+                                            PlotPoints::from(vec![
+                                                [*first.get(0).unwrap(), 16.67],
+                                                [*last.get(0).unwrap(), 16.67],
+                                            ]),
+                                        )
                                         .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
                                         .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                        .name("16.67ms (60 FPS)")
+                                        .name("16.67ms (60 FPS)"),
                                     );
                                 }
                             }
                         });
-                    
+
                     ui.add_space(5.0);
-                    
+
                     ui.label(RichText::new("Memory Usage").strong());
                     Plot::new("memory_plot")
                         .height(120.0)
@@ -271,15 +286,16 @@ impl NerdStats {
                         .legend(Legend::default())
                         .show(ui, |plot_ui| {
                             if !self.memory_history.is_empty() {
-                                let points: Vec<[f64; 2]> = self.memory_history.iter().cloned().collect();
+                                let points: Vec<[f64; 2]> =
+                                    self.memory_history.iter().cloned().collect();
                                 plot_ui.line(
                                     Line::new("memory", PlotPoints::from(points))
                                         .color(Color32::from_rgb(255, 150, 100))
-                                        .name("Memory (MB)")
+                                        .name("Memory (MB)"),
                                 );
                             }
                         });
-                    
+
                     ui.separator();
                     ui.collapsing("System Information", |ui| {
                         ui.horizontal(|ui| {

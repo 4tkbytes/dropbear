@@ -3,7 +3,7 @@ use crate::ptr::{GraphicsPtr, InputStatePtr};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
-use crate::states::{ModelProperties, Value};
+use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use dropbear_engine::camera::Camera;
@@ -53,8 +53,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
 
     let world = unsafe { &mut *world };
 
-    for (id, renderer) in world.query::<&MeshRenderer>().iter() {
-        if renderer.handle().label == label_str {
+    for (id, entity_label) in world.query::<&Label>().iter() {
+        if entity_label.as_str() == label_str {
             return id.id() as jlong;
         }
     }

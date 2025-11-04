@@ -398,7 +398,7 @@ impl JavaContext {
                 return Err(anyhow::anyhow!(result.unwrap()));
             }
 
-            log::debug!(
+            log::trace!(
                 "Updated systems for tag: {} across {} entities with dt: {}",
                 tag,
                 entity_ids.len(),

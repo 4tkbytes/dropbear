@@ -15,6 +15,7 @@ dropbear-shader = { path = "../dropbear-shader" }
 anyhow.workspace = true
 app_dirs2.workspace = true
 bytemuck.workspace = true
+bincode.workspace = true
 chrono.workspace = true
 colored.workspace = true
 egui-wgpu.workspace = true

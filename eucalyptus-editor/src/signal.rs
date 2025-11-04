@@ -10,7 +10,7 @@ use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{EditorTab, ModelProperties, PROJECT, ScriptComponent, Value};
+use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ impl SignalController for Editor {
             Signal::Paste(scene_entity) => {
                 let spawn = PendingSpawn {
                     asset_path: scene_entity.model_path.clone(),
-                    asset_name: scene_entity.label.clone(),
+                    asset_name: scene_entity.label.to_string(),
                     transform: scene_entity.transform,
                     properties: scene_entity.properties.clone(),
                     handle: None,
@@ -288,19 +288,19 @@ impl SignalController for Editor {
                                 ui.vertical_centered(|ui| {
                                     ui.heading("Gradle Build Progress");
                                     ui.add_space(10.0);
-                                    
+
                                     let progress_bar = egui::ProgressBar::new(self.build_progress)
                                         .show_percentage()
                                         .animate(true);
                                     ui.add(progress_bar);
-                                    
+
                                     ui.add_space(15.0);
                                     ui.separator();
                                     ui.add_space(5.0);
-                                    
+
                                     ui.heading("Build Log");
                                     ui.add_space(5.0);
-                                    
+
                                     egui::ScrollArea::vertical()
                                         .stick_to_bottom(true)
                                         .max_height(200.0)
@@ -310,23 +310,26 @@ impl SignalController for Editor {
                                                 ui.label(
                                                     egui::RichText::new(log_line)
                                                         .family(egui::FontFamily::Monospace)
-                                                        .size(12.0)
+                                                        .size(12.0),
                                                 );
                                             }
-                                            
+
                                             if !self.build_logs.is_empty() {
                                                 ui.add_space(10.0);
                                                 ui.label(
-                                                    egui::RichText::new(
-                                                        format!("Total log entries: {}", self.build_logs.len())
-                                                    )
+                                                    egui::RichText::new(format!(
+                                                        "Total log entries: {}",
+                                                        self.build_logs.len()
+                                                    ))
                                                     .italics()
-                                                    .color(egui::Color32::GRAY)
+                                                    .color(egui::Color32::GRAY),
                                                 );
-                                                ui.label("Tip: Press Ctrl+Alt+P to skip build and start running");
+                                                ui.label(
+                                                    "Tip: Press Ctrl+Alt+P to skip build and start running",
+                                                );
                                             }
                                         });
-                                    
+
                                     ui.add_space(10.0);
                                 });
                             });
@@ -441,10 +444,11 @@ impl SignalController for Editor {
             Signal::AddComponent(entity, e_type) => {
                 match e_type {
                     EntityType::Entity => {
-                        if let Ok(mut q) = self.world.query_one::<&MeshRenderer>(*entity) {
-                            if let Some(renderer) = q.get() {
-                                let label = renderer.handle().label.clone();
-                                egui::Window::new(format!("Add component for {}", label))
+                        if let Ok(mut q) = self.world.query_one::<(&MeshRenderer, &Label)>(*entity)
+                        {
+                            if let Some((_renderer, label)) = q.get() {
+                                let label_text = label.to_string();
+                                egui::Window::new(format!("Add component for {}", label_text))
                                     .title_bar(true)
                                     .open(&mut show)
                                     .scroll([false, true])
@@ -460,7 +464,7 @@ impl SignalController for Editor {
                                         {
                                             log::debug!(
                                                 "Adding scripting component to entity [{}]",
-                                                label
+                                                label_text
                                             );
                                             local_insert_script = true;
                                             local_signal = Some(Signal::None);
@@ -474,10 +478,10 @@ impl SignalController for Editor {
                                         {
                                             log::debug!(
                                                 "Adding camera component to entity [{}]",
-                                                label
+                                                label_text
                                             );
 
-                                            local_insert_camera = (true, label.clone());
+                                            local_insert_camera = (true, label_text.clone());
                                             local_signal = Some(Signal::None);
                                         }
                                     });
@@ -689,12 +693,10 @@ impl SignalController for Editor {
                 log::debug!("====================");
                 let mut counter = 0;
                 for e in self.world.iter() {
-                    if let Some(renderer) = e.get::<&MeshRenderer>() {
-                        log::info!(
-                            "Model: {:?} with u32 id: {:?}",
-                            renderer.handle().label,
-                            e.entity().id()
-                        );
+                    if let (Some(renderer), Some(label)) =
+                        (e.get::<&MeshRenderer>(), e.get::<&Label>())
+                    {
+                        log::info!("Model: {:?} with u32 id: {:?}", label, e.entity().id());
                         log::info!("  |-> Using model: {:?}", renderer.model_id());
                     }
 

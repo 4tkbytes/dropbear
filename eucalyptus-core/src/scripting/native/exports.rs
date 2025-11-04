@@ -2,7 +2,7 @@ use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{GraphicsPtr, InputStatePtr};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::native::types::{NativeCamera, NativeTransform, Vector3D};
-use crate::states::{ModelProperties, Value};
+use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use dropbear_engine::camera::Camera;
@@ -32,8 +32,8 @@ pub unsafe extern "C" fn dropbear_get_entity(
         }
     };
 
-    for (id, renderer) in world.query::<&MeshRenderer>().iter() {
-        if renderer.handle().label == label_str {
+    for (id, entity_label) in world.query::<&Label>().iter() {
+        if entity_label.as_str() == label_str {
             unsafe { *out_entity = id.id() as i64 };
             return 0;
         }

@@ -2,6 +2,7 @@ pub mod component;
 pub mod dock;
 pub mod input;
 pub mod scene;
+pub mod console_error;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -25,6 +26,8 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
+use eucalyptus_core::hierarchy::Parent;
+use eucalyptus_core::states::Label;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -264,27 +267,25 @@ impl Editor {
         let scene = scenes
             .iter_mut()
             .find(|scene| scene.scene_name == target_scene_name)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Active scene '{}' is not loaded",
-                    target_scene_name
-                )
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("Active scene '{}' is not loaded", target_scene_name))?;
         scene.entities.clear();
         scene.lights.clear();
         scene.cameras.clear();
 
-        for (id, (renderer, transform, properties, script)) in self
+        for (id, (label, renderer, transform, properties, script, parent)) in self
             .world
             .query::<(
+                &Label,
                 &MeshRenderer,
                 Option<&Transform>,
                 &ModelProperties,
                 Option<&ScriptComponent>,
+                Option<&Parent>,
             )>()
             .iter()
         {
             let transform = *transform.unwrap_or(&Transform::default());
+            let entity_label = label.clone();
 
             let camera_config = if let Ok(mut camera_query) =
                 self.world.query_one::<(&Camera, &CameraComponent)>(id)
@@ -298,18 +299,44 @@ impl Editor {
                 None
             };
 
+            let children = if let Some(parent_component) = parent {
+                let mut collected = Vec::new();
+                for &child_entity in parent_component.children() {
+                    if let Ok(mut child_query) = self.world.query_one::<&Label>(child_entity)
+                        && let Some(child_label) = child_query.get()
+                    {
+                        collected.push(child_label.clone());
+                    } else {
+                        log::warn!(
+                            "Unable to resolve child entity {:?} for parent '{}' when saving scene",
+                            child_entity,
+                            entity_label
+                        );
+                    }
+                }
+
+                if collected.is_empty() {
+                    None
+                } else {
+                    Some(collected)
+                }
+            } else {
+                None
+            };
+
             let scene_entity = SceneEntity {
                 model_path: renderer.handle().path.clone(),
-                label: renderer.handle().label.clone(),
+                label: entity_label.clone(),
                 transform,
                 properties: properties.clone(),
                 script: script.cloned(),
                 camera: camera_config,
+                children,
                 entity_id: Some(id),
             };
 
             scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", renderer.handle().label);
+            log::debug!("Pushed entity: {}", entity_label);
         }
 
         for (id, (light_component, transform, light)) in self
@@ -349,15 +376,11 @@ impl Editor {
 
         Ok(())
     }
-
     fn persist_active_scene_to_disk(&self) -> anyhow::Result<()> {
-        let target_scene_name = self
-            .current_scene_name
-            .clone()
-            .or_else(|| {
-                let scenes = SCENES.read();
-                scenes.first().map(|scene| scene.scene_name.clone())
-            });
+        let target_scene_name = self.current_scene_name.clone().or_else(|| {
+            let scenes = SCENES.read();
+            scenes.first().map(|scene| scene.scene_name.clone())
+        });
 
         let Some(scene_name) = target_scene_name else {
             return Ok(());
@@ -564,7 +587,7 @@ impl Editor {
                     let component = DebugCamera::new();
 
                     {
-                        let e = world.spawn((debug_camera, component));
+                        let e = world.spawn((Label::from("Debug Camera"), debug_camera, component));
                         let mut a_c = active_camera.lock();
                         *a_c = Some(e);
                     }
@@ -884,16 +907,22 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(&MeshRenderer, &Transform, &ModelProperties)>(*entity);
+                            let query = self.world.query_one::<(
+                                &Label,
+                                &MeshRenderer,
+                                &Transform,
+                                &ModelProperties,
+                            )>(*entity);
                             if let Ok(mut q) = query {
-                                if let Some((e, t, props)) = q.get() {
+                                if let Some((entity_label, e, t, props)) = q.get() {
                                     let s_entity = states::SceneEntity {
                                         model_path: e.handle().path.clone(),
-                                        label: e.handle().label.clone(),
+                                        label: entity_label.clone(),
                                         transform: *t,
                                         properties: props.clone(),
                                         script: None,
                                         camera: None,
+                                        children: None,
                                         entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);
@@ -908,7 +937,7 @@ impl Editor {
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
-                        
+
                     }
 
                     if ui.button("Paste").clicked() {
@@ -1327,6 +1356,9 @@ impl Editor {
             .any(|(_, (_, comp))| comp.starting_camera);
 
         if has_player_camera_target {
+            self.save_current_scene()?;
+            success!("Saved scene");
+
             if let Err(e) = self.create_backup() {
                 self.signal = Signal::None;
                 fatal!("Failed to create play mode backup: {}", e);
@@ -1549,41 +1581,59 @@ impl UndoableAction {
             }
             UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
                 EntityType::Entity => {
-                    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(*entity) {
-                        if let Some(renderer) = q.get() {
-                            renderer.make_model_mut().label = original_label.clone();
-                            log::debug!(
-                                "Reverted label for entity {:?} to '{}'",
-                                entity,
-                                original_label
-                            );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
-                                "Unable to query the entity for label revert"
-                            ))
+                    let mut updated = false;
+
+                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
+                        if let Some(label_component) = label_query.get() {
+                            label_component.set(original_label.clone());
+                            updated = true;
                         }
+                    }
+
+                    if let Ok(mut renderer_query) = world.query_one::<&mut MeshRenderer>(*entity) {
+                        if let Some(renderer) = renderer_query.get() {
+                            renderer.make_model_mut().label = original_label.clone();
+                            updated = true;
+                        }
+                    }
+
+                    if updated {
+                        log::debug!(
+                            "Reverted label for entity {:?} to '{}'",
+                            entity,
+                            original_label
+                        );
+                        Ok(())
                     } else {
                         Err(anyhow::anyhow!(
-                            "Could not find an entity to query for label revert"
+                            "Unable to query the entity for label revert"
                         ))
                     }
                 }
                 EntityType::Light => {
+                    let mut updated = false;
+
+                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
+                        if let Some(label_component) = label_query.get() {
+                            label_component.set(original_label.clone());
+                            updated = true;
+                        }
+                    }
+
                     if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
                         if let Some(adopted) = q.get() {
                             adopted.label = original_label.clone();
-                            log::debug!(
-                                "Reverted label for light {:?} to '{}'",
-                                entity,
-                                original_label
-                            );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
-                                "Unable to query the light for label revert"
-                            ))
+                            updated = true;
                         }
+                    }
+
+                    if updated {
+                        log::debug!(
+                            "Reverted label for light {:?} to '{}'",
+                            entity,
+                            original_label
+                        );
+                        Ok(())
                     } else {
                         Err(anyhow::anyhow!(
                             "Could not find a light to query for label revert"
@@ -1591,20 +1641,29 @@ impl UndoableAction {
                     }
                 }
                 EntityType::Camera => {
+                    let mut updated = false;
+
+                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
+                        if let Some(label_component) = label_query.get() {
+                            label_component.set(original_label.clone());
+                            updated = true;
+                        }
+                    }
+
                     if let Ok(mut q) = world.query_one::<&mut Camera>(*entity) {
                         if let Some(adopted) = q.get() {
                             adopted.label = original_label.clone();
-                            log::debug!(
-                                "Reverted label for camera {:?} to '{}'",
-                                entity,
-                                original_label
-                            );
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!(
-                                "Unable to query the camera for label revert"
-                            ))
+                            updated = true;
                         }
+                    }
+
+                    if updated {
+                        log::debug!(
+                            "Reverted label for camera {:?} to '{}'",
+                            entity,
+                            original_label
+                        );
+                        Ok(())
                     } else {
                         Err(anyhow::anyhow!(
                             "Could not find a camera to query for label revert"

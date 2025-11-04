@@ -33,14 +33,12 @@ libloading.workspace = true
 crossbeam-channel.workspace = true
 app_dirs2.workspace = true
 log-once.workspace = true
+rfd = { workspace = true, optional = true }
 
 [features]
 # editor only stuff
-editor = ["jvm"]
+editor = ["jvm", "rfd"]
 jvm = []
-
-# [target.'cfg(not(target_os = "android"))'.dependencies]
-# rfd.workspace = true
 
 [build-dependencies]
 anyhow = "1.0"

@@ -1,5 +1,6 @@
 use crate::graphics::{SharedGraphicsContext, Texture};
 use crate::utils::ResourceReference;
+use glam::Vec3;
 use image::GenericImageView;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
@@ -26,6 +27,82 @@ pub struct MaterialComponent(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshComponent(pub u64);
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ModelBounds {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl Default for ModelBounds {
+    fn default() -> Self {
+        Self {
+            min: Vec3::ZERO,
+            max: Vec3::ZERO,
+        }
+    }
+}
+
+impl ModelBounds {
+    pub fn empty() -> Self {
+        Self {
+            min: Vec3::splat(f32::INFINITY),
+            max: Vec3::splat(f32::NEG_INFINITY),
+        }
+    }
+
+    pub fn include_point(&mut self, point: Vec3) {
+        self.min = self.min.min(point);
+        self.max = self.max.max(point);
+    }
+
+    pub fn include_positions(&mut self, positions: &[[f32; 3]]) {
+        for &position in positions {
+            self.include_point(Vec3::from(position));
+        }
+    }
+
+    pub fn finalize(self) -> Self {
+        if self.is_valid() {
+            self
+        } else {
+            Self::default()
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.min.cmple(self.max).all()
+    }
+
+    pub fn size(&self) -> Vec3 {
+        if self.is_valid() {
+            self.max - self.min
+        } else {
+            Vec3::ZERO
+        }
+    }
+
+    pub fn center(&self) -> Vec3 {
+        if self.is_valid() {
+            (self.max + self.min) * 0.5
+        } else {
+            Vec3::ZERO
+        }
+    }
+
+    pub fn longest_edge(&self) -> f32 {
+        self.size().max_element()
+    }
+
+    pub fn normalization_scale(&self, target_max_extent: f32) -> f32 {
+        let longest = self.longest_edge();
+        if longest <= f32::EPSILON {
+            1.0
+        } else {
+            target_max_extent / longest
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Model {
     pub id: ModelId,
@@ -33,6 +110,7 @@ pub struct Model {
     pub path: ResourceReference,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub bounds: ModelBounds,
 }
 
 #[derive(Clone)]
@@ -86,6 +164,22 @@ pub struct Mesh {
 }
 
 impl Model {
+    pub fn bounds(&self) -> ModelBounds {
+        self.bounds
+    }
+
+    pub fn center(&self) -> Vec3 {
+        self.bounds.center()
+    }
+
+    pub fn normalization_scale(&self, target_max_extent: f64) -> f64 {
+        self.bounds.normalization_scale(target_max_extent as f32) as f64
+    }
+
+    pub fn unit_normalization_scale(&self) -> f64 {
+        self.normalization_scale(1.0)
+    }
+
     pub async fn load_from_memory(
         graphics: Arc<SharedGraphicsContext>,
         buffer: impl AsRef<[u8]>,
@@ -111,7 +205,8 @@ impl Model {
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
         let mut meshes = Vec::new();
 
-        let mut texture_data = Vec::new();
+    let mut texture_data = Vec::new();
+    let mut bounds_accumulator = ModelBounds::empty();
         for material in gltf.materials() {
             log::debug!("Processing material: {:?}", material.name());
             let material_name = material.name().unwrap_or("Unnamed Material").to_string();
@@ -214,6 +309,8 @@ impl Model {
                     .map(|iter| iter.into_f32().collect())
                     .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
 
+                bounds_accumulator.include_positions(&positions);
+
                 let vertices: Vec<ModelVertex> = positions
                     .iter()
                     .zip(normals.iter())
@@ -268,12 +365,15 @@ impl Model {
         }
 
         log::debug!("Successfully loaded model [{:?}]", label);
+        let bounds = bounds_accumulator.finalize();
+
         let model = Arc::new(Model {
             meshes,
             materials,
             label: label.unwrap_or("No named model").to_string(),
             path: res_ref,
             id: ModelId(hasher.finish()),
+            bounds,
         });
 
         MODEL_CACHE

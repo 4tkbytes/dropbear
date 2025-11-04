@@ -5,8 +5,9 @@
 
 use crate::entity::MeshRenderer;
 use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::model::{LoadedModel, MODEL_CACHE, Material, Mesh, Model, ModelId, ModelVertex};
+use crate::model::{LoadedModel, MODEL_CACHE, Material, Mesh, Model, ModelBounds, ModelId, ModelVertex};
 use crate::utils::{ResourceReference, ResourceReferenceType};
+use glam::Vec3;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use wgpu::{AddressMode, util::DeviceExt};
@@ -66,8 +67,9 @@ impl PlaneBuilder {
             self.tiles_x = self.width as u32;
             self.tiles_z = self.height as u32;
         }
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut bounds = ModelBounds::empty();
 
         for z in 0..=1 {
             for x in 0..=1 {
@@ -90,6 +92,8 @@ impl PlaneBuilder {
                     tex_coords,
                     normal,
                 });
+
+                bounds.include_point(Vec3::from(position));
             }
         }
 
@@ -142,6 +146,7 @@ impl PlaneBuilder {
             meshes: vec![mesh],
             materials: vec![material],
             id: ModelId(hash),
+            bounds: bounds.finalize(),
         });
 
         MODEL_CACHE.lock().insert(label, Arc::clone(&model));

@@ -4,7 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use crate::{
     graphics::{Instance, SharedGraphicsContext},
-    model::{LoadedModel, Model, ModelId},
+    model::{LoadedModel, Model, ModelBounds, ModelId},
 };
 
 /// A type that represents a position, rotation and scale of an entity
@@ -74,6 +74,9 @@ impl Transform {
 }
 
 #[derive(Clone)]
+/// A renderer for meshes and materials related to a model. 
+/// 
+/// It includes the instances as well as a handle 
 pub struct MeshRenderer {
     handle: LoadedModel,
     pub instance: Instance,
@@ -107,6 +110,23 @@ impl MeshRenderer {
 
     pub fn model_id(&self) -> ModelId {
         self.handle.id()
+    }
+
+    pub fn bounds(&self) -> ModelBounds {
+        self.model().bounds()
+    }
+
+    pub fn normalization_factor(&self, target_max_extent: f64) -> f64 {
+        self.model().normalization_scale(target_max_extent)
+    }
+
+    pub fn apply_normalized_scale(&self, transform: &mut Transform, target_max_extent: f64) {
+        let factor = self.normalization_factor(target_max_extent);
+        transform.scale = DVec3::splat(factor);
+    }
+
+    pub fn apply_unit_normalized_scale(&self, transform: &mut Transform) {
+        self.apply_normalized_scale(transform, 1.0);
     }
 
     pub fn handle(&self) -> &LoadedModel {

@@ -20,7 +20,7 @@ pub trait InspectableComponent {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         signal: &mut Signal,
-        label: &mut String,
+    _label: &mut String,
     );
 }
 
@@ -73,8 +73,8 @@ impl InspectableComponent for ModelProperties {
         _cfg: &mut StaticallyKept,
         ui: &mut Ui,
         _undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
-        _label: &mut String,
+    _signal: &mut Signal,
+    _label: &mut String,
     ) {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
@@ -647,21 +647,22 @@ impl InspectableComponent for MeshRenderer {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         _signal: &mut Signal,
-        _label: &mut String,
+        label: &mut String,
     ) {
         // label
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label("Name: ");
 
-                let resp = ui.text_edit_singleline(&mut self.make_model_mut().label);
+                let resp = ui.text_edit_singleline(label);
 
                 if resp.changed() {
                     if cfg.old_label_entity.is_none() {
                         cfg.old_label_entity = Some(*entity);
-                        cfg.label_original = Some(self.handle().label.clone());
+                        cfg.label_original = Some(label.clone());
                     }
                     cfg.label_last_edit = Some(Instant::now());
+                    self.make_model_mut().label = label.clone();
                 }
 
                 if resp.lost_focus() {
