@@ -7,7 +7,7 @@ use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::states::{Label, PROJECT, Value};
-use eucalyptus_core::success;
+use eucalyptus_core::{fatal, success};
 use eucalyptus_core::utils::PROTO_TEXTURE;
 use std::sync::Arc;
 
@@ -128,7 +128,7 @@ impl PendingSpawnController for Editor {
                                     completed.push(i);
                                 }
                                 Err(e) => {
-                                    log_once::error_once!("Unable to load model: {}", e);
+                                    fatal!("Unable to load model: {}", e);
                                     completed.push(i);
                                 }
                             },

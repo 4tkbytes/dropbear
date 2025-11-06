@@ -587,11 +587,6 @@ impl InspectableComponent for Transform {
                         self.scale = glam::DVec3::ONE;
                     }
                     ui.add_space(5.0);
-
-                    // maybe use? probs not :/
-                    // if pos_changed || rotation_changed || scale_changed {
-                    //     ui.colored_label(egui::Color32::YELLOW, "Transform modified");
-                    // }
                 });
         });
     }
@@ -684,6 +679,16 @@ impl InspectableComponent for MeshRenderer {
             });
 
             ui.label(format!("Entity ID: {}", entity.id()));
+
+            ui.label(format!("Model Handle: {}", self.model_id().0));
+            
+            // todo: add a way to toggle between different models through a dropdown
+            // 
+
+            // todo: add a way to toggle between different materials through a key-value pair and a dropdown menu
+
+
+
         });
     }
 }
