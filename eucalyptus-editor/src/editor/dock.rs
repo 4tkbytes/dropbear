@@ -8,7 +8,7 @@ use std::{
 
 use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
     entity::{MeshRenderer, Transform},
     lighting::{Light, LightComponent},
@@ -679,21 +679,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                                     let asset = DraggedAsset {
                                                         name: asset_name.clone(),
-                                                        path: if asset_path.starts_with("resources/") {
-                                                            ResourceReference {
-                                                                ref_type: ResourceReferenceType::File(
-                                                                    asset_path.strip_prefix("resources/")
-                                                                        .unwrap_or(asset_path)
-                                                                        .to_string_lossy()
-                                                                        .to_string()
-                                                                ),
-                                                            }
-                                                        } else {
-                                                            ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| {
-                                                                log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
-                                                                Default::default()
-                                                            })
-                                                        },
+                                                        path: ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| {
+                                                            log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
+                                                            Default::default()
+                                                        }),
                                                     };
 
                                                     match self.spawn_entity_at_pos(&asset, spawn_position, None) {

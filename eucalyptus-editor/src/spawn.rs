@@ -4,7 +4,7 @@ use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::plane::PlaneBuilder;
-use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::states::{Label, PROJECT, Value};
 use eucalyptus_core::success;
@@ -45,7 +45,8 @@ impl PendingSpawnController for Editor {
                                 let _guard = PROJECT.read();
                                 _guard.project_path.clone()
                             };
-                            let resource = path.join("resources").join(file);
+                            let relative = ResourceReference::relative_path_from_uri(&file)?;
+                            let resource = path.join("resources").join(relative);
                             MeshRenderer::from_path(graphics_clone, resource, Some(&asset_name))
                                 .await
                         }

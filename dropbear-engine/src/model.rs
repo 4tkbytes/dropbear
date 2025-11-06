@@ -31,7 +31,7 @@ pub struct MeshComponent(pub u64);
 pub struct ModelBounds {
     pub min: Vec3,
     pub max: Vec3,
-}
+}   
 
 impl Default for ModelBounds {
     fn default() -> Self {
@@ -152,6 +152,8 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
+    /// Optional identifier describing the texture currently assigned to this material.
+    pub texture_tag: Option<String>,
 }
 
 #[derive(Clone)]
@@ -180,6 +182,59 @@ impl Model {
         self.normalization_scale(1.0)
     }
 
+    /// Replaces the diffuse texture for the material identified by `material_name`.
+    /// When `texture_tag` is provided it will be stored so the caller can later
+    /// confirm which texture is applied.
+    pub fn set_material_texture(
+        &mut self,
+        material_name: &str,
+        texture: Texture,
+        texture_tag: Option<String>,
+    ) -> bool {
+        if let Some(material) = self.materials.iter_mut().find(|mat| mat.name == material_name) {
+            let bind_group = texture.bind_group().to_owned();
+            material.diffuse_texture = texture;
+            material.bind_group = bind_group;
+            if let Some(tag) = texture_tag {
+                material.texture_tag = Some(tag);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes any stored texture tag for the supplied material.
+    pub fn clear_material_texture_tag(&mut self, material_name: &str) -> bool {
+        if let Some(material) = self.materials.iter_mut().find(|mat| mat.name == material_name) {
+            material.texture_tag = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns `true` if a material with `material_name` exists within this model.
+    pub fn contains_material(&self, material_name: &str) -> bool {
+        self.materials.iter().any(|mat| mat.name == material_name)
+    }
+
+    /// Returns `true` if any material on this model is tagged with `texture_tag`.
+    pub fn contains_texture_tag(&self, texture_tag: &str) -> bool {
+        self.materials
+            .iter()
+            .any(|mat| mat.texture_tag.as_deref() == Some(texture_tag))
+    }
+
+    /// Returns `true` if the specified material currently carries `texture_tag`.
+    pub fn material_has_texture_tag(&self, material_name: &str, texture_tag: &str) -> bool {
+        self.materials
+            .iter()
+            .find(|mat| mat.name == material_name)
+            .and_then(|mat| mat.texture_tag.as_deref())
+            .map_or(false, |tag| tag == texture_tag)
+    }
+
     pub async fn load_from_memory(
         graphics: Arc<SharedGraphicsContext>,
         buffer: impl AsRef<[u8]>,
@@ -205,8 +260,8 @@ impl Model {
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
         let mut meshes = Vec::new();
 
-    let mut texture_data = Vec::new();
-    let mut bounds_accumulator = ModelBounds::empty();
+        let mut texture_data = Vec::new();
+        let mut bounds_accumulator = ModelBounds::empty();
         for material in gltf.materials() {
             log::debug!("Processing material: {:?}", material.name());
             let material_name = material.name().unwrap_or("Unnamed Material").to_string();
@@ -279,11 +334,13 @@ impl Model {
             let diffuse_texture =
                 Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions);
             let bind_group = diffuse_texture.bind_group().to_owned();
+            let texture_tag = Some(material_name.clone());
 
             materials.push(Material {
                 name: material_name,
                 diffuse_texture,
                 bind_group,
+                texture_tag,
             });
 
             log::trace!("Time to create GPU texture: {:?}", start.elapsed());

@@ -138,6 +138,7 @@ impl PlaneBuilder {
             name: "plane_material".to_string(),
             diffuse_texture,
             bind_group,
+            texture_tag: Some("plane_material".to_string()),
         };
 
         let model = Arc::new(Model {
