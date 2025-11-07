@@ -3,9 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 
 use crate::{
+    asset::{ASSET_REGISTRY, AssetHandle, AssetKind},
     graphics::{Instance, SharedGraphicsContext},
     model::{LoadedModel, Model, ModelId},
+    utils::ResourceReference,
 };
+use anyhow::anyhow;
 
 /// A type that represents a position, rotation and scale of an entity
 ///
@@ -74,9 +77,9 @@ impl Transform {
 }
 
 #[derive(Clone)]
-/// A renderer for meshes and materials related to a model. 
-/// 
-/// It includes the instances as well as a handle 
+/// A renderer for meshes and materials related to a model.
+///
+/// It includes the instances as well as a handle
 pub struct MeshRenderer {
     handle: LoadedModel,
     pub instance: Instance,
@@ -112,6 +115,10 @@ impl MeshRenderer {
         self.handle.id()
     }
 
+    pub fn asset_handle(&self) -> AssetHandle {
+        self.handle.asset_handle()
+    }
+
     pub fn handle(&self) -> &LoadedModel {
         &self.handle
     }
@@ -134,6 +141,53 @@ impl MeshRenderer {
 
     pub fn set_handle(&mut self, handle: LoadedModel) {
         self.handle = handle;
+    }
+
+    pub fn set_asset_handle(&mut self, handle: AssetHandle) -> anyhow::Result<()> {
+        if !ASSET_REGISTRY.contains_handle(handle) {
+            return Err(anyhow!(
+                "Asset handle {} is not registered with the asset registry",
+                handle.raw()
+            ));
+        }
+
+        if !ASSET_REGISTRY.is_handle_kind(handle, AssetKind::Model) {
+            return Err(anyhow!(
+                "Asset handle {} does not refer to a model asset",
+                handle.raw()
+            ));
+        }
+
+        let model = ASSET_REGISTRY
+            .get_model(handle)
+            .ok_or_else(|| anyhow!("Model handle {} not found", handle.raw()))?;
+
+        self.set_handle(LoadedModel::from_registered(handle, model));
+        Ok(())
+    }
+
+    pub fn uses_model_handle(&self, handle: AssetHandle) -> bool {
+        self.asset_handle() == handle
+    }
+
+    pub fn uses_model_reference(&self, reference: &ResourceReference) -> bool {
+        self.handle().matches_resource(reference)
+    }
+
+    pub fn contains_material_handle(&self, handle: AssetHandle) -> bool {
+        self.handle().contains_material_handle(handle)
+    }
+
+    pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
+        self.handle().contains_material_reference(reference)
+    }
+
+    pub fn material_handle(&self, material_name: &str) -> Option<AssetHandle> {
+        ASSET_REGISTRY.material_handle(self.model_id(), material_name)
+    }
+
+    pub fn mesh_handle(&self, mesh_name: &str) -> Option<AssetHandle> {
+        ASSET_REGISTRY.mesh_handle(self.model_id(), mesh_name)
     }
 }
 

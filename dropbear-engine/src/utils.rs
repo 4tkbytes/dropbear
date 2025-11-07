@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::path::{Path};
+use std::path::Path;
 
 pub const EUCA_SCHEME: &str = "euca://";
 
@@ -179,9 +179,7 @@ impl ResourceReference {
     /// Returns the resource path relative to the `resources/` directory if this reference represents a file.
     pub fn relative_path(&self) -> Option<&str> {
         match &self.ref_type {
-            ResourceReferenceType::File(reference) => {
-                relative_path_from_euca(reference).ok()
-            }
+            ResourceReferenceType::File(reference) => relative_path_from_euca(reference).ok(),
             _ => None,
         }
     }
@@ -249,7 +247,6 @@ impl ResourceReference {
 #[macro_export]
 macro_rules! resource {
     ($path:expr) => {
-        ::dropbear_engine::utils::ResourceReference::from_euca_uri($path)
-            .expect("Invalid EUCA URI")
+        ::dropbear_engine::utils::ResourceReference::from_euca_uri($path).expect("Invalid EUCA URI")
     };
 }

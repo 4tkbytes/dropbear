@@ -7,8 +7,8 @@ use dropbear_engine::procedural::plane::PlaneBuilder;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::states::{Label, PROJECT, Value};
-use eucalyptus_core::{fatal, success};
 use eucalyptus_core::utils::PROTO_TEXTURE;
+use eucalyptus_core::{fatal, success};
 use std::sync::Arc;
 
 impl PendingSpawnController for Editor {

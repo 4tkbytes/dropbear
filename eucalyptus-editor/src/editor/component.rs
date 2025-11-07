@@ -20,7 +20,7 @@ pub trait InspectableComponent {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         signal: &mut Signal,
-    _label: &mut String,
+        _label: &mut String,
     );
 }
 
@@ -73,8 +73,8 @@ impl InspectableComponent for ModelProperties {
         _cfg: &mut StaticallyKept,
         ui: &mut Ui,
         _undo_stack: &mut Vec<UndoableAction>,
-    _signal: &mut Signal,
-    _label: &mut String,
+        _signal: &mut Signal,
+        _label: &mut String,
     ) {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
@@ -681,14 +681,11 @@ impl InspectableComponent for MeshRenderer {
             ui.label(format!("Entity ID: {}", entity.id()));
 
             ui.label(format!("Model Handle: {}", self.model_id().0));
-            
+
             // todo: add a way to toggle between different models through a dropdown
-            // 
+            //
 
             // todo: add a way to toggle between different materials through a key-value pair and a dropdown menu
-
-
-
         });
     }
 }

@@ -66,8 +66,8 @@ impl PlaneBuilder {
             self.tiles_x = self.width as u32;
             self.tiles_z = self.height as u32;
         }
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
 
         for z in 0..=1 {
             for x in 0..=1 {

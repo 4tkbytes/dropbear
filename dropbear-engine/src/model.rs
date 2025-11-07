@@ -1,9 +1,13 @@
-use crate::graphics::{SharedGraphicsContext, Texture};
-use crate::utils::ResourceReference;
+use crate::{
+    asset::{ASSET_REGISTRY, AssetHandle},
+    graphics::{SharedGraphicsContext, Texture},
+    utils::ResourceReference,
+};
 use image::GenericImageView;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
@@ -17,36 +21,59 @@ lazy_static! {
     pub static ref MODEL_CACHE: Mutex<HashMap<String, Arc<Model>>> = Mutex::new(HashMap::new());
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelId(pub u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MaterialComponent(pub u64);
+impl ModelId {
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MeshComponent(pub u64);
 #[derive(Clone)]
 pub struct Model {
-    pub id: ModelId,
     pub label: String,
     pub path: ResourceReference,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub id: ModelId,
 }
 
 #[derive(Clone)]
 pub struct LoadedModel {
     inner: Arc<Model>,
+    handle: AssetHandle,
 }
 
 impl LoadedModel {
     pub fn new(inner: Arc<Model>) -> Self {
-        Self { inner }
+        let reference = inner.path.clone();
+        let handle = ASSET_REGISTRY.register_model(reference, Arc::clone(&inner));
+        Self { inner, handle }
+    }
+
+    pub fn from_registered(handle: AssetHandle, inner: Arc<Model>) -> Self {
+        Self { inner, handle }
+    }
+
+    pub fn from_asset_handle(handle: AssetHandle) -> Option<Self> {
+        ASSET_REGISTRY
+            .get_model(handle)
+            .map(|model| Self::from_registered(handle, model))
     }
 
     /// Returns the unique identifier of the underlying model asset.
     pub fn id(&self) -> ModelId {
         self.inner.id
+    }
+
+    /// Returns the asset handle associated with the underlying model.
+    pub fn asset_handle(&self) -> AssetHandle {
+        self.handle
+    }
+
+    pub fn matches_resource(&self, reference: &ResourceReference) -> bool {
+        self.inner.matches_resource(reference)
     }
 
     /// Provides shared access to the underlying model.
@@ -57,6 +84,22 @@ impl LoadedModel {
     /// Provides mutable access to the underlying model data, cloning if shared.
     pub fn make_mut(&mut self) -> &mut Model {
         Arc::make_mut(&mut self.inner)
+    }
+
+    /// Re-registers the model with the global asset registry, ensuring cached
+    /// sub-assets stay in sync after mutations.
+    pub fn refresh_registry(&mut self) {
+        let reference = self.inner.path.clone();
+        let updated_handle = ASSET_REGISTRY.register_model(reference, self.get());
+        self.handle = updated_handle;
+    }
+
+    pub fn contains_material_handle(&self, handle: AssetHandle) -> bool {
+        self.inner.contains_material_handle(handle)
+    }
+
+    pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
+        self.inner.contains_material_reference(reference)
     }
 }
 
@@ -96,7 +139,11 @@ impl Model {
         texture: Texture,
         texture_tag: Option<String>,
     ) -> bool {
-        if let Some(material) = self.materials.iter_mut().find(|mat| mat.name == material_name) {
+        if let Some(material) = self
+            .materials
+            .iter_mut()
+            .find(|mat| mat.name == material_name)
+        {
             let bind_group = texture.bind_group().to_owned();
             material.diffuse_texture = texture;
             material.bind_group = bind_group;
@@ -111,7 +158,11 @@ impl Model {
 
     /// Removes any stored texture tag for the supplied material.
     pub fn clear_material_texture_tag(&mut self, material_name: &str) -> bool {
-        if let Some(material) = self.materials.iter_mut().find(|mat| mat.name == material_name) {
+        if let Some(material) = self
+            .materials
+            .iter_mut()
+            .find(|mat| mat.name == material_name)
+        {
             material.texture_tag = None;
             true
         } else {
@@ -122,6 +173,30 @@ impl Model {
     /// Returns `true` if a material with `material_name` exists within this model.
     pub fn contains_material(&self, material_name: &str) -> bool {
         self.materials.iter().any(|mat| mat.name == material_name)
+    }
+
+    /// Returns the registered asset handle for this model, if available.
+    pub fn asset_handle(&self) -> Option<AssetHandle> {
+        ASSET_REGISTRY.model_handle_from_reference(&self.path)
+    }
+
+    /// Returns `true` if this model was loaded from the specified resource reference.
+    pub fn matches_resource(&self, reference: &ResourceReference) -> bool {
+        &self.path == reference
+    }
+
+    /// Returns `true` if this model owns the supplied material handle.
+    pub fn contains_material_handle(&self, material_handle: AssetHandle) -> bool {
+        ASSET_REGISTRY
+            .material_owner(material_handle)
+            .map_or(false, |owner| owner == self.id)
+    }
+
+    /// Returns `true` if this model owns a material registered under the provided resource reference.
+    pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
+        ASSET_REGISTRY
+            .material_handle_from_reference(reference)
+            .map_or(false, |handle| self.contains_material_handle(handle))
     }
 
     /// Returns `true` if any material on this model is tagged with `texture_tag`.
@@ -333,14 +408,14 @@ impl Model {
             id: ModelId(hasher.finish()),
         });
 
-        MODEL_CACHE
-            .lock()
-            .insert(cache_key.clone(), Arc::clone(&model));
+        let loaded = LoadedModel::new(Arc::clone(&model));
+
+        MODEL_CACHE.lock().insert(cache_key.clone(), model);
         log::trace!("==================== DONE ====================");
         log::debug!("Model cached from memory: {:?}", label);
         log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);
         log::trace!("==============================================");
-        Ok(LoadedModel::new(model))
+        Ok(loaded)
     }
 
     pub async fn load(

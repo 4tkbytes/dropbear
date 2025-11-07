@@ -1,8 +1,8 @@
 pub mod component;
+pub mod console_error;
 pub mod dock;
 pub mod input;
 pub mod scene;
-pub mod console_error;
 
 pub(crate) use crate::editor::dock::*;
 

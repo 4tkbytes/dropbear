@@ -624,10 +624,7 @@ impl EntityNode {
 
         // Handle single entities (and potentially cameras)
         for (id, (label, _renderer)) in world
-            .query::<(
-                &Label,
-                &dropbear_engine::entity::MeshRenderer,
-            )>()
+            .query::<(&Label, &dropbear_engine::entity::MeshRenderer)>()
             .iter()
         {
             if handled.contains(&id) {
@@ -1048,12 +1045,8 @@ impl SceneConfig {
                         reference
                     );
 
-                    MeshRenderer::from_path(
-                        graphics.clone(),
-                        &path,
-                        Some(label_for_map.as_str()),
-                    )
-                    .await?
+                    MeshRenderer::from_path(graphics.clone(), &path, Some(label_for_map.as_str()))
+                        .await?
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
@@ -1068,25 +1061,41 @@ impl SceneConfig {
                 }
                 ResourceReferenceType::Plane => {
                     let width = properties.get_float("width").ok_or_else(|| {
-                        anyhow::anyhow!("Entity '{}' has no width property or it's not a float", label_for_logs)
+                        anyhow::anyhow!(
+                            "Entity '{}' has no width property or it's not a float",
+                            label_for_logs
+                        )
                     })?;
 
                     let height = properties.get_float("height").ok_or_else(|| {
-                        anyhow::anyhow!("Entity '{}' has no height property or it's not a float", label_for_logs)
+                        anyhow::anyhow!(
+                            "Entity '{}' has no height property or it's not a float",
+                            label_for_logs
+                        )
                     })?;
 
                     let tiles_x = properties.get_int("tiles_x").ok_or_else(|| {
-                        anyhow::anyhow!("Entity '{}' has no tiles_x property or it's not an int", label_for_logs)
+                        anyhow::anyhow!(
+                            "Entity '{}' has no tiles_x property or it's not an int",
+                            label_for_logs
+                        )
                     })?;
 
                     let tiles_z = properties.get_int("tiles_z").ok_or_else(|| {
-                        anyhow::anyhow!("Entity '{}' has no tiles_z property or it's not an int", label_for_logs)
+                        anyhow::anyhow!(
+                            "Entity '{}' has no tiles_z property or it's not an int",
+                            label_for_logs
+                        )
                     })?;
 
                     PlaneBuilder::new()
                         .with_size(width as f32, height as f32)
                         .with_tiles(tiles_x as u32, tiles_z as u32)
-                        .build(graphics.clone(), PROTO_TEXTURE, Some(label_for_map.as_str()))
+                        .build(
+                            graphics.clone(),
+                            PROTO_TEXTURE,
+                            Some(label_for_map.as_str()),
+                        )
                         .await?
                 }
                 ResourceReferenceType::None => {
@@ -1465,14 +1474,7 @@ pub enum WorldLoadingStatus {
     Completed,
 }
 
-#[derive(
-    Clone,
-    Debug,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
-)]
+#[derive(Clone, Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct RuntimeData {
     #[bincode(with_serde)]
     pub project_config: ProjectConfig,

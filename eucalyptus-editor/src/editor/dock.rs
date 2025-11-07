@@ -1,5 +1,8 @@
 use super::*;
-use crate::editor::{ViewportMode, console_error::{ConsoleItem, ErrorLevel}};
+use crate::editor::{
+    ViewportMode,
+    console_error::{ConsoleItem, ErrorLevel},
+};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -16,9 +19,9 @@ use dropbear_engine::{
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_extras;
-use eucalyptus_core::{APP_INFO, utils::ResolveReference};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{File, Label, Node, RESOURCES, ResourceType};
+use eucalyptus_core::{APP_INFO, utils::ResolveReference};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
@@ -517,11 +520,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             "Model thumbnail [{}] does not exist, generating one now",
                                                             name
                                                         );
-                                                        let path =
-                                                            ResourceReference::from_path(path) // cuts off everything to the /resources folder
-                                                                .unwrap()
-                                                                .resolve() // resovles path to reference of resource
-                                                                .unwrap();
+                                                        let path = ResourceReference::from_path(
+                                                            path,
+                                                        ) // cuts off everything to the /resources folder
+                                                        .unwrap()
+                                                        .resolve() // resovles path to reference of resource
+                                                        .unwrap();
                                                         let mut model = match model_to_image::ModelToImageBuilder::new(&path)
                                                             .with_size((600, 600))
                                                             .build() {
