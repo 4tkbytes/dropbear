@@ -689,7 +689,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                                 asset.name, spawn_position
                                                             );
 
-                                                            success!("Spawned {} at camera", asset.name);
+                                                            success!("Pushing spawn \"{}\" at camera", asset.name);
                                                         }
                                                         Err(e) => {
                                                             log::error!(
