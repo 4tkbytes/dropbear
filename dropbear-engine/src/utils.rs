@@ -2,11 +2,22 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 
 pub const EUCA_SCHEME: &str = "euca://";
 
-fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
+/// Converts any supported resource reference into the canonical `euca://` form.
+///
+/// The function trims whitespace, normalizes path separators, ensures the scheme
+/// prefix is present, and collapses redundant separators. Legacy strings without
+/// the scheme are accepted and automatically upgraded to the canonical form.
+///
+/// # Examples
+/// ```ignore
+/// let canonical = dropbear_engine::utils::canonicalize_euca_uri("textures/diffuse.png").unwrap();
+/// assert_eq!(canonical, "euca://textures/diffuse.png");
+/// ```
+pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
     let trimmed = uri.trim();
     if trimmed.is_empty() {
         anyhow::bail!("EUCA URI cannot be empty");
@@ -46,7 +57,7 @@ fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
     Ok(format!("{EUCA_SCHEME}{clean}"))
 }
 
-fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
+pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
     let without_scheme = uri.strip_prefix(EUCA_SCHEME).unwrap_or(uri);
 
     let stripped = without_scheme.trim_start_matches('/');
@@ -230,73 +241,6 @@ impl ResourceReference {
         match &self.ref_type {
             ResourceReferenceType::Bytes(bytes) => Some(bytes),
             _ => None,
-        }
-    }
-
-    pub fn as_path(&self) -> Option<&str> {
-        self.relative_path()
-    }
-
-    /// Converts a [`ResourceReference`] to an [`Option<PathBuf>`].
-    ///
-    /// Returns None if the Resource Reference is not a [`ResourceReferenceType::File`]
-    pub fn to_project_path(&self, project_path: impl AsRef<Path>) -> Option<PathBuf> {
-        let path = project_path.as_ref();
-        log::debug!("Parent path: {}", path.display());
-        match &self.ref_type {
-            ResourceReferenceType::File(reference) => {
-                relative_path_from_euca(reference)
-                    .ok()
-                    .map(|relative| path.join("resources").join(relative))
-            }
-            _ => None,
-        }
-    }
-
-    /// Creates a PathBuf that points to the resource relative to the executable directory.
-    pub fn to_executable_path(&self) -> anyhow::Result<PathBuf> {
-        let exe_path = std::env::current_exe()?;
-        let exe_dir = exe_path
-            .parent()
-            .ok_or(anyhow::anyhow!("Cannot resolve executable path"))?;
-        match &self.ref_type {
-            ResourceReferenceType::File(file) => {
-                let relative = relative_path_from_euca(file)?;
-                Ok(exe_dir.join("resources").join(relative))
-            }
-            _ => Err(anyhow::anyhow!("Cannot resolve executable path")),
-        }
-    }
-
-    /// Creates a PathBuf that points to the resource, with fallback logic.
-    ///
-    /// First tries to resolve relative to executable, then falls back to current directory + resources.
-    ///
-    /// Returns an error of the ResourceReferenceType is not of type [`ResourceReferenceType::File`]
-    pub fn resolve_path(&self) -> anyhow::Result<PathBuf> {
-        match &self.ref_type {
-            ResourceReferenceType::None => {
-                anyhow::bail!("Cannot resolve ResourceReferenceType::None")
-            }
-            ResourceReferenceType::Bytes(_) => {
-                anyhow::bail!("Cannot resolve bytes")
-            }
-            ResourceReferenceType::File(path) => {
-                if let Ok(exe_path) = self.to_executable_path()
-                    && exe_path.exists()
-                {
-                    return Ok(exe_path);
-                }
-
-                let relative = relative_path_from_euca(path)?;
-
-                Ok(std::env::current_dir()?
-                    .join("resources")
-                    .join(relative))
-            }
-            _ => {
-                anyhow::bail!("Cannot resolve ResourceReferenceType::Plane")
-            }
         }
     }
 }

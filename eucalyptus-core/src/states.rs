@@ -1,6 +1,6 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::Parent;
-use crate::utils::PROTO_TEXTURE;
+use crate::utils::{PROTO_TEXTURE, ResolveReference};
 use chrono::Utc;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use dropbear_engine::entity::{MeshRenderer, Transform};
@@ -1039,20 +1039,7 @@ impl SceneConfig {
 
             let mut renderer = match &model_path.ref_type {
                 ResourceReferenceType::File(reference) => {
-                    let path: PathBuf = if cfg!(feature = "editor") {
-                        log::debug!("Using feature editor");
-                        model_path
-                            .to_project_path(project_config.clone())
-                            .ok_or_else(|| {
-                                anyhow::anyhow!(
-                                    "Unable to convert resource reference [{}] to project path",
-                                    reference
-                                )
-                            })?
-                    } else {
-                        log::debug!("Using feature data-only");
-                        model_path.to_executable_path()?
-                    };
+                    let path = model_path.resolve()?;
 
                     log::debug!(
                         "Path for entity {} is {} from reference {}",

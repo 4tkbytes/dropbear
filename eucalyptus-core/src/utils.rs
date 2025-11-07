@@ -1,4 +1,7 @@
+use std::{path::PathBuf};
+
 use crate::states::Node;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
@@ -235,5 +238,50 @@ pub fn keycode_from_ordinal(ordinal: i32) -> Option<KeyCode> {
         192 => Some(KeyCode::F34),
         193 => Some(KeyCode::F35),
         _ => None,
+    }
+}
+
+pub trait ResolveReference {
+    /// This function attempts to resolve the [`ResourceReference`] 
+    /// (specifically the [`ResourceReferenceType::File`]) into 
+    /// a [`PathBuf`]. 
+    /// 
+    /// It does this by checking if the app is the `eucalyptus-editor`
+    /// through the `editor` flag, or the redback-runtime. 
+    /// 
+    /// It first resolves for the project config, and if that is not available
+    /// it will resolve by comparing to the executable's directory. 
+    fn resolve(&self) -> anyhow::Result<PathBuf>;
+}
+
+impl ResolveReference for ResourceReference {
+    fn resolve(&self) -> anyhow::Result<PathBuf> {
+        match &self.ref_type {
+            ResourceReferenceType::File(path) => {
+                let relative = relative_path_from_euca(path)?;
+
+                #[cfg(feature = "editor")] 
+                {
+                    let project_config = {
+                        use crate::states::PROJECT;
+
+                        let cfg = PROJECT.read();
+                        cfg.project_path.clone()
+                    };
+
+                    let path = project_config.join(relative);
+                    return Ok(path);
+                }
+
+                #[cfg(not(feature = "editor"))]
+                {
+                    let dir = current_exe()?.parent().ok_or_else(|| anyhow::anyhow!("Unable to get path"))?;
+                    return Ok(dir.join(relative));
+                }
+            }
+            _ => {
+                anyhow::bail!("Cannot resolve any other ResourceReferenceType that is not File")
+            }
+        }
     }
 }

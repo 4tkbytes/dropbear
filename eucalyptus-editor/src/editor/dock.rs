@@ -16,7 +16,7 @@ use dropbear_engine::{
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_extras;
-use eucalyptus_core::APP_INFO;
+use eucalyptus_core::{APP_INFO, utils::ResolveReference};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{File, Label, Node, RESOURCES, ResourceType};
 use log;
@@ -517,12 +517,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                             "Model thumbnail [{}] does not exist, generating one now",
                                                             name
                                                         );
-                                                        let project_path =
-                                                            { PROJECT.read().project_path.clone() };
                                                         let path =
-                                                            ResourceReference::from_path(path)
+                                                            ResourceReference::from_path(path) // cuts off everything to the /resources folder
                                                                 .unwrap()
-                                                                .to_project_path(project_path)
+                                                                .resolve() // resovles path to reference of resource
                                                                 .unwrap();
                                                         let mut model = match model_to_image::ModelToImageBuilder::new(&path)
                                                             .with_size((600, 600))
