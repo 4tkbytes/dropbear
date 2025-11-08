@@ -99,6 +99,12 @@ impl AssetRegistry {
         model_handle
     }
 
+    /// Iterates through all models, allowing you to iterate through all items in the
+    /// model registry. 
+    pub fn iter_model(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
+        self.models.iter()
+    }
+
     /// Returns the cached model handle if it exists.
     pub fn model_handle(&self, reference: &ResourceReference) -> Option<AssetHandle> {
         self.model_handles.get(reference).map(|entry| *entry)

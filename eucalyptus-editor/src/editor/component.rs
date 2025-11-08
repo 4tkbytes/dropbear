@@ -1,12 +1,14 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
 use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
+use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
-use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
+use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
-use eucalyptus_core::warn;
+use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
 use std::time::Instant;
@@ -680,12 +682,71 @@ impl InspectableComponent for MeshRenderer {
 
             ui.label(format!("Entity ID: {}", entity.id()));
 
-            ui.label(format!("Model Handle: {}", self.model_id().0));
+            let mut selected_model: Option<AssetHandle> = None;
 
-            // todo: add a way to toggle between different models through a dropdown
-            //
+            ComboBox::from_id_salt("model_dropdown")
+                .selected_text(format!("{}", self.handle().label))
+                .width(ui.available_width())
+                .show_ui(ui, |ui| {
+                    let iter = ASSET_REGISTRY.iter_model();
+                    for i in iter {
+                        if i.path.as_uri().is_none() {
+                            log_once::debug_once!("Skipping model without uri: {}", i.label);
+                            continue;
+                        }
+                        
+                        let is_selected = selected_model.as_ref() == Some(&i.key());
+                        
+                        let (rect, response) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), 56.0),
+                            egui::Sense::click()
+                        );
+                                    
+                        if is_selected || response.hovered() {
+                            let fill = if is_selected {
+                                ui.visuals().selection.bg_fill
+                            } else {
+                                ui.visuals().widgets.hovered.bg_fill
+                            };
+                            ui.painter().rect_filled(rect, 0.0, fill);
+                        }
+                        
+                        let mut child_ui = ui.new_child(UiBuilder::new().layout(egui::Layout::left_to_right(egui::Align::Center)).max_rect(rect));
+                        child_ui.horizontal(|ui| {
+                            ui.add_space(4.0);
+                            let image = egui::Image::from_bytes(
+                                format!("bytes://{}", i.label),
+                                NO_TEXTURE,
+                            ).max_size(egui::Vec2::new(48.0, 48.0));
+                            ui.add(image);
+                            ui.add_space(8.0);
+                            
+                            ui.vertical(|ui| {
+                                if let Some(path) = i.path.as_uri() {
+                                    ui.label(egui::RichText::new(i.label.clone()).strong());
+                                    ui.label(egui::RichText::new(format!("{}", path))
+                                        .small()
+                                        .color(ui.visuals().weak_text_color()));
+                                }
+                            });
+                        });
+                        
+                        if response.clicked() {
+                            log::debug!("Model clicked [{}], setting as that", i.label);
+                            selected_model = Some(*i.key());
+                        }
+                    }
+                });
 
+            if let Some(model) = selected_model {
+                log::debug!("Attempting to set asset handle for model: {:?}", model);
+                if let Err(e) = self.set_asset_handle(model) {
+                    fatal!("Unable to swap model: {}", e);
+                }
+            }
+            
             // todo: add a way to toggle between different materials through a key-value pair and a dropdown menu
+            
         });
     }
 }

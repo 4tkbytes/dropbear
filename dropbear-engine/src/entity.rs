@@ -98,6 +98,7 @@ impl MeshRenderer {
         Ok(Self::from_handle(handle))
     }
 
+    /// Creates a new [`MeshRenderer`] instance from a [`LoadedModel`] handle
     pub fn from_handle(handle: LoadedModel) -> Self {
         Self {
             handle,
@@ -139,10 +140,14 @@ impl MeshRenderer {
         }
     }
 
+    /// Swaps the currently loaded model for that renderer by the provided [`LoadedModel`]
     pub fn set_handle(&mut self, handle: LoadedModel) {
         self.handle = handle;
     }
 
+    /// Swaps the currently loaded model for that renderer by the provided [`AssetHandle`]
+    /// 
+    /// Returns an error if the assethandle provided is not in the model registry. 
     pub fn set_asset_handle(&mut self, handle: AssetHandle) -> anyhow::Result<()> {
         if !ASSET_REGISTRY.contains_handle(handle) {
             return Err(anyhow!(
