@@ -1,11 +1,11 @@
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
     asset::{ASSET_REGISTRY, AssetHandle, AssetKind},
-    graphics::{Instance, SharedGraphicsContext},
-    model::{LoadedModel, Model, ModelId},
+    graphics::{Instance, SharedGraphicsContext, Texture},
+    model::{LoadedModel, Model, ModelId, MODEL_CACHE},
     utils::ResourceReference,
 };
 use anyhow::anyhow;
@@ -85,6 +85,21 @@ pub struct MeshRenderer {
     pub instance: Instance,
     pub previous_matrix: DMat4,
     pub is_selected: bool,
+    pub material_overrides: Vec<MaterialOverride>,
+    original_material_snapshots: HashMap<String, MaterialSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MaterialOverride {
+    pub target_material: String,
+    pub source_model: ResourceReference,
+    pub source_material: String,
+}
+
+#[derive(Clone)]
+struct MaterialSnapshot {
+    texture: Texture,
+    texture_tag: Option<String>,
 }
 
 impl MeshRenderer {
@@ -105,6 +120,8 @@ impl MeshRenderer {
             instance: Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE),
             previous_matrix: DMat4::IDENTITY,
             is_selected: false,
+            material_overrides: Vec::new(),
+            original_material_snapshots: HashMap::new(),
         }
     }
 
@@ -143,11 +160,13 @@ impl MeshRenderer {
     /// Swaps the currently loaded model for that renderer by the provided [`LoadedModel`]
     pub fn set_handle(&mut self, handle: LoadedModel) {
         self.handle = handle;
+        self.material_overrides.clear();
+        self.original_material_snapshots.clear();
     }
 
     /// Swaps the currently loaded model for that renderer by the provided [`AssetHandle`]
-    /// 
-    /// Returns an error if the assethandle provided is not in the model registry. 
+    ///
+    /// Returns an error if the assethandle provided is not in the model registry.
     pub fn set_asset_handle(&mut self, handle: AssetHandle) -> anyhow::Result<()> {
         if !ASSET_REGISTRY.contains_handle(handle) {
             return Err(anyhow!(
@@ -168,6 +187,8 @@ impl MeshRenderer {
             .ok_or_else(|| anyhow!("Model handle {} not found", handle.raw()))?;
 
         self.set_handle(LoadedModel::from_registered(handle, model));
+        self.material_overrides.clear();
+        self.original_material_snapshots.clear();
         Ok(())
     }
 
@@ -193,6 +214,161 @@ impl MeshRenderer {
 
     pub fn mesh_handle(&self, mesh_name: &str) -> Option<AssetHandle> {
         ASSET_REGISTRY.mesh_handle(self.model_id(), mesh_name)
+    }
+
+    pub fn apply_material_override(
+        &mut self,
+        target_material: &str,
+        source_model: ResourceReference,
+        source_material: &str,
+    ) -> anyhow::Result<()> {
+        let snapshot_entry = {
+            let current_model = self.model();
+            let original = current_model
+                .materials
+                .iter()
+                .find(|mat| mat.name == target_material)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Target material '{}' does not exist on model '{}'",
+                        target_material,
+                        current_model.label
+                    )
+                })?;
+
+            MaterialSnapshot {
+                texture: original.diffuse_texture.clone(),
+                texture_tag: original.texture_tag.clone(),
+            }
+        };
+
+        self.original_material_snapshots
+            .entry(target_material.to_string())
+            .or_insert(snapshot_entry);
+
+        let source_reference = ASSET_REGISTRY
+            .model_handle_from_reference(&source_model)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Source model {:?} is not registered in the asset registry",
+                    source_model
+                )
+            })?;
+
+        let source_model_arc = ASSET_REGISTRY.get_model(source_reference).ok_or_else(|| {
+            anyhow!(
+                "Unable to fetch model handle {:?} from registry",
+                source_reference
+            )
+        })?;
+
+        let material = source_model_arc
+            .materials
+            .iter()
+            .find(|mat| mat.name == source_material)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Material '{}' does not exist on source model {:?}",
+                    source_material,
+                    source_model
+                )
+            })?;
+
+        {
+            let model = self.make_model_mut();
+            if !model.set_material_texture(
+                target_material,
+                material.diffuse_texture.clone(),
+                material.texture_tag.clone(),
+            ) {
+                anyhow::bail!(
+                    "Target material '{}' does not exist on model '{}'",
+                    target_material,
+                    model.label
+                );
+            }
+        }
+
+        let original_reference = self.model().path.clone();
+        let is_default = original_reference == source_model && target_material == source_material;
+
+        self.material_overrides
+            .retain(|entry| entry.target_material != target_material);
+
+        if !is_default {
+            self.material_overrides.push(MaterialOverride {
+                target_material: target_material.to_string(),
+                source_model,
+                source_material: source_material.to_string(),
+            });
+        } else {
+            self.original_material_snapshots.remove(target_material);
+            self.clear_material_override(target_material);
+        }
+
+        // ensure downstream caches observe the newly applied material state
+        self.handle.refresh_registry();
+        self.refresh_model_cache();
+
+        Ok(())
+    }
+
+    pub fn material_overrides(&self) -> &[MaterialOverride] {
+        &self.material_overrides
+    }
+
+    pub fn clear_material_override(&mut self, target_material: &str) {
+        self.material_overrides
+            .retain(|entry| entry.target_material != target_material);
+    }
+
+    pub fn restore_original_material(&mut self, target_material: &str) -> anyhow::Result<()> {
+        let snapshot = self
+            .original_material_snapshots
+            .get(target_material)
+            .cloned();
+
+        self.clear_material_override(target_material);
+
+        if let Some(snapshot) = snapshot {
+            let model = self.make_model_mut();
+            if !model.set_material_texture(
+                target_material,
+                snapshot.texture.clone(),
+                snapshot.texture_tag.clone(),
+            ) {
+                anyhow::bail!(
+                    "Target material '{}' does not exist on model '{}'",
+                    target_material,
+                    model.label
+                );
+            }
+
+            if snapshot.texture_tag.is_none() {
+                let _ = model.clear_material_texture_tag(target_material);
+            }
+
+            self.original_material_snapshots
+                .remove(target_material);
+        }
+
+        self.handle.refresh_registry();
+        self.refresh_model_cache();
+
+        Ok(())
+    }
+
+    fn refresh_model_cache(&self) {
+        let current = self.handle.get();
+        let mut cache = MODEL_CACHE.lock();
+        let keys: Vec<String> = cache
+            .iter()
+            .filter_map(|(key, model)| (model.id == current.id).then(|| key.clone()))
+            .collect();
+
+        for key in keys {
+            cache.insert(key, Arc::clone(&current));
+        }
     }
 }
 

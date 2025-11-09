@@ -2,8 +2,9 @@ use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::Parent;
 use crate::utils::{PROTO_TEXTURE, ResolveReference};
 use chrono::Utc;
+use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
@@ -768,6 +769,8 @@ pub struct SceneEntity {
     pub script: Option<ScriptComponent>,
     pub camera: Option<CameraConfig>,
     pub children: Option<Vec<Label>>,
+    #[serde(default)]
+    pub material_overrides: Vec<MaterialOverride>,
 
     #[serde(skip)]
     #[allow(dead_code)]
@@ -1016,6 +1019,7 @@ impl SceneConfig {
                 script,
                 camera,
                 children,
+                material_overrides,
                 ..
             } = entity_config;
 
@@ -1105,6 +1109,44 @@ impl SceneConfig {
                     );
                 }
             };
+
+            if !material_overrides.is_empty() {
+                for override_entry in &material_overrides {
+                    if ASSET_REGISTRY
+                        .model_handle_from_reference(&override_entry.source_model)
+                        .is_none()
+                    {
+                        if matches!(
+                            override_entry.source_model.ref_type,
+                            ResourceReferenceType::File(_)
+                        ) {
+                            let source_path = override_entry.source_model.resolve()?;
+                            let label_hint = override_entry.source_model.as_uri();
+                            Model::load(graphics.clone(), &source_path, label_hint).await?;
+                        } else {
+                            log::warn!(
+                                "Material override for '{}' references unsupported resource {:?}",
+                                label_for_logs,
+                                override_entry.source_model
+                            );
+                            continue;
+                        }
+                    }
+
+                    if let Err(err) = renderer.apply_material_override(
+                        &override_entry.target_material,
+                        override_entry.source_model.clone(),
+                        &override_entry.source_material,
+                    ) {
+                        log::warn!(
+                            "Failed to apply material override '{}' on '{}': {}",
+                            override_entry.target_material,
+                            label_for_logs,
+                            err
+                        );
+                    }
+                }
+            }
 
             renderer.update(&transform);
 

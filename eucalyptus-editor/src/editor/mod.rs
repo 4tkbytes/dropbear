@@ -332,6 +332,7 @@ impl Editor {
                 script: script.cloned(),
                 camera: camera_config,
                 children,
+                material_overrides: renderer.material_overrides().to_vec(),
                 entity_id: Some(id),
             };
 
@@ -923,6 +924,7 @@ impl Editor {
                                         script: None,
                                         camera: None,
                                         children: None,
+                                        material_overrides: e.material_overrides().to_vec(),
                                         entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);

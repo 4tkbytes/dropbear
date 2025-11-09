@@ -36,6 +36,7 @@ pub enum AssetKind {
 pub struct AssetRegistry {
     next_id: AtomicU64,
     model_handles: DashMap<ResourceReference, AssetHandle>,
+    model_id_lookup: DashMap<ModelId, AssetHandle>,
     model_references: DashMap<AssetHandle, ResourceReference>,
     model_reference_lookup: DashMap<ResourceReference, AssetHandle>,
     models: DashMap<AssetHandle, Arc<Model>>,
@@ -56,6 +57,7 @@ impl AssetRegistry {
         Self {
             next_id: AtomicU64::new(1),
             model_handles: DashMap::new(),
+            model_id_lookup: DashMap::new(),
             model_references: DashMap::new(),
             model_reference_lookup: DashMap::new(),
             models: DashMap::new(),
@@ -90,6 +92,8 @@ impl AssetRegistry {
             handle
         };
 
+        self.model_id_lookup.insert(model.id, model_handle);
+
         self.model_references
             .insert(model_handle, canonical.clone());
         self.model_reference_lookup.insert(canonical, model_handle);
@@ -100,9 +104,13 @@ impl AssetRegistry {
     }
 
     /// Iterates through all models, allowing you to iterate through all items in the
-    /// model registry. 
+    /// model registry.
     pub fn iter_model(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
         self.models.iter()
+    }
+
+    pub fn iter_material(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Material>> {
+        self.materials.iter()
     }
 
     /// Returns the cached model handle if it exists.
@@ -183,6 +191,11 @@ impl AssetRegistry {
         self.model_reference_lookup
             .get(reference)
             .map(|entry| *entry)
+    }
+
+    /// Attempts to resolve a model handle directly from a [`ModelId`].
+    pub fn model_handle_from_id(&self, model_id: ModelId) -> Option<AssetHandle> {
+        self.model_id_lookup.get(&model_id).map(|entry| *entry)
     }
 
     /// Returns `true` if the handle refers to a material asset.

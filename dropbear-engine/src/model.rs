@@ -116,7 +116,6 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
-    /// Optional identifier describing the texture currently assigned to this material.
     pub texture_tag: Option<String>,
 }
 

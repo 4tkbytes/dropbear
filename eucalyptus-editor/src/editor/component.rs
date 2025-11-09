@@ -6,6 +6,7 @@ use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
+use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
 use eucalyptus_core::{fatal, warn};
@@ -682,71 +683,179 @@ impl InspectableComponent for MeshRenderer {
 
             ui.label(format!("Entity ID: {}", entity.id()));
 
-            let mut selected_model: Option<AssetHandle> = None;
+            CollapsingHeader::new("Model").show(ui, |ui| {
+                let mut selected_model: Option<AssetHandle> = None;
 
-            ComboBox::from_id_salt("model_dropdown")
-                .selected_text(format!("{}", self.handle().label))
-                .width(ui.available_width())
-                .show_ui(ui, |ui| {
-                    let iter = ASSET_REGISTRY.iter_model();
-                    for i in iter {
-                        if i.path.as_uri().is_none() {
-                            log_once::debug_once!("Skipping model without uri: {}", i.label);
-                            continue;
-                        }
-                        
-                        let is_selected = selected_model.as_ref() == Some(&i.key());
-                        
-                        let (rect, response) = ui.allocate_exact_size(
-                            egui::vec2(ui.available_width(), 56.0),
-                            egui::Sense::click()
-                        );
-                                    
-                        if is_selected || response.hovered() {
-                            let fill = if is_selected {
-                                ui.visuals().selection.bg_fill
-                            } else {
-                                ui.visuals().widgets.hovered.bg_fill
-                            };
-                            ui.painter().rect_filled(rect, 0.0, fill);
-                        }
-                        
-                        let mut child_ui = ui.new_child(UiBuilder::new().layout(egui::Layout::left_to_right(egui::Align::Center)).max_rect(rect));
-                        child_ui.horizontal(|ui| {
-                            ui.add_space(4.0);
-                            let image = egui::Image::from_bytes(
-                                format!("bytes://{}", i.label),
-                                NO_TEXTURE,
-                            ).max_size(egui::Vec2::new(48.0, 48.0));
-                            ui.add(image);
-                            ui.add_space(8.0);
-                            
-                            ui.vertical(|ui| {
-                                if let Some(path) = i.path.as_uri() {
-                                    ui.label(egui::RichText::new(i.label.clone()).strong());
-                                    ui.label(egui::RichText::new(format!("{}", path))
-                                        .small()
-                                        .color(ui.visuals().weak_text_color()));
-                                }
+                ComboBox::from_id_salt("model_dropdown")
+                    .selected_text(format!("{}", self.handle().label))
+                    .width(ui.available_width())
+                    .show_ui(ui, |ui| {
+                        let iter = ASSET_REGISTRY.iter_model();
+                        for i in iter {
+                            if i.path.as_uri().is_none() {
+                                log_once::debug_once!("Skipping model without uri: {}", i.label);
+                                continue;
+                            }
+
+                            let is_selected = selected_model.as_ref() == Some(&i.key());
+
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), 56.0),
+                                egui::Sense::click(),
+                            );
+
+                            if is_selected || response.hovered() {
+                                let fill = if is_selected {
+                                    ui.visuals().selection.bg_fill
+                                } else {
+                                    ui.visuals().widgets.hovered.bg_fill
+                                };
+                                ui.painter().rect_filled(rect, 0.0, fill);
+                            }
+
+                            let mut child_ui = ui.new_child(
+                                UiBuilder::new()
+                                    .layout(egui::Layout::left_to_right(egui::Align::Center))
+                                    .max_rect(rect),
+                            );
+                            child_ui.horizontal(|ui| {
+                                ui.add_space(4.0);
+                                let image = egui::Image::from_bytes(
+                                    format!("bytes://{}", i.label),
+                                    NO_TEXTURE,
+                                )
+                                .max_size(egui::Vec2::new(48.0, 48.0));
+                                ui.add(image);
+                                ui.add_space(8.0);
+
+                                ui.vertical(|ui| {
+                                    if let Some(path) = i.path.as_uri() {
+                                        ui.label(egui::RichText::new(i.label.clone()).strong());
+                                        ui.label(
+                                            egui::RichText::new(format!("{}", path))
+                                                .small()
+                                                .color(ui.visuals().weak_text_color()),
+                                        );
+                                    }
+                                });
                             });
-                        });
-                        
-                        if response.clicked() {
-                            log::debug!("Model clicked [{}], setting as that", i.label);
-                            selected_model = Some(*i.key());
+
+                            if response.clicked() {
+                                log::debug!("Model clicked [{}], setting as that", i.label);
+                                selected_model = Some(*i.key());
+                            }
                         }
+                    });
+
+                if let Some(model) = selected_model {
+                    log::debug!("Attempting to set asset handle for model: {:?}", model);
+                    if let Err(e) = self.set_asset_handle(model) {
+                        fatal!("Unable to swap model: {}", e);
+                    }
+                }
+            });
+
+            CollapsingHeader::new("Materials")
+                .default_open(false)
+                .show(ui, |ui| {
+                    for material in self.model().materials.iter() {
+                        let override_snapshot = self
+                            .material_overrides()
+                            .iter()
+                            .find(|override_entry| override_entry.target_material == material.name)
+                            .cloned();
+
+                        let selected_label = if let Some(override_entry) = &override_snapshot {
+                            let reference = override_entry
+                                .source_model
+                                .as_uri()
+                                .map(|uri| uri.to_string())
+                                .unwrap_or_else(|| "inline".to_string());
+                            format!("{}  [{}]", override_entry.source_material, reference)
+                        } else {
+                            "Original".to_string()
+                        };
+
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&material.name).strong());
+
+                            let mut pending_override: Option<(ResourceReference, String)> = None;
+                            let mut restore_original = false;
+
+                            ComboBox::from_id_salt(format!("material_override::{}", material.name))
+                                .selected_text(selected_label)
+                                .show_ui(ui, |ui| {
+                                    let is_original = override_snapshot.is_none();
+                                    if ui.selectable_label(is_original, "Original").clicked() {
+                                        restore_original = true;
+                                    }
+
+                                    for entry in ASSET_REGISTRY.iter_material() {
+                                        let handle = *entry.key();
+
+                                        let owner_id = match ASSET_REGISTRY.material_owner(handle) {
+                                            Some(owner) => owner,
+                                            None => continue,
+                                        };
+
+                                        let owner_handle =
+                                            match ASSET_REGISTRY.model_handle_from_id(owner_id) {
+                                                Some(model_handle) => model_handle,
+                                                None => continue,
+                                            };
+
+                                        let source_model = match ASSET_REGISTRY
+                                            .model_reference_for_handle(owner_handle)
+                                        {
+                                            Some(reference) => reference,
+                                            None => continue,
+                                        };
+
+                                        let owner_model =
+                                            match ASSET_REGISTRY.get_model(owner_handle) {
+                                                Some(model) => model,
+                                                None => continue,
+                                            };
+
+                                        let material_arc = entry.value();
+                                        let material_name = material_arc.name.clone();
+
+                                        let is_selected = override_snapshot
+                                            .as_ref()
+                                            .map(|override_entry| {
+                                                override_entry.source_model == source_model
+                                                    && override_entry.source_material
+                                                        == material_name
+                                            })
+                                            .unwrap_or(false);
+
+                                        let label =
+                                            format!("{} ▸ {}", owner_model.label, material_name);
+
+                                        if ui.selectable_label(is_selected, label).clicked() {
+                                            pending_override =
+                                                Some((source_model.clone(), material_name));
+                                        }
+                                    }
+                                });
+
+                            if restore_original {
+                                if let Err(err) = self.restore_original_material(&material.name) {
+                                    fatal!("Failed to restore material: {}", err);
+                                }
+                            } else if let Some((source_model, source_material)) = pending_override
+                            {
+                                if let Err(err) = self.apply_material_override(
+                                    &material.name,
+                                    source_model,
+                                    &source_material,
+                                ) {
+                                    fatal!("Failed to apply material override: {}", err);
+                                }
+                            }
+                        });
                     }
                 });
-
-            if let Some(model) = selected_model {
-                log::debug!("Attempting to set asset handle for model: {:?}", model);
-                if let Err(e) = self.set_asset_handle(model) {
-                    fatal!("Unable to swap model: {}", e);
-                }
-            }
-            
-            // todo: add a way to toggle between different materials through a key-value pair and a dropdown menu
-            
         });
     }
 }
