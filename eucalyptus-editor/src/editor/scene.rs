@@ -60,7 +60,8 @@ impl Scene for Editor {
             )
             .await
             {
-                log::error!("Failed to load project config: {}", e);
+                // todo: change from a panic to another thing
+                panic!("Failed to load project config: {}", e);
             }
         });
 

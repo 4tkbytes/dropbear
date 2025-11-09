@@ -784,9 +784,78 @@ impl InspectableComponent for MeshRenderer {
 
                             ComboBox::from_id_salt(format!("material_override::{}", material.name))
                                 .selected_text(selected_label)
+                                .width(ui.available_width())
                                 .show_ui(ui, |ui| {
-                                    let is_original = override_snapshot.is_none();
-                                    if ui.selectable_label(is_original, "Original").clicked() {
+                                    let available_width = ui.available_width();
+
+                                    let render_row = |ui: &mut Ui,
+                                                      identifier: &str,
+                                                      title: &str,
+                                                      subtitle: &str,
+                                                      is_selected: bool| {
+                                        let (rect, response) = ui.allocate_exact_size(
+                                            egui::vec2(available_width, 56.0),
+                                            egui::Sense::click(),
+                                        );
+
+                                        if is_selected || response.hovered() {
+                                            let fill = if is_selected {
+                                                ui.visuals().selection.bg_fill
+                                            } else {
+                                                ui.visuals().widgets.hovered.bg_fill
+                                            };
+                                            ui.painter().rect_filled(rect, 0.0, fill);
+                                        }
+
+                                        let mut child_ui = ui.new_child(
+                                            UiBuilder::new()
+                                                .layout(egui::Layout::left_to_right(
+                                                    egui::Align::Center,
+                                                ))
+                                                .max_rect(rect),
+                                        );
+
+                                        child_ui.horizontal(|ui| {
+                                            ui.add_space(4.0);
+                                            let image = egui::Image::from_bytes(
+                                                identifier.to_string(),
+                                                NO_TEXTURE,
+                                            )
+                                            .max_size(egui::Vec2::new(48.0, 48.0));
+                                            ui.add(image);
+                                            ui.add_space(8.0);
+
+                                            ui.vertical(|ui| {
+                                                ui.label(RichText::new(title).strong());
+                                                ui.label(
+                                                    RichText::new(subtitle.to_string())
+                                                        .small()
+                                                        .color(ui.visuals().weak_text_color()),
+                                                );
+                                            });
+                                        });
+
+                                        response
+                                    };
+
+                                    let original_identifier = format!(
+                                        "bytes://material-original-{}",
+                                        material.name
+                                    );
+                                    let original_path = self
+                                        .model()
+                                        .path
+                                        .as_uri()
+                                        .map(|uri| uri.to_string())
+                                        .unwrap_or_else(|| "embedded".to_string());
+                                    let original_response = render_row(
+                                        ui,
+                                        &original_identifier,
+                                        "Original",
+                                        &original_path,
+                                        override_snapshot.is_none(),
+                                    );
+                                    if original_response.clicked() {
                                         restore_original = true;
                                     }
 
@@ -829,10 +898,26 @@ impl InspectableComponent for MeshRenderer {
                                             })
                                             .unwrap_or(false);
 
-                                        let label =
-                                            format!("{} ▸ {}", owner_model.label, material_name);
+                                        let resource_path = source_model
+                                            .as_uri()
+                                            .map(|uri| uri.to_string())
+                                            .unwrap_or_else(|| "embedded".to_string());
 
-                                        if ui.selectable_label(is_selected, label).clicked() {
+                                        let identifier = format!(
+                                            "bytes://material-{}-{}",
+                                            owner_id.raw(),
+                                            material_name
+                                        );
+
+                                        let response = render_row(
+                                            ui,
+                                            &identifier,
+                                            &format!("{} ▸ {}", owner_model.label, material_name),
+                                            &resource_path,
+                                            is_selected,
+                                        );
+
+                                        if response.clicked() {
                                             pending_override =
                                                 Some((source_model.clone(), material_name));
                                         }
