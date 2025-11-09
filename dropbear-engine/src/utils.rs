@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
-pub const EUCA_SCHEME: &str = "euca://";
+pub const euca_SCHEME: &str = "euca://";
 
 /// Converts any supported resource reference into the canonical `euca://` form.
 ///
@@ -20,11 +20,11 @@ pub const EUCA_SCHEME: &str = "euca://";
 pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
     let trimmed = uri.trim();
     if trimmed.is_empty() {
-        anyhow::bail!("EUCA URI cannot be empty");
+        anyhow::bail!("euca URI cannot be empty");
     }
 
     let normalized = trimmed.replace('\\', "/");
-    let (had_scheme, without_scheme) = if let Some(rest) = normalized.strip_prefix(EUCA_SCHEME) {
+    let (had_scheme, without_scheme) = if let Some(rest) = normalized.strip_prefix(euca_SCHEME) {
         (true, rest)
     } else {
         (false, normalized.as_str())
@@ -32,7 +32,7 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
 
     let stripped = without_scheme.trim_start_matches('/');
     if stripped.is_empty() {
-        anyhow::bail!("EUCA URI '{}' must contain a resource path", uri);
+        anyhow::bail!("euca URI '{}' must contain a resource path", uri);
     }
 
     let clean = stripped
@@ -42,27 +42,27 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
         .join("/");
 
     if clean.is_empty() {
-        anyhow::bail!("EUCA URI '{}' must contain a resource path", uri);
+        anyhow::bail!("euca URI '{}' must contain a resource path", uri);
     }
 
     if !had_scheme {
         log::debug!(
             "Canonicalized legacy resource reference '{}' to '{}{}'",
             uri,
-            EUCA_SCHEME,
+            euca_SCHEME,
             clean
         );
     }
 
-    Ok(format!("{EUCA_SCHEME}{clean}"))
+    Ok(format!("{euca_SCHEME}{clean}"))
 }
 
 pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
-    let without_scheme = uri.strip_prefix(EUCA_SCHEME).unwrap_or(uri);
+    let without_scheme = uri.strip_prefix(euca_SCHEME).unwrap_or(uri);
 
     let stripped = without_scheme.trim_start_matches('/');
     if stripped.is_empty() {
-        anyhow::bail!("EUCA URI '{}' must contain a resource path", uri);
+        anyhow::bail!("euca URI '{}' must contain a resource path", uri);
     }
 
     Ok(stripped)
@@ -151,7 +151,7 @@ impl ResourceReference {
         match ref_type {
             ResourceReferenceType::File(reference) => {
                 let canonical = canonicalize_euca_uri(&reference)
-                    .unwrap_or_else(|err| panic!("Invalid EUCA URI '{}': {}", reference, err));
+                    .unwrap_or_else(|err| panic!("Invalid euca URI '{}': {}", reference, err));
                 Self {
                     ref_type: ResourceReferenceType::File(canonical),
                 }
@@ -160,7 +160,7 @@ impl ResourceReference {
         }
     }
 
-    /// Creates a [`ResourceReference`] directly from an EUCA URI (e.g. `euca://models/cube.glb`).
+    /// Creates a [`ResourceReference`] directly from an euca URI (e.g. `euca://models/cube.glb`).
     pub fn from_euca_uri(uri: impl AsRef<str>) -> anyhow::Result<Self> {
         let canonical = canonicalize_euca_uri(uri.as_ref())?;
         Ok(Self {
@@ -168,7 +168,7 @@ impl ResourceReference {
         })
     }
 
-    /// Returns the canonical EUCA URI for this reference if it points to a file asset.
+    /// Returns the canonical euca URI for this reference if it points to a file asset.
     pub fn as_uri(&self) -> Option<&str> {
         match &self.ref_type {
             ResourceReferenceType::File(reference) => Some(reference.as_str()),
@@ -184,7 +184,7 @@ impl ResourceReference {
         }
     }
 
-    /// Converts an EUCA URI string into a path relative to the `resources/` directory.
+    /// Converts an euca URI string into a path relative to the `resources/` directory.
     pub fn relative_path_from_uri<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
         relative_path_from_euca(uri)
     }
@@ -224,7 +224,7 @@ impl ResourceReference {
                     .collect::<Vec<_>>()
                     .join("/");
 
-                let canonical = canonicalize_euca_uri(&format!("{EUCA_SCHEME}{resource_path}"))?;
+                let canonical = canonicalize_euca_uri(&format!("{euca_SCHEME}{resource_path}"))?;
 
                 return Ok(Self {
                     ref_type: ResourceReferenceType::File(canonical),
@@ -247,6 +247,6 @@ impl ResourceReference {
 #[macro_export]
 macro_rules! resource {
     ($path:expr) => {
-        ::dropbear_engine::utils::ResourceReference::from_euca_uri($path).expect("Invalid EUCA URI")
+        ::dropbear_engine::utils::ResourceReference::from_euca_uri($path).expect("Invalid euca URI")
     };
 }

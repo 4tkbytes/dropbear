@@ -579,7 +579,7 @@ impl App {
 /// * config - [`WindowConfiguration`]: The configuration/settings of the window.
 /// * queue - [`Option<Throwable<FutureQueue>>`]: An optional value for a [`FutureQueue`]
 /// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
-///   but instead be set as an [`Arc<Mutex<T>>>`].
+///   but instead be set as an [`Arc<Mutex<T>>`].
 macro_rules! run_app {
     ($config:expr, $queue:expr, $setup:expr) => {
         $crate::App::run($config, env!("CARGO_PKG_NAME"), $queue, $setup)

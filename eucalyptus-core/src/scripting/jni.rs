@@ -2,12 +2,12 @@
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
 pub mod exception;
-mod exports;
-mod utils;
+pub mod exports;
+pub mod utils;
 
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
-use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::exception::get_exception_info;
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;
@@ -105,6 +105,7 @@ impl JavaContext {
         world: WorldPtr,
         input: InputStatePtr,
         graphics: GraphicsPtr,
+        asset: AssetRegistryPtr,
     ) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
@@ -129,21 +130,24 @@ impl JavaContext {
         let world_handle = world as jlong;
         let input_handle = input as jlong;
         let graphics_handle = graphics as jlong;
+        let asset_handle = asset as jlong;
 
         log::trace!(
-            "Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long]",
+            "Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long, {} as JValue::Long]",
             world_handle,
             input_handle,
             graphics_handle,
+            asset_handle,
         );
         env.call_method(
             &native_engine_obj,
             "init",
-            "(JJJ)V",
+            "(JJJJ)V",
             &[
                 JValue::Long(world_handle),
                 JValue::Long(input_handle),
                 JValue::Long(graphics_handle),
+                JValue::Long(asset_handle),
             ],
         )?;
 

@@ -67,16 +67,16 @@ import kotlin.experimental.ExperimentalNativeApi
         }
 
         writeln!(
-            output,
+            output, // ADD POINTERS HERE
             r#"
 object ScriptManager {{
     private var dropbearEngine: DropbearEngine? = null
     private val scriptsByTag: MutableMap<String, MutableList<System>> = mutableMapOf()
 
-    fun init(worldPtr: COpaquePointer?, inputPtr: COpaquePointer?, graphicsPtr: COpaquePointer?) : Int {{
+    fun init(worldPtr: COpaquePointer?, inputPtr: COpaquePointer?, graphicsPtr: COpaquePointer?, assetPtr: COpaquePointer?) : Int {{
         try {{
             val nativeEngine = NativeEngine()
-            nativeEngine.init(worldPtr, inputPtr, graphicsPtr)
+            nativeEngine.init(worldPtr, inputPtr, graphicsPtr, assetPtr)
             dropbearEngine = DropbearEngine(nativeEngine)
 
             scriptsByTag.clear()
@@ -205,12 +205,13 @@ object ScriptManager {{
 
         writeln!(output, "}}")?;
 
+        // ADD POINTERS HERE
         writeln!(
             output,
             r#"
 @CName("dropbear_init")
-fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?, graphicsPtr: COpaquePointer?): Int {{
-    return ScriptManager.init(worldPtr, inputStatePtr, graphicsPtr)
+fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?, graphicsPtr: COpaquePointer?, assetPtr: COpaquePointer?): Int {{
+    return ScriptManager.init(worldPtr, inputStatePtr, graphicsPtr, assetPtr)
 }}
 
 

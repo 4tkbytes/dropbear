@@ -788,11 +788,13 @@ impl InspectableComponent for MeshRenderer {
                                 .show_ui(ui, |ui| {
                                     let available_width = ui.available_width();
 
-                                    let render_row = |ui: &mut Ui,
-                                                      identifier: &str,
-                                                      title: &str,
-                                                      subtitle: &str,
-                                                      is_selected: bool| {
+                                    let render_row = |
+                                        ui: &mut Ui,
+                                        identifier: &str,
+                                        title: &str,
+                                        subtitle: &str,
+                                        is_selected: bool
+                                    | {
                                         let (rect, response) = ui.allocate_exact_size(
                                             egui::vec2(available_width, 56.0),
                                             egui::Sense::click(),

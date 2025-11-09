@@ -1,7 +1,11 @@
 package com.dropbear.ffi
 
 import com.dropbear.Camera
+import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
+import com.dropbear.asset.TextureHandle
+import com.dropbear.exception.DropbearNativeException
+import com.dropbear.exceptionOnError
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.input.MouseButtonCodes
@@ -9,7 +13,14 @@ import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
 
 actual class NativeEngine {
+    /**
+     * The handle/pointer to a `hecs::World`
+     */
     private var worldHandle: Long = 0L
+
+    /**
+     * The handle/pointer to a `eucalyptus_core::input::InputState` struct.
+     */
     private var inputHandle: Long = 0L
 
     /**
@@ -23,20 +34,14 @@ actual class NativeEngine {
      */
     private var graphicsHandle: Long = 0L
 
-    actual fun getEntity(label: String): Long? {
-        val result = JNINative.getEntity(worldHandle, label)
-        return if (result == -1L) {
-            null
-        } else {
-            result
-        }
-    }
+    private var assetHandle: Long = 0L
 
     @JvmName("init")
-    fun init(worldHandle: Long, inputHandle: Long, graphicsHandle: Long) {
+    fun init(worldHandle: Long, inputHandle: Long, graphicsHandle: Long, assetHandle: Long) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
         this.graphicsHandle = graphicsHandle
+        this.assetHandle = assetHandle
         if (this.worldHandle < 0L) {
             println("NativeEngine: Error - Invalid world handle received!")
             return
@@ -49,7 +54,25 @@ actual class NativeEngine {
             println("NativeEngine: Error - Invalid graphics handle received!")
             return
         }
+        if (this.assetHandle < 0L) {
+            println("NativeEngine: Error - Invalid asset handle received!")
+            return
+        }
     }
+
+    actual fun getEntity(label: String): Long? {
+        val result = JNINative.getEntity(worldHandle, label)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get entity: returned -1")
+            } else {
+                null
+            }
+        } else {
+            result
+        }
+    }
+
 
     actual fun getTransform(entityId: EntityId): Transform? {
         return JNINative.getTransform(worldHandle, entityId.id)
@@ -110,7 +133,11 @@ actual class NativeEngine {
     actual fun getIntProperty(entityHandle: Long, label: String): Int? {
         val result = JNINative.getIntProperty(worldHandle, entityHandle, label)
         return if (result == 650911) {
-            null
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get integer property for entity $label")
+            } else {
+                null
+            }
         } else {
             result
         }
@@ -119,7 +146,11 @@ actual class NativeEngine {
     actual fun getLongProperty(entityHandle: Long, label: String): Long? {
         val result = JNINative.getLongProperty(worldHandle, entityHandle, label)
         return if (result == 6509112938) {
-            null
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get long property for entity $label")
+            } else {
+                null
+            }
         } else {
             result
         }
@@ -128,7 +159,11 @@ actual class NativeEngine {
     actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
         val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
         return if (result.isNaN()) {
-            null
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get float property for entity $label")
+            } else {
+                null
+            }
         } else {
             result.toFloat()
         }
@@ -137,7 +172,11 @@ actual class NativeEngine {
     actual fun getDoubleProperty(entityHandle: Long, label: String): Double? {
         val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
         return if (result.isNaN()) {
-            null
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get double (float) property")
+            } else {
+                null
+            }
         } else {
             result
         }
@@ -193,5 +232,78 @@ actual class NativeEngine {
 
     actual fun setCursorHidden(hidden: Boolean) {
         JNINative.setCursorHidden(inputHandle, graphicsHandle, hidden)
+    }
+
+    actual fun getModel(entityHandle: Long): Long? {
+        val result = JNINative.getModel(worldHandle, entityHandle)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get model for entity $entityHandle")
+            } else {
+                null
+            }
+        } else {
+            result
+        }
+    }
+
+    actual fun setModel(entityHandle: Long, modelHandle: Long) {
+        JNINative.setModel(worldHandle, assetHandle, entityHandle, modelHandle)
+    }
+
+    actual fun getTexture(entityHandle: Long, name: String): Long? {
+        val result = JNINative.getTexture(worldHandle, entityHandle, name)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get texture for entity $entityHandle")
+            } else {
+                null
+            }
+        } else {
+            JNINative.getTexture(worldHandle, entityHandle, name)
+        }
+    }
+
+    actual fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle) {
+        return JNINative.setTexture(
+            worldHandle,
+            assetHandle,
+            entityHandle,
+            oldMaterialName,
+            newTextureHandle.raw()
+        )
+    }
+
+    actual fun getTextureName(textureHandle: Long): String? {
+        return JNINative.getTextureName(assetHandle, textureHandle)
+    }
+
+    actual fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean {
+        return JNINative.isUsingModel(worldHandle, entityHandle, modelHandle)
+    }
+
+    actual fun isUsingTexture(entityHandle: Long, name: String): Boolean {
+        return JNINative.isUsingTexture(worldHandle, entityHandle, name)
+    }
+
+    actual fun getAsset(eucaURI: String): Long? {
+        val result = JNINative.getAsset(assetHandle, eucaURI)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get asset for URI $eucaURI")
+            } else {
+                null
+            }
+        } else {
+            result
+        }
+    }
+
+    actual fun isModelHandle(id: Long): Boolean {
+        return JNINative.isModelHandle(assetHandle, id)
+    }
+
+    actual fun isTextureHandle(id: Long): Boolean {
+        return JNINative.isTextureHandle(assetHandle, id)
     }
 }

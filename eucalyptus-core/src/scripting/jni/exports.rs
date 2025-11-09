@@ -1,5 +1,5 @@
 use crate::camera::{CameraComponent, CameraType};
-use crate::ptr::{GraphicsPtr, InputStatePtr};
+use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
@@ -13,9 +13,11 @@ use hecs::World;
 use jni::JNIEnv;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
 use jni::sys::{JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
+use dropbear_engine::asset::{AssetHandle};
+use dropbear_engine::utils::ResourceReference;
 
-// JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
-//   (JNIEnv *, jclass, jlong, jstring);
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
+///   (JNIEnv *, jclass, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     mut env: JNIEnv,
@@ -61,8 +63,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
     -1
 }
 
-// JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getTransform
-//   (JNIEnv *, jclass, jlong, jlong);
+/// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getTransform
+///   (JNIEnv *, jclass, jlong, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getTransform(
     mut env: JNIEnv,
@@ -124,8 +126,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
     JObject::null()
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTransform
-//   (JNIEnv *, jclass, jlong, jlong, jobject);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTransform
+///   (JNIEnv *, jclass, jlong, jlong, jobject);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     mut env: JNIEnv,
@@ -230,8 +232,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_printInputState
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_printInputState
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_printInputState(
     _env: JNIEnv,
@@ -251,8 +253,8 @@ pub fn Java_com_dropbear_ffi_JNINative_printInputState(
     println!("{:#?}", input);
 }
 
-// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isKeyPressed
-//   (JNIEnv *, jclass, jlong, jint);
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isKeyPressed
+///   (JNIEnv *, jclass, jlong, jint);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
     _env: JNIEnv,
@@ -289,8 +291,8 @@ pub fn Java_com_dropbear_ffi_JNINative_isKeyPressed(
     }
 }
 
-// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMousePosition
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMousePosition
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getMousePosition(
     mut env: JNIEnv,
@@ -310,8 +312,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getMousePosition(
     new_float_array(&mut env, input.mouse_pos.0 as f32, input.mouse_pos.1 as f32)
 }
 
-// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isMouseButtonPressed
-//   (JNIEnv *, jclass, jlong, jint);
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isMouseButtonPressed
+///   (JNIEnv *, jclass, jlong, jint);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_isMouseButtonPressed(
     _env: JNIEnv,
@@ -342,8 +344,8 @@ pub fn Java_com_dropbear_ffi_JNINative_isMouseButtonPressed(
     }
 }
 
-// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMouseDelta
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getMouseDelta
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
     mut env: JNIEnv,
@@ -368,8 +370,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getMouseDelta(
     }
 }
 
-// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorLocked
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorLocked
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_isCursorLocked(
     _env: JNIEnv,
@@ -389,8 +391,8 @@ pub fn Java_com_dropbear_ffi_JNINative_isCursorLocked(
     input.is_cursor_locked as jboolean
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorLocked
-//   (JNIEnv *, jclass, jlong, jlong, jboolean);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorLocked
+///   (JNIEnv *, jclass, jlong, jlong, jboolean);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     _env: JNIEnv,
@@ -435,8 +437,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     input.is_cursor_locked = is_locked;
 }
 
-// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getLastMousePos
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getLastMousePos
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
     mut env: JNIEnv,
@@ -459,8 +461,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getLastMousePos(
     }
 }
 
-// JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getStringProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// `JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getStringProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
     mut env: JNIEnv,
@@ -526,12 +528,13 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
     }
 }
 
-// JNIEXPORT jint JNICALL Java_com_dropbear_ffi_JNINative_getIntProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
 /// Fetches a [`jint`]/[`i32`] value from a key value.
 ///
 /// If the value does not exist, it will return `650911`, a randomly generated number
 /// that is extremely specific that no one would be sane enough to use this as a property.
+///
+/// `JNIEXPORT jint JNICALL Java_com_dropbear_ffi_JNINative_getIntProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
     mut env: JNIEnv,
@@ -584,13 +587,13 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
     }
 }
 
-// JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLongProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
 /// Gets a [`jlong`]/[`i64`] property.
 ///
 /// If the value doesn't exist, it will return this value: `6509112938`. This is a random number
 /// from a generator I got, and it is such a specific number that no one would ever have this number
 /// in one of their properties.
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLongProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
     mut env: JNIEnv,
@@ -647,8 +650,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
     }
 }
 
-// JNIEXPORT jdouble JNICALL Java_com_dropbear_ffi_JNINative_getFloatProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// `JNIEXPORT jdouble JNICALL Java_com_dropbear_ffi_JNINative_getFloatProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
     mut env: JNIEnv,
@@ -705,8 +708,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
     }
 }
 
-// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_getBoolProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_getBoolProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
     mut env: JNIEnv,
@@ -769,8 +772,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
     }
 }
 
-// JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getVec3Property
-//   (JNIEnv *, jclass, jlong, jlong, jstring);
+/// `JNIEXPORT jfloatArray JNICALL Java_com_dropbear_ffi_JNINative_getVec3Property
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
     mut env: JNIEnv,
@@ -845,8 +848,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setStringProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jstring);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setStringProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
     mut env: JNIEnv,
@@ -898,8 +901,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setIntProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jint);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setIntProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jint);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
     mut env: JNIEnv,
@@ -938,8 +941,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setLongProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jlong);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setLongProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
     mut env: JNIEnv,
@@ -980,8 +983,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setFloatProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jdouble);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setFloatProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jdouble);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
     mut env: JNIEnv,
@@ -1022,8 +1025,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setBoolProperty
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jboolean);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setBoolProperty
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jboolean);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
     mut env: JNIEnv,
@@ -1066,8 +1069,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setVec3Property
-//   (JNIEnv *, jclass, jlong, jlong, jstring, jfloatArray);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setVec3Property
+///   (JNIEnv *, jclass, jlong, jlong, jstring, jfloatArray);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
     mut env: JNIEnv,
@@ -1092,8 +1095,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
 
     let world = unsafe { &mut *world };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
-
-    let array = unsafe { JPrimitiveArray::from_raw(value) };
+    #[allow(unused_unsafe)]
+    let val = unsafe { value };
+    let array = unsafe { JPrimitiveArray::from_raw(val) };
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -1140,8 +1144,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
     }
 }
 
-// JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getCamera
-//   (JNIEnv *, jclass, jlong, jstring);
+/// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getCamera
+///   (JNIEnv *, jclass, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getCamera(
     mut env: JNIEnv,
@@ -1274,8 +1278,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
     std::ptr::null_mut()
 }
 
-// JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getAttachedCamera
-//   (JNIEnv *, jclass, jlong, jlong);
+/// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getAttachedCamera
+///   (JNIEnv *, jclass, jlong, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
     mut env: JNIEnv,
@@ -1401,8 +1405,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
     std::ptr::null_mut()
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCamera
-//   (JNIEnv *, jclass, jlong, jobject);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCamera
+///   (JNIEnv *, jclass, jlong, jobject);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setCamera(
     mut env: JNIEnv,
@@ -1638,8 +1642,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setCamera(
     }
 }
 
-// JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorHidden
-//   (JNIEnv *, jclass, jlong, jlong, jboolean);
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setCursorHidden
+///   (JNIEnv *, jclass, jlong, jlong, jboolean);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
     _env: JNIEnv,
@@ -1680,8 +1684,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
     input.is_cursor_hidden = hide;
 }
 
-// JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorHidden
-//   (JNIEnv *, jclass, jlong);
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isCursorHidden
+///   (JNIEnv *, jclass, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_isCursorHidden(
     _env: JNIEnv,
@@ -1702,4 +1706,315 @@ pub fn Java_com_dropbear_ffi_JNINative_isCursorHidden(
     } else {
         false.into()
     }
+}
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getModel
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getModel(
+    _env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity: jlong,
+) -> jlong {
+    let world = world_handle as WorldPtr;
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getModel] [ERROR] World pointer is null");
+        return -1;
+    }
+
+    let world = unsafe { &*world };
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity) && let Some(model) = q.get() {
+        let handle = model.asset_handle();
+        handle.raw() as jlong
+    } else {
+        println!("[Java_com_dropbear_ffi_JNINative_getModel] [ERROR] Unable to find entity in world");
+        -1
+    }
+}
+
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setModel
+///   (JNIEnv *, jclass, jlong, jlong, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setModel(
+    _env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    asset_handle: jlong,
+    entity: jlong,
+    model_handle: jlong,
+) {
+    let world = world_handle as WorldPtr;
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] World pointer is null");
+        return;
+    }
+
+    let asset = asset_handle as AssetRegistryPtr;
+    if asset.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Asset registry pointer is null");
+        return;
+    }
+
+    let world = unsafe { &*world };
+    let asset = unsafe { &*asset };
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(entity) &&
+        let Some(model) = q.get()
+    {
+        let asset_handle = AssetHandle::new(model_handle as u64);
+        if !asset.contains_handle(asset_handle) {
+            println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Invalid model handle");
+            return;
+        }
+        if let Err(e) = model.set_asset_handle_raw(asset, asset_handle) {
+            println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Unable to set model: {}", e);
+        }
+    }
+}
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getTexture
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getTexture(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity: jlong,
+    name: JString,
+) -> jlong {
+    let world = world_handle as WorldPtr;
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] World pointer is null");
+        return -1;
+    }
+
+    let world = unsafe { &*world };
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity) && let Some(mesh) = q.get() {
+        let jni_result = env.get_string(&name);
+        let str = match jni_result {
+            Ok(java_string) => match java_string.to_str() {
+                Ok(rust_str) => rust_str.to_string(),
+                Err(e) => {
+                    println!(
+                        "[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Failed to convert Java string to Rust string: {}",
+                        e
+                    );
+                    return -1;
+                }
+            },
+            Err(e) => {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Failed to get string from JNI: {}",
+                    e
+                );
+                return -1;
+            }
+        };
+        if let Some(handle) = mesh.material_handle(str.as_str()) {
+            handle.raw() as jlong
+        } else {
+            -1
+        }
+    } else {
+        -1
+    }
+}
+
+// /// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTexture
+// ///   (JNIEnv *, jclass, jlong, jlong, jlong, jlong);`
+// #[unsafe(no_mangle)]
+// pub fn Java_com_dropbear_ffi_JNINative_setTexture(
+//     _env: JNIEnv,
+//     _class: JClass,
+//     world_handle: jlong,
+//     asset_handle: jlong,
+//     entity: jlong,
+//     texture_handle: jlong,
+// ) {
+//     let world = world_handle as WorldPtr;
+//     if world.is_null() {
+//         println!("[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] World pointer is null");
+//         return;
+//     }
+//
+//     let asset = asset_handle as AssetRegistryPtr;
+//     if asset.is_null() {
+//         println!("[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Asset registry pointer is null");
+//         return;
+//     }
+//
+//     let asset = unsafe { &*asset };
+//
+//     let world = unsafe { &*world };
+//     let entity = unsafe { world.find_entity_from_id(entity as u32) };
+//
+//     match world.query_one::<&mut MeshRenderer>(entity) {
+//         Ok(mut query) => {
+//             let Some(renderer) = query.get() else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Entity does not have a MeshRenderer component"
+//                 );
+//                 return;
+//             };
+//
+//             let material_handle = AssetHandle::new(texture_handle as u64);
+//             if !asset.contains_handle(material_handle) {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Material handle {} is not registered",
+//                     material_handle.raw()
+//                 );
+//                 return;
+//             }
+//
+//             if !asset.is_material(material_handle) {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Handle {} does not reference a material",
+//                     material_handle.raw()
+//                 );
+//                 return;
+//             }
+//
+//             let Some(material) = asset.get_material(material_handle) else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to fetch material for handle {}",
+//                     material_handle.raw()
+//                 );
+//                 return;
+//             };
+//
+//             let Some(owner_model_id) = asset.material_owner(material_handle) else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve owning model for material {}",
+//                     material_handle.raw()
+//                 );
+//                 return;
+//             };
+//
+//             let Some(owner_model_handle) = asset.model_handle_from_id(owner_model_id) else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve model handle for owner {:?}",
+//                     owner_model_id
+//                 );
+//                 return;
+//             };
+//
+//             let Some(source_model_reference) = asset.model_reference_for_handle(owner_model_handle) else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve resource reference for model handle {}",
+//                     owner_model_handle.raw()
+//                 );
+//                 return;
+//             };
+//
+//             let source_material_name = material.name.clone();
+//
+//             let target_material_name = {
+//                 let current_model = renderer.model();
+//                 if current_model
+//                     .materials
+//                     .iter()
+//                     .any(|existing| existing.name == source_material_name)
+//                 {
+//                     Some(source_material_name.clone())
+//                 } else {
+//                     current_model
+//                         .materials
+//                         .first()
+//                         .map(|existing| existing.name.clone())
+//                 }
+//             };
+//
+//             let Some(target_material_name) = target_material_name else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Entity model has no materials to override"
+//                 );
+//                 return;
+//             };
+//
+//             let Some(cache_raw) = asset.get_pointer(PointerKind::Const("model_cache")) else {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Model cache pointer is not registered"
+//                 );
+//                 return;
+//             };
+//
+//             let cache_mutex_ptr = cache_raw as *const Mutex<HashMap<String, Arc<Model>>>;
+//             if cache_mutex_ptr.is_null() {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Model cache pointer is null"
+//                 );
+//                 return;
+//             }
+//
+//             let cache_mutex = unsafe { &*cache_mutex_ptr };
+//
+//             if let Err(err) = renderer.apply_material_override_raw(
+//                 asset,
+//                 cache_mutex,
+//                 &target_material_name,
+//                 source_model_reference,
+//                 &source_material_name,
+//             ) {
+//                 println!(
+//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to apply material override: {}",
+//                     err
+//                 );
+//             }
+//         }
+//         Err(err) => {
+//             println!(
+//                 "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to query MeshRenderer: {}",
+//                 err
+//             );
+//         }
+//     }
+// }
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getAsset
+///   (JNIEnv *, jclass, jlong, jstring);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getAsset(
+    mut env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+    euca_uri: JString,
+) -> jlong {
+    let asset = asset_handle as AssetRegistryPtr;
+    if asset.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_getAsset] [ERROR] Asset registry pointer is null");
+        return -1;
+    }
+
+    let asset = unsafe { &*asset };
+
+    let jni_result = env.get_string(&euca_uri);
+    let str = match jni_result {
+        Ok(java_string) => match java_string.to_str() {
+            Ok(rust_str) => rust_str.to_string(),
+            Err(e) => {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getAsset] [ERROR] Failed to convert Java string to Rust string: {}",
+                    e
+                );
+                return -1;
+            }
+        },
+        Err(e) => {
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_getAsset] [ERROR] Failed to get string from JNI: {}",
+                e
+            );
+            return -1;
+        }
+    };
+    if let Ok(res) = ResourceReference::from_euca_uri(str) && let Some(asset_handle) = asset.get_handle_from_reference(&res) {
+        return asset_handle.raw() as jlong;
+    };
+    -1 as jlong
 }

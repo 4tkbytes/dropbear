@@ -1,5 +1,8 @@
 package com.dropbear
 
+import com.dropbear.asset.ModelHandle
+import com.dropbear.asset.TextureHandle
+import com.dropbear.exception.DropbearNativeException
 import com.dropbear.math.Transform
 
 class EntityRef(val id: EntityId = EntityId(0L)) {
@@ -54,5 +57,33 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
             result.engine = this.engine
         }
         return result
+    }
+
+    fun getTexture(materialName: String): TextureHandle? {
+        val result = engine.native.getTexture(id.id, materialName)
+        if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get texture for material $materialName")
+            }
+            return null
+        } else {
+            return TextureHandle(result ?: throw Exception("Native returned null texture handle"))
+        }
+    }
+
+    fun hasTexture(eucaURI: String): Boolean {
+        return engine.native.isUsingTexture(id.id, eucaURI)
+    }
+
+    fun setModel(modelHandle: ModelHandle) {
+        engine.native.setModel(id.id, modelHandle.raw())
+    }
+
+    fun usingModel(modelHandle: ModelHandle): Boolean {
+        return engine.native.isUsingModel(id.id, modelHandle.raw())
+    }
+
+    fun setTextureOverride(materialName: String, textureHandle: TextureHandle) {
+        engine.native.setTextureOverride(id.id, materialName, textureHandle)
     }
 }

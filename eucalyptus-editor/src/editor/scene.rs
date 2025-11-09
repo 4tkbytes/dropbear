@@ -18,6 +18,7 @@ use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use dropbear_engine::asset::{PointerKind, ASSET_REGISTRY};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -169,6 +170,11 @@ impl Scene for Editor {
                 log::info!("Plugins loaded");
             }
         }
+        let cache_mutex_ptr = std::sync::LazyLock::force(&MODEL_CACHE) as *const _;
+        ASSET_REGISTRY.add_pointer(
+            PointerKind::Const("model_cache"),
+            cache_mutex_ptr as usize,
+        );
 
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);

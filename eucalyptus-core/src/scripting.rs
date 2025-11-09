@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use dropbear_engine::asset::{ASSET_REGISTRY};
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone)]
@@ -157,10 +158,11 @@ impl ScriptManager {
         input_state: InputStatePtr,
         graphics: GraphicsPtr,
     ) -> anyhow::Result<()> {
+        let asset = &raw const *ASSET_REGISTRY;
         match &self.script_target {
             ScriptTarget::JVM { .. } => {
                 if let Some(jvm) = &mut self.jvm {
-                    jvm.init(world, input_state, graphics)?;
+                    jvm.init(world, input_state, graphics, asset)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;
@@ -170,7 +172,7 @@ impl ScriptManager {
             }
             ScriptTarget::Native { .. } => {
                 if let Some(library) = &mut self.library {
-                    library.init(world, input_state, graphics)?;
+                    library.init(world, input_state, graphics, asset)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         library.load_systems(tag.to_string())?;
@@ -195,8 +197,7 @@ impl ScriptManager {
     ///   empty, [`JavaContext::update_systems_for_tag`] if there are tags but no entities, and
     ///   [`JavaContext::update_systems_for_entities`] if there are entities.
     /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is
-    ///   empty, [`NativeLibrary::update_systems_for_tag`] if there are tags but no entities, and
-    ///   [`NativeLibrary::update_systems_for_entities`] if there are entities.
+    ///   empty or [`NativeLibrary::update_tagged`] if there are tags.
     /// - [`ScriptTarget::None`] - This returns an error.
     ///
     /// # Safety

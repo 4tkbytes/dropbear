@@ -1,6 +1,6 @@
 //! The attenuation values of light.
 //!
-//! See https://en.wikipedia.org/wiki/Attenuation
+//! See <https://en.wikipedia.org/wiki/Attenuation>
 
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Attenuation {

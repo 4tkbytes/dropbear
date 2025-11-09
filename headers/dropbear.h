@@ -9,6 +9,7 @@
 typedef struct World World; // opaque pointer
 typedef struct InputState InputState; // opaque pointer
 typedef struct GraphicsCommandQueue GraphicsCommandQueue; // opaque pointer
+typedef struct AssetRegistry AssetRegistry; // opaque pointer
 
 // ===========================================
 

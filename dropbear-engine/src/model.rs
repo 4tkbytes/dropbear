@@ -4,22 +4,21 @@ use crate::{
     utils::ResourceReference,
 };
 use image::GenericImageView;
-use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
+use crate::asset::AssetRegistry;
 
 pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/textures/grey.png");
 
-lazy_static! {
-    pub static ref MODEL_CACHE: Mutex<HashMap<String, Arc<Model>>> = Mutex::new(HashMap::new());
-}
+
+pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelId(pub u64);
@@ -56,10 +55,16 @@ impl LoadedModel {
         Self { inner, handle }
     }
 
-    pub fn from_asset_handle(handle: AssetHandle) -> Option<Self> {
-        ASSET_REGISTRY
+    pub fn from_asset_handle_raw(registry: &AssetRegistry, handle: AssetHandle) -> Option<Self> {
+        registry
             .get_model(handle)
             .map(|model| Self::from_registered(handle, model))
+    }
+
+    pub fn from_asset_handle(handle: AssetHandle) -> Option<Arc<LoadedModel>> {
+        ASSET_REGISTRY
+            .get_model(handle)
+            .map(|model| Arc::new(Self::from_registered(handle, model)))
     }
 
     /// Returns the unique identifier of the underlying model asset.
@@ -91,6 +96,12 @@ impl LoadedModel {
     pub fn refresh_registry(&mut self) {
         let reference = self.inner.path.clone();
         let updated_handle = ASSET_REGISTRY.register_model(reference, self.get());
+        self.handle = updated_handle;
+    }
+
+    pub fn refresh_registry_raw(&mut self, registry: &AssetRegistry) {
+        let reference = self.inner.path.clone();
+        let updated_handle = registry.register_model(reference, self.get());
         self.handle = updated_handle;
     }
 
@@ -187,8 +198,7 @@ impl Model {
     /// Returns `true` if this model owns the supplied material handle.
     pub fn contains_material_handle(&self, material_handle: AssetHandle) -> bool {
         ASSET_REGISTRY
-            .material_owner(material_handle)
-            .map_or(false, |owner| owner == self.id)
+            .material_owner(material_handle) == Some(self.id)
     }
 
     /// Returns `true` if this model owns a material registered under the provided resource reference.
@@ -210,8 +220,7 @@ impl Model {
         self.materials
             .iter()
             .find(|mat| mat.name == material_name)
-            .and_then(|mat| mat.texture_tag.as_deref())
-            .map_or(false, |tag| tag == texture_tag)
+            .and_then(|mat| mat.texture_tag.as_deref()) == Some(texture_tag)
     }
 
     pub async fn load_from_memory(

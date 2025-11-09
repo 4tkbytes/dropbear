@@ -1,5 +1,4 @@
 pub mod camera;
-pub mod dropbear;
 pub mod hierarchy;
 pub mod input;
 pub mod logging;

@@ -1,10 +1,6 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}, LazyLock};
 
 use dashmap::DashMap;
-use lazy_static::lazy_static;
 
 use crate::{
     model::{Material, Mesh, Model, ModelId},
@@ -15,6 +11,12 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AssetHandle(u64);
 impl AssetHandle {
+    /// Creates a new [`AssetHandle`].
+    ///
+    /// This function does not guarantee if the raw value exists in the registry.
+    /// You will have to check yourself.
+    pub fn new(raw: u64) -> Self { Self(raw) }
+    /// Returns the raw/primitive [`u64`] value.
     pub fn raw(&self) -> u64 {
         self.0
     }
@@ -27,6 +29,12 @@ pub enum AssetKind {
     Mesh,
 }
 
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum PointerKind {
+    Const(&'static str),
+    Mut(&'static str),
+}
+
 /// Centralised cache for models and their dependent resources.
 ///
 /// The registry assigns stable [`AssetHandle`] values that can be
@@ -35,21 +43,26 @@ pub enum AssetKind {
 /// while meshes and materials are keyed by `(ModelId, name)` pairs.
 pub struct AssetRegistry {
     next_id: AtomicU64,
+
     model_handles: DashMap<ResourceReference, AssetHandle>,
     model_id_lookup: DashMap<ModelId, AssetHandle>,
     model_references: DashMap<AssetHandle, ResourceReference>,
     model_reference_lookup: DashMap<ResourceReference, AssetHandle>,
     models: DashMap<AssetHandle, Arc<Model>>,
+
     material_lookup: DashMap<(ModelId, String), AssetHandle>,
     material_owners: DashMap<AssetHandle, ModelId>,
     material_references: DashMap<AssetHandle, ResourceReference>,
     material_reference_lookup: DashMap<ResourceReference, AssetHandle>,
     materials: DashMap<AssetHandle, Arc<Material>>,
+
     mesh_lookup: DashMap<(ModelId, String), AssetHandle>,
     mesh_owners: DashMap<AssetHandle, ModelId>,
     mesh_references: DashMap<AssetHandle, ResourceReference>,
     mesh_reference_lookup: DashMap<ResourceReference, AssetHandle>,
     meshes: DashMap<AssetHandle, Arc<Mesh>>,
+
+    pointers: DashMap<PointerKind, usize>,
 }
 
 impl AssetRegistry {
@@ -71,7 +84,16 @@ impl AssetRegistry {
             mesh_references: DashMap::new(),
             mesh_reference_lookup: DashMap::new(),
             meshes: DashMap::new(),
+            pointers: DashMap::new(),
         }
+    }
+
+    pub fn add_pointer(&self, pointer_kind: PointerKind, pointer: usize) {
+        self.pointers.insert(pointer_kind, pointer);
+    }
+
+    pub fn get_pointer(&self, pointer_kind: PointerKind) -> Option<usize> {
+        self.pointers.get(&pointer_kind).map(|entry| *entry.value())
     }
 
     fn allocate_handle(&self) -> AssetHandle {
@@ -137,6 +159,14 @@ impl AssetRegistry {
         self.meshes
             .get(&handle)
             .map(|entry| Arc::clone(entry.value()))
+    }
+
+    /// Fetches a handle from a [`ResourceReference`] by checking through
+    /// each cache
+    pub fn get_handle_from_reference(&self, reference: &ResourceReference) -> Option<AssetHandle> {
+        self.material_handle_from_reference(reference)
+            .or_else(|| self.mesh_handle_from_reference(reference))
+            .or_else(|| self.model_handle_from_reference(reference))
     }
 
     /// Retrieves (or lazily creates) the handle for a specific material on a model.
@@ -307,9 +337,7 @@ impl Default for AssetRegistry {
     }
 }
 
-lazy_static! {
-    pub static ref ASSET_REGISTRY: AssetRegistry = AssetRegistry::new();
-}
+pub static ASSET_REGISTRY: LazyLock<AssetRegistry> = LazyLock::new(AssetRegistry::new);
 
 fn material_reference(model_id: ModelId, name: &str) -> Option<ResourceReference> {
     resource_reference_for("materials", model_id, name)

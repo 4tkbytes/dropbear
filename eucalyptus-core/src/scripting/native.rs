@@ -1,11 +1,11 @@
 //! Deals with Kotlin/Native library loading for different platforms.
 #![allow(clippy::missing_safety_doc)]
 
-mod exports;
+pub mod exports;
 pub mod sig;
-mod types;
+pub mod types;
 
-use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::native::sig::{
     DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged,
 };
@@ -15,6 +15,7 @@ use std::path::Path;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
+    /// The libloading library that is currently loaded
     library: Library,
     init_fn: Symbol<'static, Init>,
     load_systems_fn: Symbol<'static, LoadTagged>,
@@ -25,6 +26,7 @@ pub struct NativeLibrary {
 }
 
 impl NativeLibrary {
+    /// Creates a new instance of [`NativeLibrary`]
     pub fn new(lib_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let lib_path = lib_path.as_ref();
         unsafe {
@@ -55,14 +57,16 @@ impl NativeLibrary {
         }
     }
 
+    /// Initialises the NativeLibrary by populating it with context.
     pub fn init(
         &mut self,
         world_ptr: WorldPtr,
         input_state_ptr: InputStatePtr,
         graphics_ptr: GraphicsPtr,
+        asset_ptr: AssetRegistryPtr,
     ) -> anyhow::Result<()> {
         unsafe {
-            let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr);
+            let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr, asset_ptr);
             if result != 0 {
                 anyhow::bail!("Init function failed with code: {}", result);
             }

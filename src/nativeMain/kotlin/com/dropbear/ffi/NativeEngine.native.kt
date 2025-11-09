@@ -9,6 +9,8 @@ package com.dropbear.ffi
 
 import com.dropbear.Camera
 import com.dropbear.EntityId
+import com.dropbear.exception.DropbearNativeException
+import com.dropbear.exceptionOnError
 import com.dropbear.ffi.generated.*
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
@@ -23,11 +25,14 @@ actual class NativeEngine {
     private var worldHandle: COpaquePointer? = null
     private var inputHandle: COpaquePointer? = null
     private var graphicsHandle: COpaquePointer? = null
+    private var assetHandle: COpaquePointer? = null
 
     @Suppress("unused")
-    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?, graphicsHandle: COpaquePointer?) {
+    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?, graphicsHandle: COpaquePointer?, assetHandle: COpaquePointer?) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
+        this.graphicsHandle = graphicsHandle
+        this.assetHandle = assetHandle
         if (this.worldHandle == null) {
             Logger.error("NativeEngine: Error - Invalid world handle received!")
         }
@@ -36,6 +41,9 @@ actual class NativeEngine {
         }
         if (this.graphicsHandle == null) {
             Logger.error("NativeEngine: Error - Invalid graphics handle received!")
+        }
+        if (this.assetHandle == null) {
+            Logger.error("NativeEngine: Error - Invalid asset handle received!")
         }
     }
 
@@ -147,8 +155,12 @@ actual class NativeEngine {
                 val y = yVar.value.toDouble()
                 return Vector2D(x, y)
             } else {
-                println("getMousePosition failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getMousePosition failed with code: $result")
+                } else {
+                    println("getMousePosition failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -177,8 +189,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return pressedVar.value != 0
             } else {
-                println("isMouseButtonPressed failed with code: $result")
-                return false
+                if (exceptionOnError) {
+                    throw DropbearNativeException("isMouseButtonPressed failed with code: $result")
+                } else {
+                    println("isMouseButtonPressed failed with code: $result")
+                    return false
+                }
             }
         }
     }
@@ -200,8 +216,12 @@ actual class NativeEngine {
                 val deltaY = deltaYVar.value.toDouble()
                 return Vector2D(deltaX, deltaY)
             } else {
-                println("getMouseDelta failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getMouseDelta failed with code: $result")
+                } else {
+                    println("getMouseDelta failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -219,8 +239,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return lockedVar.value != 0
             } else {
-                println("isCursorLocked failed with code: $result")
-                return false
+                if (exceptionOnError) {
+                    throw DropbearNativeException("isCursorLocked failed with code: $result")
+                } else {
+                    println("isCursorLocked failed with code: $result")
+                    return false
+                }
             }
         }
     }
@@ -237,7 +261,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setCursorLocked failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setCursorLocked failed with code: $result")
+            } else {
+                println("setCursorLocked failed with code: $result")
+            }
         }
     }
 
@@ -258,8 +286,12 @@ actual class NativeEngine {
                 val y = yVar.value.toDouble()
                 return Vector2D(x, y)
             } else {
-                println("getLastMousePos failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getLastMousePos failed with code: $result")
+                } else {
+                    println("getLastMousePos failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -277,8 +309,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return hiddenVar.value != 0
             } else {
-                println("isCursorHidden failed with code: $result")
-                return false
+                if (exceptionOnError) {
+                    throw DropbearNativeException("isCursorHidden failed with code: $result")
+                } else {
+                    println("isCursorHidden failed with code: $result")
+                    return false
+                }
             }
         }
     }
@@ -295,7 +331,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setCursorHidden failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setCursorHidden failed with code: $result")
+            } else {
+                println("setCursorHidden failed with code: $result")
+            }
         }
     }
 
@@ -318,8 +358,12 @@ actual class NativeEngine {
                 val string = output.toKString()
                 return string
             } else {
-                println("getStringProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getStringProperty failed with code: $result")
+                } else {
+                    println("getStringProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -340,8 +384,12 @@ actual class NativeEngine {
                 val string = output.value
                 return string
             } else {
-                println("getIntProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getIntProperty failed with code: $result")
+                } else {
+                    println("getIntProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -361,8 +409,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return output.value
             } else {
-                println("getLongProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getLongProperty failed with code: $result")
+                } else {
+                    println("getLongProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -382,8 +434,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return output.value
             } else {
-                println("getFloatProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getFloatProperty failed with code: $result")
+                } else {
+                    println("getFloatProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -403,8 +459,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return output.value
             } else {
-                println("getDoubleProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getDoubleProperty failed with code: $result")
+                } else {
+                    println("getDoubleProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -424,8 +484,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return output.value != 0
             } else {
-                println("getBoolProperty failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getBoolProperty failed with code: $result")
+                } else {
+                    println("getBoolProperty failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -449,8 +513,12 @@ actual class NativeEngine {
             if (result == 0) {
                 return floatArrayOf(outX.value, outY.value, outZ.value)
             } else {
-                println("getVec3Property failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getVec3Property failed with code: $result")
+                } else {
+                    println("getVec3Property failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -466,7 +534,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setStringProperty failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setStringProperty failed with code: $result")
+            } else {
+                println("setStringProperty failed with code: $result")
+            }
         }
     }
 
@@ -481,7 +553,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setIntProperty failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setIntProperty failed with code: $result")
+            } else {
+                println("setIntProperty failed with code: $result")
+            }
         }
     }
 
@@ -496,7 +572,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setLongProperty failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setLongProperty failed with code: $result")
+            } else {
+                println("setLongProperty failed with code: $result")
+            }
         }
     }
 
@@ -511,7 +591,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setFloatProperty failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setFloatProperty failed with code: $result")
+            } else {
+                println("setFloatProperty failed with code: $result")
+            }
         }
     }
 
@@ -527,7 +611,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setBoolProperty failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setBoolProperty failed with code: $result")
+            } else {
+                println("setBoolProperty failed with code: $result")
+            }
         }
     }
 
@@ -535,8 +623,12 @@ actual class NativeEngine {
         val world = worldHandle ?: return
 
         if (value.size < 3) {
-            println("setVec3Property: FloatArray must have at least 3 elements")
-            return
+            if (exceptionOnError) {
+                throw DropbearNativeException("setVec3Property: FloatArray must have at least 3 elements")
+            } else {
+                println("setVec3Property: FloatArray must have at least 3 elements")
+                return
+            }
         }
 
         val result = dropbear_set_vec3_property(
@@ -549,7 +641,11 @@ actual class NativeEngine {
         )
 
         if (result != 0) {
-            println("setVec3Property failed with code: $result")
+            if (exceptionOnError) {
+                throw DropbearNativeException("setVec3Property failed with code: $result")
+            } else {
+                println("setVec3Property failed with code: $result")
+            }
         }
     }
 
@@ -593,8 +689,12 @@ actual class NativeEngine {
                     sensitivity = outCamera.sensitivity
                 )
             } else {
-                println("getCamera failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getCamera failed with code: $result")
+                } else {
+                    println("getCamera failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -639,8 +739,12 @@ actual class NativeEngine {
                     sensitivity = outCamera.sensitivity
                 )
             } else {
-                println("getAttachedCamera failed with code: $result")
-                return null
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getAttachedCamera failed with code: $result")
+                } else {
+                    println("getAttachedCamera failed with code: $result")
+                    return null
+                }
             }
         }
     }
@@ -681,8 +785,50 @@ actual class NativeEngine {
             )
 
             if (result != 0) {
-                println("setCamera failed with code: $result")
+                if (exceptionOnError) {
+                    throw DropbearNativeException("setCamera failed with code: $result")
+                } else {
+                    println("setCamera failed with code: $result")
+                }
             }
         }
+    }
+
+    actual fun getModel(entityHandle: Long): Long? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setModel(entityHandle: Long, modelHandle: Long) {
+    }
+
+    actual fun getTexture(entityHandle: Long, name: String): Long? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun hasTexture(entityHandle: Long, name: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setTexture(entityHandle: Long) {
+    }
+
+    actual fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun isUsingTexture(entityHandle: Long, name: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getAsset(eucaURI: String): Long? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun isModelHandle(id: Long): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun isTextureHandle(id: Long): Boolean {
+        TODO("Not yet implemented")
     }
 }

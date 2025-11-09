@@ -8,8 +8,25 @@ public class JNINative {
         System.loadLibrary("eucalyptus_core");
     }
 
-    // entity and ecs
-    public static native long getEntity(long handle, String label);
+    // entity
+    public static native long getEntity(long worldHandle, String label);
+    public static native long getAsset(long assetRegistryHandle, String eucaURI);
+
+    // model
+    public static native long getModel(long worldHandle, long entityHandle);
+    public static native void setModel(long worldHandle, long assetHandle, long entityHandle, long modelHandle);
+    public static native boolean isModelHandle(long assetRegistryHandle, long handle);
+    public static native boolean isUsingModel(long worldHandle, long entityHandle, long modelHandle);
+
+    // texture
+    public static native long getTexture(long worldHandle, long entityHandle, String name);
+    public static native String getTextureName(long assetHandle, long textureHandle);
+    public static native void setTexture(long worldHandle, long assetRegistryHandle, long entityHandle,
+                                         String oldMaterialName, long textureHandle);
+    public static native boolean isTextureHandle(long assetRegistryHandle, long handle);
+    public static native boolean isUsingTexture(long worldHandle, long entityHandle, String name);
+
+    // camera
     public static native Camera getCamera(long worldHandle, String label);
     public static native Camera getAttachedCamera(long worldHandle, long entityHandle);
     public static native void setCamera(long worldHandle, Camera camera);

@@ -1,9 +1,10 @@
 use glam::{DMat4, DQuat, DVec3, Mat4};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
-    asset::{ASSET_REGISTRY, AssetHandle, AssetKind},
+    asset::{AssetRegistry, AssetHandle, AssetKind, ASSET_REGISTRY},
     graphics::{Instance, SharedGraphicsContext, Texture},
     model::{LoadedModel, Model, ModelId, MODEL_CACHE},
     utils::ResourceReference,
@@ -191,6 +192,36 @@ impl MeshRenderer {
         self.original_material_snapshots.clear();
         Ok(())
     }
+    
+    /// Swaps the loaded model to a different one by using an AssetHandle. 
+    /// 
+    /// The main difference between [`MeshRenderer::set_asset_handle`] and 
+    /// [`MeshRenderer::set_asset_handle_raw`] is that it does not use any static variables
+    /// (like [`ASSET_REGISTRY`]), instead allowing for the registry to be manually provided. 
+    pub fn set_asset_handle_raw(&mut self, registry: &AssetRegistry, handle: AssetHandle) -> anyhow::Result<()> {
+        if !registry.contains_handle(handle) {
+            return Err(anyhow!(
+                "Asset handle {} is not registered with the asset registry",
+                handle.raw()
+            ));
+        }
+
+        if !registry.is_handle_kind(handle, AssetKind::Model) {
+            return Err(anyhow!(
+                "Asset handle {} does not refer to a model asset",
+                handle.raw()
+            ));
+        }
+
+        let model = registry
+            .get_model(handle)
+            .ok_or_else(|| anyhow!("Model handle {} not found", handle.raw()))?;
+
+        self.set_handle(LoadedModel::from_registered(handle, model));
+        self.material_overrides.clear();
+        self.original_material_snapshots.clear();
+        Ok(())
+    }
 
     pub fn uses_model_handle(&self, handle: AssetHandle) -> bool {
         self.asset_handle() == handle
@@ -222,6 +253,23 @@ impl MeshRenderer {
         source_model: ResourceReference,
         source_material: &str,
     ) -> anyhow::Result<()> {
+        self.apply_material_override_raw(
+            &ASSET_REGISTRY,
+            &*MODEL_CACHE,
+            target_material,
+            source_model,
+            source_material,
+        )
+    }
+
+    pub fn apply_material_override_raw(
+        &mut self,
+        registry: &AssetRegistry,
+        model_cache: &Mutex<HashMap<String, Arc<Model>>>,
+        target_material: &str,
+        source_model: ResourceReference,
+        source_material: &str,
+    ) -> anyhow::Result<()> {
         let snapshot_entry = {
             let current_model = self.model();
             let original = current_model
@@ -246,7 +294,7 @@ impl MeshRenderer {
             .entry(target_material.to_string())
             .or_insert(snapshot_entry);
 
-        let source_reference = ASSET_REGISTRY
+        let source_reference = registry
             .model_handle_from_reference(&source_model)
             .ok_or_else(|| {
                 anyhow!(
@@ -255,7 +303,7 @@ impl MeshRenderer {
                 )
             })?;
 
-        let source_model_arc = ASSET_REGISTRY.get_model(source_reference).ok_or_else(|| {
+        let source_model_arc = registry.get_model(source_reference).ok_or_else(|| {
             anyhow!(
                 "Unable to fetch model handle {:?} from registry",
                 source_reference
@@ -307,8 +355,12 @@ impl MeshRenderer {
         }
 
         // ensure downstream caches observe the newly applied material state
-        self.handle.refresh_registry();
-        self.refresh_model_cache();
+        self.handle.refresh_registry_raw(registry);
+
+        {
+            let mut cache = model_cache.lock();
+            self.refresh_model_cache_raw(&mut cache);
+        }
 
         Ok(())
     }
@@ -359,8 +411,12 @@ impl MeshRenderer {
     }
 
     fn refresh_model_cache(&self) {
-        let current = self.handle.get();
         let mut cache = MODEL_CACHE.lock();
+        self.refresh_model_cache_raw(&mut cache);
+    }
+    
+    fn refresh_model_cache_raw(&self, cache: &mut HashMap<String, Arc<Model>>) {
+        let current = self.handle.get();
         let keys: Vec<String> = cache
             .iter()
             .filter_map(|(key, model)| (model.id == current.id).then(|| key.clone()))

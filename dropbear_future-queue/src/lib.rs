@@ -59,7 +59,7 @@ pub type FutureStorage = Arc<Mutex<VecDeque<(FutureHandle, BoxFuture<()>)>>>;
 /// A type recommended to be used by [`FutureQueue`] to allow being thrown around in your app
 pub type Throwable<T> = Rc<RefCell<T>>;
 
-/// A status showing the future, used by the [`ResultReceiver`] and [`ResultSender`]
+/// A status showing the future
 #[derive(Clone, Debug)]
 pub enum FutureStatus {
     NotPolled,

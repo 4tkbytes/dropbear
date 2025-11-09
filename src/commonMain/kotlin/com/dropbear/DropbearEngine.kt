@@ -1,12 +1,26 @@
 package com.dropbear
 
+import com.dropbear.asset.AssetHandle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 
+internal var exceptionOnError: Boolean = false
+
 class DropbearEngine(val native: NativeEngine) {
     private var inputState: InputState? = null
+
+    companion object {
+        /**
+         * Globally sets whether exceptions should be thrown when an error occurs.
+         *
+         * This can be run in your update loop without consequences.
+         */
+        fun callExceptionOnError(toggle: Boolean) {
+            exceptionOnError = toggle
+        }
+    }
 
     fun getEntity(label: String): EntityRef? {
         val entityId = native.getEntity(label)
@@ -38,5 +52,10 @@ class DropbearEngine(val native: NativeEngine) {
 
     internal fun setTransform(entityId: EntityId, transform: Transform) {
         native.setTransform(entityId, transform)
+    }
+
+    fun getAsset(eucaURI: String): AssetHandle? {
+        val id = native.getAsset(eucaURI)
+        return if (id != null) AssetHandle(id) else null
     }
 }

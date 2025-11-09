@@ -1,4 +1,4 @@
-//! A straight plane (and some components). Thats it.
+//! A straight plane (and some components). That's it.
 //!
 //! Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
 //! my old game engine made in C sharp, where this is the plane "algorithm".
@@ -11,7 +11,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use wgpu::{AddressMode, util::DeviceExt};
 
-/// Creates a plane wrapped in a [`MeshRenderer`](crate::entity::MeshRenderer).
+/// Creates a plane wrapped in a [`MeshRenderer`].
 pub struct PlaneBuilder {
     width: f32,
     height: f32,
