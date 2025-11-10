@@ -11,8 +11,15 @@ pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
         }
 
         if ui_debug.button("Show Entities Loaded").clicked() {
-            log::info!("Show Entities Loaded under Debug Menu is clicked");
+            log::debug!("Show Entities Loaded under Debug Menu is clicked");
             *signal = Signal::LogEntities;
+        }
+
+        if ui_debug.button("size_of::<Editor>()").clicked() {
+            log::debug!("size_of::<Editor>() is clicked");
+            let size = size_of::<crate::editor::Editor>();
+            log::info!("size_of::<Editor>() is {}", size);
+            log::debug!("I'm so fat - editor")
         }
     });
 }
