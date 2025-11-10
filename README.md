@@ -8,20 +8,20 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Projects
 
-- [dropbear-engine](https://github.com/4tkbytes/dropbear/tree/main/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
-- [dropbear-shader](https://github.com/4tkbytes/dropbear/tree/main/dropbear-shader) contains WESL shaders for users to import
-- [eucalyptus-editor](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
-- [eucalyptus-core](https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
-- [redback-runtime](https://github.com/4tkbytes/dropbear/tree/main/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
+- [dropbear-engine](https://github.com/tirbofish/dropbear/tree/main/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
+- [dropbear-shader](https://github.com/tirbofish/dropbear/tree/main/dropbear-shader) contains WESL shaders for users to import
+- [eucalyptus-editor](https://github.com/tirbofish/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
+- [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
+- [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
 
-[//]: # (- [eucalyptus-sdk]&#40;https://github.com/4tkbytes/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
+[//]: # (- [eucalyptus-sdk]&#40;https://github.com/tirbofish/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
 
 ### Related Projects
 
-- [magna-carta](https://github.com/4tkbytes/dropbear/tree/main/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching. 
-- [magna-carta-plugin](https://github.com/4tkbytes/dropbear/tree/main/magna-carta-plugin) is a Gradle plugin for generating metadata during compile time with the help of the magna-carta cli tool. 
-- [dropbear_future-queue](https://github.com/4tkbytes/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
-- [model_to_image](https://github.com/4tkbytes/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasteriser. _(very crude but usable)_
+- [magna-carta](https://github.com/tirbofish/dropbear/tree/main/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching. 
+- [magna-carta-plugin](https://github.com/tirbofish/dropbear/tree/main/magna-carta-plugin) is a Gradle plugin for generating metadata during compile time with the help of the magna-carta cli tool. 
+- [dropbear_future-queue](https://github.com/tirbofish/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
+- [model_to_image](https://github.com/tirbofish/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasteriser. _(very crude but usable)_
 
 ## Build
 
@@ -44,7 +44,7 @@ sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp jdk
 Then run this to build the project
 
 ```bash
-git clone git@github.com:4tkbytes/dropbear
+git clone git@github.com:tirbofish/dropbear
 cd dropbear
 
 # eucalyptus-editor requires dropbear-1.0-SNAPSHOT-all.jar to be built first
@@ -69,7 +69,7 @@ cargo build
 
 If you do not want to build it locally, you are able to download the latest action build (if no releases have been made).
 
-[nightly.link](https://nightly.link/4tkbytes/dropbear/workflows/create_executable.yaml/main?preview)
+[nightly.link](https://nightly.link/tirbofish/dropbear/workflows/create_executable.yaml/main?preview)
 
 ## Usage
 
@@ -86,7 +86,7 @@ on the JVM target. You can customise the build.gradle.kts file in your project t
 
 ## Documentation
 
-API documentation and articles are available at [4tkbytes.github.io/dropbear](https://4tkbytes.github.io/dropbear). 
+API documentation and articles are available at [tirbofish.github.io/dropbear](https://tirbofish.github.io/dropbear). 
 
 ## Compability
 
