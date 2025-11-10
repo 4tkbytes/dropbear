@@ -9,6 +9,7 @@ package com.dropbear.ffi
 
 import com.dropbear.Camera
 import com.dropbear.EntityId
+import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
 import com.dropbear.exceptionOnError
 import com.dropbear.ffi.generated.*
@@ -805,13 +806,6 @@ actual class NativeEngine {
         TODO("Not yet implemented")
     }
 
-    actual fun hasTexture(entityHandle: Long, name: String): Boolean {
-        TODO("Not yet implemented")
-    }
-
-    actual fun setTexture(entityHandle: Long) {
-    }
-
     actual fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean {
         TODO("Not yet implemented")
     }
@@ -829,6 +823,13 @@ actual class NativeEngine {
     }
 
     actual fun isTextureHandle(id: Long): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    actual fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle) {
+    }
+
+    actual fun getTextureName(textureHandle: Long): String? {
         TODO("Not yet implemented")
     }
 }
