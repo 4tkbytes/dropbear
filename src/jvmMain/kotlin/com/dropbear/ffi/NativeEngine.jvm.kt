@@ -68,6 +68,8 @@ actual class NativeEngine {
             } else {
                 null
             }
+        } else if (result == 0L) {
+            null
         } else {
             result
         }

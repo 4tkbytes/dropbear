@@ -37,8 +37,11 @@ rfd = { workspace = true, optional = true }
 
 [features]
 # editor only stuff
-editor = ["jvm", "rfd"]
+editor = ["jvm", "rfd", "jvm_debug"]
+# enabled scripttarget::jvm as an option 
 jvm = []
+# enables jdb
+jvm_debug = ["jvm"]
 
 [build-dependencies]
 anyhow = "1.0"

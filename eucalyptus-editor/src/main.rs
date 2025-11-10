@@ -18,6 +18,89 @@ async fn main() -> anyhow::Result<()> {
  to use with dependencies or create your own game on Desktop. Sorry :("
     );
 
+    #[cfg(not(target_os = "android"))]
+    {
+        use std::fs::OpenOptions;
+        use colored::Colorize;
+        use env_logger::Builder;
+        use log::LevelFilter;
+
+        let log_dir = app_dirs2::app_root(app_dirs2::AppDataType::UserData, &eucalyptus_core::APP_INFO)
+            .expect("Failed to get app data directory")
+            .join("logs");
+        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+
+        let datetime_str = chrono::offset::Local::now().format("%Y-%m-%d_%H-%M-%S");
+        let log_filename = format!("{}.{}.log", "eucalyptus-editor", datetime_str);
+        let log_path = log_dir.join(log_filename);
+
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect("Failed to open log file");
+        let file = parking_lot::Mutex::new(file);
+
+        let app_target = "eucalyptus-editor".replace('-', "_");
+        let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
+        unsafe { std::env::set_var("RUST_LOG", log_config) };
+
+        Builder::new()
+        .format(move |buf, record| {
+            use std::io::Write;
+
+            let ts = chrono::offset::Local::now().format("%Y-%m-%dT%H:%M:%S");
+
+            let colored_level = match record.level() {
+                log::Level::Error => record.level().to_string().red().bold(),
+                log::Level::Warn => record.level().to_string().yellow().bold(),
+                log::Level::Info => record.level().to_string().green().bold(),
+                log::Level::Debug => record.level().to_string().blue().bold(),
+                log::Level::Trace => record.level().to_string().cyan().bold(),
+            };
+
+            let colored_timestamp = ts.to_string().bright_black();
+
+            let file_info = format!(
+                "{}:{}",
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0)
+            )
+            .bright_black();
+
+            let console_line = format!(
+                "{} {} [{}] - {}\n",
+                file_info,
+                colored_timestamp,
+                colored_level,
+                record.args()
+            );
+
+            let file_line = format!(
+                "{}:{} {} [{}] - {}\n",
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                ts,
+                record.level(),
+                record.args()
+            );
+
+            write!(buf, "{}", console_line)?;
+
+            let mut fh = file.lock();
+            let _ = fh.write_all(file_line.as_bytes());
+
+            Ok(())
+        })
+        .filter(Some("dropbear_engine"), LevelFilter::Trace)
+        .filter(
+            Some("eucalyptus-editor".replace('-', "_").as_str()),
+            LevelFilter::Debug,
+        )
+        .filter(Some("eucalyptus_core"), LevelFilter::Debug)
+        .init();
+    }
+
     dropbear_engine::panic::set_hook();
     let matches = Command::new("eucalyptus-editor")
         .about("A visual game editor")

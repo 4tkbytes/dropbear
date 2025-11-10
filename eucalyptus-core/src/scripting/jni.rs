@@ -81,14 +81,36 @@ impl JavaContext {
             .version(JNIVersion::V8)
             .option(format!("-Djava.class.path={}", host_jar_path.display()));
 
-        #[cfg(feature = "editor")]
+        #[cfg(feature = "jvm_debug")]
         let jvm_args =
             jvm_args.option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741");
 
+        #[cfg(all(feature = "jvm", not(feature = "editor")))]
+        let jvm_args = {
+            #[allow(unused)]
+            let pathbuf = std::env::current_exe()?;
+            #[allow(unused)]
+            let path = pathbuf
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
+
+            println!("Libs folder at {}", path.display());
+
+            if !path.exists() {
+                log::warn!(
+                    "Libs folder ({}) does not exist; native libraries may fail to load",
+                    path.display()
+                );
+            }
+
+            let path_str = path.to_string_lossy();
+            jvm_args.option(format!("-Djava.library.path={}", path_str))
+        };
+        
         let jvm_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_args)?;
 
-        #[cfg(feature = "editor")]
+        #[cfg(feature = "jvm_debug")]
         crate::success!("JDB debugger enabled on localhost:6741");
 
         log::info!("Created JVM instance");

@@ -100,16 +100,20 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          mkdir dist
+          mkdir -p dist/libs
           cp target/${{ matrix.target }}/release/eucalyptus-editor${{ matrix.ext }} dist/
-          
-          # Copy any library files from target/release
+
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/*.dll dist/ 2>/dev/null || true
+            # Copy Windows native libs and import library
+            cp target/${{ matrix.target }}/release/eucalyptus_core.dll dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/eucalyptus_core.dll dist/libs/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/eucalyptus_core.dll.lib dist/libs/ 2>/dev/null || true
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            cp target/${{ matrix.target }}/release/*.so* dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.so dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.so dist/libs/ 2>/dev/null || true
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp target/${{ matrix.target }}/release/*.dylib dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.dylib dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.dylib dist/libs/ 2>/dev/null || true
             cp README.md dist/
           fi
         shell: bash

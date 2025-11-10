@@ -72,7 +72,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
             return id.id() as jlong;
         }
     }
-    -1
+    0
 }
 
 /// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getTransform

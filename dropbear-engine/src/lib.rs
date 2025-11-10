@@ -469,7 +469,7 @@ impl App {
 
         #[cfg(not(target_os = "android"))]
         {
-            Builder::new()
+            let _ = Builder::new()
                 .format(move |buf, record| {
                     let ts = Local::now().format("%Y-%m-%dT%H:%M:%S");
 
@@ -520,7 +520,7 @@ impl App {
                     LevelFilter::Debug,
                 )
                 .filter(Some("eucalyptus_core"), LevelFilter::Debug)
-                .init();
+                .try_init();
 
             // setup panic
             panic::set_hook();
