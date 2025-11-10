@@ -1,12 +1,16 @@
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, LazyLock},
+};
 
 use crate::{
-    asset::{AssetRegistry, AssetHandle, AssetKind, ASSET_REGISTRY},
+    asset::{ASSET_REGISTRY, AssetHandle, AssetKind, AssetRegistry},
     graphics::{Instance, SharedGraphicsContext, Texture},
-    model::{LoadedModel, Model, ModelId, MODEL_CACHE},
+    model::{LoadedModel, MODEL_CACHE, Model, ModelId},
     utils::ResourceReference,
 };
 use anyhow::anyhow;
@@ -160,6 +164,10 @@ impl MeshRenderer {
 
     /// Swaps the currently loaded model for that renderer by the provided [`LoadedModel`]
     pub fn set_handle(&mut self, handle: LoadedModel) {
+        self.set_handle_raw(handle);
+    }
+
+    pub fn set_handle_raw(&mut self, handle: LoadedModel) {
         self.handle = handle;
         self.material_overrides.clear();
         self.original_material_snapshots.clear();
@@ -187,18 +195,20 @@ impl MeshRenderer {
             .get_model(handle)
             .ok_or_else(|| anyhow!("Model handle {} not found", handle.raw()))?;
 
-        self.set_handle(LoadedModel::from_registered(handle, model));
-        self.material_overrides.clear();
-        self.original_material_snapshots.clear();
+        self.set_handle_raw(LoadedModel::from_registered(handle, model));
         Ok(())
     }
-    
-    /// Swaps the loaded model to a different one by using an AssetHandle. 
-    /// 
-    /// The main difference between [`MeshRenderer::set_asset_handle`] and 
+
+    /// Swaps the loaded model to a different one by using an AssetHandle.
+    ///
+    /// The main difference between [`MeshRenderer::set_asset_handle`] and
     /// [`MeshRenderer::set_asset_handle_raw`] is that it does not use any static variables
-    /// (like [`ASSET_REGISTRY`]), instead allowing for the registry to be manually provided. 
-    pub fn set_asset_handle_raw(&mut self, registry: &AssetRegistry, handle: AssetHandle) -> anyhow::Result<()> {
+    /// (like [`ASSET_REGISTRY`]), instead allowing for the registry to be manually provided.
+    pub fn set_asset_handle_raw(
+        &mut self,
+        registry: &AssetRegistry,
+        handle: AssetHandle,
+    ) -> anyhow::Result<()> {
         if !registry.contains_handle(handle) {
             return Err(anyhow!(
                 "Asset handle {} is not registered with the asset registry",
@@ -217,9 +227,7 @@ impl MeshRenderer {
             .get_model(handle)
             .ok_or_else(|| anyhow!("Model handle {} not found", handle.raw()))?;
 
-        self.set_handle(LoadedModel::from_registered(handle, model));
-        self.material_overrides.clear();
-        self.original_material_snapshots.clear();
+        self.set_handle_raw(LoadedModel::from_registered(handle, model));
         Ok(())
     }
 
@@ -240,11 +248,27 @@ impl MeshRenderer {
     }
 
     pub fn material_handle(&self, material_name: &str) -> Option<AssetHandle> {
-        ASSET_REGISTRY.material_handle(self.model_id(), material_name)
+        self.material_handle_raw(&ASSET_REGISTRY, material_name)
+    }
+
+    pub fn material_handle_raw(
+        &self,
+        registry: &AssetRegistry,
+        material_name: &str,
+    ) -> Option<AssetHandle> {
+        registry.material_handle(self.model_id(), material_name)
     }
 
     pub fn mesh_handle(&self, mesh_name: &str) -> Option<AssetHandle> {
-        ASSET_REGISTRY.mesh_handle(self.model_id(), mesh_name)
+        self.mesh_handle_raw(&ASSET_REGISTRY, mesh_name)
+    }
+
+    pub fn mesh_handle_raw(
+        &self,
+        registry: &AssetRegistry,
+        mesh_name: &str,
+    ) -> Option<AssetHandle> {
+        registry.mesh_handle(self.model_id(), mesh_name)
     }
 
     pub fn apply_material_override(
@@ -255,7 +279,7 @@ impl MeshRenderer {
     ) -> anyhow::Result<()> {
         self.apply_material_override_raw(
             &ASSET_REGISTRY,
-            &*MODEL_CACHE,
+            LazyLock::force(&MODEL_CACHE),
             target_material,
             source_model,
             source_material,
@@ -357,10 +381,7 @@ impl MeshRenderer {
         // ensure downstream caches observe the newly applied material state
         self.handle.refresh_registry_raw(registry);
 
-        {
-            let mut cache = model_cache.lock();
-            self.refresh_model_cache_raw(&mut cache);
-        }
+        self.refresh_model_cache_with(model_cache);
 
         Ok(())
     }
@@ -375,6 +396,19 @@ impl MeshRenderer {
     }
 
     pub fn restore_original_material(&mut self, target_material: &str) -> anyhow::Result<()> {
+        self.restore_original_material_raw(
+            target_material,
+            &ASSET_REGISTRY,
+            LazyLock::force(&MODEL_CACHE),
+        )
+    }
+
+    pub fn restore_original_material_raw(
+        &mut self,
+        target_material: &str,
+        registry: &AssetRegistry,
+        model_cache: &Mutex<HashMap<String, Arc<Model>>>,
+    ) -> anyhow::Result<()> {
         let snapshot = self
             .original_material_snapshots
             .get(target_material)
@@ -400,21 +434,20 @@ impl MeshRenderer {
                 let _ = model.clear_material_texture_tag(target_material);
             }
 
-            self.original_material_snapshots
-                .remove(target_material);
+            self.original_material_snapshots.remove(target_material);
         }
 
-        self.handle.refresh_registry();
-        self.refresh_model_cache();
+        self.handle.refresh_registry_raw(registry);
+        self.refresh_model_cache_with(model_cache);
 
         Ok(())
     }
 
-    fn refresh_model_cache(&self) {
-        let mut cache = MODEL_CACHE.lock();
-        self.refresh_model_cache_raw(&mut cache);
+    fn refresh_model_cache_with(&self, cache: &Mutex<HashMap<String, Arc<Model>>>) {
+        let mut guard = cache.lock();
+        self.refresh_model_cache_raw(&mut guard);
     }
-    
+
     fn refresh_model_cache_raw(&self, cache: &mut HashMap<String, Arc<Model>>) {
         let current = self.handle.get();
         let keys: Vec<String> = cache

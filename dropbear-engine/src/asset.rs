@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}, LazyLock};
+use std::sync::{
+    Arc, LazyLock,
+    atomic::{AtomicU64, Ordering},
+};
 
 use dashmap::DashMap;
 
@@ -15,7 +18,9 @@ impl AssetHandle {
     ///
     /// This function does not guarantee if the raw value exists in the registry.
     /// You will have to check yourself.
-    pub fn new(raw: u64) -> Self { Self(raw) }
+    pub fn new(raw: impl Into<u64>) -> Self {
+        Self(raw.into())
+    }
     /// Returns the raw/primitive [`u64`] value.
     pub fn raw(&self) -> u64 {
         self.0
@@ -88,10 +93,12 @@ impl AssetRegistry {
         }
     }
 
+    /// Adds a pointer to the asset registry.
     pub fn add_pointer(&self, pointer_kind: PointerKind, pointer: usize) {
         self.pointers.insert(pointer_kind, pointer);
     }
 
+    /// Attempts to fetch a pointer from the [`AssetRegistry`] by its given [`PointerKind`]
     pub fn get_pointer(&self, pointer_kind: PointerKind) -> Option<usize> {
         self.pointers.get(&pointer_kind).map(|entry| *entry.value())
     }
@@ -128,20 +135,36 @@ impl AssetRegistry {
     /// Iterates through all models, allowing you to iterate through all items in the
     /// model registry.
     pub fn iter_model(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
+        self.iter_model_raw()
+    }
+
+    pub fn iter_model_raw(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
         self.models.iter()
     }
 
     pub fn iter_material(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Material>> {
+        self.iter_material_raw()
+    }
+
+    pub fn iter_material_raw(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Material>> {
         self.materials.iter()
     }
 
     /// Returns the cached model handle if it exists.
     pub fn model_handle(&self, reference: &ResourceReference) -> Option<AssetHandle> {
+        self.model_handle_raw(reference)
+    }
+
+    pub fn model_handle_raw(&self, reference: &ResourceReference) -> Option<AssetHandle> {
         self.model_handles.get(reference).map(|entry| *entry)
     }
 
     /// Fetches a model by handle.
     pub fn get_model(&self, handle: AssetHandle) -> Option<Arc<Model>> {
+        self.get_model_raw(handle)
+    }
+
+    pub fn get_model_raw(&self, handle: AssetHandle) -> Option<Arc<Model>> {
         self.models
             .get(&handle)
             .map(|entry| Arc::clone(entry.value()))
@@ -149,6 +172,10 @@ impl AssetRegistry {
 
     /// Fetches a material by handle.
     pub fn get_material(&self, handle: AssetHandle) -> Option<Arc<Material>> {
+        self.get_material_raw(handle)
+    }
+
+    pub fn get_material_raw(&self, handle: AssetHandle) -> Option<Arc<Material>> {
         self.materials
             .get(&handle)
             .map(|entry| Arc::clone(entry.value()))
@@ -156,6 +183,10 @@ impl AssetRegistry {
 
     /// Fetches a mesh by handle.
     pub fn get_mesh(&self, handle: AssetHandle) -> Option<Arc<Mesh>> {
+        self.get_mesh_raw(handle)
+    }
+
+    pub fn get_mesh_raw(&self, handle: AssetHandle) -> Option<Arc<Mesh>> {
         self.meshes
             .get(&handle)
             .map(|entry| Arc::clone(entry.value()))
@@ -245,6 +276,10 @@ impl AssetRegistry {
 
     /// Returns the owning model ID for the given material handle.
     pub fn material_owner(&self, handle: AssetHandle) -> Option<ModelId> {
+        self.material_owner_raw(handle)
+    }
+
+    pub fn material_owner_raw(&self, handle: AssetHandle) -> Option<ModelId> {
         self.material_owners.get(&handle).map(|entry| *entry)
     }
 
@@ -255,6 +290,13 @@ impl AssetRegistry {
 
     /// Returns the synthetic `ResourceReference` associated with a material handle.
     pub fn material_reference_for_handle(&self, handle: AssetHandle) -> Option<ResourceReference> {
+        self.material_reference_for_handle_raw(handle)
+    }
+
+    pub fn material_reference_for_handle_raw(
+        &self,
+        handle: AssetHandle,
+    ) -> Option<ResourceReference> {
         self.material_references
             .get(&handle)
             .map(|entry| entry.value().clone())
@@ -262,6 +304,10 @@ impl AssetRegistry {
 
     /// Returns the synthetic `ResourceReference` associated with a mesh handle.
     pub fn mesh_reference_for_handle(&self, handle: AssetHandle) -> Option<ResourceReference> {
+        self.mesh_reference_for_handle_raw(handle)
+    }
+
+    pub fn mesh_reference_for_handle_raw(&self, handle: AssetHandle) -> Option<ResourceReference> {
         self.mesh_references
             .get(&handle)
             .map(|entry| entry.value().clone())
@@ -272,6 +318,13 @@ impl AssetRegistry {
         &self,
         reference: &ResourceReference,
     ) -> Option<AssetHandle> {
+        self.material_handle_from_reference_raw(reference)
+    }
+
+    pub fn material_handle_from_reference_raw(
+        &self,
+        reference: &ResourceReference,
+    ) -> Option<AssetHandle> {
         self.material_reference_lookup
             .get(reference)
             .map(|entry| *entry)
@@ -279,6 +332,13 @@ impl AssetRegistry {
 
     /// Attempts to resolve a mesh handle from its synthetic `ResourceReference`.
     pub fn mesh_handle_from_reference(&self, reference: &ResourceReference) -> Option<AssetHandle> {
+        self.mesh_handle_from_reference_raw(reference)
+    }
+
+    pub fn mesh_handle_from_reference_raw(
+        &self,
+        reference: &ResourceReference,
+    ) -> Option<AssetHandle> {
         self.mesh_reference_lookup
             .get(reference)
             .map(|entry| *entry)
@@ -300,7 +360,10 @@ impl AssetRegistry {
 
             self.material_owners.insert(handle, model_id);
 
-            if let Some(reference) = material_reference(model_id, &name) {
+            let reference = material_reference_from_model(model.as_ref(), &name)
+                .or_else(|| material_reference_fallback(model_id, &name));
+
+            if let Some(reference) = reference {
                 self.material_references.insert(handle, reference.clone());
                 self.material_reference_lookup.insert(reference, handle);
             }
@@ -339,7 +402,21 @@ impl Default for AssetRegistry {
 
 pub static ASSET_REGISTRY: LazyLock<AssetRegistry> = LazyLock::new(AssetRegistry::new);
 
-fn material_reference(model_id: ModelId, name: &str) -> Option<ResourceReference> {
+fn material_reference_from_model(model: &Model, name: &str) -> Option<ResourceReference> {
+    let base_uri = model.path.as_uri()?;
+    let material_component = sanitize_material_component(name);
+
+    if material_component.is_empty() {
+        return None;
+    }
+
+    let base = base_uri.trim_end_matches('/');
+    let combined = format!("{}/{}", base, material_component);
+
+    ResourceReference::from_euca_uri(combined).ok()
+}
+
+fn material_reference_fallback(model_id: ModelId, name: &str) -> Option<ResourceReference> {
     resource_reference_for("materials", model_id, name)
 }
 
@@ -358,6 +435,21 @@ fn resource_reference_for(
     }
     let uri = format!("euca://{}/{}/{}", category, model_id.raw(), sanitized);
     ResourceReference::from_euca_uri(uri).ok()
+}
+
+fn sanitize_material_component(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    trimmed
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => ch,
+            _ => '_',
+        })
+        .collect()
 }
 
 fn sanitize_component(input: &str) -> String {

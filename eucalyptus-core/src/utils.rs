@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
+use std::path::PathBuf;
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
@@ -286,4 +285,176 @@ impl ResolveReference for ResourceReference {
             }
         }
     }
+}
+
+/// Validates and converts a raw pointer to a reference.
+/// Returns early if the pointer is null.
+///
+/// # Example
+/// ```rust
+/// use eucalyptus_core::{convert_ptr, ptr::AssetRegistryPtr};
+/// use dropbear_engine::asset::AssetRegistry;
+///
+/// let asset_handle = 0x12345678; // pointer
+///
+/// let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+/// ```
+#[macro_export]
+macro_rules! convert_ptr {
+    ($ptr:expr, $ptr_ty:ty => $target_ty:ty) => {{
+        let ptr = $ptr as $ptr_ty;
+        if ptr.is_null() {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is null",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr)
+            );
+            crate::scripting::jni::error::set_last_error_message(&message);
+            println!("{}", message);
+            return $crate::ffi_error_return!();
+        }
+        unsafe { &*(ptr as *const $target_ty) }
+    }};
+
+    ($ptr:expr => $target_ty:ty) => {{
+        let ptr = $ptr as *const $target_ty;
+        if ptr.is_null() {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is null",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr)
+            );
+            crate::scripting::jni::error::set_last_error_message(&message);
+            println!("{}", message);
+            return $crate::ffi_error_return!();
+        }
+        unsafe { &*ptr }
+    }};
+}
+
+/// Converts a JString to a Rust String with automatic error handling.
+/// Automatically infers the appropriate error return value based on the function's return type.
+///
+/// # Usage
+/// ```rust
+/// convert_jstring!(env, jstring);
+/// ```
+#[macro_export]
+macro_rules! convert_jstring {
+    ($env:expr, $jstring:expr) => {{
+        match $env.get_string(&$jstring) {
+            Ok(java_string) => match java_string.to_str() {
+                Ok(rust_str) => rust_str.to_string(),
+                Err(e) => {
+                    let message = format!(
+                        "[{}] [ERROR] Failed to convert Java string to Rust string: {}",
+                        stringify!($jstring),
+                        e
+                    );
+                    crate::scripting::jni::error::set_last_error_message(&message);
+                    println!("{}", message);
+                    return $crate::ffi_error_return!();
+                }
+            },
+            Err(e) => {
+                let message = format!(
+                    "[{}] [ERROR] Failed to get string from JNI: {}",
+                    stringify!($jstring),
+                    e
+                );
+                crate::scripting::jni::error::set_last_error_message(&message);
+                println!("{}", message);
+                return $crate::ffi_error_return!();
+            }
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! ffi_error_return {
+    () => {{
+        trait ErrorValue {
+            fn error_value() -> Self;
+        }
+
+        impl ErrorValue for () {
+            fn error_value() -> Self {}
+        }
+
+        impl ErrorValue for i8 {
+            fn error_value() -> Self {
+                -1
+            }
+        }
+
+        impl ErrorValue for i16 {
+            fn error_value() -> Self {
+                -1
+            }
+        }
+
+        impl ErrorValue for i32 {
+            fn error_value() -> Self {
+                -1
+            }
+        }
+
+        impl ErrorValue for i64 {
+            fn error_value() -> Self {
+                -1
+            }
+        }
+
+        impl ErrorValue for isize {
+            fn error_value() -> Self {
+                -1
+            }
+        }
+
+        impl ErrorValue for u8 {
+            fn error_value() -> Self {
+                0
+            } // most likely a char or a jboolean
+        }
+
+        impl ErrorValue for u16 {
+            fn error_value() -> Self {
+                u16::MAX
+            }
+        }
+
+        impl ErrorValue for u32 {
+            fn error_value() -> Self {
+                u32::MAX
+            }
+        }
+
+        impl ErrorValue for u64 {
+            fn error_value() -> Self {
+                u64::MAX
+            }
+        }
+
+        impl ErrorValue for usize {
+            fn error_value() -> Self {
+                usize::MAX
+            }
+        }
+
+        impl<T> ErrorValue for *mut T {
+            fn error_value() -> Self {
+                std::ptr::null_mut()
+            }
+        }
+
+        impl<T> ErrorValue for *const T {
+            fn error_value() -> Self {
+                std::ptr::null()
+            }
+        }
+
+        // todo: implement other types
+
+        ErrorValue::error_value()
+    }};
 }

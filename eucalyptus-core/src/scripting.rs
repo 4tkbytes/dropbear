@@ -8,12 +8,12 @@ use crate::scripting::native::NativeLibrary;
 use crate::states::ScriptComponent;
 use anyhow::Context;
 use crossbeam_channel::Sender;
+use dropbear_engine::asset::ASSET_REGISTRY;
 use hecs::{Entity, World};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use dropbear_engine::asset::{ASSET_REGISTRY};
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone)]

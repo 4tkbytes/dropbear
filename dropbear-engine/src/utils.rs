@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
-pub const euca_SCHEME: &str = "euca://";
+pub const EUCA_SCHEME: &str = "euca://";
 
 /// Converts any supported resource reference into the canonical `euca://` form.
 ///
@@ -24,7 +24,7 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
     }
 
     let normalized = trimmed.replace('\\', "/");
-    let (had_scheme, without_scheme) = if let Some(rest) = normalized.strip_prefix(euca_SCHEME) {
+    let (had_scheme, without_scheme) = if let Some(rest) = normalized.strip_prefix(EUCA_SCHEME) {
         (true, rest)
     } else {
         (false, normalized.as_str())
@@ -49,16 +49,16 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
         log::debug!(
             "Canonicalized legacy resource reference '{}' to '{}{}'",
             uri,
-            euca_SCHEME,
+            EUCA_SCHEME,
             clean
         );
     }
 
-    Ok(format!("{euca_SCHEME}{clean}"))
+    Ok(format!("{EUCA_SCHEME}{clean}"))
 }
 
 pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
-    let without_scheme = uri.strip_prefix(euca_SCHEME).unwrap_or(uri);
+    let without_scheme = uri.strip_prefix(EUCA_SCHEME).unwrap_or(uri);
 
     let stripped = without_scheme.trim_start_matches('/');
     if stripped.is_empty() {
@@ -224,7 +224,7 @@ impl ResourceReference {
                     .collect::<Vec<_>>()
                     .join("/");
 
-                let canonical = canonicalize_euca_uri(&format!("{euca_SCHEME}{resource_path}"))?;
+                let canonical = canonicalize_euca_uri(&format!("{EUCA_SCHEME}{resource_path}"))?;
 
                 return Ok(Self {
                     ref_type: ResourceReferenceType::File(canonical),

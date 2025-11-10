@@ -40,9 +40,15 @@ enum Target {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    if !cli.raw || (cli.stdout && cli.output.is_some()) {
+    if !(cli.stdout || cli.output.is_some() || cli.raw) {
         return Err(anyhow::anyhow!(
             "No output given. --stdout, --output <target> or --raw must be used."
+        ));
+    }
+
+    if cli.stdout && cli.output.is_some() {
+        return Err(anyhow::anyhow!(
+            "--stdout and --output cannot be used together. Choose one output destination."
         ));
     }
 
@@ -75,10 +81,7 @@ fn main() -> anyhow::Result<()> {
 
     if cli.stdout {
         print!("{}", generated_content);
-    } else if cli.raw && !(cli.stdout || cli.output.is_some()) {
-        return Ok(());
-    } else {
-        let output_dir = cli.output.unwrap();
+    } else if let Some(output_dir) = cli.output {
         fs::create_dir_all(&output_dir)?;
 
         let filename = match cli.target {

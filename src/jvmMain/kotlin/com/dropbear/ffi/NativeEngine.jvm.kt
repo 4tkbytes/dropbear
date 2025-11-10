@@ -242,6 +242,8 @@ actual class NativeEngine {
             } else {
                 null
             }
+        } else if (result == 0L) {
+            null
         } else {
             result
         }
@@ -252,15 +254,17 @@ actual class NativeEngine {
     }
 
     actual fun getTexture(entityHandle: Long, name: String): Long? {
-        val result = JNINative.getTexture(worldHandle, entityHandle, name)
+        val result = JNINative.getTexture(worldHandle, assetHandle, entityHandle, name)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get texture for entity $entityHandle")
             } else {
                 null
             }
+        } else if (result == 0L) {
+            null
         } else {
-            JNINative.getTexture(worldHandle, entityHandle, name)
+            result
         }
     }
 
@@ -282,8 +286,8 @@ actual class NativeEngine {
         return JNINative.isUsingModel(worldHandle, entityHandle, modelHandle)
     }
 
-    actual fun isUsingTexture(entityHandle: Long, name: String): Boolean {
-        return JNINative.isUsingTexture(worldHandle, entityHandle, name)
+    actual fun isUsingTexture(entityHandle: Long, textureHandle: Long): Boolean {
+        return JNINative.isUsingTexture(worldHandle, entityHandle, textureHandle)
     }
 
     actual fun getAsset(eucaURI: String): Long? {
@@ -294,6 +298,9 @@ actual class NativeEngine {
             } else {
                 null
             }
+        } else if (result == 0L) {
+            // no asset found
+            null
         } else {
             result
         }
@@ -305,5 +312,18 @@ actual class NativeEngine {
 
     actual fun isTextureHandle(id: Long): Boolean {
         return JNINative.isTextureHandle(assetHandle, id)
+    }
+
+    actual fun getLastErrorMsg(): String? {
+        val message = JNINative.getLastErrorMsg(assetHandle)
+        return if (message.isEmpty()) null else message
+    }
+
+    actual fun getLastErrorMsgPtr(): Long {
+        return JNINative.getLastErrMsgPtr(assetHandle)
+    }
+
+    actual fun getAllTextures(entityHandle: Long): Array<String> {
+        return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
     }
 }

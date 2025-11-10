@@ -1,20 +1,32 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::scripting::jni::error::{
+    clear_last_error_message, get_last_error_message, get_last_error_message_ptr,
+    set_last_error_message,
+};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
 use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
+use crate::{convert_jstring, convert_ptr};
+use dropbear_engine::asset::PointerKind::Const;
+use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::model::Model;
+use dropbear_engine::utils::ResourceReference;
 use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::JNIEnv;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jstring};
-use dropbear_engine::asset::{AssetHandle};
-use dropbear_engine::utils::ResourceReference;
+use jni::sys::{
+    JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jobjectArray, jstring,
+};
+use parking_lot::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 ///   (JNIEnv *, jclass, jlong, jstring);`
@@ -1726,11 +1738,15 @@ pub fn Java_com_dropbear_ffi_JNINative_getModel(
     let world = unsafe { &*world };
     let entity = unsafe { world.find_entity_from_id(entity as u32) };
 
-    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity) && let Some(model) = q.get() {
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
+        && let Some(model) = q.get()
+    {
         let handle = model.asset_handle();
         handle.raw() as jlong
     } else {
-        println!("[Java_com_dropbear_ffi_JNINative_getModel] [ERROR] Unable to find entity in world");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getModel] [ERROR] Unable to find entity in world"
+        );
         -1
     }
 }
@@ -1754,7 +1770,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setModel(
 
     let asset = asset_handle as AssetRegistryPtr;
     if asset.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Asset registry pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Asset registry pointer is null"
+        );
         return;
     }
 
@@ -1762,8 +1780,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setModel(
     let asset = unsafe { &*asset };
     let entity = unsafe { world.find_entity_from_id(entity as u32) };
 
-    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(entity) &&
-        let Some(model) = q.get()
+    if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(entity)
+        && let Some(model) = q.get()
     {
         let asset_handle = AssetHandle::new(model_handle as u64);
         if !asset.contains_handle(asset_handle) {
@@ -1771,18 +1789,68 @@ pub fn Java_com_dropbear_ffi_JNINative_setModel(
             return;
         }
         if let Err(e) = model.set_asset_handle_raw(asset, asset_handle) {
-            println!("[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Unable to set model: {}", e);
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setModel] [ERROR] Unable to set model: {}",
+                e
+            );
         }
     }
 }
 
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isModelHandle
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isModelHandle(
+    _env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+    model_id: jlong,
+) -> jboolean {
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+
+    asset
+        .contains_handle(AssetHandle::new(model_id as u64))
+        .into()
+}
+
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isUsingModel
+///   (JNIEnv *, jclass, jlong, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isUsingModel(
+    _env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity: jlong,
+    model_handle: jlong,
+) -> jboolean {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    let handle = AssetHandle::new(model_handle as u64);
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
+        && let Some(model) = q.get()
+    {
+        if model.asset_handle() == handle {
+            true.into()
+        } else {
+            false.into()
+        }
+    } else {
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isUsingModel] [ERROR] Unable to find entity in world"
+        );
+        false.into()
+    }
+}
+
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getTexture
-///   (JNIEnv *, jclass, jlong, jlong, jstring);`
+///   (JNIEnv *, jclass, jlong, jlong, jlong, jstring);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_getTexture(
     mut env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
+    asset_handle: jlong,
     entity: jlong,
     name: JString,
 ) -> jlong {
@@ -1793,188 +1861,356 @@ pub fn Java_com_dropbear_ffi_JNINative_getTexture(
     }
 
     let world = unsafe { &*world };
+
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
     let entity = unsafe { world.find_entity_from_id(entity as u32) };
 
-    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity) && let Some(mesh) = q.get() {
-        let jni_result = env.get_string(&name);
-        let str = match jni_result {
-            Ok(java_string) => match java_string.to_str() {
-                Ok(rust_str) => rust_str.to_string(),
-                Err(e) => {
-                    println!(
-                        "[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Failed to convert Java string to Rust string: {}",
-                        e
-                    );
-                    return -1;
-                }
-            },
-            Err(e) => {
-                println!(
-                    "[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Failed to get string from JNI: {}",
-                    e
-                );
-                return -1;
-            }
-        };
-        if let Some(handle) = mesh.material_handle(str.as_str()) {
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
+        && let Some(mesh) = q.get()
+    {
+        let str = convert_jstring!(env, name);
+        if let Some(handle) = mesh.material_handle_raw(asset, str.as_str()) {
             handle.raw() as jlong
         } else {
-            -1
+            println!("[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Invalid texture handle");
+            0
         }
     } else {
-        -1
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getTexture] [ERROR] Unable to find entity in world"
+        );
+        0
     }
 }
 
-// /// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTexture
-// ///   (JNIEnv *, jclass, jlong, jlong, jlong, jlong);`
-// #[unsafe(no_mangle)]
-// pub fn Java_com_dropbear_ffi_JNINative_setTexture(
-//     _env: JNIEnv,
-//     _class: JClass,
-//     world_handle: jlong,
-//     asset_handle: jlong,
-//     entity: jlong,
-//     texture_handle: jlong,
-// ) {
-//     let world = world_handle as WorldPtr;
-//     if world.is_null() {
-//         println!("[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] World pointer is null");
-//         return;
-//     }
-//
-//     let asset = asset_handle as AssetRegistryPtr;
-//     if asset.is_null() {
-//         println!("[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Asset registry pointer is null");
-//         return;
-//     }
-//
-//     let asset = unsafe { &*asset };
-//
-//     let world = unsafe { &*world };
-//     let entity = unsafe { world.find_entity_from_id(entity as u32) };
-//
-//     match world.query_one::<&mut MeshRenderer>(entity) {
-//         Ok(mut query) => {
-//             let Some(renderer) = query.get() else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Entity does not have a MeshRenderer component"
-//                 );
-//                 return;
-//             };
-//
-//             let material_handle = AssetHandle::new(texture_handle as u64);
-//             if !asset.contains_handle(material_handle) {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Material handle {} is not registered",
-//                     material_handle.raw()
-//                 );
-//                 return;
-//             }
-//
-//             if !asset.is_material(material_handle) {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Handle {} does not reference a material",
-//                     material_handle.raw()
-//                 );
-//                 return;
-//             }
-//
-//             let Some(material) = asset.get_material(material_handle) else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to fetch material for handle {}",
-//                     material_handle.raw()
-//                 );
-//                 return;
-//             };
-//
-//             let Some(owner_model_id) = asset.material_owner(material_handle) else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve owning model for material {}",
-//                     material_handle.raw()
-//                 );
-//                 return;
-//             };
-//
-//             let Some(owner_model_handle) = asset.model_handle_from_id(owner_model_id) else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve model handle for owner {:?}",
-//                     owner_model_id
-//                 );
-//                 return;
-//             };
-//
-//             let Some(source_model_reference) = asset.model_reference_for_handle(owner_model_handle) else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve resource reference for model handle {}",
-//                     owner_model_handle.raw()
-//                 );
-//                 return;
-//             };
-//
-//             let source_material_name = material.name.clone();
-//
-//             let target_material_name = {
-//                 let current_model = renderer.model();
-//                 if current_model
-//                     .materials
-//                     .iter()
-//                     .any(|existing| existing.name == source_material_name)
-//                 {
-//                     Some(source_material_name.clone())
-//                 } else {
-//                     current_model
-//                         .materials
-//                         .first()
-//                         .map(|existing| existing.name.clone())
-//                 }
-//             };
-//
-//             let Some(target_material_name) = target_material_name else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Entity model has no materials to override"
-//                 );
-//                 return;
-//             };
-//
-//             let Some(cache_raw) = asset.get_pointer(PointerKind::Const("model_cache")) else {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Model cache pointer is not registered"
-//                 );
-//                 return;
-//             };
-//
-//             let cache_mutex_ptr = cache_raw as *const Mutex<HashMap<String, Arc<Model>>>;
-//             if cache_mutex_ptr.is_null() {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Model cache pointer is null"
-//                 );
-//                 return;
-//             }
-//
-//             let cache_mutex = unsafe { &*cache_mutex_ptr };
-//
-//             if let Err(err) = renderer.apply_material_override_raw(
-//                 asset,
-//                 cache_mutex,
-//                 &target_material_name,
-//                 source_model_reference,
-//                 &source_material_name,
-//             ) {
-//                 println!(
-//                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to apply material override: {}",
-//                     err
-//                 );
-//             }
-//         }
-//         Err(err) => {
-//             println!(
-//                 "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to query MeshRenderer: {}",
-//                 err
-//             );
-//         }
-//     }
-// }
+/// `JNIEXPORT jobjectArray JNICALL Java_com_dropbear_ffi_JNINative_getAllTextures
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity: jlong,
+) -> jobjectArray {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    let mut query = match world.query_one::<&MeshRenderer>(entity) {
+        Ok(query) => query,
+        Err(e) => {
+            let message = format!(
+                "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to query entity: {}",
+                e
+            );
+            set_last_error_message(&message);
+            println!("{}", message);
+            return std::ptr::null_mut();
+        }
+    };
+
+    let renderer = match query.get() {
+        Some(renderer) => renderer,
+        None => {
+            let message = "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Entity does not have a MeshRenderer component";
+            set_last_error_message(message);
+            println!("{}", message);
+            return std::ptr::null_mut();
+        }
+    };
+
+    let model = renderer.model();
+    let model_id = renderer.model_id();
+
+    let mut seen = HashSet::new();
+    let mut textures = Vec::new();
+
+    for material in &model.materials {
+        let reference = ASSET_REGISTRY
+            .material_handle(model_id, &material.name)
+            .and_then(|handle| ASSET_REGISTRY.material_reference_for_handle(handle))
+            .and_then(|reference| reference.as_uri().map(|uri| uri.to_string()))
+            .or_else(|| material.texture_tag.clone())
+            .unwrap_or_else(|| material.name.clone());
+
+        if seen.insert(reference.clone()) {
+            textures.push(reference);
+        }
+    }
+
+    let string_class = match env.find_class("java/lang/String") {
+        Ok(class) => class,
+        Err(e) => {
+            let message = format!(
+                "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to locate java/lang/String: {}",
+                e
+            );
+            set_last_error_message(&message);
+            println!("{}", message);
+            return std::ptr::null_mut();
+        }
+    };
+
+    let array = match env.new_object_array(textures.len() as i32, string_class, JObject::null()) {
+        Ok(array) => array,
+        Err(e) => {
+            let message = format!(
+                "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to allocate string array: {}",
+                e
+            );
+            set_last_error_message(&message);
+            println!("{}", message);
+            return std::ptr::null_mut();
+        }
+    };
+
+    for (index, value) in textures.iter().enumerate() {
+        let java_string = match env.new_string(value) {
+            Ok(string) => string,
+            Err(e) => {
+                let message = format!(
+                    "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to create Java string: {}",
+                    e
+                );
+                set_last_error_message(&message);
+                println!("{}", message);
+                return std::ptr::null_mut();
+            }
+        };
+
+        if let Err(e) =
+            env.set_object_array_element(&array, index as i32, JObject::from(java_string))
+        {
+            let message = format!(
+                "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to set array element: {}",
+                e
+            );
+            set_last_error_message(&message);
+            println!("{}", message);
+            return std::ptr::null_mut();
+        }
+    }
+
+    clear_last_error_message();
+    array.into_raw()
+}
+
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_setTexture
+///   (JNIEnv *, jclass, jlong, jlong, jlong, jstring, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_setTexture(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    asset_handle: jlong,
+    entity: jlong,
+    old_material_name: JString,
+    new_texture_handle: jlong,
+) {
+    let world = world_handle as WorldPtr;
+    if world.is_null() {
+        println!("[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] World pointer is null");
+        return;
+    }
+
+    let asset = asset_handle as AssetRegistryPtr;
+    if asset.is_null() {
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Asset registry pointer is null"
+        );
+        return;
+    }
+
+    let asset = unsafe { &*asset };
+
+    let world = unsafe { &*world };
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    match world.query_one::<&mut MeshRenderer>(entity) {
+        Ok(mut query) => {
+            let Some(renderer) = query.get() else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Entity does not have a MeshRenderer component"
+                );
+                return;
+            };
+
+            let Some(cache) = asset.get_pointer(Const("model_cache")) else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Asset registry does not contain model cache"
+                );
+                return;
+            };
+
+            let cache = cache as *const Mutex<HashMap<String, Arc<Model>>>;
+            let cache = unsafe { &*cache };
+
+            let jni_result = env.get_string(&old_material_name);
+            let target_material = match jni_result {
+                Ok(java_string) => match java_string.to_str() {
+                    Ok(rust_str) => rust_str.to_string(),
+                    Err(e) => {
+                        println!(
+                            "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to convert Java string to Rust string: {}",
+                            e
+                        );
+                        return;
+                    }
+                },
+                Err(e) => {
+                    println!(
+                        "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to get string from JNI: {}",
+                        e
+                    );
+                    return;
+                }
+            };
+
+            let handle = AssetHandle::new(new_texture_handle as u64);
+
+            if !asset.contains_handle(handle) {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Invalid texture handle: {}",
+                    new_texture_handle
+                );
+                return;
+            }
+
+            if !asset.is_material(handle) {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Handle {} does not refer to a material",
+                    new_texture_handle
+                );
+                return;
+            }
+
+            let Some(material) = asset.get_material(handle) else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Invalid texture handle"
+                );
+                return;
+            };
+
+            let Some(owner_model_id) = asset.material_owner(handle) else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to determine owning model for material handle {}",
+                    new_texture_handle
+                );
+                return;
+            };
+
+            let Some(owner_model_handle) = asset.model_handle_from_id(owner_model_id) else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve model handle for owner id {:?}",
+                    owner_model_id
+                );
+                return;
+            };
+
+            let Some(source_reference) = asset.model_reference_for_handle(owner_model_handle)
+            else {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve model reference for handle {}",
+                    owner_model_handle.raw()
+                );
+                return;
+            };
+
+            let material_name = material.name.clone();
+
+            if let Err(e) = renderer.apply_material_override_raw(
+                asset,
+                cache,
+                target_material.as_str(),
+                source_reference,
+                material_name.as_str(),
+            ) {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to apply material override: {}",
+                    e
+                );
+            }
+        }
+        Err(err) => {
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to query MeshRenderer: {}",
+                err
+            );
+        }
+    }
+}
+
+/// `JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getTextureName
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getTextureName(
+    env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+    texture_id: jlong,
+) -> jstring {
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+
+    let texture_id = AssetHandle::new(texture_id as u64);
+    asset.get_material(texture_id).map_or_else(
+        || {
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_getTextureName] [ERROR] Invalid texture handle"
+            );
+            return std::ptr::null_mut();
+        },
+        |material| {
+            let Ok(str) = env.new_string(material.name.as_str()) else {
+                return std::ptr::null_mut();
+            };
+
+            str.into_raw()
+        },
+    )
+}
+
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isTextureHandle
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isTextureHandle(
+    _env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+    texture_id: jlong,
+) -> jboolean {
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+    let texture_id = AssetHandle::new(texture_id as u64);
+    if asset.is_material(texture_id) {
+        true.into()
+    } else {
+        false.into()
+    }
+}
+
+/// `JNIEXPORT jboolean JNICALL Java_com_dropbear_ffi_JNINative_isUsingTexture
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_isUsingTexture(
+    _env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity: jlong,
+    texture_handle: jlong,
+) -> jboolean {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+
+    if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
+        && let Some(mesh) = q.get()
+    {
+        mesh.contains_material_handle(AssetHandle::new(texture_handle as u64))
+            .into()
+    } else {
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_isUsingTexture] [ERROR] Unable to find entity in world"
+        );
+        false.into()
+    }
+}
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getAsset
 ///   (JNIEnv *, jclass, jlong, jstring);`
@@ -1987,7 +2223,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getAsset(
 ) -> jlong {
     let asset = asset_handle as AssetRegistryPtr;
     if asset.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_getAsset] [ERROR] Asset registry pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_getAsset] [ERROR] Asset registry pointer is null"
+        );
         return -1;
     }
 
@@ -2013,8 +2251,60 @@ pub fn Java_com_dropbear_ffi_JNINative_getAsset(
             return -1;
         }
     };
-    if let Ok(res) = ResourceReference::from_euca_uri(str) && let Some(asset_handle) = asset.get_handle_from_reference(&res) {
+    if let Ok(res) = ResourceReference::from_euca_uri(str)
+        && let Some(asset_handle) = asset.get_handle_from_reference(&res)
+    {
         return asset_handle.raw() as jlong;
     };
-    -1 as jlong
+    0 as jlong
+}
+
+/// `JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getLastErrorMsg
+///   (JNIEnv *, jclass, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getLastErrorMsg(
+    env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+) -> jstring {
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+    if asset.get_pointer(Const("last_error_msg")).is_none() {
+        let ptr = get_last_error_message_ptr() as usize;
+        asset.add_pointer(Const("last_error_msg"), ptr);
+    }
+    let message = get_last_error_message();
+    match env.new_string(&message) {
+        Ok(java_string) => {
+            clear_last_error_message();
+            java_string.into_raw()
+        }
+        Err(e) => {
+            let fallback = format!(
+                "[Java_com_dropbear_ffi_JNINative_getLastErrorMsg] [ERROR] Failed to allocate Java string: {}",
+                e
+            );
+            println!("{}", fallback);
+            set_last_error_message(&fallback);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLastErrMsgPtr
+///   (JNIEnv *, jclass, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getLastErrMsgPtr(
+    _env: JNIEnv,
+    _class: JClass,
+    asset_handle: jlong,
+) -> jlong {
+    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+    let pointer = asset
+        .get_pointer(Const("last_error_msg"))
+        .unwrap_or_else(|| {
+            let ptr = get_last_error_message_ptr() as usize;
+            asset.add_pointer(Const("last_error_msg"), ptr);
+            ptr
+        });
+    pointer as jlong
 }

@@ -22,4 +22,19 @@ abstract class Handle(private val id: Long) {
     override fun toString(): String {
         return "Handle(id=$id)"
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+
+        val otherAsset = when (other) {
+            is Handle      -> other.asAssetHandle()
+            is AssetHandle -> other
+            else           -> return false
+        }
+
+        val thisAsset = asAssetHandle()
+        return thisAsset.raw() == otherAsset.raw()
+    }
+
+    override fun hashCode(): Int = asAssetHandle().raw().hashCode()
 }

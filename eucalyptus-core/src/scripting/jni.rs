@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
+pub mod error;
 pub mod exception;
 pub mod exports;
 pub mod utils;

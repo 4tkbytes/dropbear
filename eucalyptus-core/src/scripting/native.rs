@@ -118,6 +118,11 @@ impl NativeLibrary {
 
 /// Displays the types of errors that can be returned by the native library.
 pub enum DropbearNativeError {
+    /// An error in the case the function returns an unsigned value.
+    ///
+    /// Subtract [`DropbearNativeError::UnsignedGenericError`] with another value
+    /// to get the alternative unsigned error.
+    UnsignedGenericError = 65535,
     Success = 0,
     NullPointer = -1,
     QueryFailed = -2,

@@ -8,7 +8,7 @@ public class JNINative {
         System.loadLibrary("eucalyptus_core");
     }
 
-    // entity
+    // getters
     public static native long getEntity(long worldHandle, String label);
     public static native long getAsset(long assetRegistryHandle, String eucaURI);
 
@@ -19,12 +19,12 @@ public class JNINative {
     public static native boolean isUsingModel(long worldHandle, long entityHandle, long modelHandle);
 
     // texture
-    public static native long getTexture(long worldHandle, long entityHandle, String name);
+    public static native long getTexture(long worldHandle, long assetHandle, long entityHandle, String name);
     public static native String getTextureName(long assetHandle, long textureHandle);
     public static native void setTexture(long worldHandle, long assetRegistryHandle, long entityHandle,
                                          String oldMaterialName, long textureHandle);
     public static native boolean isTextureHandle(long assetRegistryHandle, long handle);
-    public static native boolean isUsingTexture(long worldHandle, long entityHandle, String name);
+    public static native boolean isUsingTexture(long worldHandle, long entityHandle, long textureHandle);
 
     // camera
     public static native Camera getCamera(long worldHandle, String label);
@@ -61,4 +61,7 @@ public class JNINative {
     public static native float[] getLastMousePos(long inputHandle);
     public static native boolean isCursorHidden(long inputHandle);
     public static native void setCursorHidden(long inputHandle, long graphicsHandle, boolean hidden);
+    public static native String getLastErrorMsg(long assetHandle);
+    public static native long getLastErrMsgPtr(long assetHandle);
+    public static native String[] getAllTextures(long worldHandle, long entityHandle);
 }

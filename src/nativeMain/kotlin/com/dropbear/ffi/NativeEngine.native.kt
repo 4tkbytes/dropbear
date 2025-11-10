@@ -810,7 +810,7 @@ actual class NativeEngine {
         TODO("Not yet implemented")
     }
 
-    actual fun isUsingTexture(entityHandle: Long, name: String): Boolean {
+    actual fun isUsingTexture(entityHandle: Long, textureHandle: Long): Boolean {
         TODO("Not yet implemented")
     }
 
@@ -830,6 +830,18 @@ actual class NativeEngine {
     }
 
     actual fun getTextureName(textureHandle: Long): String? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getLastErrorMsg(): String? {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getLastErrorMsgPtr(): Long {
+        TODO("Not yet implemented")
+    }
+
+    actual fun getAllTextures(entityHandle: Long): Array<String> {
         TODO("Not yet implemented")
     }
 }

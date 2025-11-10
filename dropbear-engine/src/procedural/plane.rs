@@ -3,12 +3,15 @@
 //! Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
 //! my old game engine made in C sharp, where this is the plane "algorithm".
 
+use crate::asset::{ASSET_REGISTRY, AssetRegistry};
 use crate::entity::MeshRenderer;
 use crate::graphics::{SharedGraphicsContext, Texture};
 use crate::model::{LoadedModel, MODEL_CACHE, Material, Mesh, Model, ModelId, ModelVertex};
 use crate::utils::{ResourceReference, ResourceReferenceType};
+use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use wgpu::{AddressMode, util::DeviceExt};
 
 /// Creates a plane wrapped in a [`MeshRenderer`].
@@ -48,10 +51,28 @@ impl PlaneBuilder {
     }
 
     pub async fn build(
+        self,
+        graphics: Arc<SharedGraphicsContext>,
+        texture_bytes: &[u8],
+        label: Option<&str>,
+    ) -> anyhow::Result<MeshRenderer> {
+        self.build_raw(
+            graphics,
+            texture_bytes,
+            label,
+            &ASSET_REGISTRY,
+            LazyLock::force(&MODEL_CACHE),
+        )
+        .await
+    }
+
+    pub async fn build_raw(
         mut self,
         graphics: Arc<SharedGraphicsContext>,
         texture_bytes: &[u8],
         label: Option<&str>,
+        registry: &AssetRegistry,
+        cache: &Mutex<HashMap<String, Arc<Model>>>,
     ) -> anyhow::Result<MeshRenderer> {
         let label = if let Some(label) = label {
             label.to_string()
@@ -98,9 +119,12 @@ impl PlaneBuilder {
 
         let hash = hasher.finish();
 
-        if let Some(cached_model) = MODEL_CACHE.lock().get(&label) {
+        if let Some(cached_model) = {
+            let cache_guard = cache.lock();
+            cache_guard.get(&label).cloned()
+        } {
             log::debug!("Model loaded from cache: {:?}", label);
-            let handle = LoadedModel::new(Arc::clone(cached_model));
+            let handle = LoadedModel::new_raw(registry, cached_model);
             return Ok(MeshRenderer::from_handle(handle));
         }
 
@@ -145,9 +169,12 @@ impl PlaneBuilder {
             id: ModelId(hash),
         });
 
-        MODEL_CACHE.lock().insert(label, Arc::clone(&model));
+        {
+            let mut cache_guard = cache.lock();
+            cache_guard.insert(label.clone(), Arc::clone(&model));
+        }
 
-        let handle = LoadedModel::new(model);
+        let handle = LoadedModel::new_raw(registry, model);
         Ok(MeshRenderer::from_handle(handle))
     }
 }

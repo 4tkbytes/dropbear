@@ -1,3 +1,4 @@
+use crate::asset::AssetRegistry;
 use crate::{
     asset::{ASSET_REGISTRY, AssetHandle},
     graphics::{SharedGraphicsContext, Texture},
@@ -13,12 +14,11 @@ use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
-use crate::asset::AssetRegistry;
 
 pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/textures/grey.png");
 
-
-pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelId(pub u64);
@@ -46,8 +46,12 @@ pub struct LoadedModel {
 
 impl LoadedModel {
     pub fn new(inner: Arc<Model>) -> Self {
+        Self::new_raw(&ASSET_REGISTRY, inner)
+    }
+
+    pub fn new_raw(registry: &AssetRegistry, inner: Arc<Model>) -> Self {
         let reference = inner.path.clone();
-        let handle = ASSET_REGISTRY.register_model(reference, Arc::clone(&inner));
+        let handle = registry.register_model(reference, Arc::clone(&inner));
         Self { inner, handle }
     }
 
@@ -62,9 +66,7 @@ impl LoadedModel {
     }
 
     pub fn from_asset_handle(handle: AssetHandle) -> Option<Arc<LoadedModel>> {
-        ASSET_REGISTRY
-            .get_model(handle)
-            .map(|model| Arc::new(Self::from_registered(handle, model)))
+        Self::from_asset_handle_raw(&ASSET_REGISTRY, handle).map(|model| Arc::new(model))
     }
 
     /// Returns the unique identifier of the underlying model asset.
@@ -94,9 +96,7 @@ impl LoadedModel {
     /// Re-registers the model with the global asset registry, ensuring cached
     /// sub-assets stay in sync after mutations.
     pub fn refresh_registry(&mut self) {
-        let reference = self.inner.path.clone();
-        let updated_handle = ASSET_REGISTRY.register_model(reference, self.get());
-        self.handle = updated_handle;
+        self.refresh_registry_raw(&ASSET_REGISTRY);
     }
 
     pub fn refresh_registry_raw(&mut self, registry: &AssetRegistry) {
@@ -106,11 +106,28 @@ impl LoadedModel {
     }
 
     pub fn contains_material_handle(&self, handle: AssetHandle) -> bool {
-        self.inner.contains_material_handle(handle)
+        self.contains_material_handle_raw(&ASSET_REGISTRY, handle)
+    }
+
+    pub fn contains_material_handle_raw(
+        &self,
+        registry: &AssetRegistry,
+        handle: AssetHandle,
+    ) -> bool {
+        self.inner.contains_material_handle_raw(registry, handle)
     }
 
     pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
-        self.inner.contains_material_reference(reference)
+        self.contains_material_reference_raw(&ASSET_REGISTRY, reference)
+    }
+
+    pub fn contains_material_reference_raw(
+        &self,
+        registry: &AssetRegistry,
+        reference: &ResourceReference,
+    ) -> bool {
+        self.inner
+            .contains_material_reference_raw(registry, reference)
     }
 }
 
@@ -187,7 +204,11 @@ impl Model {
 
     /// Returns the registered asset handle for this model, if available.
     pub fn asset_handle(&self) -> Option<AssetHandle> {
-        ASSET_REGISTRY.model_handle_from_reference(&self.path)
+        self.asset_handle_raw(&ASSET_REGISTRY)
+    }
+
+    pub fn asset_handle_raw(&self, registry: &AssetRegistry) -> Option<AssetHandle> {
+        registry.model_handle_from_reference(&self.path)
     }
 
     /// Returns `true` if this model was loaded from the specified resource reference.
@@ -197,15 +218,32 @@ impl Model {
 
     /// Returns `true` if this model owns the supplied material handle.
     pub fn contains_material_handle(&self, material_handle: AssetHandle) -> bool {
-        ASSET_REGISTRY
-            .material_owner(material_handle) == Some(self.id)
+        self.contains_material_handle_raw(&ASSET_REGISTRY, material_handle)
+    }
+
+    pub fn contains_material_handle_raw(
+        &self,
+        registry: &AssetRegistry,
+        material_handle: AssetHandle,
+    ) -> bool {
+        registry.material_owner(material_handle) == Some(self.id)
     }
 
     /// Returns `true` if this model owns a material registered under the provided resource reference.
     pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
-        ASSET_REGISTRY
+        self.contains_material_reference_raw(&ASSET_REGISTRY, reference)
+    }
+
+    pub fn contains_material_reference_raw(
+        &self,
+        registry: &AssetRegistry,
+        reference: &ResourceReference,
+    ) -> bool {
+        registry
             .material_handle_from_reference(reference)
-            .map_or(false, |handle| self.contains_material_handle(handle))
+            .map_or(false, |handle| {
+                self.contains_material_handle_raw(registry, handle)
+            })
     }
 
     /// Returns `true` if any material on this model is tagged with `texture_tag`.
@@ -220,22 +258,49 @@ impl Model {
         self.materials
             .iter()
             .find(|mat| mat.name == material_name)
-            .and_then(|mat| mat.texture_tag.as_deref()) == Some(texture_tag)
+            .and_then(|mat| mat.texture_tag.as_deref())
+            == Some(texture_tag)
     }
 
-    pub async fn load_from_memory(
+    pub async fn load_from_memory<B>(
         graphics: Arc<SharedGraphicsContext>,
-        buffer: impl AsRef<[u8]>,
+        buffer: B,
         label: Option<&str>,
-    ) -> anyhow::Result<LoadedModel> {
+    ) -> anyhow::Result<LoadedModel>
+    where
+        B: AsRef<[u8]>,
+    {
+        Self::load_from_memory_raw(
+            graphics,
+            buffer,
+            label,
+            &ASSET_REGISTRY,
+            LazyLock::force(&MODEL_CACHE),
+        )
+        .await
+    }
+
+    pub async fn load_from_memory_raw<B>(
+        graphics: Arc<SharedGraphicsContext>,
+        buffer: B,
+        label: Option<&str>,
+        registry: &AssetRegistry,
+        cache: &Mutex<HashMap<String, Arc<Model>>>,
+    ) -> anyhow::Result<LoadedModel>
+    where
+        B: AsRef<[u8]>,
+    {
         let start = Instant::now();
         let mut hasher = DefaultHasher::new();
 
         let cache_key = label.unwrap_or("default").to_string();
 
-        if let Some(cached_model) = MODEL_CACHE.lock().get(&cache_key) {
+        if let Some(cached_model) = {
+            let cache_guard = cache.lock();
+            cache_guard.get(&cache_key).cloned()
+        } {
             log::debug!("Model loaded from memory cache: {:?}", cache_key);
-            return Ok(LoadedModel::new(cached_model.clone()));
+            return Ok(LoadedModel::new_raw(registry, cached_model));
         }
 
         log::trace!(
@@ -416,9 +481,12 @@ impl Model {
             id: ModelId(hasher.finish()),
         });
 
-        let loaded = LoadedModel::new(Arc::clone(&model));
+        let loaded = LoadedModel::new_raw(registry, Arc::clone(&model));
 
-        MODEL_CACHE.lock().insert(cache_key.clone(), model);
+        {
+            let mut cache_guard = cache.lock();
+            cache_guard.insert(cache_key.clone(), model);
+        }
         log::trace!("==================== DONE ====================");
         log::debug!("Model cached from memory: {:?}", label);
         log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);
@@ -431,22 +499,42 @@ impl Model {
         path: &PathBuf,
         label: Option<&str>,
     ) -> anyhow::Result<LoadedModel> {
+        Self::load_raw(
+            graphics,
+            path,
+            label,
+            &ASSET_REGISTRY,
+            LazyLock::force(&MODEL_CACHE),
+        )
+        .await
+    }
+
+    pub async fn load_raw(
+        graphics: Arc<SharedGraphicsContext>,
+        path: &PathBuf,
+        label: Option<&str>,
+        registry: &AssetRegistry,
+        cache: &Mutex<HashMap<String, Arc<Model>>>,
+    ) -> anyhow::Result<LoadedModel> {
         let file_name = path.file_name();
         log::debug!("Loading model [{:?}]", file_name);
 
         let path_str = path.to_string_lossy().to_string();
 
         log::debug!("Checking if model exists in cache");
-        if let Some(cached_model) = MODEL_CACHE.lock().get(&path_str) {
+        if let Some(cached_model) = {
+            let cache_guard = cache.lock();
+            cache_guard.get(&path_str).cloned()
+        } {
             log::debug!("Model loaded from cache: {:?}", path_str);
-            return Ok(LoadedModel::new(cached_model.clone()));
+            return Ok(LoadedModel::new_raw(registry, cached_model));
         }
         log::debug!("Model does not exist in cache, loading memory...");
 
         log::debug!("Path of model: {}", path.display());
 
         let buffer = std::fs::read(path)?;
-        let loaded = Self::load_from_memory(graphics, buffer, label).await?;
+        let loaded = Self::load_from_memory_raw(graphics, buffer, label, registry, cache).await?;
 
         let mut model_clone: Model = (*loaded).clone();
         if let Ok(reference) = ResourceReference::from_path(path) {
@@ -458,15 +546,15 @@ impl Model {
 
         let updated = Arc::new(model_clone);
         {
-            let mut cache = MODEL_CACHE.lock();
-            cache.insert(path_str, Arc::clone(&updated));
+            let mut cache_guard = cache.lock();
+            cache_guard.insert(path_str.clone(), Arc::clone(&updated));
             if let Some(custom_label) = label {
-                cache.insert(custom_label.to_string(), Arc::clone(&updated));
+                cache_guard.insert(custom_label.to_string(), Arc::clone(&updated));
             }
         }
 
         log::debug!("Model cached and loaded: {:?}", file_name);
-        Ok(LoadedModel::new(updated))
+        Ok(LoadedModel::new_raw(registry, updated))
     }
 }
 

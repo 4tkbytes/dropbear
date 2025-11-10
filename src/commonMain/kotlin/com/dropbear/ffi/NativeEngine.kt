@@ -21,9 +21,10 @@ expect class NativeEngine {
 
     fun getTexture(entityHandle: Long, name: String): Long?
     fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle)
-    fun isUsingTexture(entityHandle: Long, name: String): Boolean
+    fun isUsingTexture(entityHandle: Long, textureHandle: Long): Boolean
     fun isTextureHandle(id: Long): Boolean
     fun getTextureName(textureHandle: Long): String?
+    fun getAllTextures(entityHandle: Long): Array<String>
 
     fun getCamera(label: String): Camera?
     fun getAttachedCamera(entityId: EntityId): Camera?
@@ -65,6 +66,8 @@ expect class NativeEngine {
     fun isCursorHidden(): Boolean
     fun setCursorHidden(hidden: Boolean)
     fun getLastMousePos(): Vector2D?
+    fun getLastErrorMsg(): String?
+    fun getLastErrorMsgPtr(): Long
 //    fun getConnectedGamepads(): List<Gamepad>
 
     // -------------------------------------------------------------------

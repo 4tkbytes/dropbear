@@ -13,6 +13,7 @@ use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::Receiver;
+use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
     camera::Camera,
@@ -1408,11 +1409,8 @@ impl Editor {
             log::debug!("Pointers before sendoff:");
             log::debug!("World: {:p}", world_ptr);
             log::debug!("Input: {:p}", input_ptr);
-            log::debug!(
-                "script graphics_command: 0x{:p}, 0x{:p}",
-                &GRAPHICS_COMMAND.0,
-                &GRAPHICS_COMMAND.1
-            );
+            log::debug!("Graphics Command Queue: {:p}", &GRAPHICS_COMMAND.0,);
+            log::debug!("Asset Registry: {:p}", &raw const ASSET_REGISTRY);
 
             if let Err(e) = self
                 .script_manager

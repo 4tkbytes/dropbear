@@ -758,6 +758,19 @@ impl InspectableComponent for MeshRenderer {
             CollapsingHeader::new("Materials")
                 .default_open(false)
                 .show(ui, |ui| {
+                    let material_uri_for = |model_reference: &ResourceReference,
+                                            material_name: &str|
+                     -> Option<String> {
+                        let model_handle =
+                            ASSET_REGISTRY.model_handle_from_reference(model_reference)?;
+                        let model_arc = ASSET_REGISTRY.get_model(model_handle)?;
+                        let material_handle =
+                            ASSET_REGISTRY.material_handle(model_arc.id, material_name)?;
+                        let reference =
+                            ASSET_REGISTRY.material_reference_for_handle(material_handle)?;
+                        reference.as_uri().map(|uri| uri.to_string())
+                    };
+
                     for material in self.model().materials.iter() {
                         let override_snapshot = self
                             .material_overrides()
@@ -766,11 +779,16 @@ impl InspectableComponent for MeshRenderer {
                             .cloned();
 
                         let selected_label = if let Some(override_entry) = &override_snapshot {
-                            let reference = override_entry
-                                .source_model
-                                .as_uri()
-                                .map(|uri| uri.to_string())
-                                .unwrap_or_else(|| "inline".to_string());
+                            let reference = material_uri_for(
+                                &override_entry.source_model,
+                                &override_entry.source_material,
+                            )
+                            .or_else(|| {
+                                override_entry.source_model.as_uri().map(|uri| {
+                                    format!("{}/{}", uri, override_entry.source_material)
+                                })
+                            })
+                            .unwrap_or_else(|| "inline".to_string());
                             format!("{}  [{}]", override_entry.source_material, reference)
                         } else {
                             "Original".to_string()
@@ -840,16 +858,17 @@ impl InspectableComponent for MeshRenderer {
                                         response
                                     };
 
-                                    let original_identifier = format!(
-                                        "bytes://material-original-{}",
-                                        material.name
-                                    );
-                                    let original_path = self
-                                        .model()
-                                        .path
-                                        .as_uri()
-                                        .map(|uri| uri.to_string())
-                                        .unwrap_or_else(|| "embedded".to_string());
+                                    let original_identifier =
+                                        format!("bytes://material-original-{}", material.name);
+                                    let original_path =
+                                        material_uri_for(&self.model().path, &material.name)
+                                            .or_else(|| {
+                                                self.model()
+                                                    .path
+                                                    .as_uri()
+                                                    .map(|uri| format!("{}/{}", uri, material.name))
+                                            })
+                                            .unwrap_or_else(|| "embedded".to_string());
                                     let original_response = render_row(
                                         ui,
                                         &original_identifier,
@@ -900,9 +919,11 @@ impl InspectableComponent for MeshRenderer {
                                             })
                                             .unwrap_or(false);
 
-                                        let resource_path = source_model
-                                            .as_uri()
-                                            .map(|uri| uri.to_string())
+                                        let resource_path = ASSET_REGISTRY
+                                            .material_reference_for_handle(handle)
+                                            .and_then(|reference| {
+                                                reference.as_uri().map(|uri| uri.to_string())
+                                            })
                                             .unwrap_or_else(|| "embedded".to_string());
 
                                         let identifier = format!(
@@ -930,8 +951,7 @@ impl InspectableComponent for MeshRenderer {
                                 if let Err(err) = self.restore_original_material(&material.name) {
                                     fatal!("Failed to restore material: {}", err);
                                 }
-                            } else if let Some((source_model, source_material)) = pending_override
-                            {
+                            } else if let Some((source_model, source_material)) = pending_override {
                                 if let Err(err) = self.apply_material_override(
                                     &material.name,
                                     source_model,
