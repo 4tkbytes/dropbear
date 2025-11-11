@@ -274,7 +274,8 @@ impl ResolveReference for ResourceReference {
 
                 #[cfg(not(feature = "editor"))]
                 {
-                    let dir = current_exe()?
+                    let current_exe = std::env::current_exe()?;
+                    let dir = current_exe
                         .parent()
                         .ok_or_else(|| anyhow::anyhow!("Unable to get path"))?;
                     return Ok(dir.join("resources").join(relative));

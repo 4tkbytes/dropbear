@@ -223,9 +223,9 @@ impl ScriptManager {
                         jvm.update_all_systems(dt)?;
                     } else {
                         for (tag, entities) in &self.entity_tag_database {
-                            let entity_ids: Vec<i64> = entities
+                            let entity_ids: Vec<u64> = entities
                                 .iter()
-                                .map(|entity| entity.to_bits().get() as i64)
+                                .map(|entity| entity.id() as u64)
                                 .collect();
 
                             if entity_ids.is_empty() {

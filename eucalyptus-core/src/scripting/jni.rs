@@ -77,15 +77,43 @@ impl JavaContext {
             log::debug!("Host library JAR at {:?} is up-to-date.", host_jar_path);
         }
 
+        let mut jar_paths = Vec::new();
+        if deps.exists() && deps.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&deps) {
+                for entry in entries.filter_map(Result::ok) {
+                    let path = entry.path();
+                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("jar") {
+                        jar_paths.push(path);
+                    }
+                }
+            }
+        }
+
+        jar_paths.sort();
+
+        let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+
+        let classpath = if jar_paths.is_empty() {
+            host_jar_path.display().to_string()
+        } else {
+            jar_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(separator)
+        };
+
+        log::debug!("JVM classpath path: {}", classpath);
+
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
-            .option(format!("-Djava.class.path={}", host_jar_path.display()));
+            .option(format!("-Djava.class.path={}", classpath));
 
         #[cfg(feature = "jvm_debug")]
         let jvm_args =
             jvm_args.option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741");
 
-        #[cfg(all(feature = "jvm", not(feature = "editor")))]
+        #[cfg(feature = "jvm")]
         let jvm_args = {
             #[allow(unused)]
             let pathbuf = std::env::current_exe()?;
@@ -93,18 +121,50 @@ impl JavaContext {
             let path = pathbuf
                 .parent()
                 .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
-
+            
             println!("Libs folder at {}", path.display());
-
             if !path.exists() {
                 log::warn!(
                     "Libs folder ({}) does not exist; native libraries may fail to load",
                     path.display()
                 );
             }
-
+            
             let path_str = path.to_string_lossy();
-            jvm_args.option(format!("-Djava.library.path={}", path_str))
+            
+            let (separator, default_paths) = if cfg!(target_os = "windows") {
+                (";", vec![
+                    "C:\\Windows\\System32",
+                    "C:\\Windows\\SysWOW64",
+                ])
+            } else if cfg!(target_os = "macos") {
+                (":", vec![
+                    "/Library/Java/Extensions",
+                    "/System/Library/Java/Extensions",
+                    "/usr/local/lib",
+                    "/usr/lib",
+                    ".",
+                ])
+            } else {
+                (":", vec![
+                    "/usr/java/packages/lib",
+                    "/usr/lib64",
+                    "/lib64",
+                    "/lib",
+                    "/usr/lib",
+                    ".",
+                ])
+            };
+            
+            let combined_path = format!(
+                "{}{}{}",
+                path_str,
+                separator,
+                default_paths.join(separator)
+            );
+            
+            log::debug!("Java library path: {}", combined_path);
+            jvm_args.option(format!("-Djava.library.path={}", combined_path))
         };
         
         let jvm_args = jvm_args.build()?;
@@ -387,7 +447,7 @@ impl JavaContext {
     pub fn update_systems_for_entities(
         &self,
         tag: &str,
-        entity_ids: &[i64],
+        entity_ids: &[u64],
         dt: f32,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
@@ -403,8 +463,10 @@ impl JavaContext {
             let tag_jstring = env.new_string(tag)?;
             let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
             let entity_array_raw = entity_array.as_raw();
+            log::trace!("u64 entity: {:?}", entity_ids);
+            log::trace!("i64 entity: {:?}", entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>());
             if !entity_ids.is_empty() {
-                env.set_long_array_region(entity_array, 0, entity_ids)?;
+                env.set_long_array_region(entity_array, 0, &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>())?;
             }
             let entity_array_obj =
                 unsafe { JObject::from_raw(entity_array_raw.cast::<jni::sys::_jobject>()) };
