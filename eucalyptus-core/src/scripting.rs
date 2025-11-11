@@ -5,7 +5,7 @@ use crate::input::InputState;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
-use crate::states::ScriptComponent;
+use crate::states::{ScriptComponent};
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;
@@ -225,7 +225,7 @@ impl ScriptManager {
                         for (tag, entities) in &self.entity_tag_database {
                             let entity_ids: Vec<u64> = entities
                                 .iter()
-                                .map(|entity| entity.id() as u64)
+                                .map(|entity| entity.to_bits().get())
                                 .collect();
 
                             if entity_ids.is_empty() {

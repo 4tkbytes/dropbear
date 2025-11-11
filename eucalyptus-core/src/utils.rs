@@ -454,8 +454,46 @@ macro_rules! ffi_error_return {
             }
         }
 
+        impl<'local> ErrorValue for jni::objects::JObject<'local> {
+            fn error_value() -> Self {
+                jni::objects::JObject::null()
+            }
+        }
+
+        impl ErrorValue for f64 {
+            fn error_value() -> Self {
+                f64::NAN
+            }
+        }
+
         // todo: implement other types
 
         ErrorValue::error_value()
+    }};
+}
+
+/// Converts a jlong to a hecs::Entity with automatic error handling.
+/// Returns from the function with an appropriate error value if the conversion fails.
+///
+/// # Usage
+/// ```rust
+/// let entity = convert_jlong_to_entity!(jlong_value);
+/// ```
+#[macro_export]
+macro_rules! convert_jlong_to_entity {
+    ($jlong:expr) => {{
+        match hecs::Entity::from_bits($jlong as u64) {
+            Some(entity) => entity,
+            None => {
+                let message = format!(
+                    "[{}] [ERROR] Invalid bit pattern for entity provided: {}",
+                    stringify!($jlong),
+                    $jlong
+                );
+                $crate::scripting::jni::error::set_last_error_message(&message);
+                println!("{}", message);
+                return $crate::ffi_error_return!();
+            }
+        }
     }};
 }

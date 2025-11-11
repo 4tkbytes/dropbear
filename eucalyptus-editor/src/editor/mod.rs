@@ -1778,6 +1778,7 @@ pub struct PlayModeBackup {
     camera_data: Vec<(hecs::Entity, Camera, CameraComponent)>,
 }
 
+#[derive(Debug)]
 pub enum EditorState {
     Editing,
     Building,

@@ -1,3 +1,4 @@
+use std::any::{TypeId};
 use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::error::{
@@ -7,10 +8,10 @@ use crate::scripting::jni::error::{
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
-use crate::states::{Label, ModelProperties, Value};
+use crate::states::{Label, ModelProperties, ScriptComponent, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
-use crate::{convert_jstring, convert_ptr};
+use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
 use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
 use dropbear_engine::camera::Camera;
@@ -27,6 +28,7 @@ use jni::sys::{
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use dropbear_engine::lighting::{Light, LightComponent};
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 ///   (JNIEnv *, jclass, jlong, jstring);`
@@ -69,7 +71,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
 
     for (id, entity_label) in world.query::<&Label>().iter() {
         if entity_label.as_str() == label_str {
-            return id.id() as jlong;
+            return id.to_bits().get() as jlong;
         }
     }
     0
@@ -93,7 +95,65 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
 
     let world = unsafe { &mut *world };
 
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
+
+    println!("world total items: {}", world.len());
+    println!("typeid of Label: {:?}", TypeId::of::<Label>());
+    println!("typeid of MeshRenderer: {:?}", TypeId::of::<MeshRenderer>());
+    println!("typeid of Transform: {:?}", TypeId::of::<Transform>());
+    println!("typeid of ModelProperties: {:?}", TypeId::of::<ModelProperties>());
+    println!("typeid of Camera: {:?}", TypeId::of::<Camera>());
+    println!("typeid of CameraComponent: {:?}", TypeId::of::<CameraComponent>());
+    println!("typeid of ScriptComponent: {:?}", TypeId::of::<ScriptComponent>());
+    println!("typeid of Light: {:?}", TypeId::of::<Light>());
+    println!("typeid of LightComponent: {:?}", TypeId::of::<LightComponent>());
+    for i in world.iter() {
+        println!("entity id: {:?}", i.entity().id());
+        println!("entity bytes: {:?}", i.entity().to_bits().get());
+        println!("components [{}]: ", i.component_types().collect::<Vec<_>>().len());
+        let mut comp_builder = String::new();
+        for j in i.component_types() {
+            comp_builder.push_str(format!("{:?} ", j).as_str());
+            if TypeId::of::<Label>() == j {
+                println!(" |- Label");
+            }
+
+            if TypeId::of::<MeshRenderer>() == j {
+                println!(" |- MeshRenderer");
+            }
+
+            if TypeId::of::<Transform>() == j {
+                println!(" |- Transform");
+            }
+
+            if TypeId::of::<ModelProperties>() == j {
+                println!(" |- ModelProperties");
+            }
+
+            if TypeId::of::<Camera>() == j {
+                println!(" |- Camera");
+            }
+
+            if TypeId::of::<CameraComponent>() == j {
+                println!(" |- CameraComponent");
+            }
+
+            if TypeId::of::<ScriptComponent>() == j {
+                println!(" |- ScriptComponent");
+            }
+
+            if TypeId::of::<Light>() == j {
+                println!(" |- Light");
+            }
+
+            if TypeId::of::<LightComponent>() == j {
+                println!(" |- LightComponent");
+            }
+            println!("----------")
+        }
+        println!("components (typeid) [{}]: ", comp_builder);
+        println!("thats all the components of that entity...");
+    }
 
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &Transform)>(entity)
         && let Some((_, transform)) = q.get()
@@ -156,7 +216,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let get_number_field = |env: &mut JNIEnv, obj: &JObject, field_name: &str| -> f64 {
         match env.get_field(obj, field_name, "Ljava/lang/Number;") {
@@ -492,7 +552,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getStringProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -562,7 +622,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getIntProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -623,7 +683,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getLongProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -681,7 +741,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getFloatProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -739,7 +799,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getBoolProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -803,7 +863,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getVec3Property(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
@@ -880,7 +940,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setStringProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -931,7 +991,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setIntProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -973,7 +1033,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setLongProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -1015,7 +1075,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setFloatProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -1057,7 +1117,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setBoolProperty(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let key = env.get_string(&property_name);
     let key: String = if let Ok(str) = key {
@@ -1106,7 +1166,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setVec3Property(
     }
 
     let world = unsafe { &mut *world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
     #[allow(unused_unsafe)]
     let val = unsafe { value };
     let array = unsafe { JPrimitiveArray::from_raw(val) };
@@ -1202,7 +1262,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
             return std::ptr::null_mut();
         };
         let entity_id = if let Ok(v) =
-            env.new_object(entity_id, "(J)V", &[JValue::Long(id.id() as i64)])
+            env.new_object(entity_id, "(J)V", &[JValue::Long(id.to_bits().get() as i64)])
         {
             v
         } else {
@@ -1308,7 +1368,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
     }
 
     let world = unsafe { &*world };
-    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     if let Ok(mut q) = world.query_one::<(&Camera, &CameraComponent)>(entity)
         && let Some((cam, comp)) = q.get()
@@ -1329,7 +1389,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
             return std::ptr::null_mut();
         };
         let entity_id = if let Ok(v) =
-            env.new_object(entity_id, "(J)V", &[JValue::Long(entity.id() as i64)])
+            env.new_object(entity_id, "(J)V", &[JValue::Long(entity.to_bits().get() as i64)])
         {
             v
         } else {
@@ -1727,7 +1787,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getModel(
     _env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
 ) -> jlong {
     let world = world_handle as WorldPtr;
     if world.is_null() {
@@ -1736,7 +1796,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getModel(
     }
 
     let world = unsafe { &*world };
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
         && let Some(model) = q.get()
@@ -1759,7 +1819,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setModel(
     _class: JClass,
     world_handle: jlong,
     asset_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
     model_handle: jlong,
 ) {
     let world = world_handle as WorldPtr;
@@ -1778,7 +1838,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setModel(
 
     let world = unsafe { &*world };
     let asset = unsafe { &*asset };
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(entity)
         && let Some(model) = q.get()
@@ -1820,11 +1880,11 @@ pub fn Java_com_dropbear_ffi_JNINative_isUsingModel(
     _env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
     model_handle: jlong,
 ) -> jboolean {
     let world = convert_ptr!(world_handle, WorldPtr => World);
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let handle = AssetHandle::new(model_handle as u64);
     if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
@@ -1851,7 +1911,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTexture(
     _class: JClass,
     world_handle: jlong,
     asset_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
     name: JString,
 ) -> jlong {
     let world = world_handle as WorldPtr;
@@ -1863,7 +1923,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTexture(
     let world = unsafe { &*world };
 
     let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
         && let Some(mesh) = q.get()
@@ -1890,10 +1950,10 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
     mut env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
 ) -> jobjectArray {
     let world = convert_ptr!(world_handle, WorldPtr => World);
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     let mut query = match world.query_one::<&MeshRenderer>(entity) {
         Ok(query) => query,
@@ -2002,7 +2062,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
     _class: JClass,
     world_handle: jlong,
     asset_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
     old_material_name: JString,
     new_texture_handle: jlong,
 ) {
@@ -2023,7 +2083,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
     let asset = unsafe { &*asset };
 
     let world = unsafe { &*world };
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     match world.query_one::<&mut MeshRenderer>(entity) {
         Ok(mut query) => {
@@ -2193,11 +2253,11 @@ pub fn Java_com_dropbear_ffi_JNINative_isUsingTexture(
     _env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
-    entity: jlong,
+    entity_id: jlong,
     texture_handle: jlong,
 ) -> jboolean {
     let world = convert_ptr!(world_handle, WorldPtr => World);
-    let entity = unsafe { world.find_entity_from_id(entity as u32) };
+    let entity = convert_jlong_to_entity!(entity_id);
 
     if let Ok(mut q) = world.query_one::<&MeshRenderer>(entity)
         && let Some(mesh) = q.get()
