@@ -2045,7 +2045,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
             let cache = unsafe { &*cache };
 
             let jni_result = env.get_string(&old_material_name);
-            let target_material = match jni_result {
+            let target_identifier = match jni_result {
                 Ok(java_string) => match java_string.to_str() {
                     Ok(rust_str) => rust_str.to_string(),
                     Err(e) => {
@@ -2063,6 +2063,58 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
                     );
                     return;
                 }
+            };
+
+            let model = renderer.model();
+            let model_id = renderer.model_id();
+
+            let resolved_target_name = if model
+                .materials
+                .iter()
+                .any(|material| material.name == target_identifier)
+            {
+                Some(target_identifier.clone())
+            } else {
+                model.materials.iter().find_map(|material| {
+                    if material.name == target_identifier {
+                        return Some(material.name.clone());
+                    }
+
+                    let registry_reference = ASSET_REGISTRY
+                        .material_handle(model_id, &material.name)
+                        .and_then(|handle| ASSET_REGISTRY.material_reference_for_handle(handle))
+                        .and_then(|reference| reference.as_uri().map(|uri| uri.to_string()));
+
+                    if registry_reference
+                        .as_ref()
+                        .map(|value| value == &target_identifier)
+                        .unwrap_or(false)
+                    {
+                        return Some(material.name.clone());
+                    }
+
+                    if material
+                        .texture_tag
+                        .as_ref()
+                        .map(|tag| tag == &target_identifier)
+                        .unwrap_or(false)
+                    {
+                        return Some(material.name.clone());
+                    }
+
+                    None
+                })
+            };
+
+            let Some(target_material) = resolved_target_name else {
+                let message = format!(
+                    "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve material '{}' on model '{}'",
+                    target_identifier,
+                    model.label
+                );
+                set_last_error_message(&message);
+                println!("{}", message);
+                return;
             };
 
             let handle = AssetHandle::new(new_texture_handle as u64);
@@ -2115,14 +2167,12 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
                 return;
             };
 
-            let material_name = material.name.clone();
-
             if let Err(e) = renderer.apply_material_override_raw(
                 asset,
                 cache,
                 target_material.as_str(),
                 source_reference,
-                material_name.as_str(),
+                material.name.as_str(),
             ) {
                 println!(
                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Failed to apply material override: {}",
