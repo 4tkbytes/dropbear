@@ -4,7 +4,7 @@ on:
     branches:
       - '**'
   pull_request: {}
-  workflow_dispatch:  # Add manual trigger
+  workflow_dispatch:
 jobs:
   build:
     if: contains(github.event.head_commit.message, 'jarvis, run github actions') || github.event_name == 'workflow_dispatch'
@@ -19,7 +19,7 @@ jobs:
             ext: .exe
           - os: ubuntu-latest
             os_name: linux-x64
-            target: x86_64-unknown-linux-musl
+            target: x86_64-unknown-linux-gnu
             ext: ""
           - os: macos-latest
             os_name: macos-arm64
@@ -56,9 +56,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: install musl rust toolchain (linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: rustup target add x86_64-unknown-linux-musl
       - name: build eucalyptus-core libs
         run: cargo build --release --package eucalyptus-core --target ${{ matrix.target }}
       - name: build eucalyptus-editor
