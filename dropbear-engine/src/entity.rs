@@ -2,7 +2,7 @@ use glam::{DMat4, DQuat, DVec3, Mat4};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, hash_map::Entry},
     path::Path,
     sync::{Arc, LazyLock},
 };
@@ -92,6 +92,7 @@ pub struct MeshRenderer {
     pub is_selected: bool,
     pub material_overrides: Vec<MaterialOverride>,
     original_material_snapshots: HashMap<String, MaterialSnapshot>,
+    texture_identifier_cache: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,6 +128,7 @@ impl MeshRenderer {
             is_selected: false,
             material_overrides: Vec::new(),
             original_material_snapshots: HashMap::new(),
+            texture_identifier_cache: HashMap::new(),
         }
     }
 
@@ -171,6 +173,7 @@ impl MeshRenderer {
         self.handle = handle;
         self.material_overrides.clear();
         self.original_material_snapshots.clear();
+        self.texture_identifier_cache.clear();
     }
 
     /// Swaps the currently loaded model for that renderer by the provided [`AssetHandle`]
@@ -388,6 +391,30 @@ impl MeshRenderer {
 
     pub fn material_overrides(&self) -> &[MaterialOverride] {
         &self.material_overrides
+    }
+
+    pub fn clear_texture_identifier_cache(&mut self) {
+        self.texture_identifier_cache.clear();
+    }
+
+    pub fn register_texture_identifier(&mut self, identifier: String, material_name: String) {
+        match self.texture_identifier_cache.entry(identifier) {
+            Entry::Occupied(_) => {}
+            Entry::Vacant(slot) => {
+                slot.insert(material_name);
+            }
+        }
+    }
+
+    pub fn resolve_texture_identifier(&self, identifier: &str) -> Option<&str> {
+        self.texture_identifier_cache
+            .get(identifier)
+            .map(|value| value.as_str())
+    }
+
+    pub fn sync_asset_registry(&mut self) {
+        self.handle.refresh_registry_raw(&ASSET_REGISTRY);
+        self.refresh_model_cache_with(LazyLock::force(&MODEL_CACHE));
     }
 
     pub fn clear_material_override(&mut self, target_material: &str) {

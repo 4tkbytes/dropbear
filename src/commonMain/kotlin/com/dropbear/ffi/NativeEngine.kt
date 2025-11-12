@@ -10,6 +10,12 @@ import com.dropbear.input.MouseButton
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
 
+/**
+ * Native functions
+ * 
+ * Class that describes all the functions that can
+ * be communicated with the `eucalyptus_core` dynamic library
+ */
 expect class NativeEngine {
     fun getEntity(label: String): Long?
     fun getAsset(eucaURI: String): Long?

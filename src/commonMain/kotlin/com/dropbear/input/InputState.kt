@@ -3,6 +3,15 @@ package com.dropbear.input
 import com.dropbear.DropbearEngine
 import com.dropbear.math.Vector2D
 
+/**
+ * The current state of the input system.
+ * 
+ * It mirrors `eucalyptus_core::input::InputState` and has 
+ * functions that are basically getters. 
+ * 
+ * The InputState does not have any values that can be mutated, only
+ * queried. 
+ */
 class InputState(private val engine: DropbearEngine) {
 
     fun printInputState() {

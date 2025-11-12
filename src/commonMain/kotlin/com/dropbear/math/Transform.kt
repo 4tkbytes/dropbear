@@ -1,5 +1,9 @@
 package com.dropbear.math
 
+/**
+ * Represents a position, rotation and scale, typically
+ * attached to an entity. 
+ */
 class Transform(
     var position: Vector3D,
     var rotation: QuaternionD,

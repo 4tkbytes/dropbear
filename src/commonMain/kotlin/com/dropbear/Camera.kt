@@ -2,6 +2,9 @@ package com.dropbear
 
 import com.dropbear.math.Vector3D
 
+/**
+ * Describes a 3D camera. 
+ */
 class Camera(
     val label: String,
     val id: EntityId, // it could be attached to nothing or an AdoptedEntity

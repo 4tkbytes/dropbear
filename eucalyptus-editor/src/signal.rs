@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use crate::editor::{
     ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction,
 };
@@ -13,6 +12,7 @@ use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, Value};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
+use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
@@ -696,16 +696,31 @@ impl SignalController for Editor {
                 log::info!("typeid of Label: {:?}", TypeId::of::<Label>());
                 log::info!("typeid of MeshRenderer: {:?}", TypeId::of::<MeshRenderer>());
                 log::info!("typeid of Transform: {:?}", TypeId::of::<Transform>());
-                log::info!("typeid of ModelProperties: {:?}", TypeId::of::<ModelProperties>());
+                log::info!(
+                    "typeid of ModelProperties: {:?}",
+                    TypeId::of::<ModelProperties>()
+                );
                 log::info!("typeid of Camera: {:?}", TypeId::of::<Camera>());
-                log::info!("typeid of CameraComponent: {:?}", TypeId::of::<CameraComponent>());
-                log::info!("typeid of ScriptComponent: {:?}", TypeId::of::<ScriptComponent>());
+                log::info!(
+                    "typeid of CameraComponent: {:?}",
+                    TypeId::of::<CameraComponent>()
+                );
+                log::info!(
+                    "typeid of ScriptComponent: {:?}",
+                    TypeId::of::<ScriptComponent>()
+                );
                 log::info!("typeid of Light: {:?}", TypeId::of::<Light>());
-                log::info!("typeid of LightComponent: {:?}", TypeId::of::<LightComponent>());
+                log::info!(
+                    "typeid of LightComponent: {:?}",
+                    TypeId::of::<LightComponent>()
+                );
                 for i in self.world.iter() {
                     log::info!("entity id: {:?}", i.entity().id());
                     log::info!("entity bytes: {:?}", i.entity().to_bits().get());
-                    log::info!("components [{}]: ", i.component_types().collect::<Vec<_>>().len());
+                    log::info!(
+                        "components [{}]: ",
+                        i.component_types().collect::<Vec<_>>().len()
+                    );
                     let mut comp_builder = String::new();
                     for j in i.component_types() {
                         comp_builder.push_str(format!("{:?} ", j).as_str());

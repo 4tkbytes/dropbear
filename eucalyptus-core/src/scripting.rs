@@ -5,7 +5,7 @@ use crate::input::InputState;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
-use crate::states::{ScriptComponent};
+use crate::states::ScriptComponent;
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;

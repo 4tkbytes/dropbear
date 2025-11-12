@@ -3,6 +3,10 @@ package com.dropbear.ffi;
 import com.dropbear.Camera;
 import com.dropbear.math.Transform;
 
+/**
+ * Describes all the functions that are available in
+ * the `eucalyptus_core` dynamic library. 
+ */
 public class JNINative {
     static {
         System.loadLibrary("eucalyptus_core");

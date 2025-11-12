@@ -7,6 +7,12 @@ import com.dropbear.logging.Logger
 
 internal var exceptionOnError: Boolean = false
 
+/**
+ * The main engine. 
+ * 
+ * All queries and fetching of entities run through this instance,
+ * which contains a [NativeEngine] (contains native functions). 
+ */
 class DropbearEngine(val native: NativeEngine) {
     private var inputState: InputState? = null
 

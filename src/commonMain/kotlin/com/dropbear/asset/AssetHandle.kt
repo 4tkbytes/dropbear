@@ -2,6 +2,9 @@ package com.dropbear.asset
 
 import com.dropbear.DropbearEngine
 
+/**
+ * A handle that describes the type of asset in the ASSET_REGISTRY
+ */
 class AssetHandle(private val id: Long): Handle(id) {
     /**
      * Converts an [AssetHandle] to a [ModelHandle].

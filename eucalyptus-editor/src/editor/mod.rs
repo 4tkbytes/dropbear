@@ -1163,6 +1163,7 @@ impl Editor {
             {
                 if let Ok(mut mesh_renderer) = self.world.get::<&mut MeshRenderer>(*entity_id) {
                     mesh_renderer.clone_from(original_mesh_renderer);
+                    mesh_renderer.sync_asset_registry();
                 }
 
                 if let Ok(mut transform) = self.world.get::<&mut Transform>(*entity_id) {

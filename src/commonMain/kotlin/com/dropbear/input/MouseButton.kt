@@ -1,5 +1,8 @@
 package com.dropbear.input
 
+/**
+ * Buttons that can be pressed on a mouse
+ */
 sealed class MouseButton {
     object Left : MouseButton()
     object Right : MouseButton()

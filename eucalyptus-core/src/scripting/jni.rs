@@ -91,7 +91,11 @@ impl JavaContext {
 
         jar_paths.sort();
 
-        let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let separator = if cfg!(target_os = "windows") {
+            ";"
+        } else {
+            ":"
+        };
 
         let classpath = if jar_paths.is_empty() {
             host_jar_path.display().to_string()
@@ -121,7 +125,7 @@ impl JavaContext {
             let path = pathbuf
                 .parent()
                 .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
-            
+
             println!("Libs folder at {}", path.display());
             if !path.exists() {
                 log::warn!(
@@ -129,44 +133,43 @@ impl JavaContext {
                     path.display()
                 );
             }
-            
+
             let path_str = path.to_string_lossy();
-            
+
             let (separator, default_paths) = if cfg!(target_os = "windows") {
-                (";", vec![
-                    "C:\\Windows\\System32",
-                    "C:\\Windows\\SysWOW64",
-                ])
+                (";", vec!["C:\\Windows\\System32", "C:\\Windows\\SysWOW64"])
             } else if cfg!(target_os = "macos") {
-                (":", vec![
-                    "/Library/Java/Extensions",
-                    "/System/Library/Java/Extensions",
-                    "/usr/local/lib",
-                    "/usr/lib",
-                    ".",
-                ])
+                (
+                    ":",
+                    vec![
+                        "/Library/Java/Extensions",
+                        "/System/Library/Java/Extensions",
+                        "/usr/local/lib",
+                        "/usr/lib",
+                        ".",
+                    ],
+                )
             } else {
-                (":", vec![
-                    "/usr/java/packages/lib",
-                    "/usr/lib64",
-                    "/lib64",
-                    "/lib",
-                    "/usr/lib",
-                    ".",
-                ])
+                (
+                    ":",
+                    vec![
+                        "/usr/java/packages/lib",
+                        "/usr/lib64",
+                        "/lib64",
+                        "/lib",
+                        "/usr/lib",
+                        ".",
+                    ],
+                )
             };
-            
-            let combined_path = format!(
-                "{}{}{}",
-                path_str,
-                separator,
-                default_paths.join(separator)
-            );
-            
+
+            let combined_path =
+                format!("{}{}{}", path_str, separator, default_paths.join(separator));
+
             log::debug!("Java library path: {}", combined_path);
             jvm_args.option(format!("-Djava.library.path={}", combined_path))
         };
-        
+
         let jvm_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_args)?;
 
@@ -464,9 +467,16 @@ impl JavaContext {
             let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
             let entity_array_raw = entity_array.as_raw();
             log::trace!("u64 entity: {:?}", entity_ids);
-            log::trace!("i64 entity: {:?}", entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>());
+            log::trace!(
+                "i64 entity: {:?}",
+                entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>()
+            );
             if !entity_ids.is_empty() {
-                env.set_long_array_region(entity_array, 0, &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>())?;
+                env.set_long_array_region(
+                    entity_array,
+                    0,
+                    &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
+                )?;
             }
             let entity_array_obj =
                 unsafe { JObject::from_raw(entity_array_raw.cast::<jni::sys::_jobject>()) };

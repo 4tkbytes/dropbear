@@ -1201,9 +1201,11 @@ pub fn Java_com_dropbear_ffi_JNINative_getCamera(
             );
             return std::ptr::null_mut();
         };
-        let entity_id = if let Ok(v) =
-            env.new_object(entity_id, "(J)V", &[JValue::Long(id.to_bits().get() as i64)])
-        {
+        let entity_id = if let Ok(v) = env.new_object(
+            entity_id,
+            "(J)V",
+            &[JValue::Long(id.to_bits().get() as i64)],
+        ) {
             v
         } else {
             eprintln!(
@@ -1328,9 +1330,11 @@ pub fn Java_com_dropbear_ffi_JNINative_getAttachedCamera(
             );
             return std::ptr::null_mut();
         };
-        let entity_id = if let Ok(v) =
-            env.new_object(entity_id, "(J)V", &[JValue::Long(entity.to_bits().get() as i64)])
-        {
+        let entity_id = if let Ok(v) = env.new_object(
+            entity_id,
+            "(J)V",
+            &[JValue::Long(entity.to_bits().get() as i64)],
+        ) {
             v
         } else {
             eprintln!(
@@ -1895,7 +1899,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
     let world = convert_ptr!(world_handle, WorldPtr => World);
     let entity = convert_jlong_to_entity!(entity_id);
 
-    let mut query = match world.query_one::<&MeshRenderer>(entity) {
+    let mut query = match world.query_one::<&mut MeshRenderer>(entity) {
         Ok(query) => query,
         Err(e) => {
             let message = format!(
@@ -1918,6 +1922,8 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
         }
     };
 
+    renderer.clear_texture_identifier_cache();
+
     let model = renderer.model();
     let model_id = renderer.model_id();
 
@@ -1925,6 +1931,11 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
     let mut textures = Vec::new();
 
     for material in &model.materials {
+        renderer.register_texture_identifier(material.name.clone(), material.name.clone());
+        if let Some(tag) = &material.texture_tag {
+            renderer.register_texture_identifier(tag.clone(), material.name.clone());
+        }
+
         let reference = ASSET_REGISTRY
             .material_handle(model_id, &material.name)
             .and_then(|handle| ASSET_REGISTRY.material_reference_for_handle(handle))
@@ -1933,6 +1944,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
             .unwrap_or_else(|| material.name.clone());
 
         if seen.insert(reference.clone()) {
+            renderer.register_texture_identifier(reference.clone(), material.name.clone());
             textures.push(reference);
         }
     }
@@ -2065,52 +2077,56 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
                 }
             };
 
-            let model = renderer.model();
-            let model_id = renderer.model_id();
+            let resolved_target_name = renderer
+                .resolve_texture_identifier(&target_identifier)
+                .map(|name| name.to_string())
+                .or_else(|| {
+                    let model = renderer.model();
+                    let model_id = renderer.model_id();
 
-            let resolved_target_name = if model
-                .materials
-                .iter()
-                .any(|material| material.name == target_identifier)
-            {
-                Some(target_identifier.clone())
-            } else {
-                model.materials.iter().find_map(|material| {
-                    if material.name == target_identifier {
-                        return Some(material.name.clone());
-                    }
-
-                    let registry_reference = ASSET_REGISTRY
-                        .material_handle(model_id, &material.name)
-                        .and_then(|handle| ASSET_REGISTRY.material_reference_for_handle(handle))
-                        .and_then(|reference| reference.as_uri().map(|uri| uri.to_string()));
-
-                    if registry_reference
-                        .as_ref()
-                        .map(|value| value == &target_identifier)
-                        .unwrap_or(false)
+                    if model
+                        .materials
+                        .iter()
+                        .any(|material| material.name == target_identifier)
                     {
-                        return Some(material.name.clone());
+                        return Some(target_identifier.clone());
                     }
 
-                    if material
-                        .texture_tag
-                        .as_ref()
-                        .map(|tag| tag == &target_identifier)
-                        .unwrap_or(false)
-                    {
-                        return Some(material.name.clone());
-                    }
+                    model.materials.iter().find_map(|material| {
+                        if material.name == target_identifier {
+                            return Some(material.name.clone());
+                        }
 
-                    None
-                })
-            };
+                        let registry_reference = ASSET_REGISTRY
+                            .material_handle(model_id, &material.name)
+                            .and_then(|handle| ASSET_REGISTRY.material_reference_for_handle(handle))
+                            .and_then(|reference| reference.as_uri().map(|uri| uri.to_string()));
+
+                        if registry_reference
+                            .as_ref()
+                            .map(|value| value == &target_identifier)
+                            .unwrap_or(false)
+                        {
+                            return Some(material.name.clone());
+                        }
+
+                        if material
+                            .texture_tag
+                            .as_ref()
+                            .map(|tag| tag == &target_identifier)
+                            .unwrap_or(false)
+                        {
+                            return Some(material.name.clone());
+                        }
+
+                        None
+                    })
+                });
 
             let Some(target_material) = resolved_target_name else {
                 let message = format!(
                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve material '{}' on model '{}'",
-                    target_identifier,
-                    model.label
+                    target_identifier, renderer.model().label
                 );
                 set_last_error_message(&message);
                 println!("{}", message);
