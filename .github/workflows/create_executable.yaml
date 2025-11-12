@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    if: contains(github.event.head_commit.message, 'jarvis, run github actions') || github.event_name == 'workflow_dispatch'
+    if: contains(github.event.head_commit.message, 'jarvis, run github actions') || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     name: Build for ${{ matrix.os_name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -65,13 +65,12 @@ jobs:
           mkdir -p dist/libs
           cp target/${{ matrix.target }}/release/eucalyptus-editor${{ matrix.ext }} dist/
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/release/eucalyptus_core.dll dist/ 2>/dev/null || true
-            cp target/release/eucalyptus_core.dll.lib dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/eucalyptus_core.dll dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/eucalyptus_core.dll.lib dist/ 2>/dev/null || true
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            cp target/release/libeucalyptus_core.so dist/ 2>/dev/null || true
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.so dist/ 2>/dev/null || true
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp target/release/libeucalyptus_core.dylib dist/ 2>/dev/null || true
-            cp README.md dist/
+            cp target/${{ matrix.target }}/release/libeucalyptus_core.dylib dist/ 2>/dev/null || true
           fi
         shell: bash
       - name: upload
