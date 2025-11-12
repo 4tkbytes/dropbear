@@ -67,6 +67,7 @@ pub struct AssetRegistry {
     mesh_reference_lookup: DashMap<ResourceReference, AssetHandle>,
     meshes: DashMap<AssetHandle, Arc<Mesh>>,
 
+    /// Internal pointer database, typically used when querying in the database
     pointers: DashMap<PointerKind, usize>,
 }
 

@@ -820,12 +820,6 @@ impl Editor {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    // if ui
-                    //     .button("Main Menu (New + Open + Editor Settings)")
-                    //     .clicked()
-                    // {
-                    //     self.scene_command = SceneCommand::SwitchScene("main_menu".into());
-                    // }
 
                     if ui.button("New Scene").clicked() {
                         self.open_new_scene_window = true;
@@ -1021,6 +1015,25 @@ impl Editor {
                         debug::show_menu_bar(ui, &mut self.signal);
                     }
                 }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let can_play = matches!(self.editor_state, EditorState::Playing);
+                    ui.group(|ui| {
+                        ui.add_enabled_ui(can_play, |ui| {
+                            if ui.button("⏹").clicked() {
+                                log::debug!("Menu button Stop button pressed");
+                                self.signal = Signal::StopPlaying;
+                            }
+                        });
+
+                        ui.add_enabled_ui(!can_play, |ui| {
+                            if ui.button("▶").clicked() {
+                                log::debug!("Menu Button Play button pressed");
+                                self.signal = Signal::Play;
+                            }
+                        });
+                    });
+                });
             });
         });
 
@@ -1140,18 +1153,25 @@ impl Editor {
         }
 
         if let Some(backup) = &self.play_mode_backup {
-            for (entity_id, original_transform, _original_properties, original_script) in
-                &backup.entities
+            for (
+                entity_id,
+                original_mesh_renderer,
+                original_transform,
+                original_properties,
+                original_script,
+            ) in &backup.entities
             {
+                if let Ok(mut mesh_renderer) = self.world.get::<&mut MeshRenderer>(*entity_id) {
+                    mesh_renderer.clone_from(original_mesh_renderer);
+                }
+
                 if let Ok(mut transform) = self.world.get::<&mut Transform>(*entity_id) {
                     *transform = *original_transform;
                 }
 
-                // not backing up anymore because i think people would prefer if there was no
-                // property backup at all
-                // if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
-                //     *properties = original_properties.clone();
-                // }
+                if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
+                    properties.clone_from(original_properties);
+                }
 
                 let has_script = self.world.get::<&ScriptComponent>(*entity_id).is_ok();
                 match (has_script, original_script) {
@@ -1193,7 +1213,7 @@ impl Editor {
     pub fn create_backup(&mut self) -> anyhow::Result<()> {
         let mut entities = Vec::new();
 
-        for (entity_id, (_, transform, properties)) in self
+        for (entity_id, (mesh_renderer, transform, properties)) in self
             .world
             .query::<(&MeshRenderer, &Transform, &ModelProperties)>()
             .iter()
@@ -1203,7 +1223,13 @@ impl Editor {
                 .query_one::<&ScriptComponent>(entity_id)
                 .ok()
                 .and_then(|mut s| s.get().cloned());
-            entities.push((entity_id, *transform, properties.clone(), script));
+            entities.push((
+                entity_id,
+                mesh_renderer.clone(),
+                *transform,
+                properties.clone(),
+                script,
+            ));
         }
 
         let mut camera_data = Vec::new();
@@ -1771,6 +1797,7 @@ pub enum ComponentType {
 pub struct PlayModeBackup {
     entities: Vec<(
         hecs::Entity,
+        MeshRenderer,
         Transform,
         ModelProperties,
         Option<ScriptComponent>,

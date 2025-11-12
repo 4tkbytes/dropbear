@@ -1,4 +1,3 @@
-use std::any::{TypeId};
 use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::error::{
@@ -8,7 +7,7 @@ use crate::scripting::jni::error::{
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
-use crate::states::{Label, ModelProperties, ScriptComponent, Value};
+use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
@@ -28,7 +27,6 @@ use jni::sys::{
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use dropbear_engine::lighting::{Light, LightComponent};
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 ///   (JNIEnv *, jclass, jlong, jstring);`
@@ -96,64 +94,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
     let world = unsafe { &mut *world };
 
     let entity = convert_jlong_to_entity!(entity_id);
-
-    println!("world total items: {}", world.len());
-    println!("typeid of Label: {:?}", TypeId::of::<Label>());
-    println!("typeid of MeshRenderer: {:?}", TypeId::of::<MeshRenderer>());
-    println!("typeid of Transform: {:?}", TypeId::of::<Transform>());
-    println!("typeid of ModelProperties: {:?}", TypeId::of::<ModelProperties>());
-    println!("typeid of Camera: {:?}", TypeId::of::<Camera>());
-    println!("typeid of CameraComponent: {:?}", TypeId::of::<CameraComponent>());
-    println!("typeid of ScriptComponent: {:?}", TypeId::of::<ScriptComponent>());
-    println!("typeid of Light: {:?}", TypeId::of::<Light>());
-    println!("typeid of LightComponent: {:?}", TypeId::of::<LightComponent>());
-    for i in world.iter() {
-        println!("entity id: {:?}", i.entity().id());
-        println!("entity bytes: {:?}", i.entity().to_bits().get());
-        println!("components [{}]: ", i.component_types().collect::<Vec<_>>().len());
-        let mut comp_builder = String::new();
-        for j in i.component_types() {
-            comp_builder.push_str(format!("{:?} ", j).as_str());
-            if TypeId::of::<Label>() == j {
-                println!(" |- Label");
-            }
-
-            if TypeId::of::<MeshRenderer>() == j {
-                println!(" |- MeshRenderer");
-            }
-
-            if TypeId::of::<Transform>() == j {
-                println!(" |- Transform");
-            }
-
-            if TypeId::of::<ModelProperties>() == j {
-                println!(" |- ModelProperties");
-            }
-
-            if TypeId::of::<Camera>() == j {
-                println!(" |- Camera");
-            }
-
-            if TypeId::of::<CameraComponent>() == j {
-                println!(" |- CameraComponent");
-            }
-
-            if TypeId::of::<ScriptComponent>() == j {
-                println!(" |- ScriptComponent");
-            }
-
-            if TypeId::of::<Light>() == j {
-                println!(" |- Light");
-            }
-
-            if TypeId::of::<LightComponent>() == j {
-                println!(" |- LightComponent");
-            }
-            println!("----------")
-        }
-        println!("components (typeid) [{}]: ", comp_builder);
-        println!("thats all the components of that entity...");
-    }
 
     if let Ok(mut q) = world.query_one::<(&MeshRenderer, &Transform)>(entity)
         && let Some((_, transform)) = q.get()
