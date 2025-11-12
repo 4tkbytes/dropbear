@@ -48,7 +48,7 @@ git clone git@github.com:tirbofish/dropbear
 cd dropbear
 
 # eucalyptus-editor requires dropbear-1.0-SNAPSHOT-all.jar to be built first
-./gradlew build fatJar
+./gradlew fatJar
 # this will build all the projects in the workspace
 cargo build
 ```
@@ -90,14 +90,14 @@ API documentation and articles are available at [tirbofish.github.io/dropbear](h
 
 ## Compability
 
-|            | Windows | macOS | Linux | Web           | Android       | iOS           |
-|------------|---------|-------|-------|---------------|---------------|---------------|
-| eucalyptus | ✅       | ✅     | ✅     | ❌<sup>1</sup> | ❌<sup>1</sup> | ❌<sup>1</sup> |
-| redback    | ✅       | ✅     | ✅     | ❌<sup>2</sup> | ❌<sup>2</sup> | ❌             |
+|            | Windows | macOS | Linux | Web | Android | iOS |
+|------------|---------|-------|-------|-----|---------------|---------------|
+| eucalyptus | ✅       | ✅     | ✅  | ❌ | ❌ | ❌ |
+| redback    | ✅       | ✅     | ✅  | ❌ | ❌ | ❌ |
 
-<sup>1</sup> Will never be implemented; not intended for that platform.
+<!-- <sup>1</sup> Will never be implemented; not intended for that platform.
 
-<sup>2</sup> Made some progress on implementing, but currently a WIP.
+<sup>2</sup> Made some progress on implementing, but currently a WIP. -->
 
 ## Contributions
 
