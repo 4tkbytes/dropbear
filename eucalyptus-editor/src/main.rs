@@ -11,13 +11,6 @@ use std::{fs, path::PathBuf, rc::Rc};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    #[cfg(target_os = "android")]
-    compile_error!(
-        "The `editor` feature is not supported on Android. If you are attempting\
- to use the Eucalyptus editor on Android, please don't. Instead, use the `data-only` feature\
- to use with dependencies or create your own game on Desktop. Sorry :("
-    );
-
     #[cfg(not(target_os = "android"))]
     {
         use colored::Colorize;
@@ -100,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .filter(Some("eucalyptus_core"), LevelFilter::Debug)
             .init();
+        log::info!("Initialised logger");
     }
 
     dropbear_engine::panic::set_hook();

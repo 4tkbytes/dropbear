@@ -762,12 +762,19 @@ impl CameraConfig {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
+    #[serde(default)]
     pub model_path: ResourceReference,
+    #[serde(default)]
     pub label: Label,
+    #[serde(default)]
     pub transform: Transform,
+    #[serde(default)]
     pub properties: ModelProperties,
+    #[serde(default)]
     pub script: Option<ScriptComponent>,
+    #[serde(default)]
     pub camera: Option<CameraConfig>,
+    #[serde(default)]
     pub children: Option<Vec<Label>>,
     #[serde(default)]
     pub material_overrides: Vec<MaterialOverride>,
