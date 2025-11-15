@@ -1,0 +1,10 @@
+[package]
+name = "dropbear-traits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+typetag.workspace = true

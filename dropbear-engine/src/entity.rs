@@ -1,3 +1,4 @@
+use dropbear_traits::Component;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -14,8 +15,186 @@ use crate::{
     utils::ResourceReference,
 };
 use anyhow::anyhow;
+use dropbear_derive::Component;
 
-/// A type that represents a position, rotation and scale of an entity
+/// LocalTransform represents the transform of an entity relative to its parent.
+/// If an entity has no parent, this is its position in world space.
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Component)]
+pub struct LocalTransform(Transform);
+
+impl LocalTransform {
+    /// Creates a new LocalTransform with the specified position, rotation, and scale
+    pub fn new(position: impl Into<DVec3>, rotation: impl Into<DQuat>, scale: impl Into<DVec3>) -> Self {
+        Self(Transform {
+            position: position.into(),
+            rotation: rotation.into(),
+            scale: scale.into(),
+        })
+    }
+
+    /// Creates a LocalTransform from an existing Transform
+    pub fn from_transform(transform: Transform) -> Self {
+        Self(transform)
+    }
+
+    /// Returns a reference to the inner Transform
+    pub fn inner(&self) -> &Transform {
+        &self.0
+    }
+
+    /// Returns a mutable reference to the inner Transform
+    pub fn inner_mut(&mut self) -> &mut Transform {
+        &mut self.0
+    }
+
+    /// Consumes self and returns the inner Transform
+    pub fn into_inner(self) -> Transform {
+        self.0
+    }
+
+    /// Gets the position relative to parent
+    pub fn position(&self) -> DVec3 {
+        self.0.position
+    }
+
+    /// Sets the position relative to parent
+    pub fn set_position(&mut self, position: DVec3) {
+        self.0.position = position;
+    }
+
+    /// Gets the rotation relative to parent
+    pub fn rotation(&self) -> DQuat {
+        self.0.rotation
+    }
+
+    /// Sets the rotation relative to parent
+    pub fn set_rotation(&mut self, rotation: DQuat) {
+        self.0.rotation = rotation;
+    }
+
+    /// Gets the scale relative to parent
+    pub fn scale(&self) -> DVec3 {
+        self.0.scale
+    }
+
+    /// Sets the scale relative to parent
+    pub fn set_scale(&mut self, scale: DVec3) {
+        self.0.scale = scale;
+    }
+
+    /// Computes the local transformation matrix
+    pub fn matrix(&self) -> DMat4 {
+        self.0.matrix()
+    }
+}
+
+impl Default for LocalTransform {
+    fn default() -> Self {
+        Self(Transform::default())
+    }
+}
+
+/// WorldTransform represents the absolute transform of an entity in world space.
+/// This is computed by combining the LocalTransform with all parent transforms.
+/// 
+/// This should be updated by a transform propagation system that walks the hierarchy.
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Component)]
+pub struct WorldTransform(Transform);
+
+impl WorldTransform {
+    /// Creates a new WorldTransform with the specified position, rotation, and scale
+    pub fn new(position: impl Into<DVec3>, rotation: impl Into<DQuat>, scale: impl Into<DVec3>) -> Self {
+        Self(Transform {
+            position: position.into(),
+            rotation: rotation.into(),
+            scale: scale.into(),
+        })
+    }
+
+    /// Creates a WorldTransform from an existing Transform
+    pub fn from_transform(transform: Transform) -> Self {
+        Self(transform)
+    }
+
+    /// Returns a reference to the inner Transform
+    pub fn inner(&self) -> &Transform {
+        &self.0
+    }
+
+    /// Returns a mutable reference to the inner Transform
+    pub fn inner_mut(&mut self) -> &mut Transform {
+        &mut self.0
+    }
+
+    /// Consumes self and returns the inner Transform
+    pub fn into_inner(self) -> Transform {
+        self.0
+    }
+
+    /// Gets the absolute position in world space
+    pub fn position(&self) -> DVec3 {
+        self.0.position
+    }
+
+    /// Sets the absolute position in world space
+    pub fn set_position(&mut self, position: DVec3) {
+        self.0.position = position;
+    }
+
+    /// Gets the absolute rotation in world space
+    pub fn rotation(&self) -> DQuat {
+        self.0.rotation
+    }
+
+    /// Sets the absolute rotation in world space
+    pub fn set_rotation(&mut self, rotation: DQuat) {
+        self.0.rotation = rotation;
+    }
+
+    /// Gets the absolute scale in world space
+    pub fn scale(&self) -> DVec3 {
+        self.0.scale
+    }
+
+    /// Sets the absolute scale in world space
+    pub fn set_scale(&mut self, scale: DVec3) {
+        self.0.scale = scale;
+    }
+
+    /// Computes the world transformation matrix
+    pub fn matrix(&self) -> DMat4 {
+        self.0.matrix()
+    }
+
+    /// Computes the WorldTransform by combining a LocalTransform with a parent's WorldTransform
+    pub fn from_local_and_parent(local: &LocalTransform, parent: &WorldTransform) -> Self {
+        Self(Transform {
+            position: parent.position() + parent.rotation() * (local.position() * parent.scale()),
+            rotation: parent.rotation() * local.rotation(),
+            scale: parent.scale() * local.scale(),
+        })
+    }
+
+    /// Updates this WorldTransform from a LocalTransform and parent WorldTransform
+    pub fn update_from_parent(&mut self, local: &LocalTransform, parent: &WorldTransform) {
+        self.0.position = parent.position() + parent.rotation() * (local.position() * parent.scale());
+        self.0.rotation = parent.rotation() * local.rotation();
+        self.0.scale = parent.scale() * local.scale();
+    }
+
+    /// Synchronizes this WorldTransform from a LocalTransform when there is no parent
+    pub fn sync_from_local(&mut self, local: &LocalTransform) {
+        self.0 = local.0;
+    }
+}
+
+impl Default for WorldTransform {
+    fn default() -> Self {
+        Self(Transform::default())
+    }
+}
+
+/// A type that represents a position, rotation, and scale of an entity
 ///
 /// This type is the most primitive model, as it implements most traits.
 #[repr(C)]

@@ -10,6 +10,9 @@ readme = "README.md"
 crate-type = ["rlib", "dylib"]
 
 [dependencies]
+dropbear-derive = { path = "../dropbear-derive" }
+dropbear-traits = { path = "../dropbear-traits" }
+
 anyhow.workspace = true
 bincode.workspace = true
 chrono.workspace = true
@@ -34,12 +37,15 @@ crossbeam-channel.workspace = true
 app_dirs2.workspace = true
 log-once.workspace = true
 rfd = { workspace = true, optional = true }
+typetag.workspace = true
 
 [features]
 # editor only stuff
 editor = ["jvm", "rfd", "jvm_debug"]
-# enabled scripttarget::jvm as an option 
+
+# enabled scripttarget::jvm as an option
 jvm = []
+
 # enables jdb
 jvm_debug = ["jvm"]
 

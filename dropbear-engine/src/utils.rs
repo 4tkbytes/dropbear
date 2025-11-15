@@ -84,6 +84,8 @@ pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
 )]
 pub enum ResourceReferenceType {
     /// The default type; Specifies there being no resource reference type.
+    ///
+    /// # Warning
     /// Typically creates errors, so watch out!
     None,
 
@@ -91,7 +93,10 @@ pub enum ResourceReferenceType {
     File(String),
 
     /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
-    /// [`include_bytes!`] macro, this type stores it.
+    /// [`include_bytes!`] macro; this type stores it.
+    ///
+    /// # Warning
+    /// If you keep an entire model as bytes in here, it will take more time to load an object.
     Bytes(Vec<u8>),
 
     /// A simple plane. Some of the types in [`ResourceReferenceType`] can be simple, just as a signal
@@ -100,6 +105,9 @@ pub enum ResourceReferenceType {
     /// In specifics, the plane (as from [`crate::procedural::plane::PlaneBuilder`]) is a model that
     /// has meshes and a textured material, but is created "in house" (during runtime instead of loaded).
     Plane,
+
+    /// A standard cube with a default texture of a grey cube.
+    Cube,
 }
 
 impl Default for ResourceReferenceType {

@@ -5,6 +5,7 @@ use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
     RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
+use dropbear_traits::Component;
 
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::graphics::SharedGraphicsContext;
@@ -118,7 +119,7 @@ impl From<LightType> for u32 {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, dropbear_derive::Component)]
 pub struct LightComponent {
     pub position: DVec3,          // point, spot
     pub direction: DVec3,         // directional, spot

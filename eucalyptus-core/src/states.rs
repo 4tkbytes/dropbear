@@ -1,21 +1,19 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::Parent;
-use crate::utils::{PROTO_TEXTURE, ResolveReference};
+use crate::utils::ResolveReference;
 use chrono::Utc;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
-use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
+use dropbear_engine::entity::{LocalTransform, MaterialOverride, MeshRenderer, Transform, WorldTransform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
-use dropbear_engine::procedural::plane::PlaneBuilder;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::ResourceReference;
 use egui::Ui;
 use egui_dock::DockState;
 use glam::{DQuat, DVec3};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
-use rayon::prelude::*;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -26,6 +24,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
 use tokio::sync::mpsc::UnboundedSender;
+use dropbear_derive::Component;
+use dropbear_traits::Component;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -549,155 +549,17 @@ fn collect_nodes(
     nodes
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
-pub enum EntityNode {
-    Entity {
-        id: hecs::Entity,
-        name: String,
-    },
-    Script {
-        tags: Vec<String>,
-    },
-    Light {
-        id: hecs::Entity,
-        name: String,
-    },
-    Camera {
-        id: hecs::Entity,
-        name: String,
-        camera_type: CameraType,
-    },
-    Group {
-        name: String,
-        children: Vec<EntityNode>,
-        collapsed: bool,
-    },
-}
-
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone, Component)]
 pub struct ScriptComponent {
     pub tags: Vec<String>,
 }
 
-impl EntityNode {
-    pub fn from_world(world: &hecs::World) -> Vec<Self> {
-        let mut nodes = Vec::new();
-        let mut handled = std::collections::HashSet::new();
-
-        for (id, (label, script, _transform, _renderer)) in world
-            .query::<(
-                &Label,
-                &ScriptComponent,
-                &dropbear_engine::entity::Transform,
-                &dropbear_engine::entity::MeshRenderer,
-            )>()
-            .iter()
-        {
-            let name = label.to_string();
-            let mut children = vec![
-                EntityNode::Entity {
-                    id,
-                    name: name.clone(),
-                },
-                EntityNode::Script {
-                    tags: script.tags.clone(),
-                },
-            ];
-
-            // Check if this entity also has camera components
-            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id)
-                && let Some((camera, component)) = camera_query.get()
-            {
-                children.push(EntityNode::Camera {
-                    id,
-                    name: camera.label.clone(),
-                    camera_type: component.camera_type,
-                });
-            }
-
-            nodes.push(EntityNode::Group {
-                name: name.clone(),
-                children,
-                collapsed: false,
-            });
-            handled.insert(id);
-        }
-
-        // Handle single entities (and potentially cameras)
-        for (id, (label, _renderer)) in world
-            .query::<(&Label, &dropbear_engine::entity::MeshRenderer)>()
-            .iter()
-        {
-            if handled.contains(&id) {
-                continue;
-            }
-            let name = label.to_string();
-
-            // Check if this entity has camera components
-            if let Ok(mut camera_query) = world.query_one::<(&Camera, &CameraComponent)>(id) {
-                if let Some((camera, component)) = camera_query.get() {
-                    // Create a group with the entity and its camera component
-                    nodes.push(EntityNode::Group {
-                        name: name.clone(),
-                        children: vec![
-                            EntityNode::Entity {
-                                id,
-                                name: name.clone(),
-                            },
-                            EntityNode::Camera {
-                                id,
-                                name: camera.label.clone(),
-                                camera_type: component.camera_type,
-                            },
-                        ],
-                        collapsed: false,
-                    });
-                } else {
-                    // Regular entity without camera components
-                    nodes.push(EntityNode::Entity { id, name });
-                }
-            } else {
-                // Regular entity without camera components
-                nodes.push(EntityNode::Entity { id, name });
-            }
-        }
-
-        // lights
-        for (id, (_transform, _light_comp, light)) in world
-            .query::<(&dropbear_engine::entity::Transform, &LightComponent, &Light)>()
-            .iter()
-        {
-            if handled.contains(&id) {
-                continue;
-            }
-            nodes.push(EntityNode::Light {
-                id,
-                name: light.label().to_string(),
-            });
-            handled.insert(id);
-        }
-
-        // Handle standalone cameras (cameras without MeshRenderer - like viewport cameras)
-        for (entity, (camera, component)) in world.query::<(&Camera, &CameraComponent)>().iter() {
-            if world.get::<&MeshRenderer>(entity).is_err() {
-                nodes.push(EntityNode::Camera {
-                    id: entity,
-                    name: camera.label.clone(),
-                    camera_type: component.camera_type,
-                });
-            }
-        }
-
-        nodes
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Component)]
 pub struct CameraConfig {
     pub label: String,
     pub camera_type: CameraType,
 
-    pub position: [f64; 3],
+    pub eye: [f64; 3],
     pub target: [f64; 3],
     pub up: [f64; 3],
     pub aspect: f64,
@@ -708,8 +570,6 @@ pub struct CameraConfig {
     pub speed: f32,
     pub sensitivity: f32,
 
-    // pub follow_target_entity_label: Option<String>,
-    // pub follow_offset: Option<[f64; 3]>,
     pub starting_camera: bool,
 }
 
@@ -717,15 +577,13 @@ impl Default for CameraConfig {
     fn default() -> Self {
         let default = CameraComponent::new();
         Self {
-            position: [0.0, 1.0, 2.0],
+            eye: [0.0, 1.0, 2.0],
             target: [0.0, 0.0, 0.0],
             up: [0.0, 1.0, 0.0],
             aspect: 16.0 / 9.0,
             fov: 45.0,
             near: 0.1,
             far: 100.0,
-            // follow_target_entity_label: None,
-            // follow_offset: None,
             label: String::new(),
             camera_type: CameraType::Normal,
             speed: default.settings.speed as f32,
@@ -739,10 +597,9 @@ impl CameraConfig {
     pub fn from_ecs_camera(
         camera: &Camera,
         component: &CameraComponent,
-        // follow_target: Option<&CameraFollowTarget>,
     ) -> Self {
         Self {
-            position: camera.position().to_array(),
+            eye: camera.position().to_array(),
             target: camera.target.to_array(),
             label: camera.label.clone(),
             camera_type: component.camera_type,
@@ -753,31 +610,67 @@ impl CameraConfig {
             far: camera.zfar as f32,
             speed: component.settings.speed as f32,
             sensitivity: component.settings.sensitivity as f32,
-            // follow_target_entity_label: follow_target.map(|target| target.follow_target.clone()),
-            // follow_offset: follow_target.map(|target| target.offset.to_array()),
             starting_camera: component.starting_camera,
         }
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct SceneEntity {
-    pub model_path: ResourceReference,
-    pub label: Label,
-    pub transform: Transform,
-    pub properties: ModelProperties,
-    pub script: Option<ScriptComponent>,
-    pub camera: Option<CameraConfig>,
-    pub children: Option<Vec<Label>>,
-    #[serde(default)]
-    pub material_overrides: Vec<MaterialOverride>,
-
-    #[serde(skip)]
-    #[allow(dead_code)]
-    pub entity_id: Option<hecs::Entity>,
+impl From<CameraConfig> for CameraBuilder {
+    fn from(value: CameraConfig) -> CameraBuilder {
+        CameraBuilder {
+            eye: value.eye.into(),
+            target: value.target.into(),
+            up: value.up.into(),
+            aspect: value.aspect,
+            znear: value.near as f64,
+            zfar: value.far as f64,
+            settings: CameraSettings {
+                speed: value.speed as f64,
+                sensitivity: value.sensitivity as f64,
+                fov_y: value.fov as f64,
+            },
+        }
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+/// A type of entity that can be serialized into a scene (which will then be serialized into a file).
+///
+/// This just contains the parent, the children, the components of that entity and the name of it.
+///
+/// This should not be added to the world. 
+#[derive(Default, Serialize, Deserialize)]
+pub struct SceneEntity {
+    pub label: Label,
+    pub components: Vec<Box<dyn Component>>,
+    pub parent: Label,
+    pub children: Vec<SceneEntity>,
+}
+
+impl Clone for SceneEntity {
+    fn clone(&self) -> Self {
+        Self {
+            label: self.label.clone(),
+            components: self.components.iter()
+                .map(|c| c.clone_component())
+                .collect(),
+            children: self.children.clone(),
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+impl fmt::Debug for SceneEntity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SceneEntity")
+            .field("label", &self.label)
+            .field("components_count", &self.components.len())
+            .field("parent", &self.parent)
+            .field("children_count", &self.children.len())
+            .finish()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Component)]
 pub struct ModelProperties {
     pub custom_properties: Vec<Property>,
     pub next_id: u64,
@@ -806,7 +699,7 @@ impl Default for Value {
 }
 
 impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let string: String = match self {
             Value::String(_) => "String".into(),
             Value::Int(_) => "Int".into(),
@@ -916,19 +809,26 @@ impl Default for ModelProperties {
     }
 }
 
+/// A component that holds basic information for a [`MeshRenderer`].
+#[derive(Serialize, Deserialize, Clone, Component)]
+pub struct SceneMeshRendererComponent {
+    model: ResourceReference,
+    material_overrides: Vec<MaterialOverride>,
+}
+
+/// The config of a scene. Organises the content for serialization for a scene and for packing
+/// into a runtime.
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     #[serde(default)]
     pub scene_name: String,
+
     #[serde(default)]
     pub entities: Vec<SceneEntity>,
-    #[serde(default)]
-    pub cameras: Vec<CameraConfig>,
-    #[serde(default)]
-    pub lights: Vec<LightConfig>,
-    #[serde(default)]
+
     // todo later
     // pub settings: SceneSettings,
+
     #[serde(skip)]
     pub path: PathBuf,
 }
@@ -940,8 +840,6 @@ impl SceneConfig {
             scene_name,
             path: path.as_ref().to_path_buf(),
             entities: Vec::new(),
-            cameras: Vec::new(),
-            lights: Vec::new(),
         }
     }
 
@@ -968,6 +866,7 @@ impl SceneConfig {
         Ok(config)
     }
 
+    /// Loads a [`SceneConfig`] into a [`hecs::World`] asynchronously
     pub async fn load_into_world(
         &self,
         world: &mut hecs::World,
@@ -983,246 +882,150 @@ impl SceneConfig {
             self.scene_name,
             world.len()
         );
-        {
-            world.clear();
-        }
-
-        #[allow(unused_variables)]
-        let project_config = if cfg!(feature = "editor") {
-            let cfg = PROJECT.read();
-            cfg.project_path.clone()
-        } else {
-            log::debug!("Not using the editor feature, returning empty pathbuffer");
-            PathBuf::new()
-        };
-
+        world.clear();
         log::info!("World cleared, now has {} entities", world.len());
 
-        let entity_configs: Vec<(usize, SceneEntity)> = {
-            let cloned = self.entities.clone();
-            cloned
-                .into_par_iter()
-                .enumerate()
-                .map(|(i, e)| (i, e))
-                .collect()
-        };
-
         let mut label_to_entity: HashMap<Label, hecs::Entity> = HashMap::new();
-        let mut pending_parent_links: Vec<(Label, Vec<Label>)> = Vec::new();
 
-        for (index, entity_config) in entity_configs {
-            let SceneEntity {
-                model_path,
-                label,
-                transform,
-                properties,
-                script,
-                camera,
-                children,
-                material_overrides,
-                ..
-            } = entity_config;
-
-            let label_for_map = label.clone();
-            let label_for_logs = label_for_map.to_string();
-
-            log::debug!("Loading entity: {}", label_for_logs);
-
-            let total = self.entities.len();
+        // entities
+        for (index, entity_config) in self.entities.iter().enumerate() {
+            let label_str = entity_config.label.to_string();
+            
+            log::debug!("Loading entity: {}", label_str);
 
             if let Some(ref s) = progress_sender {
                 let _ = s.send(WorldLoadingStatus::LoadingEntity {
                     index,
-                    name: label_for_logs.clone(),
-                    total,
+                    name: label_str.clone(),
+                    total: self.entities.len(),
                 });
             }
 
-            let mut renderer = match &model_path.ref_type {
-                ResourceReferenceType::File(reference) => {
-                    let path = model_path.resolve()?;
+            let mut builder = hecs::EntityBuilder::new();
+            builder.add(entity_config.label.clone());
 
-                    log::debug!(
-                        "Path for entity {} is {} from reference {}",
-                        label_for_logs,
-                        path.display(),
-                        reference
-                    );
+            let mut mesh_renderer: Option<MeshRenderer> = None;
+            let mut world_transform: Option<WorldTransform> = None;
+            let mut local_transform: Option<LocalTransform> = None;
+            let mut camera_config: Option<CameraConfig> = None;
+            let mut light_config: Option<(LightComponent, Transform)> = None;
 
-                    MeshRenderer::from_path(graphics.clone(), &path, Some(label_for_map.as_str()))
-                        .await?
-                }
-                ResourceReferenceType::Bytes(bytes) => {
-                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
-
-                    let model = Model::load_from_memory(
-                        graphics.clone(),
-                        bytes.clone(),
-                        Some(label_for_map.as_str()),
-                    )
-                    .await?;
-                    MeshRenderer::from_handle(model)
-                }
-                ResourceReferenceType::Plane => {
-                    let width = properties.get_float("width").ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Entity '{}' has no width property or it's not a float",
-                            label_for_logs
-                        )
-                    })?;
-
-                    let height = properties.get_float("height").ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Entity '{}' has no height property or it's not a float",
-                            label_for_logs
-                        )
-                    })?;
-
-                    let tiles_x = properties.get_int("tiles_x").ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Entity '{}' has no tiles_x property or it's not an int",
-                            label_for_logs
-                        )
-                    })?;
-
-                    let tiles_z = properties.get_int("tiles_z").ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Entity '{}' has no tiles_z property or it's not an int",
-                            label_for_logs
-                        )
-                    })?;
-
-                    PlaneBuilder::new()
-                        .with_size(width as f32, height as f32)
-                        .with_tiles(tiles_x as u32, tiles_z as u32)
-                        .build(
-                            graphics.clone(),
-                            PROTO_TEXTURE,
-                            Some(label_for_map.as_str()),
-                        )
-                        .await?
-                }
-                ResourceReferenceType::None => {
-                    anyhow::bail!(
-                        "Entity '{}' has a resource reference of None, which cannot be loaded or referenced",
-                        label_for_logs
-                    );
-                }
-            };
-
-            if !material_overrides.is_empty() {
-                for override_entry in &material_overrides {
-                    if ASSET_REGISTRY
-                        .model_handle_from_reference(&override_entry.source_model)
-                        .is_none()
-                    {
-                        if matches!(
-                            override_entry.source_model.ref_type,
-                            ResourceReferenceType::File(_)
-                        ) {
-                            let source_path = override_entry.source_model.resolve()?;
-                            let label_hint = override_entry.source_model.as_uri();
-                            Model::load(graphics.clone(), &source_path, label_hint).await?;
-                        } else {
-                            log::warn!(
-                                "Material override for '{}' references unsupported resource {:?}",
-                                label_for_logs,
-                                override_entry.source_model
-                            );
+            for comp in &entity_config.components {
+                if let Some(mesh_comp) = comp.as_any().downcast_ref::<SceneMeshRendererComponent>() {
+                    match self.load_mesh_renderer(mesh_comp, &graphics, &label_str).await {
+                        Ok(renderer) => mesh_renderer = Some(renderer),
+                        Err(e) => {
+                            log::error!("Failed to load mesh for entity '{}': {}", label_str, e);
                             continue;
                         }
                     }
-
-                    if let Err(err) = renderer.apply_material_override(
-                        &override_entry.target_material,
-                        override_entry.source_model.clone(),
-                        &override_entry.source_material,
-                    ) {
-                        log::warn!(
-                            "Failed to apply material override '{}' on '{}': {}",
-                            override_entry.target_material,
-                            label_for_logs,
-                            err
-                        );
-                    }
+                }
+                else if let Some(wt) = comp.as_any().downcast_ref::<WorldTransform>() {
+                    world_transform = Some(*wt);
+                }
+                else if let Some(lt) = comp.as_any().downcast_ref::<LocalTransform>() {
+                    local_transform = Some(*lt);
+                }
+                else if let Some(cam_cfg) = comp.as_any().downcast_ref::<CameraConfig>() {
+                    camera_config = Some(cam_cfg.clone());
+                }
+                else if let Some(light_comp) = comp.as_any().downcast_ref::<LightComponent>() {
+                    let transform = local_transform
+                        .map(|lt| lt.into_inner())
+                        .unwrap_or_default();
+                    light_config = Some((light_comp.clone(), transform));
+                }
+                else if let Some(script_comp) = comp.as_any().downcast_ref::<ScriptComponent>() {
+                    builder.add(script_comp.clone());
+                }
+                else if let Some(props) = comp.as_any().downcast_ref::<ModelProperties>() {
+                    builder.add(props.clone());
                 }
             }
 
-            renderer.update(&transform);
+            let lt = local_transform.unwrap_or_default();
+            let wt = world_transform.unwrap_or_else(|| WorldTransform::from_transform(lt.into_inner()));
 
-            let entity = world.spawn((label, renderer, transform, properties));
+            builder.add(lt);
+            builder.add(wt);
 
-            if let Some(script_component) = script {
-                world.insert_one(entity, script_component)?;
+            if let Some(mut renderer) = mesh_renderer {
+                renderer.update(wt.inner());
+                builder.add(renderer);
             }
 
-            if let Some(camera_config) = camera {
+            // camera
+            if let Some(cam_cfg) = camera_config {
                 let camera = Camera::new(
                     graphics.clone(),
-                    CameraBuilder {
-                        eye: DVec3::from_array(camera_config.position),
-                        target: DVec3::from_array(camera_config.target),
-                        up: DVec3::from_array(camera_config.up),
-                        aspect: camera_config.aspect,
-                        znear: camera_config.near as f64,
-                        zfar: camera_config.far as f64,
-                        settings: CameraSettings::new(
-                            camera_config.speed as f64,
-                            camera_config.sensitivity as f64,
-                            camera_config.fov as f64,
-                        ),
-                    },
-                    Some(&camera_config.label),
+                    cam_cfg.clone().into(),
+                    Some(&cam_cfg.label),
                 );
 
                 let camera_component = CameraComponent {
                     settings: CameraSettings::new(
-                        camera_config.speed as f64,
-                        camera_config.sensitivity as f64,
-                        camera_config.fov as f64,
+                        cam_cfg.speed as f64,
+                        cam_cfg.sensitivity as f64,
+                        cam_cfg.fov as f64,
                     ),
-                    camera_type: camera_config.camera_type,
-                    starting_camera: camera_config.starting_camera,
+                    camera_type: cam_cfg.camera_type,
+                    starting_camera: cam_cfg.starting_camera,
                 };
 
-                world.insert(entity, (camera, camera_component))?;
+                builder.add(camera);
+                builder.add(camera_component);
             }
 
-            if let Some(children_labels) = children {
-                if !children_labels.is_empty() {
-                    pending_parent_links.push((label_for_map.clone(), children_labels));
-                }
+            // light
+            if let Some((light_comp, transform)) = light_config {
+                let light = Light::new(
+                    graphics.clone(),
+                    light_comp.clone(),
+                    transform,
+                    Some(&label_str),
+                )
+                .await;
+
+                builder.add(light_comp);
+                builder.add(light);
             }
 
-            if let Some(previous) = label_to_entity.insert(label_for_map.clone(), entity) {
+            let entity = world.spawn(builder.build());
+            
+            if let Some(previous) = label_to_entity.insert(entity_config.label.clone(), entity) {
                 log::warn!(
-                    "Duplicate entity label '{}' detected; previous entity {:?} will be overwritten in hierarchy mapping",
-                    label_for_logs,
+                    "Duplicate entity label '{}' detected; previous entity {:?} will be overwritten",
+                    label_str,
                     previous
                 );
             }
 
-            log::debug!("Loaded entity '{}'", label_for_logs);
+            log::debug!("Loaded entity '{}'", label_str);
         }
 
-        for (parent_label, child_labels) in pending_parent_links {
-            let Some(&parent_entity) = label_to_entity.get(&parent_label) else {
+        // parent-child relationships
+        for entity_config in &self.entities {
+            if entity_config.children.is_empty() {
+                continue;
+            }
+
+            let Some(&parent_entity) = label_to_entity.get(&entity_config.label) else {
                 log::warn!(
                     "Unable to resolve parent entity '{}' while rebuilding hierarchy",
-                    parent_label
+                    entity_config.label
                 );
                 continue;
             };
 
             let mut resolved_children = Vec::new();
-            for child_label in child_labels {
-                if let Some(&child_entity) = label_to_entity.get(&child_label) {
+            for child in &entity_config.children {
+                if let Some(&child_entity) = label_to_entity.get(&child.label) {
                     resolved_children.push(child_entity);
                 } else {
                     log::warn!(
                         "Unable to resolve child '{}' for parent '{}'",
-                        child_label,
-                        parent_label
+                        child.label,
+                        entity_config.label
                     );
                 }
             }
@@ -1231,128 +1034,34 @@ impl SceneConfig {
                 continue;
             }
 
-            let mut local_insert_one: Option<hecs::Entity> = None;
-
-            match world.query_one::<&mut Parent>(parent_entity) {
-                Ok(mut parent_query) => {
-                    if let Some(parent_component) = parent_query.get() {
-                        parent_component.clear();
-                        parent_component
-                            .children_mut()
-                            .extend(resolved_children.iter().copied());
-                    } else {
-                        local_insert_one = Some(parent_entity);
+            match world.query_one_mut::<&mut Parent>(parent_entity) {
+                Ok(parent_comp) => {
+                    parent_comp.clear();
+                    parent_comp.children_mut().extend(resolved_children);
+                }
+                Err(_) => {
+                    if let Err(e) = world.insert_one(parent_entity, Parent::new(resolved_children)) {
+                        log::error!(
+                            "Failed to attach Parent component to entity {:?}: {}",
+                            parent_entity,
+                            e
+                        );
                     }
                 }
-                Err(e) => {
-                    log::warn!(
-                        "Failed to query Parent component for entity {:?}: {}",
-                        parent_entity,
-                        e
-                    );
-                    local_insert_one = Some(parent_entity);
-                }
-            }
-
-            if let Some(parent_entity) = local_insert_one {
-                if let Err(e) = world.insert_one(parent_entity, Parent::new(resolved_children)) {
-                    log::error!(
-                        "Failed to attach Parent component to entity {:?}: {}",
-                        parent_entity,
-                        e
-                    );
-                }
             }
         }
 
-        let total = self.lights.len();
-
-        for (index, light_config) in self.lights.iter().enumerate() {
-            log::debug!("Loading light: {}", light_config.label);
-            if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingLight {
-                    index,
-                    name: light_config.label.clone(),
-                    total,
-                });
-            }
-
-            let light = Light::new(
-                graphics.clone(),
-                light_config.light_component.clone(),
-                light_config.transform,
-                Some(&light_config.label),
-            )
-            .await;
-            {
-                world.spawn((
-                    Label::from(light_config.label.clone()),
-                    light_config.light_component.clone(),
-                    light_config.transform,
-                    light,
-                    ModelProperties::default(),
-                ));
-            }
-        }
-
-        let total = self.cameras.len();
-        for (index, camera_config) in self.cameras.iter().enumerate() {
-            log::debug!(
-                "Loading camera {} of type {:?}",
-                camera_config.label,
-                camera_config.camera_type
-            );
-            if let Some(ref s) = progress_sender {
-                let _ = s.send(WorldLoadingStatus::LoadingCamera {
-                    index,
-                    name: camera_config.label.clone(),
-                    total,
-                });
-            }
-
-            let camera = Camera::new(
-                graphics.clone(),
-                CameraBuilder {
-                    eye: DVec3::from_array(camera_config.position),
-                    target: DVec3::from_array(camera_config.target),
-                    up: DVec3::from_array(camera_config.up),
-                    aspect: camera_config.aspect,
-                    znear: camera_config.near as f64,
-                    zfar: camera_config.far as f64,
-                    settings: CameraSettings::new(
-                        camera_config.speed as f64,
-                        camera_config.sensitivity as f64,
-                        camera_config.fov as f64,
-                    ),
-                },
-                Some(&camera_config.label),
-            );
-
-            let component = CameraComponent {
-                settings: CameraSettings::new(
-                    camera_config.speed as f64,
-                    camera_config.sensitivity as f64,
-                    camera_config.fov as f64,
-                ),
-                camera_type: camera_config.camera_type,
-                starting_camera: camera_config.starting_camera,
-            };
-            world.spawn((Label::from(camera_config.label.clone()), camera, component));
-        }
+        log::info!("Loaded {} entities with hierarchy", self.entities.len());
 
         {
-            let mut is_none = false;
-            if world
+            let has_light = world
                 .query::<(&LightComponent, &Light)>()
                 .iter()
                 .next()
-                .is_none()
-            {
-                log::info!("No lights in scene, spawning default light");
-                is_none = true;
-            }
+                .is_some();
 
-            if is_none {
+            if !has_light {
+                log::info!("No lights in scene, spawning default light");
                 if let Some(ref s) = progress_sender {
                     let _ = s.send(WorldLoadingStatus::LoadingLight {
                         index: 0,
@@ -1360,74 +1069,171 @@ impl SceneConfig {
                         total: 1,
                     });
                 }
-                let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
+
+                let comp = LightComponent::directional(DVec3::ONE, 1.0);
                 let light_direction = LightComponent::default_direction();
-                let rotation =
-                    DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
-                let trans = Transform {
-                    position: glam::DVec3::new(2.0, 4.0, 2.0),
+                let rotation = DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
+                let transform = Transform {
+                    position: DVec3::new(2.0, 4.0, 2.0),
                     rotation,
                     ..Default::default()
                 };
-                let light =
-                    Light::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
+                
+                let light = Light::new(
+                    graphics.clone(),
+                    comp.clone(),
+                    transform,
+                    Some("Default Light"),
+                )
+                .await;
 
+                let local = LocalTransform::from_transform(transform);
+                let world_t = WorldTransform::from_transform(transform);
+
+                world.spawn((
+                    Label::from("Default Light"),
+                    comp,
+                    local,
+                    world_t,
+                    light,
+                    ModelProperties::default(),
+                ));
+            }
+        }
+
+        self.setup_camera(world, &graphics, &progress_sender).await
+    }
+
+    /// Helper function to load a mesh renderer from a SceneMeshRendererComponent
+    async fn load_mesh_renderer(
+        &self,
+        comp: &SceneMeshRendererComponent,
+        graphics: &Arc<SharedGraphicsContext>,
+        label: &str,
+    ) -> anyhow::Result<MeshRenderer> {
+        use dropbear_engine::utils::ResourceReferenceType;
+
+        let mut renderer = match &comp.model.ref_type {
+            ResourceReferenceType::File(reference) => {
+                let path = comp.model.resolve()?;
+                log::debug!(
+                    "Loading model for entity '{}' from path {} (ref: {})",
+                    label,
+                    path.display(),
+                    reference
+                );
+                MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
+            }
+            ResourceReferenceType::Bytes(bytes) => {
+                log::info!("Loading entity '{}' from bytes [Len: {}]", label, bytes.len());
+                let model = Model::load_from_memory(
+                    graphics.clone(),
+                    bytes.clone(),
+                    Some(label),
+                ).await?;
+                MeshRenderer::from_handle(model)
+            }
+            ResourceReferenceType::Cube => {
+                log::info!("Loading entity '{}' as cube", label);
+                let model = Model::load_from_memory(
+                    graphics.clone(),
+                    include_bytes!("../../resources/models/cube.glb").to_vec(),
+                    Some(label),
+                ).await?;
+                MeshRenderer::from_handle(model)
+            }
+            ResourceReferenceType::None => {
+                anyhow::bail!("No model reference provided for entity '{}'", label);
+            }
+            ResourceReferenceType::Plane => {
+                anyhow::bail!("Plane resource type is no longer supported for entity '{}'", label);
+            }
+        };
+
+        if !comp.material_overrides.is_empty() {
+            for override_entry in &comp.material_overrides {
+                if ASSET_REGISTRY
+                    .model_handle_from_reference(&override_entry.source_model)
+                    .is_none()
                 {
-                    world.spawn((
-                        Label::from("Default Light"),
-                        comp,
-                        trans,
-                        light,
-                        ModelProperties::default(),
-                    ));
+                    if matches!(
+                        override_entry.source_model.ref_type,
+                        ResourceReferenceType::File(_)
+                    ) {
+                        let source_path = override_entry.source_model.resolve()?;
+                        let label_hint = override_entry.source_model.as_uri();
+                        Model::load(graphics.clone(), &source_path, label_hint).await?;
+                    } else {
+                        log::warn!(
+                            "Material override for '{}' references unsupported resource {:?}",
+                            label,
+                            override_entry.source_model
+                        );
+                        continue;
+                    }
+                }
+
+                if let Err(err) = renderer.apply_material_override(
+                    &override_entry.target_material,
+                    override_entry.source_model.clone(),
+                    &override_entry.source_material,
+                ) {
+                    log::warn!(
+                        "Failed to apply material override '{}' on '{}': {}",
+                        override_entry.target_material,
+                        label,
+                        err
+                    );
                 }
             }
         }
 
-        log::info!(
-            "Loaded {} entities, {} lights and {} cameras",
-            self.entities.len(),
-            self.lights.len(),
-            self.cameras.len()
-        );
+        Ok(renderer)
+    }
+
+    /// Helper function to setup the appropriate camera for the scene
+    async fn setup_camera(
+        &self,
+        world: &mut hecs::World,
+        graphics: &Arc<SharedGraphicsContext>,
+        progress_sender: &Option<UnboundedSender<WorldLoadingStatus>>,
+    ) -> anyhow::Result<hecs::Entity> {
         #[cfg(feature = "editor")]
         {
-            let debug_camera = {
-                world
-                    .query::<(&Camera, &CameraComponent)>()
-                    .iter()
-                    .find_map(|(entity, (_, component))| {
-                        if matches!(component.camera_type, CameraType::Debug) {
-                            Some(entity)
-                        } else {
-                            None
-                        }
-                    })
-            };
-
-            {
-                if let Some(camera_entity) = debug_camera {
-                    log::info!("Using existing debug camera for editor");
-                    Ok(camera_entity)
-                } else {
-                    log::info!("No debug camera found, creating viewport camera for editor");
-                    if let Some(ref s) = progress_sender {
-                        let _ = s.send(WorldLoadingStatus::LoadingCamera {
-                            index: 0,
-                            name: String::from("Viewport Camera"),
-                            total: 1,
-                        });
+            // Look for existing debug camera
+            let debug_camera = world
+                .query::<(&Camera, &CameraComponent)>()
+                .iter()
+                .find_map(|(entity, (_, component))| {
+                    if matches!(component.camera_type, CameraType::Debug) {
+                        Some(entity)
+                    } else {
+                        None
                     }
-                    let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
-                    let component = crate::camera::DebugCamera::new();
-                    let camera_entity = { world.spawn((camera, component)) };
-                    Ok(camera_entity)
+                });
+
+            if let Some(camera_entity) = debug_camera {
+                log::info!("Using existing debug camera for editor");
+                Ok(camera_entity)
+            } else {
+                log::info!("No debug camera found, creating viewport camera for editor");
+                if let Some(s) = progress_sender.as_ref() {
+                    let _ = s.send(WorldLoadingStatus::LoadingCamera {
+                        index: 0,
+                        name: String::from("Viewport Camera"),
+                        total: 1,
+                    });
                 }
+                let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
+                let component = crate::camera::DebugCamera::new();
+                let camera_entity = world.spawn((camera, component));
+                Ok(camera_entity)
             }
         }
 
         #[cfg(not(feature = "editor"))]
         {
+            // Runtime mode: must have a player camera
             let player_camera = world
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
@@ -1443,7 +1249,7 @@ impl SceneConfig {
                 log::info!("Using player camera for runtime");
                 Ok(camera_entity)
             } else {
-                panic!("Runtime mode requires a player camera, but none was found in the scene!");
+                anyhow::bail!("Runtime mode requires a player camera, but none was found in the scene!");
             }
         }
     }
@@ -1516,6 +1322,7 @@ pub enum WorldLoadingStatus {
     Completed,
 }
 
+#[deprecated = "This RuntimeData struct should not be used at all for any projects, a new one is being made"]
 #[derive(Clone, Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct RuntimeData {
     #[bincode(with_serde)]
@@ -1528,6 +1335,7 @@ pub struct RuntimeData {
     pub scripts: HashMap<String, String>,
 }
 
+/// A label. Contains the name of something as a [String]. Nothing fancy ova 'ere. 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Label(String);
 

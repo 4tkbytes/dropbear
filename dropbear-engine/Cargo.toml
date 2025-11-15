@@ -11,6 +11,8 @@ readme.workspace = true
 [dependencies]
 dropbear_future-queue = { path = "../dropbear_future-queue" }
 dropbear-shader = { path = "../dropbear-shader" }
+dropbear-traits = { path = "../dropbear-traits" }
+dropbear-derive = { path = "../dropbear-derive" }
 
 anyhow.workspace = true
 app_dirs2.workspace = true
@@ -33,7 +35,6 @@ wgpu.workspace = true
 winit.workspace = true
 hecs.workspace = true
 parking_lot.workspace = true
-lazy_static.workspace = true
 gltf.workspace = true
 rayon.workspace = true
 backtrace.workspace = true
@@ -41,6 +42,7 @@ os_info.workspace = true
 rustc_version_runtime.workspace = true
 ron.workspace = true
 dashmap.workspace = true
+typetag.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
