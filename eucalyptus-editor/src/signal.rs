@@ -2,15 +2,16 @@ use crate::editor::{
     ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction,
 };
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{LocalTransform, MeshRenderer, Transform, WorldTransform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
-use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, Value};
+use eucalyptus_core::spawn::push_pending_spawn;
+use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, SceneEntity, SceneMeshRendererComponent, ScriptComponent, Value};
+use eucalyptus_core::traits::Component;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
 use std::path::PathBuf;
@@ -35,14 +36,7 @@ impl SignalController for Editor {
             }
             Signal::Copy(_) => Ok(()),
             Signal::Paste(scene_entity) => {
-                let spawn = PendingSpawn {
-                    asset_path: scene_entity.model_path.clone(),
-                    asset_name: scene_entity.label.to_string(),
-                    transform: scene_entity.transform,
-                    properties: scene_entity.properties.clone(),
-                    handle: None,
-                };
-                push_pending_spawn(spawn);
+                push_pending_spawn(scene_entity.clone());
                 self.signal = Signal::Copy(scene_entity.clone());
                 Ok(())
             }
@@ -641,8 +635,27 @@ impl SignalController for Editor {
                             );
                         }
                         Err(e) => {
-                            warn!("Failed to remove script component from entity: {}", e);
+                            warn!("Failed to remove camera component from entity: {}", e);
                             self.signal = Signal::None;
+                        }
+                    };
+                    self.signal = Signal::None;
+                    Ok(())
+                }
+                ComponentType::Light(_) => {
+                    match self.world.remove_one::<LightComponent>(*entity) {
+                        Ok(component) => {
+                            success!("Removed light component from entity {:?}", entity);
+                            UndoableAction::push_to_undo(
+                                &mut self.undo_stack,
+                                UndoableAction::RemoveComponent(
+                                    *entity,
+                                    Box::new(ComponentType::Light(component)),
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            warn!("Failed to remove light component from entity: {}", e);
                         }
                     };
                     self.signal = Signal::None;
@@ -768,7 +781,7 @@ impl SignalController for Editor {
             }
             Signal::Spawn(entity_type) => {
                 match entity_type {
-                    crate::editor::PendingSpawn2::Light => {
+                    PendingSpawn2::Light => {
                         let light = Light::new(
                             graphics.clone(),
                             LightComponent::default(),
@@ -779,36 +792,58 @@ impl SignalController for Editor {
                         self.light_spawn_queue.push(handle);
                         success!("Pushed light to queue");
                     }
-                    crate::editor::PendingSpawn2::Plane => {
-                        let transform = Transform::new();
+                    PendingSpawn2::Plane => {
                         let mut props = ModelProperties::new();
                         props.add_property("width".to_string(), Value::Float(500.0));
                         props.add_property("height".to_string(), Value::Float(200.0));
                         props.add_property("tiles_x".to_string(), Value::Int(500));
                         props.add_property("tiles_z".to_string(), Value::Int(200));
 
-                        push_pending_spawn(PendingSpawn {
-                            asset_path: ResourceReference::from_reference(
-                                ResourceReferenceType::Plane,
-                            ),
-                            asset_name: "DefaultPlane".to_string(),
-                            transform,
-                            properties: props,
-                            handle: None,
-                        });
+                        let local_transform = LocalTransform::default();
+                        let world_transform = WorldTransform::default();
+
+                        let mut components: Vec<Box<dyn Component>> = Vec::new();
+                        components.push(Box::new(local_transform));
+                        components.push(Box::new(world_transform));
+                        components.push(Box::new(SceneMeshRendererComponent {
+                            model: ResourceReference::from_reference(ResourceReferenceType::Plane),
+                            material_overrides: Vec::new(),
+                        }));
+                        components.push(Box::new(props));
+
+                        let scene_entity = SceneEntity {
+                            label: Label::from("DefaultPlane"),
+                            components,
+                            parent: Label::default(),
+                            children: Vec::new(),
+                        };
+
+                        push_pending_spawn(scene_entity);
                         success!("Pushed plane to queue");
                     }
                     PendingSpawn2::Cube => {
-                        let pending = PendingSpawn {
-                            asset_path: ResourceReference::from_bytes(include_bytes!(
+                        let local_transform = LocalTransform::default();
+                        let world_transform = WorldTransform::default();
+
+                        let mut components: Vec<Box<dyn Component>> = Vec::new();
+                        components.push(Box::new(local_transform));
+                        components.push(Box::new(world_transform));
+                        components.push(Box::new(SceneMeshRendererComponent {
+                            model: ResourceReference::from_bytes(include_bytes!(
                                 "../../resources/models/cube.glb"
-                            )),
-                            asset_name: "Default Cube".to_string(),
-                            transform: Default::default(),
-                            properties: Default::default(),
-                            handle: None,
+                            ).to_vec()),
+                            material_overrides: Vec::new(),
+                        }));
+                        components.push(Box::new(ModelProperties::default()));
+
+                        let scene_entity = SceneEntity {
+                            label: Label::from("Default Cube"),
+                            components,
+                            parent: Label::default(),
+                            children: Vec::new(),
                         };
-                        push_pending_spawn(pending);
+
+                        push_pending_spawn(scene_entity);
                         success!("Pushed cube to queue");
                     }
                     PendingSpawn2::Camera => {

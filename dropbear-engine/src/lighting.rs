@@ -15,6 +15,7 @@ use crate::{
     entity::Transform,
     model::{self, Model, Vertex},
 };
+use crate::model::SpecialModelType;
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -246,9 +247,9 @@ impl Light {
 
         log::trace!("Created new light uniform");
 
-        let cube_model = Model::load_from_memory(
+        let cube_model = Model::load_special(
             graphics.clone(),
-            include_bytes!("../../resources/models/cube.glb").to_vec(),
+            SpecialModelType::Cube,
             label,
         )
         .await

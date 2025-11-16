@@ -29,6 +29,11 @@ impl ModelId {
     }
 }
 
+/// Models that have been cached and have a special [ResourceReference].
+pub enum SpecialModelType {
+    Cube,
+}
+
 #[derive(Clone)]
 pub struct Model {
     pub label: String,
@@ -262,6 +267,7 @@ impl Model {
             == Some(texture_tag)
     }
 
+    /// Loads the specified model from memory (bytes).
     pub async fn load_from_memory<B>(
         graphics: Arc<SharedGraphicsContext>,
         buffer: B,
@@ -276,16 +282,42 @@ impl Model {
             label,
             &ASSET_REGISTRY,
             LazyLock::force(&MODEL_CACHE),
+            None,
         )
         .await
     }
 
+    /// Loads a special model (as specified by [SpecialModelType]).
+    pub async fn load_special(
+        graphics: Arc<SharedGraphicsContext>,
+        model_type: SpecialModelType,
+        label: Option<&str>,
+    ) -> anyhow::Result<LoadedModel> {
+        let (bytes, res_ref) = match model_type {
+            SpecialModelType::Cube => {
+                (include_bytes!("../../resources/models/cube.glb"), ResourceReference::from_euca_uri("euca://editor/cube.glb"))
+            }
+        };
+        Self::load_from_memory_raw(
+            graphics,
+            bytes,
+            label,
+            &ASSET_REGISTRY,
+            LazyLock::force(&MODEL_CACHE),
+            res_ref.ok()
+        )
+        .await
+    }
+
+    /// Loads the specified model from memory (bytes) with the individual registry and model cache
+    /// specified.
     pub async fn load_from_memory_raw<B>(
         graphics: Arc<SharedGraphicsContext>,
         buffer: B,
         label: Option<&str>,
         registry: &AssetRegistry,
         cache: &Mutex<HashMap<String, Arc<Model>>>,
+        res_ref: Option<ResourceReference>,
     ) -> anyhow::Result<LoadedModel>
     where
         B: AsRef<[u8]>,
@@ -308,7 +340,8 @@ impl Model {
             label
         );
         log::debug!("Loading from memory");
-        let res_ref = ResourceReference::from_bytes(buffer.as_ref());
+
+        let res_ref = res_ref.unwrap_or(ResourceReference::from_bytes(buffer.as_ref()));
 
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
         let mut meshes = Vec::new();
@@ -534,7 +567,7 @@ impl Model {
         log::debug!("Path of model: {}", path.display());
 
         let buffer = std::fs::read(path)?;
-        let loaded = Self::load_from_memory_raw(graphics, buffer, label, registry, cache).await?;
+        let loaded = Self::load_from_memory_raw(graphics, buffer, label, registry, cache, None).await?;
 
         let mut model_clone: Model = (*loaded).clone();
         if let Ok(reference) = ResourceReference::from_path(path) {

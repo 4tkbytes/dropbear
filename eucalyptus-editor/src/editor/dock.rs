@@ -4,7 +4,7 @@ use crate::editor::{
     console_error::{ConsoleItem, ErrorLevel},
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     sync::LazyLock,
 };
@@ -13,14 +13,15 @@ use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
+    entity::{LocalTransform, MeshRenderer, Transform, WorldTransform},
     lighting::{Light, LightComponent},
 };
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_extras;
-use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{File, Label, Node, RESOURCES, ResourceType};
+use eucalyptus_core::spawn::push_pending_spawn;
+use eucalyptus_core::states::{File, Label, ModelProperties, Node, RESOURCES, ResourceType, SceneEntity, SceneMeshRendererComponent};
+use eucalyptus_core::traits::Component;
 use eucalyptus_core::{APP_INFO, utils::ResolveReference};
 use log;
 use parking_lot::Mutex;
@@ -28,7 +29,6 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, mat
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
-    pub nodes: Vec<EntityNode>,
     pub tex_size: Extent3d,
     pub gizmo: &'a mut Gizmo,
     pub world: &'a mut World,
@@ -52,30 +52,38 @@ impl<'a> EditorTabViewer<'a> {
         position: DVec3,
         properties: Option<ModelProperties>,
     ) -> anyhow::Result<()> {
-        let transform = Transform {
+        let local_transform = LocalTransform::from_transform(Transform {
             position,
             ..Default::default()
+        });
+        let world_transform = WorldTransform::from_transform(local_transform.into_inner());
+
+        let mut components: Vec<Box<dyn Component>> = Vec::new();
+        
+        // Add transforms
+        components.push(Box::new(local_transform));
+        components.push(Box::new(world_transform));
+        
+        // Add mesh component
+        let mesh_comp = SceneMeshRendererComponent {
+            model: asset.path.clone(),
+            material_overrides: Vec::new(),
         };
-        {
-            if let Some(props) = properties {
-                push_pending_spawn(PendingSpawn {
-                    asset_path: asset.path.clone(),
-                    asset_name: asset.name.clone(),
-                    transform,
-                    properties: props,
-                    handle: None,
-                });
-            } else {
-                push_pending_spawn(PendingSpawn {
-                    asset_path: asset.path.clone(),
-                    asset_name: asset.name.clone(),
-                    transform,
-                    properties: ModelProperties::default(),
-                    handle: None,
-                });
-            }
-            Ok(())
-        }
+        components.push(Box::new(mesh_comp));
+        
+        // Add properties
+        let props = properties.unwrap_or_default();
+        components.push(Box::new(props));
+
+        let scene_entity = SceneEntity {
+            label: Label::from(asset.name.clone()),
+            components,
+            parent: Label::default(),
+            children: Vec::new(),
+        };
+
+        push_pending_spawn(scene_entity);
+        Ok(())
     }
 }
 
@@ -119,7 +127,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
         match tab {
             EditorTab::Viewport => "Viewport".into(),
-            EditorTab::ModelEntityList => "Model/Entity List".into(),
+            EditorTab::ModelEntityList => "Entity List".into(),
             EditorTab::AssetViewer => "Asset Viewer".into(),
             EditorTab::ResourceInspector => "Resource Inspector".into(),
             EditorTab::Plugin(dock_index) => {
@@ -203,179 +211,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     )
                 });
 
-                let image_response = ui.interact(
-                    image_rect,
-                    ui.id().with("viewport_image"),
-                    egui::Sense::click_and_drag(),
-                );
-
-                if image_response.clicked() {
-                    let active_cam = self.active_camera.lock();
-                    if let Some(active_camera) = *active_cam {
-                        {
-                            if let Ok(mut q) = self
-                                .world
-                                .query_one::<(&Camera, &CameraComponent)>(active_camera)
-                            {
-                                if let Some((camera, _)) = q.get() {
-                                    if let Some(click_pos) =
-                                        ui.ctx().input(|i| i.pointer.interact_pos())
-                                    {
-                                        let viewport_rect = image_response.rect;
-                                        let local_pos = click_pos - viewport_rect.min;
-
-                                        let ndc_x =
-                                            (2.0 * local_pos.x / viewport_rect.width()) - 1.0;
-                                        let ndc_y =
-                                            1.0 - (2.0 * local_pos.y / viewport_rect.height());
-
-                                        let view_matrix = glam::DMat4::look_at_lh(
-                                            camera.eye,
-                                            camera.target,
-                                            camera.up,
-                                        );
-
-                                        let proj_matrix = glam::DMat4::perspective_lh(
-                                            camera.settings.fov_y.to_radians(),
-                                            camera.aspect,
-                                            camera.znear,
-                                            camera.zfar,
-                                        );
-
-                                        if !view_matrix.is_finite() {
-                                            log::error!("Invalid view matrix");
-                                            return;
-                                        }
-                                        if !proj_matrix.is_finite() {
-                                            log::error!("Invalid projection matrix");
-                                            return;
-                                        }
-
-                                        let view_proj = proj_matrix * view_matrix;
-                                        let inv_view_proj = view_proj.inverse();
-
-                                        if !inv_view_proj.is_finite() {
-                                            log::error!("Cannot invert view-projection matrix");
-                                            return;
-                                        }
-
-                                        let ray_start_ndc =
-                                            glam::DVec4::new(ndc_x as f64, ndc_y as f64, 0.0, 1.0);
-                                        let ray_end_ndc =
-                                            glam::DVec4::new(ndc_x as f64, ndc_y as f64, 1.0, 1.0);
-
-                                        let ray_start_world = inv_view_proj * ray_start_ndc;
-                                        let ray_end_world = inv_view_proj * ray_end_ndc;
-
-                                        if ray_start_world.w == 0.0 || ray_end_world.w == 0.0 {
-                                            log::error!("Invalid homogeneous coordinates");
-                                            return;
-                                        }
-
-                                        let ray_start =
-                                            ray_start_world.truncate() / ray_start_world.w;
-                                        let ray_end = ray_end_world.truncate() / ray_end_world.w;
-
-                                        if !ray_start.is_finite() || !ray_end.is_finite() {
-                                            log::error!(
-                                                "Invalid ray points - start: {:?}, end: {:?}",
-                                                ray_start,
-                                                ray_end
-                                            );
-                                            return;
-                                        }
-
-                                        let ray_direction = (ray_end - ray_start).normalize();
-
-                                        if !ray_direction.is_finite() {
-                                            log::error!(
-                                                "Invalid ray direction: {:?}",
-                                                ray_direction
-                                            );
-                                            return;
-                                        }
-
-                                        let (selected_entity_id, entity_count) = {
-                                            let mut closest_distance = f64::INFINITY;
-                                            let mut selected_entity_id: Option<hecs::Entity> = None;
-                                            let mut entity_count = 0;
-
-                                            {
-                                                for (entity_id, (transform, _)) in self
-                                                    .world
-                                                    .query::<(&Transform, &MeshRenderer)>()
-                                                    .iter()
-                                                {
-                                                    entity_count += 1;
-                                                    let entity_pos = transform.position;
-                                                    let sphere_radius =
-                                                        transform.scale.max_element() * 1.5;
-                                                    let to_sphere = entity_pos - ray_start;
-                                                    let projection = to_sphere.dot(ray_direction);
-                                                    if projection > 0.0 {
-                                                        let closest_point =
-                                                            ray_start + ray_direction * projection;
-                                                        let distance_to_sphere =
-                                                            (closest_point - entity_pos).length();
-                                                        if distance_to_sphere <= sphere_radius {
-                                                            let discriminant = sphere_radius
-                                                                * sphere_radius
-                                                                - distance_to_sphere
-                                                                    * distance_to_sphere;
-                                                            if discriminant >= 0.0 {
-                                                                let intersection_distance =
-                                                                    projection
-                                                                        - discriminant.sqrt();
-                                                                if intersection_distance
-                                                                    < closest_distance
-                                                                {
-                                                                    closest_distance =
-                                                                        intersection_distance;
-                                                                    selected_entity_id =
-                                                                        Some(entity_id);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            (selected_entity_id, entity_count)
-                                        };
-
-                                        log::debug!("Total entities checked: {}", entity_count);
-
-                                        if !matches!(self.editor_mode, EditorState::Playing) {
-                                            if let Some(entity_id) = selected_entity_id {
-                                                *self.selected_entity = Some(entity_id);
-                                                log::debug!("Selected entity: {:?}", entity_id);
-                                            } else if entity_count == 0 {
-                                                log::debug!("No entities in world to select");
-                                            } else {
-                                                log::debug!(
-                                                    "No entity hit by ray (checked {} entities)",
-                                                    entity_count
-                                                );
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    log_once::warn_once!(
-                                        "Unable to fetch the query result of camera: {:?}",
-                                        active_camera
-                                    )
-                                }
-                            } else {
-                                log_once::warn_once!(
-                                    "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
-                                    active_camera
-                                );
-                            }
-                        }
-                    } else {
-                        log_once::warn_once!("No active camera found");
-                    }
-                }
+                // let image_response = ui.interact(
+                //     image_rect,
+                //     ui.id().with("viewport_image"),
+                //     egui::Sense::click_and_drag(),
+                // );
 
                 let snapping = ui.input(|input| input.modifiers.shift);
 
@@ -464,13 +304,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
             }
             EditorTab::ModelEntityList => {
-                ui.label("Model/Entity List");
-                show_entity_tree(
-                    ui,
-                    &mut self.nodes,
-                    self.selected_entity,
-                    "Model Entity Asset List",
-                );
+                ui.label("Entity List");
+                ui.label(format!("This would be the entity list, however it needs to be remade. Check it out at line {}:{}", file!(), line!()));
             }
             EditorTab::AssetViewer => {
                 egui_extras::install_image_loaders(ui.ctx());
@@ -483,7 +318,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     fn recursive_search_nodes_and_attach_thumbnail(
                         res: &Vec<Node>,
                         assets: &mut Vec<(String, String, PathBuf, ResourceType)>,
-                        logged: &mut HashSet<String>,
                     ) {
                         for node in res {
                             match node {
@@ -495,14 +329,11 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             path,
                                             resource_type,
                                         } => {
-                                            if !logged.contains(name) {
-                                                logged.insert(name.clone());
-                                                log::debug!(
-                                                    "Adding image for {} of type {}",
-                                                    name,
-                                                    resource_type
-                                                );
-                                            }
+                                            log_once::debug_once!(
+                                                "Adding image for {} of type {}",
+                                                name,
+                                                resource_type
+                                            );
                                             match resource_type {
                                                 ResourceType::Model => {
                                                     let ad_dir = app_dirs2::get_app_root(
@@ -590,18 +421,15 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     recursive_search_nodes_and_attach_thumbnail(
                                         &folder.nodes,
                                         assets,
-                                        logged,
                                     )
                                 }
                             }
                         }
                     }
 
-                    let mut logged = LOGGED.lock();
                     recursive_search_nodes_and_attach_thumbnail(
                         &res.nodes,
                         &mut assets,
-                        &mut logged,
                     );
                 }
 
@@ -653,7 +481,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                             let image_response = card_ui.add_sized(
                                                 [image_size, image_size],
-                                                egui::Button::image(image.clone()).frame(false),
+                                                egui::Button::image(image.clone()).min_size([image_size, image_size].into()).frame(false),
                                             );
 
                                             let is_hovered = card_response.hovered() || image_response.hovered() || state.dragged;
@@ -740,23 +568,24 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     if let Ok(mut q) = self.world.query_one::<(
                         &mut Label,
                         &mut MeshRenderer,
-                        Option<&mut Transform>,
+                        Option<&mut LocalTransform>,
+                        Option<&mut WorldTransform>,
                         Option<&mut ModelProperties>,
                         Option<&mut ScriptComponent>,
                         Option<&mut Camera>,
                         Option<&mut CameraComponent>,
-                        // Option<&mut CameraFollowTarget>,
+                        Option<&mut LightComponent>,
                     )>(*entity)
                     {
                         if let Some((
                             label,
                             e,
-                            transform,
+                            lt, wt,
                             _props,
                             script,
                             camera,
                             camera_component,
-                            // follow_target,
+                            light_component,
                         )) = q.get()
                         {
                             // entity
@@ -769,8 +598,17 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 label.as_mut_string(),
                             );
                             // transform
-                            if let Some(t) = transform {
-                                t.inspect(
+                            if let (Some(lt), Some(wt)) = (lt, wt) {
+                                lt.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    label.as_mut_string(),
+                                );
+
+                                wt.inspect(
                                     entity,
                                     &mut cfg,
                                     ui,
@@ -891,6 +729,37 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     self.signal,
                                     label.as_mut_string(),
                                 );
+                            }
+
+                            // light component
+                            if let Some(light) = light_component {
+                                ui.separator();
+                                CollapsingHeader::new("Light Component")
+                                    .default_open(true)
+                                    .show(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.with_layout(
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    if ui.button("Remove Component ❌").clicked() {
+                                                        *self.signal = Signal::RemoveComponent(
+                                                            *entity,
+                                                            Box::new(ComponentType::Light(light.clone())),
+                                                        )
+                                                    }
+                                                },
+                                            );
+                                        });
+
+                                        light.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            label.as_mut_string(),
+                                        );
+                                    });
                             }
 
                             if let Some(t) = cfg.label_last_edit

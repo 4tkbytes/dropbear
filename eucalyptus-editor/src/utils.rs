@@ -1,15 +1,125 @@
 use anyhow::anyhow;
 use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::{LocalTransform, MeshRenderer, WorldTransform};
 use dropbear_engine::scene::SceneCommand;
 use egui::Context;
 use egui_toast::{Toast, ToastOptions, Toasts};
-use eucalyptus_core::states::{PROJECT, ProjectConfig};
+use eucalyptus_core::camera::CameraComponent;
+use eucalyptus_core::hierarchy::Parent;
+use eucalyptus_core::states::{CameraConfig, Label, ModelProperties, PROJECT, ProjectConfig, SceneEntity, SceneMeshRendererComponent, ScriptComponent};
+use eucalyptus_core::traits::Component;
 use eucalyptus_core::utils::ProjectProgress;
 use git2::Repository;
+use hecs::{Entity, World};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
+
+/// Helper function to collect all components from an entity into a component vector
+pub fn collect_entity_components(world: &World, entity_id: Entity) -> Vec<Box<dyn Component>> {
+    let mut components: Vec<Box<dyn Component>> = Vec::new();
+
+    if let Ok(mut query) = world.query_one::<&LocalTransform>(entity_id) {
+        if let Some(lt) = query.get() {
+            components.push(Box::new(*lt));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<&WorldTransform>(entity_id) {
+        if let Some(wt) = query.get() {
+            components.push(Box::new(*wt));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<&MeshRenderer>(entity_id) {
+        if let Some(renderer) = query.get() {
+            let mesh_comp = SceneMeshRendererComponent {
+                model: renderer.handle().path.clone(),
+                material_overrides: renderer.material_overrides().to_vec(),
+            };
+            components.push(Box::new(mesh_comp));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<&ModelProperties>(entity_id) {
+        if let Some(props) = query.get() {
+            components.push(Box::new(props.clone()));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<&ScriptComponent>(entity_id) {
+        if let Some(script) = query.get() {
+            components.push(Box::new(script.clone()));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<(&Camera, &CameraComponent)>(entity_id) {
+        if let Some((camera, component)) = query.get() {
+            let camera_config = CameraConfig::from_ecs_camera(camera, component);
+            components.push(Box::new(camera_config));
+        }
+    }
+
+    if let Ok(mut query) = world.query_one::<&dropbear_engine::lighting::LightComponent>(entity_id) {
+        if let Some(light_comp) = query.get() {
+            components.push(Box::new(light_comp.clone()));
+        }
+    }
+
+    components
+}
+
+/// Collect a single entity as a SceneEntity (without recursing into children)
+pub fn collect_entity(world: &World, entity_id: Entity) -> Option<SceneEntity> {
+    let entity_label = if let Ok(mut query) = world.query_one::<&Label>(entity_id) {
+        query.get().cloned()
+    } else {
+        return None;
+    }?;
+
+    let components = collect_entity_components(world, entity_id);
+
+    Some(SceneEntity {
+        label: entity_label,
+        components,
+        parent: Label::default(),
+        children: Vec::new(),
+    })
+}
+
+/// Recursively collect an entity and all its children as SceneEntity objects
+pub fn collect_entity_recursive(world: &World, entity_id: Entity) -> Option<SceneEntity> {
+    let entity_label = if let Ok(mut query) = world.query_one::<&Label>(entity_id) {
+        query.get().cloned()
+    } else {
+        return None;
+    }?;
+
+    let components = collect_entity_components(world, entity_id);
+
+    let mut children_entities = Vec::new();
+    if let Ok(mut query) = world.query_one::<&Parent>(entity_id) {
+        if let Some(parent_component) = query.get() {
+            for &child_entity in parent_component.children() {
+                if let Some(child_scene_entity) = collect_entity_recursive(world, child_entity) {
+                    log::debug!("Recursively saved child '{}' of '{}'", child_scene_entity.label, entity_label);
+                    children_entities.push(child_scene_entity);
+                } else {
+                    log::warn!("Unable to collect child entity {:?} for parent '{}'", child_entity, entity_label);
+                }
+            }
+        }
+    }
+
+    Some(SceneEntity {
+        label: entity_label,
+        components,
+        parent: Label::default(),
+        children: children_entities,
+    })
+}
+
 
 pub fn show_new_project_window<F>(
     ctx: &Context,

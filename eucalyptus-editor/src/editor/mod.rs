@@ -20,7 +20,7 @@ use dropbear_engine::{
     entity::{MeshRenderer, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
-    lighting::{Light, LightManager},
+    lighting::{Light, LightComponent, LightManager},
     model::{MODEL_CACHE, ModelId},
     scene::SceneCommand,
 };
@@ -37,7 +37,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
+        EditorTab, ModelProperties, PROJECT, SCENES,
         SceneConfig, SceneEntity, ScriptComponent, WorldLoadingStatus,
     },
     success, success_without_console,
@@ -50,10 +50,10 @@ use parking_lot::Mutex;
 use rfd::FileDialog;
 use std::path::Path;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     path::PathBuf,
-    sync::{Arc, LazyLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -189,7 +189,6 @@ impl Editor {
             render_pipeline: None,
             color: Color::default(),
             is_viewport_focused: false,
-            // is_cursor_locked: false,
             window: None,
             world: Box::new(World::new()),
             show_new_project: false,
@@ -251,6 +250,11 @@ impl Editor {
         false
     }
 
+    /// Helper func to collect entity recursively. 
+    fn collect_entity_recursive(&self, entity_id: Entity) -> Option<SceneEntity> {
+        crate::utils::collect_entity_recursive(&self.world, entity_id)
+    }
+
     /// Save the current world state to the active scene
     pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
         let mut scenes = SCENES.write();
@@ -270,108 +274,32 @@ impl Editor {
             .find(|scene| scene.scene_name == target_scene_name)
             .ok_or_else(|| anyhow::anyhow!("Active scene '{}' is not loaded", target_scene_name))?;
         scene.entities.clear();
-        scene.lights.clear();
-        scene.cameras.clear();
 
-        for (id, (label, renderer, transform, properties, script, parent)) in self
-            .world
-            .query::<(
-                &Label,
-                &MeshRenderer,
-                Option<&Transform>,
-                &ModelProperties,
-                Option<&ScriptComponent>,
-                Option<&Parent>,
-            )>()
-            .iter()
-        {
-            let transform = *transform.unwrap_or(&Transform::default());
-            let entity_label = label.clone();
-
-            let camera_config = if let Ok(mut camera_query) =
-                self.world.query_one::<(&Camera, &CameraComponent)>(id)
-            {
-                if let Some((camera, component)) = camera_query.get() {
-                    Some(CameraConfig::from_ecs_camera(camera, component))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            let children = if let Some(parent_component) = parent {
-                let mut collected = Vec::new();
-                for &child_entity in parent_component.children() {
-                    if let Ok(mut child_query) = self.world.query_one::<&Label>(child_entity)
-                        && let Some(child_label) = child_query.get()
-                    {
-                        collected.push(child_label.clone());
-                    } else {
-                        log::warn!(
-                            "Unable to resolve child entity {:?} for parent '{}' when saving scene",
-                            child_entity,
-                            entity_label
-                        );
-                    }
-                }
-
-                if collected.is_empty() {
-                    None
-                } else {
-                    Some(collected)
-                }
-            } else {
-                None
-            };
-
-            let scene_entity = SceneEntity {
-                model_path: renderer.handle().path.clone(),
-                label: entity_label.clone(),
-                transform,
-                properties: properties.clone(),
-                script: script.cloned(),
-                camera: camera_config,
-                children,
-                material_overrides: renderer.material_overrides().to_vec(),
-                entity_id: Some(id),
-            };
-
-            scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", entity_label);
+        // Collect all entities that have a Parent component (i.e., are children)
+        let mut child_entities = std::collections::HashSet::new();
+        for (_id, parent) in self.world.query::<&Parent>().iter() {
+            for &child in parent.children() {
+                child_entities.insert(child);
+            }
         }
 
-        for (id, (light_component, transform, light)) in self
-            .world
-            .query::<(
-                &dropbear_engine::lighting::LightComponent,
-                &Transform,
-                &Light,
-            )>()
-            .iter()
-        {
-            let light_config = LightConfig {
-                label: light.cube_model.label.to_string(),
-                transform: *transform,
-                light_component: light_component.clone(),
-                enabled: light_component.enabled,
-                entity_id: Some(id),
-            };
+        // Only save top-level entities (those that are NOT children of any other entity)
+        for (id, label) in self.world.query::<&Label>().iter() {
+            // Skip entities that are children - they'll be saved recursively
+            if child_entities.contains(&id) {
+                continue;
+            }
 
-            scene.lights.push(light_config);
-            log::debug!("Pushed light into lights: {}", light.cube_model.label);
-        }
-
-        for (id, (camera, component)) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
-            if self.world.get::<&MeshRenderer>(id).is_err() {
-                let camera_config = CameraConfig::from_ecs_camera(camera, component);
-                scene.cameras.push(camera_config);
-                log::debug!("Pushed standalone camera into cameras: {}", camera.label);
+            if let Some(scene_entity) = self.collect_entity_recursive(id) {
+                scene.entities.push(scene_entity);
+                log::debug!("Saved top-level entity: {}", label);
+            } else {
+                log::warn!("Failed to collect entity data for '{}'", label);
             }
         }
 
         log::info!(
-            "Saved {} entities and camera configs to scene '{}'",
+            "Saved {} top-level entities to scene '{}'",
             scene.entities.len(),
             scene.scene_name
         );
@@ -560,9 +488,8 @@ impl Editor {
                 *a_c = Some(cam);
 
                 log::info!(
-                    "Successfully loaded scene with {} entities and {} camera configs",
+                    "Successfully loaded scene with {} entities",
                     first_scene.entities.len(),
-                    first_scene.cameras.len(),
                 );
             } else {
                 let existing_debug_camera = {
@@ -903,33 +830,27 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(
-                                &Label,
-                                &MeshRenderer,
-                                &Transform,
-                                &ModelProperties,
-                            )>(*entity);
-                            if let Ok(mut q) = query {
-                                if let Some((entity_label, e, t, props)) = q.get() {
-                                    let s_entity = states::SceneEntity {
-                                        model_path: e.handle().path.clone(),
-                                        label: entity_label.clone(),
-                                        transform: *t,
-                                        properties: props.clone(),
-                                        script: None,
-                                        camera: None,
-                                        children: None,
-                                        material_overrides: e.material_overrides().to_vec(),
-                                        entity_id: None,
-                                    };
-                                    self.signal = Signal::Copy(s_entity);
-
-                                    info!("Copied selected entity!");
-                                } else {
-                                    warn!("Unable to copy entity: Unable to fetch world entity properties");
-                                }
+                            // Collect entity label
+                            let label = if let Ok(mut query) = self.world.query_one::<&Label>(*entity) {
+                                query.get().cloned()
                             } else {
-                                warn!("Unable to copy entity: Unable to obtain lock");
+                                None
+                            };
+
+                            if let Some(entity_label) = label {
+                                let components = crate::utils::collect_entity_components(&self.world, *entity);
+
+                                let s_entity = states::SceneEntity {
+                                    label: entity_label.clone(),
+                                    components,
+                                    parent: Label::default(),
+                                    children: Vec::new(),
+                                };
+                                self.signal = Signal::Copy(s_entity);
+
+                                info!("Copied selected entity!");
+                            } else {
+                                warn!("Unable to copy entity: Unable to fetch entity label");
                             }
                         } else {
                             warn!("Unable to copy entity: None selected");
@@ -1046,7 +967,6 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        nodes: EntityNode::from_world(&self.world),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         world: &mut self.world,
@@ -1095,9 +1015,7 @@ impl Editor {
 
                     ui.horizontal(|ui| {
                         ui.label("Check out the repository at");
-                        if ui.label("https://github.com/4tkbytes/dropbear").clicked() {
-                            let _ = open::that("https://github.com/4tkbytes/dropbear");
-                        }
+                        ui.hyperlink("https://github.com/tirbofish/dropbear");
                     });
 
                     ui.add_space(12.0);
@@ -1462,95 +1380,7 @@ impl Editor {
     }
 }
 
-pub static LOGGED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
-
-fn show_entity_tree(
-    ui: &mut egui::Ui,
-    nodes: &mut [EntityNode],
-    selected: &mut Option<hecs::Entity>,
-    id_source: &str,
-) {
-    egui_dnd::Dnd::new(ui, id_source).show_vec(nodes, |ui, item, handle, _dragging| {
-        match item.clone() {
-            EntityNode::Entity { id, name } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("⏹️");
-                    });
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-            EntityNode::Script { .. } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("📜");
-                    });
-                    ui.label("Script");
-                });
-            }
-            EntityNode::Group {
-                ref name,
-                ref mut children,
-                ref mut collapsed,
-            } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        let header = egui::CollapsingHeader::new(name)
-                            .default_open(!*collapsed)
-                            .show(ui, |ui| {
-                                show_entity_tree(ui, children, selected, name);
-                            });
-                        *collapsed = header.body_returned.is_none();
-                    });
-                });
-            }
-            EntityNode::Light { id, name } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("💡");
-                    });
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-            EntityNode::Camera {
-                id,
-                name,
-                camera_type,
-            } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        let icon = match camera_type {
-                            CameraType::Debug => "🎥",  // Debug camera
-                            CameraType::Player => "📹", // Player camera
-                            CameraType::Normal => "📷", // Normal camera
-                        };
-                        ui.label(icon);
-                    });
-                    let display_name = format!(
-                        "{} ({})",
-                        name,
-                        match camera_type {
-                            CameraType::Debug => "Debug",
-                            CameraType::Player => "Player",
-                            CameraType::Normal => "Normal",
-                        }
-                    );
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), display_name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-        }
-    });
-}
-
+// todo: remake this system
 /// Describes an action that is undoable
 #[derive(Debug)]
 pub enum UndoableAction {
@@ -1558,14 +1388,14 @@ pub enum UndoableAction {
     Transform(hecs::Entity, Transform),
     #[allow(dead_code)] // don't know why its considered dead code, todo: check the cause
     /// A spawn of the entity. Undoing will delete the entity
-    Spawn(hecs::Entity),
+    Spawn(Entity),
     /// A change of label of the entity. Undoing will revert its label
-    Label(hecs::Entity, String, EntityType),
+    Label(Entity, String, EntityType),
     /// Removing a component. Undoing will add back the component.
     RemoveComponent(hecs::Entity, Box<ComponentType>),
     #[allow(dead_code)]
     CameraAction(UndoableCameraAction),
-    RemoveStartingCamera(hecs::Entity),
+    RemoveStartingCamera(Entity),
 }
 
 #[derive(Debug)]
@@ -1706,6 +1536,9 @@ impl UndoableAction {
                     ComponentType::Camera(camera, component) => {
                         world.insert(*entity, (camera.clone(), component.clone()))?;
                     }
+                    ComponentType::Light(component) => {
+                        world.insert_one(*entity, component.clone())?;
+                    }
                 }
                 Ok(())
             }
@@ -1792,6 +1625,7 @@ pub enum Signal {
 pub enum ComponentType {
     Script(ScriptComponent),
     Camera(Box<Camera>, CameraComponent),
+    Light(LightComponent),
 }
 
 #[derive(Clone)]

@@ -1,9 +1,7 @@
 use super::*;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
     input::{Controller, Keyboard, Mouse},
 };
-use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -11,6 +9,7 @@ use transform_gizmo_egui::GizmoMode;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
+use crate::utils::collect_entity;
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
@@ -130,37 +129,16 @@ impl Keyboard for Editor {
                         && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(
-                                &Label,
-                                &MeshRenderer,
-                                &Transform,
-                                &ModelProperties,
-                            )>(*entity);
-                            if let Ok(mut q) = query {
-                                if let Some((label, renderer, t, props)) = q.get() {
-                                    let s_entity = SceneEntity {
-                                        model_path: renderer.handle().path.clone(),
-                                        label: label.clone(),
-                                        transform: *t,
-                                        properties: props.clone(),
-                                        script: None,
-                                        camera: None,
-                                        children: None,
-                                        material_overrides: renderer.material_overrides().to_vec(),
-                                        entity_id: None,
-                                    };
-                                    self.signal = Signal::Copy(s_entity);
 
-                                    info!("Copied!");
+                            let se = collect_entity(&self.world, *entity);
 
-                                    log::debug!("Copied selected entity");
-                                } else {
-                                    warn!(
-                                        "Unable to copy entity: Unable to fetch world entity properties"
-                                    );
-                                }
+                            if let Some(entity) = se {
+                                self.signal = Signal::Copy(entity);
+                                log::debug!("Copied selected entity");
                             } else {
-                                warn!("Unable to copy entity: Unable to obtain lock");
+                                warn!(
+                                    "Unable to copy entity: Unable to fetch world entity properties"
+                                );
                             }
                         } else {
                             warn!("Unable to copy entity: None selected");

@@ -812,8 +812,8 @@ impl Default for ModelProperties {
 /// A component that holds basic information for a [`MeshRenderer`].
 #[derive(Serialize, Deserialize, Clone, Component)]
 pub struct SceneMeshRendererComponent {
-    model: ResourceReference,
-    material_overrides: Vec<MaterialOverride>,
+    pub model: ResourceReference,
+    pub material_overrides: Vec<MaterialOverride>,
 }
 
 /// The config of a scene. Organises the content for serialization for a scene and for packing
