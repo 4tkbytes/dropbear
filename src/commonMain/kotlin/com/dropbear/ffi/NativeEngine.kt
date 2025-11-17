@@ -12,7 +12,7 @@ import com.dropbear.math.Vector2D
 
 /**
  * Native functions
- * 
+ *
  * Class that describes all the functions that can
  * be communicated with the `eucalyptus_core` dynamic library
  */
@@ -36,8 +36,10 @@ expect class NativeEngine {
     fun getAttachedCamera(entityId: EntityId): Camera?
     fun setCamera(camera: Camera);
 
-    fun getTransform(entityId: EntityId): Transform?
-    fun setTransform(entityId: EntityId, transform: Transform)
+    fun getWorldTransform(entityId: EntityId): Transform?
+    fun getLocalTransform(entityId: EntityId): Transform?
+    fun commitWorldTransform(entityId: EntityId, transform: Transform)
+    fun commitLocalTransform(entityId: EntityId, transform: Transform)
 
     // ------------------------ MODEL PROPERTIES -------------------------
 

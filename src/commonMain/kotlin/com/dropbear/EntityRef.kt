@@ -23,18 +23,33 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 
     /**
-     * Fetches the transform component for the entity.
+     * Fetches the world transform component for the entity.
      */
-    fun getTransform(): Transform? {
-        return engine.native.getTransform(id)
+    fun getWorldTransform(): Transform? {
+        return engine.native.getWorldTransform(id)
     }
 
     /**
-     * Sets and replaces the transform component for the entity.
+     * Fetches the local transform component for the entity
      */
-    fun setTransform(transform: Transform?) {
+    fun getLocalTransform(): Transform? {
+        return engine.native.getLocalTransform(id)
+    }
+
+    /**
+     * Sets and replaces the world transform component for the entity.
+     */
+    fun commitWorld(transform: Transform?) {
         if (transform == null) return
-        return engine.native.setTransform(id, transform)
+        return engine.native.setWorldTransform(id, transform)
+    }
+
+    /**
+     * Sets and replaces the local transfrom component for the entity
+     */
+    fun commitLocal(transform: Transform?) {
+        if (transform == null) return
+        return engine.native.setLocalTransform(id, transform)
     }
 
     /**

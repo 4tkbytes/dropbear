@@ -76,12 +76,20 @@ actual class NativeEngine {
     }
 
 
-    actual fun getTransform(entityId: EntityId): Transform? {
-        return JNINative.getTransform(worldHandle, entityId.id)
+    actual fun getWorldTransform(entityId: EntityId): Transform? {
+        return JNINative.getWorldTransform(worldHandle, entityId.id)
     }
 
-    actual fun setTransform(entityId: EntityId, transform: Transform) {
-        return JNINative.setTransform(worldHandle, entityId.id, transform)
+    actual fun getLocalTransform(entityId: EntityId): Transform? {
+        return JNINative.getLocalTransform(worldHandle, entityId.id)
+    }
+
+    actual fun commitWorldTransform(entityId: EntityId, transform: Transform) {
+        return JNINative.commitWorldTransform(worldHandle, entityId.id, transform)
+    }
+
+    actual fun commitLocalTransform(entityId: EntityId, transform: Transform) {
+        return JNINative.commitLocalTransform(worldHandle, entityId.id, transform)
     }
 
     actual fun printInputState() {
