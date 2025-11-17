@@ -5,7 +5,7 @@ import com.dropbear.math.Transform;
 
 /**
  * Describes all the functions that are available in
- * the `eucalyptus_core` dynamic library. 
+ * the `eucalyptus_core` dynamic library.
  */
 public class JNINative {
     static {
@@ -36,8 +36,10 @@ public class JNINative {
     public static native void setCamera(long worldHandle, Camera camera);
 
     // transformations
-    public static native Transform getTransform(long handle, long entityHandle);
-    public static native void setTransform(long worldHandle, long id, Transform transform);
+    public static native Transform getWorldTransform(long handle, long entityHandle);
+    public static native void commitWorldTransform(long worldHandle, long id, Transform transform);
+    public static native Transform getLocalTransform(long handle, long entityHandle);
+    public static native void commitLocalTransform(long worldHandle, long id, Transform transform);
 
     // properties
     public static native String getStringProperty(long worldHandle, long entityHandle, String label);

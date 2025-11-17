@@ -47,20 +47,20 @@ pub unsafe extern "C" fn dropbear_get_entity(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dropbear_get_transform(
+pub unsafe extern "C" fn dropbear_get_world_transform(
     world_ptr: *const World,
     entity_id: i64,
     out_transform: *mut NativeTransform,
 ) -> i32 {
     if world_ptr.is_null() || out_transform.is_null() {
-        eprintln!("[dropbear_get_transform] [ERROR] Null pointer received");
+        eprintln!("[dropbear_get_world_transform] [ERROR] Null pointer received");
         return -1;
     }
 
     let world = unsafe { &*world_ptr };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    match world.query_one::<&Transform>(entity) {
+    match world.query_one::<&WorldTransform>(entity) {
         Ok(mut q) => {
             if let Some(transform) = q.get() {
                 unsafe {
@@ -77,7 +77,9 @@ pub unsafe extern "C" fn dropbear_get_transform(
                 }
                 0
             } else {
-                eprintln!("[dropbear_get_transform] [ERROR] Entity has no Transform component");
+                eprintln!(
+                    "[dropbear_get_transform] [ERROR] Entity has no WorldTransform component"
+                );
                 -4
             }
         }
@@ -89,20 +91,64 @@ pub unsafe extern "C" fn dropbear_get_transform(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dropbear_set_transform(
+pub unsafe extern "C" fn dropbear_get_local_transform(
+    world_ptr: *const World,
+    entity_id: i64,
+    out_transform: *mut NativeTransform,
+) -> i32 {
+    if world_ptr.is_null() || out_transform.is_null() {
+        eprintln!("[dropbear_get_local_transform] [ERROR] Null pointer received");
+        return DropbearNativeError::NullPointer as i32;
+    }
+
+    let world = unsafe { &*world_ptr };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    match world.query_one::<&LocalTransform>(entity) {
+        Ok(mut q) => {
+            if let Some(transform) = q.get() {
+                unsafe {
+                    (*out_transform).position_x = transform.position.x;
+                    (*out_transform).position_y = transform.position.y;
+                    (*out_transform).position_z = transform.position.z;
+                    (*out_transform).rotation_x = transform.rotation.x;
+                    (*out_transform).rotation_y = transform.rotation.y;
+                    (*out_transform).rotation_z = transform.rotation.z;
+                    (*out_transform).rotation_w = transform.rotation.w;
+                    (*out_transform).scale_x = transform.scale.x;
+                    (*out_transform).scale_y = transform.scale.y;
+                    (*out_transform).scale_z = transform.scale.z;
+                }
+                0
+            } else {
+                eprintln!(
+                    "[dropbear_get_local_transform] [ERROR] Entity has no LocalTransform component"
+                );
+                return DropbearNativeError::NoSuchComponent as i32;
+            }
+        }
+        Err(_) => {
+            eprintln!("[dropbear_get_local_transform] [ERROR] Failed to query entity");
+            return DropbearNativeError::QueryFailed as i32;
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dropbear_commit_world_transform(
     world_ptr: *mut World,
     entity_id: i64,
     transform: NativeTransform,
 ) -> i32 {
     if world_ptr.is_null() {
-        eprintln!("[dropbear_set_transform] [ERROR] World pointer is null");
+        eprintln!("[dropbear_commit_world_transform] [ERROR] World pointer is null");
         return -1;
     }
 
     let world = unsafe { &mut *world_ptr };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    let rust_transform = Transform {
+    let rust_transform = WorldTransform::new(Transform {
         position: DVec3::new(
             transform.position_x,
             transform.position_y,
@@ -115,12 +161,50 @@ pub unsafe extern "C" fn dropbear_set_transform(
             transform.rotation_w,
         ),
         scale: DVec3::new(transform.scale_x, transform.scale_y, transform.scale_z),
-    };
+    });
 
     match world.insert_one(entity, rust_transform) {
         Ok(_) => 0,
         Err(_) => {
-            eprintln!("[dropbear_set_transform] [ERROR] Failed to insert transform");
+            eprintln!("[dropbear_commit_world_transform] [ERROR] Failed to insert transform");
+            DropbearNativeError::WorldInsertError as i32;
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dropbear_commit_local_transform(
+    world_ptr: *mut World,
+    entity_id: i64,
+    transform: NativeTransform,
+) -> i32 {
+    if world_ptr.is_null() {
+        eprintln!("[dropbear_commit_local_transform] [ERROR] World pointer is null");
+        return -1;
+    }
+
+    let world = unsafe { &mut *world_ptr };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    let rust_transform = LocalTransform::new(Transform {
+        position: DVec3::new(
+            transform.position_x,
+            transform.position_y,
+            transform.position_z,
+        ),
+        rotation: DQuat::from_xyzw(
+            transform.rotation_x,
+            transform.rotation_y,
+            transform.rotation_z,
+            transform.rotation_w,
+        ),
+        scale: DVec3::new(transform.scale_x, transform.scale_y, transform.scale_z),
+    });
+
+    match world.insert_one(entity, rust_transform) {
+        Ok(_) => 0,
+        Err(_) => {
+            eprintln!("[dropbear_commit_local_transform] [ERROR] Failed to insert transform");
             -6
         }
     }

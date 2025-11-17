@@ -61,13 +61,25 @@ typedef struct {
 
 int dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
 
-int dropbear_get_transform(
+int dropbear_get_world_transform(
     const World* world_ptr,
     int64_t entity_id,
     NativeTransform* out_transform
 );
 
-int dropbear_set_transform(
+int dropbear_commit_world_transform(
+    const World* world_ptr,
+    int64_t entity_id,
+    const NativeTransform transform
+);
+
+int dropbear_get_local_transform(
+    const World* world_ptr,
+    int64_t entity_id,
+    NativeTransform* out_transform
+);
+
+int dropbear_commit_local_transform(
     const World* world_ptr,
     int64_t entity_id,
     const NativeTransform transform
