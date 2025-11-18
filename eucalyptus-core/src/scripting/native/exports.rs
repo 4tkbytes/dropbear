@@ -6,7 +6,7 @@ use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{LocalTransform, MeshRenderer, Transform, WorldTransform};
 use glam::{DQuat, DVec3};
 use hecs::World;
 use std::ffi::{CStr, c_char};
@@ -64,16 +64,16 @@ pub unsafe extern "C" fn dropbear_get_world_transform(
         Ok(mut q) => {
             if let Some(transform) = q.get() {
                 unsafe {
-                    (*out_transform).position_x = transform.position.x;
-                    (*out_transform).position_y = transform.position.y;
-                    (*out_transform).position_z = transform.position.z;
-                    (*out_transform).rotation_x = transform.rotation.x;
-                    (*out_transform).rotation_y = transform.rotation.y;
-                    (*out_transform).rotation_z = transform.rotation.z;
-                    (*out_transform).rotation_w = transform.rotation.w;
-                    (*out_transform).scale_x = transform.scale.x;
-                    (*out_transform).scale_y = transform.scale.y;
-                    (*out_transform).scale_z = transform.scale.z;
+                    (*out_transform).position_x = transform.inner().position.x;
+                    (*out_transform).position_y = transform.inner().position.y;
+                    (*out_transform).position_z = transform.inner().position.z;
+                    (*out_transform).rotation_x = transform.inner().rotation.x;
+                    (*out_transform).rotation_y = transform.inner().rotation.y;
+                    (*out_transform).rotation_z = transform.inner().rotation.z;
+                    (*out_transform).rotation_w = transform.inner().rotation.w;
+                    (*out_transform).scale_x = transform.inner().scale.x;
+                    (*out_transform).scale_y = transform.inner().scale.y;
+                    (*out_transform).scale_z = transform.inner().scale.z;
                 }
                 0
             } else {
@@ -108,16 +108,16 @@ pub unsafe extern "C" fn dropbear_get_local_transform(
         Ok(mut q) => {
             if let Some(transform) = q.get() {
                 unsafe {
-                    (*out_transform).position_x = transform.position.x;
-                    (*out_transform).position_y = transform.position.y;
-                    (*out_transform).position_z = transform.position.z;
-                    (*out_transform).rotation_x = transform.rotation.x;
-                    (*out_transform).rotation_y = transform.rotation.y;
-                    (*out_transform).rotation_z = transform.rotation.z;
-                    (*out_transform).rotation_w = transform.rotation.w;
-                    (*out_transform).scale_x = transform.scale.x;
-                    (*out_transform).scale_y = transform.scale.y;
-                    (*out_transform).scale_z = transform.scale.z;
+                    (*out_transform).position_x = transform.inner().position.x;
+                    (*out_transform).position_y = transform.inner().position.y;
+                    (*out_transform).position_z = transform.inner().position.z;
+                    (*out_transform).rotation_x = transform.inner().rotation.x;
+                    (*out_transform).rotation_y = transform.inner().rotation.y;
+                    (*out_transform).rotation_z = transform.inner().rotation.z;
+                    (*out_transform).rotation_w = transform.inner().rotation.w;
+                    (*out_transform).scale_x = transform.inner().scale.x;
+                    (*out_transform).scale_y = transform.inner().scale.y;
+                    (*out_transform).scale_z = transform.inner().scale.z;
                 }
                 0
             } else {
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn dropbear_commit_world_transform(
     let world = unsafe { &mut *world_ptr };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    let rust_transform = WorldTransform::new(Transform {
+    let rust_transform = WorldTransform::from_transform(Transform {
         position: DVec3::new(
             transform.position_x,
             transform.position_y,
@@ -167,7 +167,7 @@ pub unsafe extern "C" fn dropbear_commit_world_transform(
         Ok(_) => 0,
         Err(_) => {
             eprintln!("[dropbear_commit_world_transform] [ERROR] Failed to insert transform");
-            DropbearNativeError::WorldInsertError as i32;
+            DropbearNativeError::WorldInsertError as i32
         }
     }
 }
@@ -186,7 +186,7 @@ pub unsafe extern "C" fn dropbear_commit_local_transform(
     let world = unsafe { &mut *world_ptr };
     let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
 
-    let rust_transform = LocalTransform::new(Transform {
+    let rust_transform = LocalTransform::from_transform(Transform {
         position: DVec3::new(
             transform.position_x,
             transform.position_y,

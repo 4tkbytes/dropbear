@@ -14,7 +14,7 @@ use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
 use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{LocalTransform, MeshRenderer, Transform, WorldTransform};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReference;
 use glam::{DQuat, DVec3};
@@ -97,10 +97,10 @@ pub fn Java_com_dropbear_ffi_JNINative_getWorldTransform(
 
     let entity = convert_jlong_to_entity!(entity_id);
 
-    if let Ok(mut q) = world.query_one::<(&WorldTransform, &LocalTransform)>(entity)
-        && let Some((wt, lt)) = q.get()
+    if let Ok(mut q) = world.query_one::<&WorldTransform>(entity)
+        && let Some(wt) = q.get()
     {
-        let new_transform = *transform;
+        let new_transform = *wt;
 
         let transform_class = match env.find_class("com/dropbear/math/Transform") {
             Ok(c) => c,
@@ -111,16 +111,16 @@ pub fn Java_com_dropbear_ffi_JNINative_getWorldTransform(
             &transform_class,
             "(DDDDDDDDDD)V",
             &[
-                new_transform.position.x.into(),
-                new_transform.position.y.into(),
-                new_transform.position.z.into(),
-                new_transform.rotation.x.into(),
-                new_transform.rotation.y.into(),
-                new_transform.rotation.z.into(),
-                new_transform.rotation.w.into(),
-                new_transform.scale.x.into(),
-                new_transform.scale.y.into(),
-                new_transform.scale.z.into(),
+                new_transform.inner().position.x.into(),
+                new_transform.inner().position.y.into(),
+                new_transform.inner().position.z.into(),
+                new_transform.inner().rotation.x.into(),
+                new_transform.inner().rotation.y.into(),
+                new_transform.inner().rotation.z.into(),
+                new_transform.inner().rotation.w.into(),
+                new_transform.inner().scale.x.into(),
+                new_transform.inner().scale.y.into(),
+                new_transform.inner().scale.z.into(),
             ],
         ) {
             Ok(java_transform) => java_transform,
@@ -162,10 +162,10 @@ pub fn Java_com_dropbear_ffi_JNINative_getLocalTransform(
 
     let entity = convert_jlong_to_entity!(entity_id);
 
-    if let Ok(mut q) = world.query_one::<(&WorldTransform, &LocalTransform)>(entity)
-        && let Some((wt, lt)) = q.get()
+    if let Ok(mut q) = world.query_one::<&LocalTransform>(entity)
+        && let Some(lt) = q.get()
     {
-        let new_transform = *transform;
+        let new_transform = *lt;
 
         let transform_class = match env.find_class("com/dropbear/math/Transform") {
             Ok(c) => c,
@@ -176,16 +176,16 @@ pub fn Java_com_dropbear_ffi_JNINative_getLocalTransform(
             &transform_class,
             "(DDDDDDDDDD)V",
             &[
-                new_transform.position.x.into(),
-                new_transform.position.y.into(),
-                new_transform.position.z.into(),
-                new_transform.rotation.x.into(),
-                new_transform.rotation.y.into(),
-                new_transform.rotation.z.into(),
-                new_transform.rotation.w.into(),
-                new_transform.scale.x.into(),
-                new_transform.scale.y.into(),
-                new_transform.scale.z.into(),
+                new_transform.inner().position.x.into(),
+                new_transform.inner().position.y.into(),
+                new_transform.inner().position.z.into(),
+                new_transform.inner().rotation.x.into(),
+                new_transform.inner().rotation.y.into(),
+                new_transform.inner().rotation.z.into(),
+                new_transform.inner().rotation.w.into(),
+                new_transform.inner().scale.x.into(),
+                new_transform.inner().scale.y.into(),
+                new_transform.inner().scale.z.into(),
             ],
         ) {
             Ok(java_transform) => java_transform,
@@ -292,7 +292,7 @@ pub fn Java_com_dropbear_ffi_JNINative_commitWorldTransform(
     let sy = get_number_field(&mut env, &scale_obj, "y");
     let sz = get_number_field(&mut env, &scale_obj, "z");
 
-    let new_transform = WorldTransform::new(Transform {
+    let new_transform = WorldTransform::from_transform(Transform {
         position: DVec3::new(px, py, pz),
         rotation: DQuat::from_xyzw(rx, ry, rz, rw),
         scale: DVec3::new(sx, sy, sz),
@@ -400,7 +400,7 @@ pub fn Java_com_dropbear_ffi_JNINative_commitLocalTransform(
     let sy = get_number_field(&mut env, &scale_obj, "y");
     let sz = get_number_field(&mut env, &scale_obj, "z");
 
-    let new_transform = LocalTransform::new(Transform {
+    let new_transform = LocalTransform::from_transform(Transform {
         position: DVec3::new(px, py, pz),
         rotation: DQuat::from_xyzw(rx, ry, rz, rw),
         scale: DVec3::new(sx, sy, sz),

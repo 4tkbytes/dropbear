@@ -294,9 +294,10 @@ impl Model {
         label: Option<&str>,
     ) -> anyhow::Result<LoadedModel> {
         let (bytes, res_ref) = match model_type {
-            SpecialModelType::Cube => {
-                (include_bytes!("../../resources/models/cube.glb"), ResourceReference::from_euca_uri("euca://editor/cube.glb"))
-            }
+            SpecialModelType::Cube => (
+                include_bytes!("../../resources/models/cube.glb"),
+                ResourceReference::from_euca_uri("euca://editor/cube.glb"),
+            ),
         };
         Self::load_from_memory_raw(
             graphics,
@@ -304,7 +305,7 @@ impl Model {
             label,
             &ASSET_REGISTRY,
             LazyLock::force(&MODEL_CACHE),
-            res_ref.ok()
+            res_ref.ok(),
         )
         .await
     }
@@ -567,7 +568,8 @@ impl Model {
         log::debug!("Path of model: {}", path.display());
 
         let buffer = std::fs::read(path)?;
-        let loaded = Self::load_from_memory_raw(graphics, buffer, label, registry, cache, None).await?;
+        let loaded =
+            Self::load_from_memory_raw(graphics, buffer, label, registry, cache, None).await?;
 
         let mut model_clone: Model = (*loaded).clone();
         if let Ok(reference) = ResourceReference::from_path(path) {

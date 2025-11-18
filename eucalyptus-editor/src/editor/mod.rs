@@ -37,8 +37,8 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        EditorTab, ModelProperties, PROJECT, SCENES,
-        SceneConfig, SceneEntity, ScriptComponent, WorldLoadingStatus,
+        EditorTab, ModelProperties, PROJECT, SCENES, SceneConfig, SceneEntity, ScriptComponent,
+        WorldLoadingStatus,
     },
     success, success_without_console,
     utils::ViewportMode,
@@ -250,7 +250,7 @@ impl Editor {
         false
     }
 
-    /// Helper func to collect entity recursively. 
+    /// Helper func to collect entity recursively.
     fn collect_entity_recursive(&self, entity_id: Entity) -> Option<SceneEntity> {
         crate::utils::collect_entity_recursive(&self.world, entity_id)
     }
@@ -747,7 +747,6 @@ impl Editor {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-
                     if ui.button("New Scene").clicked() {
                         self.open_new_scene_window = true;
                     }
@@ -782,9 +781,7 @@ impl Editor {
                         success!("Successfully saved project");
                     }
                     if ui.button("Reveal project").clicked() {
-                        let project_path = {
-                            PROJECT.read().project_path.clone()
-                        };
+                        let project_path = { PROJECT.read().project_path.clone() };
                         match open::that(project_path) {
                             Ok(()) => info!("Revealed project"),
                             Err(e) => warn!("Unable to open project: {}", e),
@@ -803,11 +800,21 @@ impl Editor {
                         if ui.button("Build").clicked() {
                             {
                                 let proj = PROJECT.read();
-                                match build(proj.project_path.join(format!("{}.eucp", proj.project_name.clone())).clone()) {
-                                    Ok(thingy) => success!("Project output at {}", thingy.display()),
+                                match build(
+                                    proj.project_path
+                                        .join(format!("{}.eucp", proj.project_name.clone()))
+                                        .clone(),
+                                ) {
+                                    Ok(thingy) => {
+                                        success!("Project output at {}", thingy.display())
+                                    }
                                     Err(e) => {
-                                        fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);
-                                    },
+                                        fatal!(
+                                            "Unable to build project [{}]: {}",
+                                            proj.project_path.clone().display(),
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -830,21 +837,23 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            // Collect entity label
-                            let label = if let Ok(mut query) = self.world.query_one::<&Label>(*entity) {
-                                query.get().cloned()
-                            } else {
-                                None
-                            };
+                            let label =
+                                if let Ok(mut query) = self.world.query_one::<&Label>(*entity) {
+                                    query.get().cloned()
+                                } else {
+                                    None
+                                };
 
                             if let Some(entity_label) = label {
-                                let components = crate::utils::collect_entity_components(&self.world, *entity);
+                                let components =
+                                    crate::utils::collect_entity_components(&self.world, *entity);
 
                                 let s_entity = states::SceneEntity {
                                     label: entity_label.clone(),
                                     components,
                                     parent: Label::default(),
                                     children: Vec::new(),
+                                    id: None,
                                 };
                                 self.signal = Signal::Copy(s_entity);
 
@@ -855,7 +864,6 @@ impl Editor {
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
-
                     }
 
                     if ui.button("Paste").clicked() {
@@ -891,16 +899,20 @@ impl Editor {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
                     if ui_window.button("Open Error Console").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::ErrorConsole);
+                        self.dock_state
+                            .push_to_focused_leaf(EditorTab::ErrorConsole);
                     }
                     if self.plugin_registry.plugins.len() == 0 {
                         ui_window.label(
                             egui::RichText::new("No plugins ")
-                                .color(ui_window.visuals().weak_text_color())
+                                .color(ui_window.visuals().weak_text_color()),
                         );
                     }
                     for (i, (_, plugin)) in self.plugin_registry.plugins.iter().enumerate() {
-                        if ui_window.button(format!("Open {}", plugin.display_name())).clicked() {
+                        if ui_window
+                            .button(format!("Open {}", plugin.display_name()))
+                            .clicked()
+                        {
                             self.dock_state.push_to_focused_leaf(EditorTab::Plugin(i));
                         }
                     }
@@ -909,15 +921,13 @@ impl Editor {
                 ui.menu_button("Help", |ui| {
                     if ui.button("Show AppData folder").clicked() {
                         match app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO) {
-                            Ok(val) => {
-                                match open::that(&val) {
-                                    Ok(()) => info!("Opened logs folder"),
-                                    Err(e) => fatal!("Unable to open {}: {}", val.display(), e)
-                                }
+                            Ok(val) => match open::that(&val) {
+                                Ok(()) => info!("Opened logs folder"),
+                                Err(e) => fatal!("Unable to open {}: {}", val.display(), e),
                             },
                             Err(e) => {
                                 fatal!("Unable to show logs: {}", e);
-                            },
+                            }
                         };
                     }
 
@@ -980,6 +990,7 @@ impl Editor {
                         plugin_registry: &mut self.plugin_registry,
                         editor: editor_ptr,
                         build_logs: &mut self.build_logs,
+                        mel_counter: -1,
                     },
                 );
         });

@@ -1,11 +1,12 @@
-use crate::states::{SceneEntity};
+use crate::states::SceneEntity;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use parking_lot::Mutex;
 use std::sync::{Arc, LazyLock};
 
 /// All spawns that are waiting to be spawned in.
-pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PotentialSpawn>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PotentialSpawn>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 pub struct PotentialSpawn {
     pub entity: SceneEntity,
@@ -29,5 +30,8 @@ pub trait PendingSpawnController {
 /// Helper function to spawn a [`PendingSpawn`]
 pub fn push_pending_spawn(spawn: SceneEntity) {
     log::debug!("Pushing spawn");
-    PENDING_SPAWNS.lock().push(PotentialSpawn { entity: spawn, handle: None });
+    PENDING_SPAWNS.lock().push(PotentialSpawn {
+        entity: spawn,
+        handle: None,
+    });
 }

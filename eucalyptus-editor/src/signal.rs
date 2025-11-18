@@ -10,7 +10,10 @@ use egui::{Align2, Image};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::push_pending_spawn;
-use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, SceneEntity, SceneMeshRendererComponent, ScriptComponent, Value};
+use eucalyptus_core::states::{
+    EditorTab, Label, ModelProperties, PROJECT, SceneEntity, SceneMeshRendererComponent,
+    ScriptComponent, Value,
+};
 use eucalyptus_core::traits::Component;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
@@ -816,6 +819,7 @@ impl SignalController for Editor {
                             components,
                             parent: Label::default(),
                             children: Vec::new(),
+                            id: None,
                         };
 
                         push_pending_spawn(scene_entity);
@@ -829,9 +833,9 @@ impl SignalController for Editor {
                         components.push(Box::new(local_transform));
                         components.push(Box::new(world_transform));
                         components.push(Box::new(SceneMeshRendererComponent {
-                            model: ResourceReference::from_bytes(include_bytes!(
-                                "../../resources/models/cube.glb"
-                            ).to_vec()),
+                            model: ResourceReference::from_bytes(
+                                include_bytes!("../../resources/models/cube.glb").to_vec(),
+                            ),
                             material_overrides: Vec::new(),
                         }));
                         components.push(Box::new(ModelProperties::default()));
@@ -841,6 +845,7 @@ impl SignalController for Editor {
                             components,
                             parent: Label::default(),
                             children: Vec::new(),
+                            id: None,
                         };
 
                         push_pending_spawn(scene_entity);

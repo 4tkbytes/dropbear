@@ -5,14 +5,14 @@ use dropbear_engine::asset::{ASSET_REGISTRY, PointerKind};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
+    entity::{MeshRenderer, Transform, WorldTransform},
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
-use eucalyptus_core::logging;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
 use eucalyptus_core::window::poll;
+use eucalyptus_core::{hierarchy, logging};
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;
@@ -270,19 +270,23 @@ impl Scene for Editor {
         }
 
         {
+            hierarchy::propagate_transforms(&mut self.world);
+
             {
-                let query = self.world.query_mut::<(&mut MeshRenderer, &Transform)>();
-                for (_, (renderer, transform)) in query {
-                    renderer.update(transform);
+                let mut query = self
+                    .world
+                    .query_mut::<(&mut MeshRenderer, &WorldTransform)>();
+                for (_, (renderer, world_transform)) in query {
+                    renderer.update(world_transform.inner());
                 }
             }
 
             {
-                let light_query = self
+                let mut light_query = self
                     .world
-                    .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
-                for (_, (light_component, transform, light)) in light_query {
-                    light.update(light_component, transform);
+                    .query_mut::<(&mut LightComponent, &WorldTransform, &mut Light)>();
+                for (_, (light_component, world_transform, light)) in light_query {
+                    light.update(light_component, world_transform.inner());
                 }
             }
         }

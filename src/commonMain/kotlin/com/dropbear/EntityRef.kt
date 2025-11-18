@@ -41,7 +41,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      */
     fun commitWorld(transform: Transform?) {
         if (transform == null) return
-        return engine.native.setWorldTransform(id, transform)
+        return engine.native.commitWorldTransform(id, transform)
     }
 
     /**
@@ -49,7 +49,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      */
     fun commitLocal(transform: Transform?) {
         if (transform == null) return
-        return engine.native.setLocalTransform(id, transform)
+        return engine.native.commitLocalTransform(id, transform)
     }
 
     /**

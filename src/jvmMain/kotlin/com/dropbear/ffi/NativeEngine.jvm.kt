@@ -1,7 +1,6 @@
 package com.dropbear.ffi
 
 import com.dropbear.Camera
-import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
@@ -13,24 +12,21 @@ import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
 
 actual class NativeEngine {
-    /**
-     * The handle/pointer to a `hecs::World`
-     */
+    /** The handle/pointer to a `hecs::World` */
     private var worldHandle: Long = 0L
 
-    /**
-     * The handle/pointer to a `eucalyptus_core::input::InputState` struct.
-     */
+    /** The handle/pointer to a `eucalyptus_core::input::InputState` struct. */
     private var inputHandle: Long = 0L
 
     /**
      * The handle/pointer to the graphics queue.
      *
-     * Contrary-to-belief, this is different from the `Arc<SharedGraphicsContext>` handle
-     * as such in the game engine, but rather a pointer to a static variable called `GRAPHICS_COMMANDS`.
+     * Contrary-to-belief, this is different from the `Arc<SharedGraphicsContext>` handle as such in
+     * the game engine, but rather a pointer to a static variable called `GRAPHICS_COMMANDS`.
      *
-     * Since winit (the windowing library) requires all commands to be done on the main thread, this variable
-     * allows for "commands" to be sent over and processed on the main thread with the crossbeam_channels library.
+     * Since winit (the windowing library) requires all commands to be done on the main thread, this
+     * variable allows for "commands" to be sent over and processed on the main thread with the
+     * crossbeam_channels library.
      */
     private var graphicsHandle: Long = 0L
 
@@ -75,7 +71,6 @@ actual class NativeEngine {
         }
     }
 
-
     actual fun getWorldTransform(entityId: EntityId): Transform? {
         return JNINative.getWorldTransform(worldHandle, entityId.id)
     }
@@ -101,25 +96,26 @@ actual class NativeEngine {
     }
 
     actual fun getMousePosition(): Vector2D? {
-        val result = JNINative.getMousePosition(inputHandle);
+        val result = JNINative.getMousePosition(inputHandle)
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
     actual fun isMouseButtonPressed(button: MouseButton): Boolean {
-        val buttonCode: Int = when (button) {
-            MouseButton.Left -> MouseButtonCodes.LEFT
-            MouseButton.Right -> MouseButtonCodes.RIGHT
-            MouseButton.Middle -> MouseButtonCodes.MIDDLE
-            MouseButton.Back -> MouseButtonCodes.BACK
-            MouseButton.Forward -> MouseButtonCodes.FORWARD
-            is MouseButton.Other -> button.value
-        }
+        val buttonCode: Int =
+                when (button) {
+                    MouseButton.Left -> MouseButtonCodes.LEFT
+                    MouseButton.Right -> MouseButtonCodes.RIGHT
+                    MouseButton.Middle -> MouseButtonCodes.MIDDLE
+                    MouseButton.Back -> MouseButtonCodes.BACK
+                    MouseButton.Forward -> MouseButtonCodes.FORWARD
+                    is MouseButton.Other -> button.value
+                }
 
         return JNINative.isMouseButtonPressed(inputHandle, buttonCode)
     }
 
     actual fun getMouseDelta(): Vector2D? {
-        val result = JNINative.getMouseDelta(inputHandle);
+        val result = JNINative.getMouseDelta(inputHandle)
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
@@ -132,7 +128,7 @@ actual class NativeEngine {
     }
 
     actual fun getLastMousePos(): Vector2D? {
-        val result = JNINative.getLastMousePos(inputHandle);
+        val result = JNINative.getLastMousePos(inputHandle)
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
@@ -278,13 +274,17 @@ actual class NativeEngine {
         }
     }
 
-    actual fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle) {
+    actual fun setTextureOverride(
+            entityHandle: Long,
+            oldMaterialName: String,
+            newTextureHandle: TextureHandle
+    ) {
         return JNINative.setTexture(
-            worldHandle,
-            assetHandle,
-            entityHandle,
-            oldMaterialName,
-            newTextureHandle.raw()
+                worldHandle,
+                assetHandle,
+                entityHandle,
+                oldMaterialName,
+                newTextureHandle.raw()
         )
     }
 

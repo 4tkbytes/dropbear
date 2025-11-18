@@ -44,6 +44,7 @@ memory-stats.workspace = true
 env_logger.workspace = true
 colored.workspace = true
 chrono.workspace = true
+egui_ltreeview.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

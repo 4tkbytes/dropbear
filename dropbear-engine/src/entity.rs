@@ -24,7 +24,11 @@ pub struct LocalTransform(Transform);
 
 impl LocalTransform {
     /// Creates a new LocalTransform with the specified position, rotation, and scale
-    pub fn new(position: impl Into<DVec3>, rotation: impl Into<DQuat>, scale: impl Into<DVec3>) -> Self {
+    pub fn new(
+        position: impl Into<DVec3>,
+        rotation: impl Into<DQuat>,
+        scale: impl Into<DVec3>,
+    ) -> Self {
         Self(Transform {
             position: position.into(),
             rotation: rotation.into(),
@@ -96,14 +100,18 @@ impl Default for LocalTransform {
 
 /// WorldTransform represents the absolute transform of an entity in world space.
 /// This is computed by combining the LocalTransform with all parent transforms.
-/// 
+///
 /// This should be updated by a transform propagation system that walks the hierarchy.
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Component)]
 pub struct WorldTransform(Transform);
 
 impl WorldTransform {
     /// Creates a new WorldTransform with the specified position, rotation, and scale
-    pub fn new(position: impl Into<DVec3>, rotation: impl Into<DQuat>, scale: impl Into<DVec3>) -> Self {
+    pub fn new(
+        position: impl Into<DVec3>,
+        rotation: impl Into<DQuat>,
+        scale: impl Into<DVec3>,
+    ) -> Self {
         Self(Transform {
             position: position.into(),
             rotation: rotation.into(),
@@ -177,7 +185,8 @@ impl WorldTransform {
 
     /// Updates this WorldTransform from a LocalTransform and parent WorldTransform
     pub fn update_from_parent(&mut self, local: &LocalTransform, parent: &WorldTransform) {
-        self.0.position = parent.position() + parent.rotation() * (local.position() * parent.scale());
+        self.0.position =
+            parent.position() + parent.rotation() * (local.position() * parent.scale());
         self.0.rotation = parent.rotation() * local.rotation();
         self.0.scale = parent.scale() * local.scale();
     }

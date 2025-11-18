@@ -9,11 +9,11 @@ pub mod spawn;
 pub mod states;
 pub mod utils;
 pub mod window;
-pub use dropbear_traits as traits;
 pub use dropbear_derive as derive;
+pub use dropbear_traits as traits;
 
-pub use typetag;
 pub use egui;
+pub use typetag;
 
 /// The appdata directory for storing any information.
 ///

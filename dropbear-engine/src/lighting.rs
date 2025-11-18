@@ -1,3 +1,4 @@
+use dropbear_traits::Component;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -5,17 +6,16 @@ use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
     RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
-use dropbear_traits::Component;
 
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::graphics::SharedGraphicsContext;
+use crate::model::SpecialModelType;
 use crate::shader::Shader;
 use crate::{
     camera::Camera,
     entity::Transform,
     model::{self, Model, Vertex},
 };
-use crate::model::SpecialModelType;
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -247,14 +247,10 @@ impl Light {
 
         log::trace!("Created new light uniform");
 
-        let cube_model = Model::load_special(
-            graphics.clone(),
-            SpecialModelType::Cube,
-            label,
-        )
-        .await
-        .expect("failed to load light cube model")
-        .get();
+        let cube_model = Model::load_special(graphics.clone(), SpecialModelType::Cube, label)
+            .await
+            .expect("failed to load light cube model")
+            .get();
 
         let label_str = label.unwrap_or("Light").to_string();
 

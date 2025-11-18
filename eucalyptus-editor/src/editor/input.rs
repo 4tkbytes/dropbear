@@ -1,7 +1,6 @@
 use super::*;
-use dropbear_engine::{
-    input::{Controller, Keyboard, Mouse},
-};
+use crate::utils::collect_entity;
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -9,7 +8,6 @@ use transform_gizmo_egui::GizmoMode;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
-use crate::utils::collect_entity;
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
@@ -129,7 +127,6 @@ impl Keyboard for Editor {
                         && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
-
                             let se = collect_entity(&self.world, *entity);
 
                             if let Some(entity) = se {

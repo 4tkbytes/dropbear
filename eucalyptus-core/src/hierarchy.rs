@@ -40,7 +40,9 @@ pub fn propagate_transforms(world: &mut hecs::World) {
 
     // update root entities
     {
-        let mut query = world.query::<(&LocalTransform, &mut WorldTransform)>().without::<&Parent>();
+        let mut query = world
+            .query::<(&LocalTransform, &mut WorldTransform)>()
+            .without::<&Parent>();
         for (_, (local, world_transform)) in query.iter() {
             world_transform.sync_from_local(local);
         }
@@ -63,24 +65,29 @@ pub fn propagate_transforms(world: &mut hecs::World) {
         children: &[hecs::Entity],
         parent_child_map: &[(hecs::Entity, Vec<hecs::Entity>)],
     ) {
-        let parent_world_transform = if let Ok(mut query) = world.query_one::<&WorldTransform>(parent_entity) {
-            if let Some(transform) = query.get() {
-                *transform
+        let parent_world_transform =
+            if let Ok(mut query) = world.query_one::<&WorldTransform>(parent_entity) {
+                if let Some(transform) = query.get() {
+                    *transform
+                } else {
+                    return;
+                }
             } else {
                 return;
-            }
-        } else {
-            return;
-        };
+            };
 
         for &child_entity in children {
-            if let Ok(mut child_query) = world.query_one::<(&LocalTransform, &mut WorldTransform)>(child_entity) {
+            if let Ok(mut child_query) =
+                world.query_one::<(&LocalTransform, &mut WorldTransform)>(child_entity)
+            {
                 if let Some((local, world_transform)) = child_query.get() {
                     world_transform.update_from_parent(local, &parent_world_transform);
                 }
             }
 
-            if let Some((_, grandchildren)) = parent_child_map.iter().find(|(e, _)| *e == child_entity) {
+            if let Some((_, grandchildren)) =
+                parent_child_map.iter().find(|(e, _)| *e == child_entity)
+            {
                 propagate_to_children(world, child_entity, grandchildren, parent_child_map);
             }
         }

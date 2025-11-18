@@ -1,30 +1,32 @@
 use super::*;
+use crate::editor::component::InspectableComponent;
 use crate::editor::{
     ViewportMode,
     console_error::{ConsoleItem, ErrorLevel},
 };
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::LazyLock,
-};
-
-use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
     entity::{LocalTransform, MeshRenderer, Transform, WorldTransform},
     lighting::{Light, LightComponent},
 };
-use egui::{self, CollapsingHeader, Margin, RichText};
+use egui::{self, CollapsingHeader, Id, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_extras;
+use egui_ltreeview::{Action, NodeBuilder, TreeView, TreeViewBuilder};
+use eucalyptus_core::hierarchy::Parent;
 use eucalyptus_core::spawn::push_pending_spawn;
-use eucalyptus_core::states::{File, Label, ModelProperties, Node, RESOURCES, ResourceType, SceneEntity, SceneMeshRendererComponent};
+use eucalyptus_core::states::{
+    File, Label, ModelProperties, Node, RESOURCES, ResourceType, SceneEntity,
+    SceneMeshRendererComponent,
+};
 use eucalyptus_core::traits::Component;
 use eucalyptus_core::{APP_INFO, utils::ResolveReference};
 use log;
 use parking_lot::Mutex;
+use std::ffi::OsStr;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, math::DVec3};
 
 pub struct EditorTabViewer<'a> {
@@ -43,6 +45,7 @@ pub struct EditorTabViewer<'a> {
     pub build_logs: &'a mut Vec<String>,
     // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
     pub editor: *mut Editor,
+    pub mel_counter: i64,
 }
 
 impl<'a> EditorTabViewer<'a> {
@@ -59,19 +62,16 @@ impl<'a> EditorTabViewer<'a> {
         let world_transform = WorldTransform::from_transform(local_transform.into_inner());
 
         let mut components: Vec<Box<dyn Component>> = Vec::new();
-        
-        // Add transforms
+
         components.push(Box::new(local_transform));
         components.push(Box::new(world_transform));
-        
-        // Add mesh component
+
         let mesh_comp = SceneMeshRendererComponent {
             model: asset.path.clone(),
             material_overrides: Vec::new(),
         };
         components.push(Box::new(mesh_comp));
-        
-        // Add properties
+
         let props = properties.unwrap_or_default();
         components.push(Box::new(props));
 
@@ -80,6 +80,7 @@ impl<'a> EditorTabViewer<'a> {
             components,
             parent: Label::default(),
             children: Vec::new(),
+            id: None,
         };
 
         push_pending_spawn(scene_entity);
@@ -118,7 +119,7 @@ pub struct StaticallyKept {
     pub(crate) transform_original_transform: Option<Transform>,
 
     pub(crate) transform_in_progress: bool,
-    pub(crate) transform_rotation_cache: HashMap<hecs::Entity, glam::DVec3>,
+    pub(crate) transform_rotation_cache: HashMap<Entity, DVec3>,
 }
 
 impl<'a> TabViewer for EditorTabViewer<'a> {
@@ -259,308 +260,221 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if !matches!(self.viewport_mode, ViewportMode::None)
                     && let Some(entity_id) = self.selected_entity
                 {
-                    {
-                        if let Ok(mut q) = self.world.query_one::<&mut Transform>(*entity_id)
-                            && let Some(transform) = q.get()
+                    let world_transform = self
+                        .world
+                        .query_one::<&WorldTransform>(*entity_id)
+                        .ok()
+                        .and_then(|mut query| query.get().copied());
+
+                    let mut transform = world_transform
+                        .map(|wt| wt.into_inner())
+                        .or_else(|| {
+                            self.world
+                                .query_one::<&LocalTransform>(*entity_id)
+                                .ok()
+                                .and_then(|mut query| query.get().map(|lt| lt.inner().clone()))
+                        })
+                        .or_else(|| {
+                            self.world
+                                .query_one::<&Transform>(*entity_id)
+                                .ok()
+                                .and_then(|mut query| query.get().copied())
+                        });
+
+                    if let Some(mut transform) = transform {
+                        let was_focused = cfg.is_focused;
+                        cfg.is_focused = self.gizmo.is_focused();
+
+                        if cfg.is_focused && !was_focused {
+                            cfg.old_pos = transform;
+                        }
+
+                        let gizmo_transform =
+                            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                transform.scale,
+                                transform.rotation,
+                                transform.position,
+                            );
+
+                        let mut updated_transform: Option<Transform> = None;
+
+                        if let Some((_result, new_transforms)) =
+                            self.gizmo.interact(ui, &[gizmo_transform])
+                            && let Some(new_transform) = new_transforms.first()
                         {
-                            let was_focused = cfg.is_focused;
-                            cfg.is_focused = self.gizmo.is_focused();
+                            transform.position = new_transform.translation.into();
+                            transform.rotation = new_transform.rotation.into();
+                            transform.scale = new_transform.scale.into();
+                            updated_transform = Some(transform);
+                        }
 
-                            if cfg.is_focused && !was_focused {
-                                cfg.old_pos = *transform;
-                            }
-
-                            let gizmo_transform =
-                                        transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                                            transform.scale,
-                                            transform.rotation,
-                                            transform.position,
-                                        );
-
-                            if let Some((_result, new_transforms)) =
-                                self.gizmo.interact(ui, &[gizmo_transform])
-                                && let Some(new_transform) = new_transforms.first()
+                        if let Some(new_transform) = updated_transform {
+                            let mut applied_to_local = false;
                             {
-                                transform.position = new_transform.translation.into();
-                                transform.rotation = new_transform.rotation.into();
-                                transform.scale = new_transform.scale.into();
+                                if let Ok(mut query) =
+                                    self.world.query_one::<&mut LocalTransform>(*entity_id)
+                                    && let Some(local_transform) = query.get()
+                                {
+                                    *local_transform =
+                                        LocalTransform::from_transform(new_transform);
+                                    applied_to_local = true;
+                                }
                             }
 
-                            if was_focused && !cfg.is_focused {
-                                let transform_changed = cfg.old_pos.position != transform.position
-                                    || cfg.old_pos.rotation != transform.rotation
-                                    || cfg.old_pos.scale != transform.scale;
-
-                                if transform_changed {
-                                    UndoableAction::push_to_undo(
-                                        self.undo_stack,
-                                        UndoableAction::Transform(*entity_id, cfg.old_pos),
-                                    );
-                                    log::debug!("Pushed transform action to stack");
+                            if !applied_to_local {
+                                if let Ok(mut query) =
+                                    self.world.query_one::<&mut WorldTransform>(*entity_id)
+                                    && let Some(world_transform) = query.get()
+                                {
+                                    *world_transform =
+                                        WorldTransform::from_transform(new_transform);
+                                } else if let Ok(mut query) =
+                                    self.world.query_one::<&mut Transform>(*entity_id)
+                                    && let Some(existing_transform) = query.get()
+                                {
+                                    *existing_transform = new_transform;
                                 }
+                            }
+                        }
+
+                        if was_focused && !cfg.is_focused {
+                            let transform_changed = cfg.old_pos.position != transform.position
+                                || cfg.old_pos.rotation != transform.rotation
+                                || cfg.old_pos.scale != transform.scale;
+
+                            if transform_changed {
+                                UndoableAction::push_to_undo(
+                                    self.undo_stack,
+                                    UndoableAction::Transform(*entity_id, cfg.old_pos),
+                                );
+                                log::debug!("Pushed transform action to stack");
                             }
                         }
                     }
                 }
             }
             EditorTab::ModelEntityList => {
-                ui.label("Entity List");
-                ui.label(format!("This would be the entity list, however it needs to be remade. Check it out at line {}:{}", file!(), line!()));
+                let response = TreeView::new(Id::new("model entity list")).show(ui, |builder| {
+                    let last_opened_scene = { PROJECT.read().last_opened_scene.clone() };
+
+                    builder.dir(
+                        -1,
+                        format!("{}", last_opened_scene.unwrap_or("Scene".into())),
+                    );
+
+                    fn build_entity_tree(
+                        builder: &mut egui_ltreeview::TreeViewBuilder<i32>,
+                        entity: &SceneEntity,
+                    ) {
+                        let id = entity.id.unwrap().id() as i32;
+                        builder.dir(id, &*entity.label);
+
+                        for component in &entity.components {
+                            builder.leaf(-1 * id, component.type_name());
+                        }
+
+                        for child in &entity.children {
+                            build_entity_tree(builder, child);
+                        }
+
+                        builder.close_dir();
+                    }
+
+                    let root_entities: Vec<_> = self
+                        .world
+                        .query::<(&Label, Option<&Parent>)>()
+                        .iter()
+                        .filter_map(|(e, (l, p))| {
+                            if p.is_none() {
+                                Some((e, l.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    for (entity, _label) in root_entities {
+                        if let Some(scene_entity) =
+                            crate::utils::collect_entity_recursive(&self.world, entity)
+                        {
+                            build_entity_tree(builder, &scene_entity);
+                        }
+                    }
+
+                    builder.close_dir()
+                });
+
+                for resp in response.1 {
+                    match resp {
+                        Action::SetSelected(id) => {
+                            log::debug!("Entities {:?} have been selected", id);
+                            let Some(actual_selected) = id.first() else {
+                                continue;
+                            };
+                            if *actual_selected < 0 {
+                                continue; // means that its the root scene dir in the tree
+                            }
+                            *self.selected_entity = Some(unsafe {
+                                self.world.find_entity_from_id(*actual_selected as u32)
+                            });
+                        }
+                        Action::Move(id) => {
+                            log::debug!("Entities {:?} have been MOVED", id);
+                        }
+                        Action::Drag(id) => {
+                            log::debug!("Entities {:?} have been DRAGGED", id);
+                        }
+                        Action::Activate(id) => {
+                            log::debug!("Entities {:?} have been ACTIVATED", id);
+                        }
+                        Action::DragExternal(id) => {
+                            log::debug!("Entities {:?} have been EXTERNALLY DRAGGED", id);
+                        }
+                        Action::MoveExternal(id) => {
+                            log::debug!("Entities {:?} have been EXTERNALLY MOVED", id);
+                        }
+                    }
+                }
             }
             EditorTab::AssetViewer => {
-                egui_extras::install_image_loaders(ui.ctx());
+                let res = { RESOURCES.read().clone() };
+                let mut old_depth: usize = 0;
+                egui_ltreeview::TreeView::new(Id::new("asset viewer")).show(
+                    ui,
+                    |builder: &mut TreeViewBuilder<u64>| {
+                        for entry in walkdir::WalkDir::new(res.path.clone()) {
+                            let Ok(e) = entry else {
+                                continue;
+                            };
+                            let depth = e.depth();
 
-                let mut assets: Vec<(String, String, PathBuf, ResourceType)> = Vec::new();
-                {
-                    let res = RESOURCES.read();
-                    egui_extras::install_image_loaders(ui.ctx());
-
-                    fn recursive_search_nodes_and_attach_thumbnail(
-                        res: &Vec<Node>,
-                        assets: &mut Vec<(String, String, PathBuf, ResourceType)>,
-                    ) {
-                        for node in res {
-                            match node {
-                                Node::File(file) => {
-                                    match file {
-                                        File::Unknown => {}
-                                        File::ResourceFile {
-                                            name,
-                                            path,
-                                            resource_type,
-                                        } => {
-                                            log_once::debug_once!(
-                                                "Adding image for {} of type {}",
-                                                name,
-                                                resource_type
-                                            );
-                                            match resource_type {
-                                                ResourceType::Model => {
-                                                    let ad_dir = app_dirs2::get_app_root(
-                                                        app_dirs2::AppDataType::UserData,
-                                                        &APP_INFO,
-                                                    )
-                                                    .unwrap();
-
-                                                    let model_thumbnail =
-                                                        ad_dir.join(format!("{}.png", name));
-
-                                                    if !model_thumbnail.exists() {
-                                                        // gen image
-                                                        log::debug!(
-                                                            "Model thumbnail [{}] does not exist, generating one now",
-                                                            name
-                                                        );
-                                                        let path = ResourceReference::from_path(
-                                                            path,
-                                                        ) // cuts off everything to the /resources folder
-                                                        .unwrap()
-                                                        .resolve() // resovles path to reference of resource
-                                                        .unwrap();
-                                                        let mut model = match model_to_image::ModelToImageBuilder::new(&path)
-                                                            .with_size((600, 600))
-                                                            .build() {
-                                                            Ok(v) => v,
-                                                            Err(e) => panic!("Error occurred while loading file from path: {}", e),
-                                                        };
-                                                        if let Err(e) =
-                                                            model.render().unwrap().write_to(Some(
-                                                                &ad_dir
-                                                                    .join(format!("{}.png", name)),
-                                                            ))
-                                                        {
-                                                            log::error!(
-                                                                "Failed to write model thumbnail for {}: {}",
-                                                                name,
-                                                                e
-                                                            );
-                                                        }
-                                                    }
-
-                                                    let image_uri = model_thumbnail
-                                                        .to_string_lossy()
-                                                        .to_string();
-
-                                                    assets.push((
-                                                        format!("file://{}", image_uri),
-                                                        name.clone(),
-                                                        path.clone(),
-                                                        resource_type.clone(),
-                                                    ))
-                                                }
-                                                ResourceType::Texture => assets.push((
-                                                    format!("file://{}", path.to_string_lossy()),
-                                                    name.clone(),
-                                                    path.clone(),
-                                                    resource_type.clone(),
-                                                )),
-                                                _ => {
-                                                    if path
-                                                        .clone()
-                                                        .extension()
-                                                        .unwrap()
-                                                        .to_str()
-                                                        .unwrap()
-                                                        .contains("euc")
-                                                    {
-                                                        continue;
-                                                    }
-                                                    assets.push((
-                                                        "NO_TEXTURE".into(),
-                                                        name.clone(),
-                                                        path.clone(),
-                                                        resource_type.clone(),
-                                                    ))
-                                                }
-                                            }
-                                        }
-                                        File::SourceFile { .. } => {}
-                                    }
-                                }
-                                Node::Folder(folder) => {
-                                    recursive_search_nodes_and_attach_thumbnail(
-                                        &folder.nodes,
-                                        assets,
-                                    )
+                            if depth < old_depth {
+                                for _ in 0..(old_depth - depth) {
+                                    builder.close_dir();
                                 }
                             }
-                        }
-                    }
+                            old_depth = depth;
 
-                    recursive_search_nodes_and_attach_thumbnail(
-                        &res.nodes,
-                        &mut assets,
-                    );
-                }
+                            let Some(file_name) = e.file_name().to_str() else {
+                                continue;
+                            };
+                            let str_file_name = file_name.to_string();
+                            let mut hasher = DefaultHasher::new();
+                            file_name.hash(&mut hasher);
+                            let hash = hasher.finish();
 
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let max_columns = 6;
-                    let available_width = ui.clip_rect().width() - ui.spacing().indent;
-                    let margin = 16.0;
-                    let usable_width = available_width - margin;
-                    let label_height = 20.0;
-                    let padding = 8.0;
-                    let min_card_width = 60.0;
-
-                    let mut columns = max_columns;
-                    for test_columns in (1..=max_columns).rev() {
-                        let card_width = usable_width / test_columns as f32;
-                        if card_width >= min_card_width {
-                            columns = test_columns;
-                            break;
-                        }
-                    }
-
-                    let card_width = usable_width / columns as f32;
-                    let image_size = (card_width - label_height - padding).max(32.0);
-                    let card_height = image_size + label_height + padding;
-
-                    for row_start in (0..assets.len()).step_by(columns) {
-                        let row_end = (row_start + columns).min(assets.len());
-                        let row_items = &mut assets[row_start..row_end];
-
-                        ui.horizontal(|ui| {
-                            ui.set_max_width(usable_width);
-
-                            egui_dnd::dnd(ui, format!("asset_row_{}", row_start / columns))
-                                .show_vec(
-                                    row_items,
-                                    |ui, (image, asset_name, asset_path, asset_type), handle, state| {
-                                        let card_size = egui::vec2(card_width, card_height);
-                                        handle.ui(ui, |ui| {
-                                            let (rect, card_response) = ui.allocate_exact_size(
-                                                card_size,
-                                                egui::Sense::click(),
-                                            );
-
-                                            let mut card_ui = ui.new_child(
-                                                egui::UiBuilder::new().max_rect(rect).layout(
-                                                    egui::Layout::top_down(egui::Align::Center),
-                                                ),
-                                            );
-
-                                            let image_response = card_ui.add_sized(
-                                                [image_size, image_size],
-                                                egui::Button::image(image.clone()).min_size([image_size, image_size].into()).frame(false),
-                                            );
-
-                                            let is_hovered = card_response.hovered() || image_response.hovered() || state.dragged;
-                                            let is_d_clicked = card_response.double_clicked() || image_response.double_clicked();
-
-                                            if is_d_clicked
-                                                && matches!(asset_type, ResourceType::Model) {
-                                                    let mut spawn_position = DVec3::default();
-                                                    {
-                                                        let active_cam = self.active_camera.lock();
-                                                        if let Some(active_camera) = *active_cam {
-                                                            if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent)>(active_camera) {
-                                                                if let Some((camera, _)) = q.get() {
-                                                                    spawn_position = camera.eye;
-                                                                } else {
-                                                                    log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
-                                                                }
-                                                            } else {
-                                                                log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
-                                                            }
-                                                        } else {
-                                                            log_once::warn_once!("No active camera found");
-                                                        }
-                                                    }
-
-                                                    let asset = DraggedAsset {
-                                                        name: asset_name.clone(),
-                                                        path: ResourceReference::from_path(asset_path.clone()).unwrap_or_else(|_e| {
-                                                            log::warn!("Unable to create ResourceReference from path: {:?}", asset_path);
-                                                            Default::default()
-                                                        }),
-                                                    };
-
-                                                    match self.spawn_entity_at_pos(&asset, spawn_position, None) {
-                                                        Ok(()) => {
-                                                            log::debug!("double click spawned {} at camera pos {:?}",
-                                                                asset.name, spawn_position
-                                                            );
-
-                                                            success!("Pushing spawn \"{}\" at camera", asset.name);
-                                                        }
-                                                        Err(e) => {
-                                                            log::error!(
-                                                            "Failed to spawn {} at camera: {}",
-                                                            asset.name,
-                                                            e);
-
-                                                            fatal!("Failed to spawn {}: {}",
-                                                                        asset.name, e);
-                                                        }
-                                                    }
-                                                }
-
-                                            if is_hovered || state.dragged {
-                                                ui.painter().rect_filled(
-                                                    rect,
-                                                    6.0,
-                                                    if state.dragged {
-                                                        egui::Color32::from_rgb(80, 80, 100)
-                                                    } else {
-                                                        egui::Color32::from_rgb(60, 60, 80)
-                                                    },
-                                                );
-                                            }
-
-                                            card_ui.vertical_centered(|ui| {
-                                                ui.label(
-                                                    egui::RichText::new(asset_name.clone())
-                                                        .strong()
-                                                        .color(egui::Color32::WHITE),
-                                                );
-                                            });
-                                        });
-                                    },
+                            if e.file_type().is_dir() {
+                                builder.node(
+                                    NodeBuilder::dir(hash).label(str_file_name), // .icon(add_icon) todo: add folder icon
                                 );
-                        });
-                        ui.add_space(8.0);
-                    }
-                });
+                            } else if e.file_type().is_file() {
+                                builder.node(
+                                    NodeBuilder::leaf(hash).label(str_file_name), // .icon(add_icon) todo: add folder icon
+                                );
+                            }
+                        }
+                    },
+                );
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
@@ -580,7 +494,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         if let Some((
                             label,
                             e,
-                            lt, wt,
+                            lt,
+                            wt,
                             _props,
                             script,
                             camera,
@@ -744,7 +659,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     if ui.button("Remove Component ❌").clicked() {
                                                         *self.signal = Signal::RemoveComponent(
                                                             *entity,
-                                                            Box::new(ComponentType::Light(light.clone())),
+                                                            Box::new(ComponentType::Light(
+                                                                light.clone(),
+                                                            )),
                                                         )
                                                     }
                                                 },

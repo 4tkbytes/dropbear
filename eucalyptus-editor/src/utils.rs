@@ -6,7 +6,10 @@ use egui::Context;
 use egui_toast::{Toast, ToastOptions, Toasts};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::hierarchy::Parent;
-use eucalyptus_core::states::{CameraConfig, Label, ModelProperties, PROJECT, ProjectConfig, SceneEntity, SceneMeshRendererComponent, ScriptComponent};
+use eucalyptus_core::states::{
+    CameraConfig, Label, ModelProperties, PROJECT, ProjectConfig, SceneEntity,
+    SceneMeshRendererComponent, ScriptComponent,
+};
 use eucalyptus_core::traits::Component;
 use eucalyptus_core::utils::ProjectProgress;
 use git2::Repository;
@@ -61,7 +64,8 @@ pub fn collect_entity_components(world: &World, entity_id: Entity) -> Vec<Box<dy
         }
     }
 
-    if let Ok(mut query) = world.query_one::<&dropbear_engine::lighting::LightComponent>(entity_id) {
+    if let Ok(mut query) = world.query_one::<&dropbear_engine::lighting::LightComponent>(entity_id)
+    {
         if let Some(light_comp) = query.get() {
             components.push(Box::new(light_comp.clone()));
         }
@@ -85,6 +89,7 @@ pub fn collect_entity(world: &World, entity_id: Entity) -> Option<SceneEntity> {
         components,
         parent: Label::default(),
         children: Vec::new(),
+        id: Some(entity_id),
     })
 }
 
@@ -103,10 +108,18 @@ pub fn collect_entity_recursive(world: &World, entity_id: Entity) -> Option<Scen
         if let Some(parent_component) = query.get() {
             for &child_entity in parent_component.children() {
                 if let Some(child_scene_entity) = collect_entity_recursive(world, child_entity) {
-                    log::debug!("Recursively saved child '{}' of '{}'", child_scene_entity.label, entity_label);
+                    log::debug!(
+                        "Recursively saved child '{}' of '{}'",
+                        child_scene_entity.label,
+                        entity_label
+                    );
                     children_entities.push(child_scene_entity);
                 } else {
-                    log::warn!("Unable to collect child entity {:?} for parent '{}'", child_entity, entity_label);
+                    log::warn!(
+                        "Unable to collect child entity {:?} for parent '{}'",
+                        child_entity,
+                        entity_label
+                    );
                 }
             }
         }
@@ -117,9 +130,9 @@ pub fn collect_entity_recursive(world: &World, entity_id: Entity) -> Option<Scen
         components,
         parent: Label::default(),
         children: children_entities,
+        id: Some(entity_id),
     })
 }
-
 
 pub fn show_new_project_window<F>(
     ctx: &Context,

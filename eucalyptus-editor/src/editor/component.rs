@@ -221,7 +221,15 @@ impl InspectableComponent for Transform {
 }
 
 impl InspectableComponent for WorldTransform {
-    fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         ui.vertical(|ui| {
             CollapsingHeader::new("World Transform")
                 .default_open(true)
@@ -602,7 +610,15 @@ impl InspectableComponent for WorldTransform {
 }
 
 impl InspectableComponent for LocalTransform {
-    fn inspect(&mut self, entity: &mut Entity, cfg: &mut StaticallyKept, ui: &mut Ui, undo_stack: &mut Vec<UndoableAction>, _signal: &mut Signal, _label: &mut String) {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
         ui.vertical(|ui| {
             CollapsingHeader::new("Local Transform")
                 .default_open(true)

@@ -2,16 +2,21 @@ use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::Parent;
 use crate::utils::ResolveReference;
 use chrono::Utc;
+use dropbear_derive::Component;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
-use dropbear_engine::entity::{LocalTransform, MaterialOverride, MeshRenderer, Transform, WorldTransform};
+use dropbear_engine::entity::{
+    LocalTransform, MaterialOverride, MeshRenderer, Transform, WorldTransform,
+};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReference;
+use dropbear_traits::Component;
 use egui::Ui;
 use egui_dock::DockState;
 use glam::{DQuat, DVec3};
+use hecs::Entity;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use ron::ser::PrettyConfig;
@@ -24,8 +29,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, fs};
 use tokio::sync::mpsc::UnboundedSender;
-use dropbear_derive::Component;
-use dropbear_traits::Component;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -380,7 +383,7 @@ impl Display for ResourceType {
 }
 
 /// The resource config.
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ResourceConfig {
     /// The path to the resource folder.
     pub path: PathBuf,
@@ -594,10 +597,7 @@ impl Default for CameraConfig {
 }
 
 impl CameraConfig {
-    pub fn from_ecs_camera(
-        camera: &Camera,
-        component: &CameraComponent,
-    ) -> Self {
+    pub fn from_ecs_camera(camera: &Camera, component: &CameraComponent) -> Self {
         Self {
             eye: camera.position().to_array(),
             target: camera.target.to_array(),
@@ -637,24 +637,30 @@ impl From<CameraConfig> for CameraBuilder {
 ///
 /// This just contains the parent, the children, the components of that entity and the name of it.
 ///
-/// This should not be added to the world. 
+/// This should not be added to the world.
 #[derive(Default, Serialize, Deserialize)]
 pub struct SceneEntity {
     pub label: Label,
     pub components: Vec<Box<dyn Component>>,
     pub parent: Label,
     pub children: Vec<SceneEntity>,
+
+    #[serde(skip)]
+    pub id: Option<Entity>,
 }
 
 impl Clone for SceneEntity {
     fn clone(&self) -> Self {
         Self {
             label: self.label.clone(),
-            components: self.components.iter()
+            components: self
+                .components
+                .iter()
                 .map(|c| c.clone_component())
                 .collect(),
             children: self.children.clone(),
             parent: self.parent.clone(),
+            id: None,
         }
     }
 }
@@ -828,7 +834,6 @@ pub struct SceneConfig {
 
     // todo later
     // pub settings: SceneSettings,
-
     #[serde(skip)]
     pub path: PathBuf,
 }
@@ -890,7 +895,7 @@ impl SceneConfig {
         // entities
         for (index, entity_config) in self.entities.iter().enumerate() {
             let label_str = entity_config.label.to_string();
-            
+
             log::debug!("Loading entity: {}", label_str);
 
             if let Some(ref s) = progress_sender {
@@ -911,40 +916,39 @@ impl SceneConfig {
             let mut light_config: Option<(LightComponent, Transform)> = None;
 
             for comp in &entity_config.components {
-                if let Some(mesh_comp) = comp.as_any().downcast_ref::<SceneMeshRendererComponent>() {
-                    match self.load_mesh_renderer(mesh_comp, &graphics, &label_str).await {
+                if let Some(mesh_comp) = comp.as_any().downcast_ref::<SceneMeshRendererComponent>()
+                {
+                    match self
+                        .load_mesh_renderer(mesh_comp, &graphics, &label_str)
+                        .await
+                    {
                         Ok(renderer) => mesh_renderer = Some(renderer),
                         Err(e) => {
                             log::error!("Failed to load mesh for entity '{}': {}", label_str, e);
                             continue;
                         }
                     }
-                }
-                else if let Some(wt) = comp.as_any().downcast_ref::<WorldTransform>() {
+                } else if let Some(wt) = comp.as_any().downcast_ref::<WorldTransform>() {
                     world_transform = Some(*wt);
-                }
-                else if let Some(lt) = comp.as_any().downcast_ref::<LocalTransform>() {
+                } else if let Some(lt) = comp.as_any().downcast_ref::<LocalTransform>() {
                     local_transform = Some(*lt);
-                }
-                else if let Some(cam_cfg) = comp.as_any().downcast_ref::<CameraConfig>() {
+                } else if let Some(cam_cfg) = comp.as_any().downcast_ref::<CameraConfig>() {
                     camera_config = Some(cam_cfg.clone());
-                }
-                else if let Some(light_comp) = comp.as_any().downcast_ref::<LightComponent>() {
+                } else if let Some(light_comp) = comp.as_any().downcast_ref::<LightComponent>() {
                     let transform = local_transform
                         .map(|lt| lt.into_inner())
                         .unwrap_or_default();
                     light_config = Some((light_comp.clone(), transform));
-                }
-                else if let Some(script_comp) = comp.as_any().downcast_ref::<ScriptComponent>() {
+                } else if let Some(script_comp) = comp.as_any().downcast_ref::<ScriptComponent>() {
                     builder.add(script_comp.clone());
-                }
-                else if let Some(props) = comp.as_any().downcast_ref::<ModelProperties>() {
+                } else if let Some(props) = comp.as_any().downcast_ref::<ModelProperties>() {
                     builder.add(props.clone());
                 }
             }
 
             let lt = local_transform.unwrap_or_default();
-            let wt = world_transform.unwrap_or_else(|| WorldTransform::from_transform(lt.into_inner()));
+            let wt =
+                world_transform.unwrap_or_else(|| WorldTransform::from_transform(lt.into_inner()));
 
             builder.add(lt);
             builder.add(wt);
@@ -991,7 +995,7 @@ impl SceneConfig {
             }
 
             let entity = world.spawn(builder.build());
-            
+
             if let Some(previous) = label_to_entity.insert(entity_config.label.clone(), entity) {
                 log::warn!(
                     "Duplicate entity label '{}' detected; previous entity {:?} will be overwritten",
@@ -1040,7 +1044,8 @@ impl SceneConfig {
                     parent_comp.children_mut().extend(resolved_children);
                 }
                 Err(_) => {
-                    if let Err(e) = world.insert_one(parent_entity, Parent::new(resolved_children)) {
+                    if let Err(e) = world.insert_one(parent_entity, Parent::new(resolved_children))
+                    {
                         log::error!(
                             "Failed to attach Parent component to entity {:?}: {}",
                             parent_entity,
@@ -1072,13 +1077,14 @@ impl SceneConfig {
 
                 let comp = LightComponent::directional(DVec3::ONE, 1.0);
                 let light_direction = LightComponent::default_direction();
-                let rotation = DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
+                let rotation =
+                    DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
                 let transform = Transform {
                     position: DVec3::new(2.0, 4.0, 2.0),
                     rotation,
                     ..Default::default()
                 };
-                
+
                 let light = Light::new(
                     graphics.clone(),
                     comp.clone(),
@@ -1125,12 +1131,13 @@ impl SceneConfig {
                 MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
             }
             ResourceReferenceType::Bytes(bytes) => {
-                log::info!("Loading entity '{}' from bytes [Len: {}]", label, bytes.len());
-                let model = Model::load_from_memory(
-                    graphics.clone(),
-                    bytes.clone(),
-                    Some(label),
-                ).await?;
+                log::info!(
+                    "Loading entity '{}' from bytes [Len: {}]",
+                    label,
+                    bytes.len()
+                );
+                let model =
+                    Model::load_from_memory(graphics.clone(), bytes.clone(), Some(label)).await?;
                 MeshRenderer::from_handle(model)
             }
             ResourceReferenceType::Cube => {
@@ -1139,14 +1146,18 @@ impl SceneConfig {
                     graphics.clone(),
                     include_bytes!("../../resources/models/cube.glb").to_vec(),
                     Some(label),
-                ).await?;
+                )
+                .await?;
                 MeshRenderer::from_handle(model)
             }
             ResourceReferenceType::None => {
                 anyhow::bail!("No model reference provided for entity '{}'", label);
             }
             ResourceReferenceType::Plane => {
-                anyhow::bail!("Plane resource type is no longer supported for entity '{}'", label);
+                anyhow::bail!(
+                    "Plane resource type is no longer supported for entity '{}'",
+                    label
+                );
             }
         };
 
@@ -1249,7 +1260,9 @@ impl SceneConfig {
                 log::info!("Using player camera for runtime");
                 Ok(camera_entity)
             } else {
-                anyhow::bail!("Runtime mode requires a player camera, but none was found in the scene!");
+                anyhow::bail!(
+                    "Runtime mode requires a player camera, but none was found in the scene!"
+                );
             }
         }
     }
@@ -1335,7 +1348,7 @@ pub struct RuntimeData {
     pub scripts: HashMap<String, String>,
 }
 
-/// A label. Contains the name of something as a [String]. Nothing fancy ova 'ere. 
+/// A label. Contains the name of something as a [String]. Nothing fancy ova 'ere.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Label(String);
 

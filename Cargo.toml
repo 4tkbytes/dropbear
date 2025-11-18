@@ -6,7 +6,17 @@ package.repository = "https://github.com/4tkbytes/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
-members = ["dropbear-derive", "dropbear-engine", "dropbear-shader", "dropbear-traits", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
+members = [
+    "dropbear-derive",
+    "dropbear-engine",
+    "dropbear-shader",
+    "dropbear-traits",
+    "dropbear_future-queue",
+    "eucalyptus-core",
+    "eucalyptus-editor",
+    "magna-carta",
+    "redback-runtime",
+]
 
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -37,7 +47,7 @@ log = "0.4"
 log-once = "0.4"
 model_to_image = "0.1"
 once_cell = "1.21"
-parking_lot = {version = "0.12", features = ["deadlock_detection"] }
+parking_lot = { version = "0.12", features = ["deadlock_detection"] }
 rfd = "0.15"
 ron = "0.11"
 serde = { version = "1.0", features = ["derive"] }
@@ -54,7 +64,7 @@ gltf = "1"
 os_info = "3.12"
 rustc_version_runtime = "0.3"
 jni = { version = "0.21", features = ["invocation"] }
-tree-sitter = "0.22" # must be kept as 0.22 because tree-sitter-kotlin has not been updated
+tree-sitter = "0.22"                                                                                    # must be kept as 0.22 because tree-sitter-kotlin has not been updated
 tree-sitter-kotlin = "0.3"
 libloading = "0.8"
 indexmap = "2.11"
@@ -66,6 +76,7 @@ egui_plot = "0.34"
 memory-stats = "1.2"
 typetag = "0.2"
 dyn-clone = "1.0"
+egui_ltreeview = { version = "0.6", features = ["doc"] }
 
 [workspace.dependencies.image]
 version = "0.25"

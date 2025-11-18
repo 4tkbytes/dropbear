@@ -56,7 +56,9 @@ impl PlaneBuilder {
         _texture_bytes: &[u8],
         _label: Option<&str>,
     ) -> anyhow::Result<MeshRenderer> {
-        anyhow::bail!("Unable to build plane: Deprecated, remaking plane system. Use the Cube model instead");
+        anyhow::bail!(
+            "Unable to build plane: Deprecated, remaking plane system. Use the Cube model instead"
+        );
         // self.build_raw(
         //     graphics,
         //     texture_bytes,
@@ -75,7 +77,9 @@ impl PlaneBuilder {
         _registry: &AssetRegistry,
         _cache: &Mutex<HashMap<String, Arc<Model>>>,
     ) -> anyhow::Result<MeshRenderer> {
-        anyhow::bail!("Unable to build plane: Deprecated, remaking plane system. Use the Cube model instead");
+        anyhow::bail!(
+            "Unable to build plane: Deprecated, remaking plane system. Use the Cube model instead"
+        );
         // let label = if let Some(label) = label {
         //     label.to_string()
         // } else {
