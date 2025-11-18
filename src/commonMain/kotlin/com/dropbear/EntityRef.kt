@@ -23,16 +23,16 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 
     /**
-     * Fetches the transform component for the entity.
+     * Fetches the [EntityTransform] component for the entity.
      */
-    fun getTransform(): Transform? {
+    fun getTransform(): EntityTransform? {
         return engine.native.getTransform(id)
     }
 
     /**
-     * Sets and replaces the transform component for the entity.
+     * Sets and replaces the [EntityTransform] component for the entity.
      */
-    fun setTransform(transform: Transform?) {
+    fun setTransform(transform: EntityTransform?) {
         if (transform == null) return
         return engine.native.setTransform(id, transform)
     }

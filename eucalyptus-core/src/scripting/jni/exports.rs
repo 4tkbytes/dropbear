@@ -14,7 +14,7 @@ use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
 use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReference;
 use glam::{DQuat, DVec3};
@@ -95,31 +95,80 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
 
     let entity = convert_jlong_to_entity!(entity_id);
 
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &Transform)>(entity)
-        && let Some((_, transform)) = q.get()
+    if let Ok(mut q) = world.query_one::<(&EntityTransform)>(entity)
+        && let Some(transform) = q.get()
     {
-        let new_transform = *transform;
+        let wt = *transform.world();
 
         let transform_class = match env.find_class("com/dropbear/math/Transform") {
             Ok(c) => c,
             Err(_) => return JObject::null(),
         };
 
-        return match env.new_object(
+        let world_transform_java = match env.new_object(
             &transform_class,
             "(DDDDDDDDDD)V",
             &[
-                new_transform.position.x.into(),
-                new_transform.position.y.into(),
-                new_transform.position.z.into(),
-                new_transform.rotation.x.into(),
-                new_transform.rotation.y.into(),
-                new_transform.rotation.z.into(),
-                new_transform.rotation.w.into(),
-                new_transform.scale.x.into(),
-                new_transform.scale.y.into(),
-                new_transform.scale.z.into(),
+                wt.position.x.into(),
+                wt.position.y.into(),
+                wt.position.z.into(),
+                wt.rotation.x.into(),
+                wt.rotation.y.into(),
+                wt.rotation.z.into(),
+                wt.rotation.w.into(),
+                wt.scale.x.into(),
+                wt.scale.y.into(),
+                wt.scale.z.into(),
             ],
+        ) {
+            Ok(java_transform) => java_transform,
+            Err(_) => {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create world transform object"
+                );
+                return JObject::null();
+            }
+        };
+
+        let lt = *transform.local();
+
+        let local_transform_java = match env.new_object(
+            &transform_class,
+            "(DDDDDDDDDD)V",
+            &[
+                lt.position.x.into(),
+                lt.position.y.into(),
+                lt.position.z.into(),
+                lt.rotation.x.into(),
+                lt.rotation.y.into(),
+                lt.rotation.z.into(),
+                lt.rotation.w.into(),
+                lt.scale.x.into(),
+                lt.scale.y.into(),
+                lt.scale.z.into(),
+            ],
+        ) {
+            Ok(java_transform) => java_transform,
+            Err(_) => {
+                println!(
+                    "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create local transform object"
+                );
+                return JObject::null();
+            }
+        };
+
+        let entity_transform_class = match env.find_class("com/dropbear/EntityTransform") {
+            Ok(c) => c,
+            Err(_) => return JObject::null(),
+        };
+
+        return match env.new_object(
+            &entity_transform_class,
+            "(Lcom/dropbear/math/Transform;Lcom/dropbear/math/Transform)V",
+            &[
+                JValue::Object(&local_transform_java),
+                JValue::Object(&world_transform_java),
+            ]
         ) {
             Ok(java_transform) => java_transform,
             Err(_) => {
@@ -128,7 +177,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
                 );
                 JObject::null()
             }
-        };
+        }
     }
 
     println!(

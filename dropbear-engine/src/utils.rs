@@ -100,6 +100,9 @@ pub enum ResourceReferenceType {
     /// In specifics, the plane (as from [`crate::procedural::plane::PlaneBuilder`]) is a model that
     /// has meshes and a textured material, but is created "in house" (during runtime instead of loaded).
     Plane,
+    
+    /// A cube.
+    Cube,
 }
 
 impl Default for ResourceReferenceType {

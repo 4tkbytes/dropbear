@@ -1,11 +1,13 @@
+use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
     RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
-
+use dropbear_macro::SerializableComponent;
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
@@ -118,7 +120,7 @@ impl From<LightType> for u32 {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SerializableComponent)]
 pub struct LightComponent {
     pub position: DVec3,          // point, spot
     pub direction: DVec3,         // directional, spot

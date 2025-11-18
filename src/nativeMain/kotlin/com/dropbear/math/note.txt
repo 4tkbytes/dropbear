@@ -1,2 +1,0 @@
-this folder is just so i can easily add any future packages easily in intellij without all the folders
-being clumped up. 

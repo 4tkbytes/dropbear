@@ -2,6 +2,7 @@ package com.dropbear.ffi
 
 import com.dropbear.Camera
 import com.dropbear.EntityId
+import com.dropbear.EntityTransform
 import com.dropbear.asset.AssetHandle
 import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
@@ -36,8 +37,8 @@ expect class NativeEngine {
     fun getAttachedCamera(entityId: EntityId): Camera?
     fun setCamera(camera: Camera);
 
-    fun getTransform(entityId: EntityId): Transform?
-    fun setTransform(entityId: EntityId, transform: Transform)
+    fun getTransform(entityId: EntityId): EntityTransform?
+    fun setTransform(entityId: EntityId, transform: EntityTransform)
 
     // ------------------------ MODEL PROPERTIES -------------------------
 

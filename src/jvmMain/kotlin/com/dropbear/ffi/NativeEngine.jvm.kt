@@ -3,6 +3,7 @@ package com.dropbear.ffi
 import com.dropbear.Camera
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
+import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
 import com.dropbear.exceptionOnError
@@ -76,11 +77,11 @@ actual class NativeEngine {
     }
 
 
-    actual fun getTransform(entityId: EntityId): Transform? {
+    actual fun getTransform(entityId: EntityId): EntityTransform? {
         return JNINative.getTransform(worldHandle, entityId.id)
     }
 
-    actual fun setTransform(entityId: EntityId, transform: Transform) {
+    actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
         return JNINative.setTransform(worldHandle, entityId.id, transform)
     }
 

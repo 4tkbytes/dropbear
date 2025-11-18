@@ -1,3 +1,4 @@
+use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,44 @@ use crate::{
     utils::ResourceReference,
 };
 use anyhow::anyhow;
+use dropbear_macro::SerializableComponent;
+
+/// A type of transform that is attached to all entities. It contains the local and world transforms.
+#[derive(Default, Debug, Deserialize, Serialize, Copy, PartialEq, Clone, SerializableComponent)]
+pub struct EntityTransform {
+    local: Transform,
+    world: Transform,
+}
+
+impl EntityTransform {
+    pub fn new(local: Transform, world: Transform) -> Self {
+        Self { local, world }
+    }
+
+    /// Gets a reference to the local transform
+    pub fn local(&self) -> &Transform {
+        &self.local
+    }
+
+    /// Gets a reference to the world transform
+    pub fn world(&self) -> &Transform {
+        &self.world
+    }
+
+    /// Combines both transforms into one, propagating the local transform
+    /// to the world transform and returning a uniform [Transform]
+    pub fn sync(&self) -> Transform {
+        let scaled_pos = self.local.position * self.world.scale;
+        let rotated_pos = self.world.rotation * scaled_pos;
+        let position = self.world.position + rotated_pos;
+
+        Transform {
+            position,
+            rotation: self.world.rotation * self.local.rotation,
+            scale: self.world.scale * self.local.scale,
+        }
+    }
+}
 
 /// A type that represents a position, rotation and scale of an entity
 ///
@@ -32,9 +71,9 @@ pub struct Transform {
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            position: DVec3::new(0.0, 0.0, 0.0),
+            position: DVec3::ZERO,
             rotation: DQuat::IDENTITY,
-            scale: DVec3::new(1.0, 1.0, 1.0),
+            scale: DVec3::ONE,
         }
     }
 }
