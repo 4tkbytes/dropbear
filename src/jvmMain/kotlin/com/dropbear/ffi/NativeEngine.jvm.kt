@@ -3,6 +3,7 @@ package com.dropbear.ffi
 import com.dropbear.Camera
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
+import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
 import com.dropbear.exceptionOnError
@@ -76,20 +77,12 @@ actual class NativeEngine {
     }
 
 
-    actual fun getWorldTransform(entityId: EntityId): Transform? {
-        return JNINative.getWorldTransform(worldHandle, entityId.id)
+    actual fun getTransform(entityId: EntityId): EntityTransform? {
+        return JNINative.getTransform(worldHandle, entityId.id)
     }
 
-    actual fun getLocalTransform(entityId: EntityId): Transform? {
-        return JNINative.getLocalTransform(worldHandle, entityId.id)
-    }
-
-    actual fun commitWorldTransform(entityId: EntityId, transform: Transform) {
-        return JNINative.commitWorldTransform(worldHandle, entityId.id, transform)
-    }
-
-    actual fun commitLocalTransform(entityId: EntityId, transform: Transform) {
-        return JNINative.commitLocalTransform(worldHandle, entityId.id, transform)
+    actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
+        return JNINative.setTransform(worldHandle, entityId.id, transform)
     }
 
     actual fun printInputState() {
@@ -335,5 +328,9 @@ actual class NativeEngine {
 
     actual fun getAllTextures(entityHandle: Long): Array<String> {
         return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
+    }
+
+    actual fun propagateTransform(entityId: EntityId) {
+        JNINative.propagateTransform(worldHandle, entityId.id)
     }
 }

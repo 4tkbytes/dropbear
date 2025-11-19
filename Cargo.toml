@@ -6,7 +6,7 @@ package.repository = "https://github.com/4tkbytes/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
-members = [ "dropbear-engine", "dropbear-shader", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
+members = [ "dropbear-engine", "dropbear-macro", "dropbear-shader", "dropbear-traits", "dropbear_future-queue", "eucalyptus-core", "eucalyptus-editor", "magna-carta", "redback-runtime"]
 
 [workspace.dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -64,6 +64,9 @@ dashmap = "6.1"
 open = "5.3"
 egui_plot = "0.34"
 memory-stats = "1.2"
+typetag = "0.2"
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
 
 [workspace.dependencies.image]
 version = "0.25"

@@ -1,5 +1,5 @@
 use crate::states::ModelProperties;
-use dropbear_engine::entity::Transform;
+use dropbear_engine::entity::{EntityTransform};
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::utils::ResourceReference;
@@ -17,8 +17,8 @@ pub struct PendingSpawn {
     pub asset_path: ResourceReference,
     /// The name/label of the asset
     pub asset_name: String,
-    /// The [`Transform`] properties (position)
-    pub transform: Transform,
+    /// The [`EntityTransform`] properties (position)
+    pub transform: EntityTransform,
     /// The properties of a model, as specified in [`ModelProperties`]
     pub properties: ModelProperties,
     /// An optional future handle to an object.

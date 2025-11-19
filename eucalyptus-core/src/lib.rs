@@ -10,6 +10,11 @@ pub mod spawn;
 pub mod states;
 pub mod utils;
 pub mod window;
+pub mod scene;
+mod component;
+
+pub use dropbear_traits as traits;
+pub use dropbear_macro as macros;
 
 pub use egui;
 

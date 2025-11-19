@@ -1,4 +1,4 @@
-use crate::states::SceneConfig;
+use crate::scene::SceneConfig;
 use std::collections::HashMap;
 // #[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Debug)]
 // pub struct RuntimeData {

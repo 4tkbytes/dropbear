@@ -1,5 +1,5 @@
 use crate::editor::{
-    ComponentType, Editor, EditorState, EntityType, PendingSpawn2, Signal, UndoableAction,
+    ComponentType, Editor, EditorState, EntityType, PendingSpawnType, Signal, UndoableAction,
 };
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MeshRenderer, Transform};
@@ -667,22 +667,22 @@ impl SignalController for Editor {
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Light")).clicked() {
                             log::debug!("Creating new lighting");
-                            self.signal = Signal::Spawn(PendingSpawn2::Light);
+                            self.signal = Signal::Spawn(PendingSpawnType::Light);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
                             log::debug!("Creating new plane");
-                            self.signal = Signal::Spawn(PendingSpawn2::Plane);
+                            self.signal = Signal::Spawn(PendingSpawnType::Plane);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
                             log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawn2::Cube);
+                            self.signal = Signal::Spawn(PendingSpawnType::Cube);
                         }
 
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
                             log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawn2::Camera);
+                            self.signal = Signal::Spawn(PendingSpawnType::Camera);
                         }
                     });
                 if !show {
@@ -768,7 +768,7 @@ impl SignalController for Editor {
             }
             Signal::Spawn(entity_type) => {
                 match entity_type {
-                    crate::editor::PendingSpawn2::Light => {
+                    crate::editor::PendingSpawnType::Light => {
                         let light = Light::new(
                             graphics.clone(),
                             LightComponent::default(),
@@ -779,7 +779,7 @@ impl SignalController for Editor {
                         self.light_spawn_queue.push(handle);
                         success!("Pushed light to queue");
                     }
-                    crate::editor::PendingSpawn2::Plane => {
+                    crate::editor::PendingSpawnType::Plane => {
                         let transform = Transform::new();
                         let mut props = ModelProperties::new();
                         props.add_property("width".to_string(), Value::Float(500.0));
@@ -798,7 +798,7 @@ impl SignalController for Editor {
                         });
                         success!("Pushed plane to queue");
                     }
-                    PendingSpawn2::Cube => {
+                    PendingSpawnType::Cube => {
                         let pending = PendingSpawn {
                             asset_path: ResourceReference::from_bytes(include_bytes!(
                                 "../../resources/models/cube.glb"
@@ -811,7 +811,7 @@ impl SignalController for Editor {
                         push_pending_spawn(pending);
                         success!("Pushed cube to queue");
                     }
-                    PendingSpawn2::Camera => {
+                    PendingSpawnType::Camera => {
                         let camera = Camera::predetermined(graphics.clone(), None);
                         let component = CameraComponent::new();
                         {

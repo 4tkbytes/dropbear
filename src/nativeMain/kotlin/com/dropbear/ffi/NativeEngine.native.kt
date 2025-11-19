@@ -9,6 +9,7 @@ package com.dropbear.ffi
 
 import com.dropbear.Camera
 import com.dropbear.EntityId
+import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
 import com.dropbear.exceptionOnError
@@ -61,7 +62,7 @@ actual class NativeEngine {
         }
     }
 
-    actual fun getWorldTransform(entityId: EntityId): Transform? {
+    actual fun getTransform(entityId: EntityId): EntityTransform? {
         val world = worldHandle ?: return null
         memScoped {
             val outTransform = alloc<NativeTransform>()
@@ -70,114 +71,60 @@ actual class NativeEngine {
                 entity_id = entityId.id,
                 out_transform = outTransform.ptr
             )
-            if (result == 0) {
-                return Transform(
-                    position = com.dropbear.math.Vector3D(
-                        outTransform.position_x,
-                        outTransform.position_y,
-                        outTransform.position_z
-                    ),
-                    rotation = com.dropbear.math.QuaternionD(
-                        outTransform.rotation_x,
-                        outTransform.rotation_y,
-                        outTransform.rotation_z,
-                        outTransform.rotation_w
-                    ),
-                    scale = com.dropbear.math.Vector3D(
-                        outTransform.scale_x,
-                        outTransform.scale_y,
-                        outTransform.scale_z
-                    )
-                )
-            } else {
-                return null
-            }
+//            if (result == 0) {
+//                return Transform(
+//                    position = com.dropbear.math.Vector3D(
+//                        outTransform.position_x,
+//                        outTransform.position_y,
+//                        outTransform.position_z
+//                    ),
+//                    rotation = com.dropbear.math.QuaternionD(
+//                        outTransform.rotation_x,
+//                        outTransform.rotation_y,
+//                        outTransform.rotation_z,
+//                        outTransform.rotation_w
+//                    ),
+//                    scale = com.dropbear.math.Vector3D(
+//                        outTransform.scale_x,
+//                        outTransform.scale_y,
+//                        outTransform.scale_z
+//                    )
+//                )
+//            } else {
+//                return null
+//            }
+            TODO("Function com.dropbear.ffi.NativeEngine.native.getTransform() not completed yet, will return NULL")
         }
     }
 
-    actual fun getLocalTransform(entityId: EntityId): Transform? {
-        val world = worldHandle ?: return null
-        memScoped {
-            val outTransform = alloc<NativeTransform>()
-            val result = dropbear_get_transform(
-                world_ptr = world.reinterpret(),
-                entity_id = entityId.id,
-                out_transform = outTransform.ptr
-            )
-            if (result == 0) {
-                return Transform(
-                    position = com.dropbear.math.Vector3D(
-                        outTransform.position_x,
-                        outTransform.position_y,
-                        outTransform.position_z
-                    ),
-                    rotation = com.dropbear.math.QuaternionD(
-                        outTransform.rotation_x,
-                        outTransform.rotation_y,
-                        outTransform.rotation_z,
-                        outTransform.rotation_w
-                    ),
-                    scale = com.dropbear.math.Vector3D(
-                        outTransform.scale_x,
-                        outTransform.scale_y,
-                        outTransform.scale_z
-                    )
-                )
-            } else {
-                return null
-            }
-        }
+    actual fun propagateTransform(entityId: EntityId) {
+        TODO("Not yet implemented")
     }
 
-    actual fun commitWorldTransform(entityId: EntityId, transform: Transform) {
+    actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
         val world = worldHandle ?: return
         memScoped {
-            val nativeTransform = cValue<NativeTransform> {
-                position_x = transform.position.x
-                position_y = transform.position.y
-                position_z = transform.position.z
-
-                rotation_w = transform.rotation.w
-                rotation_x = transform.rotation.x
-                rotation_y = transform.rotation.y
-                rotation_z = transform.rotation.z
-
-                scale_x = transform.scale.x
-                scale_y = transform.scale.y
-                scale_z = transform.scale.z
-            }
-
-            dropbear_set_transform(
-                world_ptr = world.reinterpret(),
-                entity_id = entityId.id,
-                transform = nativeTransform
-            )
-        }
-    }
-
-    actual fun commitLocalTransform(entityId: EntityId, transform: Transform) {
-        val world = worldHandle ?: return
-        memScoped {
-            val nativeTransform = cValue<NativeTransform> {
-                position_x = transform.position.x
-                position_y = transform.position.y
-                position_z = transform.position.z
-
-                rotation_w = transform.rotation.w
-                rotation_x = transform.rotation.x
-                rotation_y = transform.rotation.y
-                rotation_z = transform.rotation.z
-
-                scale_x = transform.scale.x
-                scale_y = transform.scale.y
-                scale_z = transform.scale.z
-            }
-
-            dropbear_set_transform(
-                world_ptr = world.reinterpret(),
-                entity_id = entityId.id,
-                transform = nativeTransform
-            )
+//            val nativeTransform = cValue<NativeTransform> {
+//                position_x = transform.position.x
+//                position_y = transform.position.y
+//                position_z = transform.position.z
+//
+//                rotation_w = transform.rotation.w
+//                rotation_x = transform.rotation.x
+//                rotation_y = transform.rotation.y
+//                rotation_z = transform.rotation.z
+//
+//                scale_x = transform.scale.x
+//                scale_y = transform.scale.y
+//                scale_z = transform.scale.z
+//            }
+//
+//            dropbear_set_transform(
+//                world_ptr = world.reinterpret(),
+//                entity_id = entityId.id,
+//                transform = nativeTransform
+//            )
+            TODO("Function com.dropbear.ffi.NativeEngine.native.setTransform() not completed yet, will not do any action")
         }
     }
 

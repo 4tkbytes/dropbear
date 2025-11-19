@@ -21,14 +21,14 @@ use dropbear_engine::{
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
     lighting::{Light, LightManager},
-    model::{MODEL_CACHE, ModelId},
+    model::{ModelId, MODEL_CACHE},
     scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
-use eucalyptus_core::hierarchy::Parent;
-use eucalyptus_core::states::Label;
+use eucalyptus_core::hierarchy::{Parent, SceneHierarchy};
+use eucalyptus_core::states::{Label, SerializedMeshRenderer};
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -37,8 +37,8 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, PROJECT, SCENES,
-        SceneConfig, SceneEntity, ScriptComponent, WorldLoadingStatus,
+        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, ScriptComponent, WorldLoadingStatus,
+        PROJECT, SCENES,
     },
     success, success_without_console,
     utils::ViewportMode,
@@ -62,6 +62,10 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
+use dropbear_engine::entity::EntityTransform;
+use dropbear_engine::lighting::LightComponent;
+use eucalyptus_core::scene::{SceneConfig, SceneEntity};
+use eucalyptus_core::traits::SerializableComponent;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -269,44 +273,66 @@ impl Editor {
             .iter_mut()
             .find(|scene| scene.scene_name == target_scene_name)
             .ok_or_else(|| anyhow::anyhow!("Active scene '{}' is not loaded", target_scene_name))?;
+        
         scene.entities.clear();
-        scene.lights.clear();
-        scene.cameras.clear();
+        scene.hierarchy_map = SceneHierarchy::new();
 
-        for (id, (label, renderer, transform, properties, script, parent)) in self
-            .world
-            .query::<(
-                &Label,
-                &MeshRenderer,
-                Option<&Transform>,
-                &ModelProperties,
-                Option<&ScriptComponent>,
-                Option<&Parent>,
-            )>()
-            .iter()
-        {
-            let transform = *transform.unwrap_or(&Transform::default());
+        let labels = self.world.query::<&Label>().iter().map(|(e, l)| (e, l.clone())).collect::<Vec<_>>();
+
+        for (id, label) in labels {
             let entity_label = label.clone();
+            let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
 
-            let camera_config = if let Ok(mut camera_query) =
-                self.world.query_one::<(&Camera, &CameraComponent)>(id)
+            if let Ok(transform) = self.world.get::<&EntityTransform>(id) {
+                components.push(Box::new(*transform));
+            }
+
+            if let Ok(renderer) = self.world.get::<&MeshRenderer>(id) {
+                let serialized = SerializedMeshRenderer {
+                    handle: renderer.handle().path.clone(),
+                    material_override: renderer.material_overrides().to_vec(),
+                };
+                components.push(Box::new(serialized));
+            }
+
+            if let Ok(mut q) = self.world.query_one::<&ModelProperties>(id) && let Some(properties) = q.get() {
+                components.push(Box::new(properties.clone()));
+            }
+
+            if let Ok(mut camera_query) = self.world.query_one::<(&Camera, &CameraComponent)>(id)
+                && let Some((camera, component)) = camera_query.get()
             {
-                if let Some((camera, component)) = camera_query.get() {
-                    Some(CameraConfig::from_ecs_camera(camera, component))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+                let camera_config = CameraConfig::from_ecs_camera(camera, component);
+                components.push(Box::new(camera_config));
+            }
 
-            let children = if let Some(parent_component) = parent {
-                let mut collected = Vec::new();
+            if let Ok(mut light_query) = self.world.query_one::<(&Light, &LightComponent, &EntityTransform)>(id) {
+                if let Some((light, light_component, entity_transform)) = light_query.get() {
+                    let light_config = LightConfig {
+                        label: light.cube_model.label.to_string(),
+                        transform: entity_transform.sync(),
+                        light_component: light_component.clone(),
+                        enabled: light_component.enabled,
+                        entity_id: Some(id),
+                    };
+                    components.push(Box::new(light_config));
+                }
+            }
+
+            if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(id) && let Some(script) = q.get() {
+                components.push(Box::new(script.clone()));
+            }
+
+            let mut parent_component = None;
+
+            if let Ok(comp) = self.world.query_one_mut::<&Parent>(id) {
+                parent_component = Some(comp.clone());
+            }
+
+            if let Some(parent_component) = parent_component {
                 for &child_entity in parent_component.children() {
-                    if let Ok(mut child_query) = self.world.query_one::<&Label>(child_entity)
-                        && let Some(child_label) = child_query.get()
-                    {
-                        collected.push(child_label.clone());
+                    if let Ok(child_label) = self.world.query_one_mut::<&Label>(child_entity) {
+                        scene.hierarchy_map.set_parent(child_label.clone(), entity_label.clone());
                     } else {
                         log::warn!(
                             "Unable to resolve child entity {:?} for parent '{}' when saving scene",
@@ -315,69 +341,27 @@ impl Editor {
                         );
                     }
                 }
-
-                if collected.is_empty() {
-                    None
-                } else {
-                    Some(collected)
-                }
-            } else {
-                None
-            };
+            }
 
             let scene_entity = SceneEntity {
-                model_path: renderer.handle().path.clone(),
                 label: entity_label.clone(),
-                transform,
-                properties: properties.clone(),
-                script: script.cloned(),
-                camera: camera_config,
-                children,
-                material_overrides: renderer.material_overrides().to_vec(),
+                components,
                 entity_id: Some(id),
             };
 
             scene.entities.push(scene_entity);
-            log::debug!("Pushed entity: {}", entity_label);
-        }
-
-        for (id, (light_component, transform, light)) in self
-            .world
-            .query::<(
-                &dropbear_engine::lighting::LightComponent,
-                &Transform,
-                &Light,
-            )>()
-            .iter()
-        {
-            let light_config = LightConfig {
-                label: light.cube_model.label.to_string(),
-                transform: *transform,
-                light_component: light_component.clone(),
-                enabled: light_component.enabled,
-                entity_id: Some(id),
-            };
-
-            scene.lights.push(light_config);
-            log::debug!("Pushed light into lights: {}", light.cube_model.label);
-        }
-
-        for (id, (camera, component)) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
-            if self.world.get::<&MeshRenderer>(id).is_err() {
-                let camera_config = CameraConfig::from_ecs_camera(camera, component);
-                scene.cameras.push(camera_config);
-                log::debug!("Pushed standalone camera into cameras: {}", camera.label);
-            }
+            log::debug!("Saved entity: {}", entity_label);
         }
 
         log::info!(
-            "Saved {} entities and camera configs to scene '{}'",
+            "Saved {} entities to scene '{}'",
             scene.entities.len(),
             scene.scene_name
         );
 
         Ok(())
     }
+
     fn persist_active_scene_to_disk(&self) -> anyhow::Result<()> {
         let target_scene_name = self.current_scene_name.clone().or_else(|| {
             let scenes = SCENES.read();
@@ -441,16 +425,6 @@ impl Editor {
                         self.current_state =
                             WorldLoadingStatus::LoadingEntity { index, name, total };
                     }
-                    WorldLoadingStatus::LoadingLight { index, name, total } => {
-                        log::debug!("Loading light: {} ({}/{})", name, index + 1, total);
-                        self.current_state =
-                            WorldLoadingStatus::LoadingLight { index, name, total };
-                    }
-                    WorldLoadingStatus::LoadingCamera { index, name, total } => {
-                        log::debug!("Loading camera: {} ({}/{})", name, index + 1, total);
-                        self.current_state =
-                            WorldLoadingStatus::LoadingCamera { index, name, total };
-                    }
                     WorldLoadingStatus::Completed => {
                         log::debug!(
                             "Received WorldLoadingStatus::Completed - project loading finished"
@@ -493,12 +467,6 @@ impl Editor {
                         }
                         WorldLoadingStatus::LoadingEntity { name, .. } => {
                             ui.label(format!("Loading entity: {}", name));
-                        }
-                        WorldLoadingStatus::LoadingLight { name, .. } => {
-                            ui.label(format!("Loading light: {}", name));
-                        }
-                        WorldLoadingStatus::LoadingCamera { name, .. } => {
-                            ui.label(format!("Loading camera: {}", name));
                         }
                         WorldLoadingStatus::Completed => {
                             ui.label("Done!");
@@ -560,9 +528,8 @@ impl Editor {
                 *a_c = Some(cam);
 
                 log::info!(
-                    "Successfully loaded scene with {} entities and {} camera configs",
+                    "Successfully loaded scene with {} entities",
                     first_scene.entities.len(),
-                    first_scene.cameras.len(),
                 );
             } else {
                 let existing_debug_camera = {
@@ -906,20 +873,26 @@ impl Editor {
                             let query = self.world.query_one::<(
                                 &Label,
                                 &MeshRenderer,
-                                &Transform,
+                                &EntityTransform,
                                 &ModelProperties,
                             )>(*entity);
                             if let Ok(mut q) = query {
-                                if let Some((entity_label, e, t, props)) = q.get() {
-                                    let s_entity = states::SceneEntity {
-                                        model_path: e.handle().path.clone(),
+                                if let Some((entity_label, renderer, transform, props)) = q.get() {
+                                    let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
+                                    
+                                    components.push(Box::new(*transform));
+                                    
+                                    let serialized_renderer = SerializedMeshRenderer {
+                                        handle: renderer.handle().path.clone(),
+                                        material_override: renderer.material_overrides().to_vec(),
+                                    };
+                                    components.push(Box::new(serialized_renderer));
+                                    
+                                    components.push(Box::new(props.clone()));
+                                    
+                                    let s_entity = SceneEntity {
                                         label: entity_label.clone(),
-                                        transform: *t,
-                                        properties: props.clone(),
-                                        script: None,
-                                        camera: None,
-                                        children: None,
-                                        material_overrides: e.material_overrides().to_vec(),
+                                        components,
                                         entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);
@@ -1783,7 +1756,7 @@ pub enum Signal {
     RemoveComponent(hecs::Entity, Box<ComponentType>),
     CreateEntity,
     LogEntities,
-    Spawn(PendingSpawn2),
+    Spawn(PendingSpawnType),
 }
 
 #[derive(Debug)]
@@ -1817,7 +1790,7 @@ struct PendingSceneLoad {
     scene: SceneConfig,
 }
 
-pub enum PendingSpawn2 {
+pub enum PendingSpawnType {
     Light,
     Plane,
     Cube,

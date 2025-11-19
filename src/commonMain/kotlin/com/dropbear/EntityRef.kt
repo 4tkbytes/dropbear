@@ -23,33 +23,26 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 
     /**
-     * Fetches the world transform component for the entity.
+     * Fetches the [EntityTransform] component for the entity.
      */
-    fun getWorldTransform(): Transform? {
-        return engine.native.getWorldTransform(id)
+    fun getTransform(): EntityTransform? {
+        return engine.native.getTransform(id)
     }
 
     /**
-     * Fetches the local transform component for the entity
+     * Walks up the hierarchy to find the transform of the parent, then multiply to create a propagated [Transform].
+     * This will update the entity's world transform based on its parent's world transform.
      */
-    fun getLocalTransform(): Transform? {
-        return engine.native.getLocalTransform(id)
+    fun propagate() {
+        engine.native.propagateTransform(id)
     }
 
     /**
-     * Sets and replaces the world transform component for the entity.
+     * Sets and replaces the [EntityTransform] component for the entity.
      */
-    fun commitWorld(transform: Transform?) {
+    fun setTransform(transform: EntityTransform?) {
         if (transform == null) return
-        return engine.native.setWorldTransform(id, transform)
-    }
-
-    /**
-     * Sets and replaces the local transfrom component for the entity
-     */
-    fun commitLocal(transform: Transform?) {
-        if (transform == null) return
-        return engine.native.setLocalTransform(id, transform)
+        return engine.native.setTransform(id, transform)
     }
 
     /**

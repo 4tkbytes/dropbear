@@ -1,8 +1,11 @@
-use dropbear_engine::camera::{Camera, CameraSettings};
+use crate::traits::SerializableComponent;
+use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
+use dropbear_macro::SerializableComponent;
+use crate::states::CameraConfig;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, SerializableComponent)]
 pub struct CameraComponent {
     pub settings: CameraSettings,
     pub camera_type: CameraType,
@@ -27,9 +30,35 @@ impl CameraComponent {
     pub fn update(&mut self, camera: &mut Camera) {
         camera.settings = self.settings;
     }
+}
 
-    // setting camera offset is just adding the CameraFollowTarget struct
-    // to the ecs system
+impl From<CameraConfig> for CameraBuilder {
+    fn from(value: CameraConfig) -> Self {
+        Self {
+            eye: value.eye.into(),
+            target: value.target.into(),
+            up: value.up.into(),
+            aspect: value.aspect,
+            znear: value.near as f64,
+            zfar: value.far as f64,
+            settings: CameraSettings {
+                speed: value.speed as f64,
+                sensitivity: value.sensitivity as f64,
+                fov_y: value.fov as f64,
+            },
+        }
+    }
+}
+
+impl From<CameraConfig> for CameraComponent {
+    fn from(value: CameraConfig) -> Self {
+        let settings = CameraSettings::new(value.speed as f64, value.sensitivity as f64, value.fov as f64);
+        Self {
+            settings,
+            camera_type: value.camera_type,
+            starting_camera: value.starting_camera,
+        }
+    }
 }
 
 pub struct PlayerCamera;
