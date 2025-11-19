@@ -39,6 +39,16 @@ impl EntityTransform {
         &self.world
     }
 
+    /// Gets a mutable reference to the local transform
+    pub fn local_mut(&mut self) -> &mut Transform {
+        &mut self.local
+    }
+
+    /// Gets a mutable reference to the world transform
+    pub fn world_mut(&mut self) -> &mut Transform {
+        &mut self.world
+    }
+
     /// Combines both transforms into one, propagating the local transform
     /// to the world transform and returning a uniform [Transform]
     pub fn sync(&self) -> Transform {

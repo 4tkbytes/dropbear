@@ -2,6 +2,8 @@ package com.dropbear.ffi;
 
 import com.dropbear.Camera;
 import com.dropbear.EntityTransform;
+import com.dropbear.math.Transform;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Describes all the functions that are available in
@@ -37,6 +39,7 @@ public class JNINative {
 
     // transformations
     public static native EntityTransform getTransform(long handle, long entityHandle);
+    public static native void propagateTransform(long worldHandle, long id);
     public static native void setTransform(long worldHandle, long id, EntityTransform transform);
 
     // properties

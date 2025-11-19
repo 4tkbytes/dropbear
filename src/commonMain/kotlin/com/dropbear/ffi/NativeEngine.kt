@@ -38,6 +38,7 @@ expect class NativeEngine {
     fun setCamera(camera: Camera);
 
     fun getTransform(entityId: EntityId): EntityTransform?
+    fun propagateTransform(entityId: EntityId)
     fun setTransform(entityId: EntityId, transform: EntityTransform)
 
     // ------------------------ MODEL PROPERTIES -------------------------

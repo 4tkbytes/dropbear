@@ -93,9 +93,12 @@ actual class NativeEngine {
 //            } else {
 //                return null
 //            }
-            println("Function com.dropbear.ffi.NativeEngine.native.getTransform() not completed yet, will return NULL")
-            return null
+            TODO("Function com.dropbear.ffi.NativeEngine.native.getTransform() not completed yet, will return NULL")
         }
+    }
+
+    actual fun propagateTransform(entityId: EntityId) {
+        TODO("Not yet implemented")
     }
 
     actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
@@ -121,7 +124,7 @@ actual class NativeEngine {
 //                entity_id = entityId.id,
 //                transform = nativeTransform
 //            )
-            println("Function com.dropbear.ffi.NativeEngine.native.setTransform() not completed yet, will not do any action")
+            TODO("Function com.dropbear.ffi.NativeEngine.native.setTransform() not completed yet, will not do any action")
         }
     }
 

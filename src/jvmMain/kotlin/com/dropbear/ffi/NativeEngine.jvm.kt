@@ -329,4 +329,8 @@ actual class NativeEngine {
     actual fun getAllTextures(entityHandle: Long): Array<String> {
         return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
     }
+
+    actual fun propagateTransform(entityId: EntityId) {
+        JNINative.propagateTransform(worldHandle, entityId.id)
+    }
 }
