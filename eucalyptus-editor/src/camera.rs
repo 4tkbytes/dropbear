@@ -1,5 +1,5 @@
 use crate::editor::component::InspectableComponent;
-use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
+use crate::editor::{Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::camera::Camera;
 use egui::{CollapsingHeader, Ui};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
@@ -38,7 +38,7 @@ impl InspectableComponent for Camera {
                                     if let Some(orig) = cfg.label_original.take() {
                                         UndoableAction::push_to_undo(
                                             undo_stack,
-                                            UndoableAction::Label(ent, orig, EntityType::Entity),
+                                            UndoableAction::Label(ent, orig),
                                         );
                                         log::debug!("Pushed camera label change to undo stack");
                                     }

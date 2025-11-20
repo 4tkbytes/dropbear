@@ -7,7 +7,6 @@ pub mod scene;
 pub(crate) use crate::editor::dock::*;
 
 use crate::build::build;
-use crate::camera::UndoableCameraAction;
 use crate::debug;
 use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
@@ -37,7 +36,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, EntityNode, LightConfig, ModelProperties, ScriptComponent, WorldLoadingStatus,
+        CameraConfig, EditorTab, LightConfig, ModelProperties, ScriptComponent, WorldLoadingStatus,
         PROJECT, SCENES,
     },
     success, success_without_console,
@@ -50,10 +49,10 @@ use parking_lot::Mutex;
 use rfd::FileDialog;
 use std::path::Path;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap},
     fs,
     path::PathBuf,
-    sync::{Arc, LazyLock},
+    sync::{Arc},
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -1019,7 +1018,6 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view: self.texture_id.unwrap(),
-                        nodes: EntityNode::from_world(&self.world),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         world: &mut self.world,
@@ -1435,95 +1433,6 @@ impl Editor {
     }
 }
 
-pub static LOGGED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
-
-fn show_entity_tree(
-    ui: &mut egui::Ui,
-    nodes: &mut [EntityNode],
-    selected: &mut Option<hecs::Entity>,
-    id_source: &str,
-) {
-    egui_dnd::Dnd::new(ui, id_source).show_vec(nodes, |ui, item, handle, _dragging| {
-        match item.clone() {
-            EntityNode::Entity { id, name } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("⏹️");
-                    });
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-            EntityNode::Script { .. } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("📜");
-                    });
-                    ui.label("Script");
-                });
-            }
-            EntityNode::Group {
-                ref name,
-                ref mut children,
-                ref mut collapsed,
-            } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        let header = egui::CollapsingHeader::new(name)
-                            .default_open(!*collapsed)
-                            .show(ui, |ui| {
-                                show_entity_tree(ui, children, selected, name);
-                            });
-                        *collapsed = header.body_returned.is_none();
-                    });
-                });
-            }
-            EntityNode::Light { id, name } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        ui.label("💡");
-                    });
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-            EntityNode::Camera {
-                id,
-                name,
-                camera_type,
-            } => {
-                ui.horizontal(|ui| {
-                    handle.ui(ui, |ui| {
-                        let icon = match camera_type {
-                            CameraType::Debug => "🎥",  // Debug camera
-                            CameraType::Player => "📹", // Player camera
-                            CameraType::Normal => "📷", // Normal camera
-                        };
-                        ui.label(icon);
-                    });
-                    let display_name = format!(
-                        "{} ({})",
-                        name,
-                        match camera_type {
-                            CameraType::Debug => "Debug",
-                            CameraType::Player => "Player",
-                            CameraType::Normal => "Normal",
-                        }
-                    );
-                    let resp = ui.selectable_label(selected.as_ref().eq(&Some(&id)), display_name);
-                    if resp.clicked() {
-                        *selected = Some(id);
-                    }
-                });
-            }
-        }
-    });
-}
-
 /// Describes an action that is undoable
 #[derive(Debug)]
 pub enum UndoableAction {
@@ -1533,21 +1442,8 @@ pub enum UndoableAction {
     /// A spawn of the entity. Undoing will delete the entity
     Spawn(hecs::Entity),
     /// A change of label of the entity. Undoing will revert its label
-    Label(hecs::Entity, String, EntityType),
-    /// Removing a component. Undoing will add back the component.
-    RemoveComponent(hecs::Entity, Box<ComponentType>),
-    #[allow(dead_code)]
-    CameraAction(UndoableCameraAction),
-    RemoveStartingCamera(hecs::Entity),
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-// todo: deal with why there is no Camera
-pub enum EntityType {
-    Entity,
-    Light,
-    Camera,
+    Label(hecs::Entity, String),
+    RemoveStartingCamera(Entity),
 }
 
 impl UndoableAction {
@@ -1579,150 +1475,14 @@ impl UndoableAction {
                     Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
                 }
             }
-            UndoableAction::Label(entity, original_label, entity_type) => match entity_type {
-                EntityType::Entity => {
-                    let mut updated = false;
-
-                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
-                        if let Some(label_component) = label_query.get() {
-                            label_component.set(original_label.clone());
-                            updated = true;
-                        }
-                    }
-
-                    if let Ok(mut renderer_query) = world.query_one::<&mut MeshRenderer>(*entity) {
-                        if let Some(renderer) = renderer_query.get() {
-                            renderer.make_model_mut().label = original_label.clone();
-                            updated = true;
-                        }
-                    }
-
-                    if updated {
-                        log::debug!(
-                            "Reverted label for entity {:?} to '{}'",
-                            entity,
-                            original_label
-                        );
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!(
-                            "Unable to query the entity for label revert"
-                        ))
-                    }
-                }
-                EntityType::Light => {
-                    let mut updated = false;
-
-                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
-                        if let Some(label_component) = label_query.get() {
-                            label_component.set(original_label.clone());
-                            updated = true;
-                        }
-                    }
-
-                    if let Ok(mut q) = world.query_one::<&mut Light>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            adopted.label = original_label.clone();
-                            updated = true;
-                        }
-                    }
-
-                    if updated {
-                        log::debug!(
-                            "Reverted label for light {:?} to '{}'",
-                            entity,
-                            original_label
-                        );
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!(
-                            "Could not find a light to query for label revert"
-                        ))
-                    }
-                }
-                EntityType::Camera => {
-                    let mut updated = false;
-
-                    if let Ok(mut label_query) = world.query_one::<&mut Label>(*entity) {
-                        if let Some(label_component) = label_query.get() {
-                            label_component.set(original_label.clone());
-                            updated = true;
-                        }
-                    }
-
-                    if let Ok(mut q) = world.query_one::<&mut Camera>(*entity) {
-                        if let Some(adopted) = q.get() {
-                            adopted.label = original_label.clone();
-                            updated = true;
-                        }
-                    }
-
-                    if updated {
-                        log::debug!(
-                            "Reverted label for camera {:?} to '{}'",
-                            entity,
-                            original_label
-                        );
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!(
-                            "Could not find a camera to query for label revert"
-                        ))
-                    }
+            UndoableAction::Label(entity, original_label) => {
+                if let Ok(label) = world.query_one_mut::<&mut Label>(*entity) {
+                    label.set(original_label.clone());
+                    Ok(())
+                } else {
+                    anyhow::bail!("No entity found (with or without the Label property)");
                 }
             },
-            UndoableAction::RemoveComponent(entity, c_type) => {
-                match &**c_type {
-                    ComponentType::Script(component) => {
-                        world.insert_one(*entity, component.clone())?;
-                    }
-                    ComponentType::Camera(camera, component) => {
-                        world.insert(*entity, (camera.clone(), component.clone()))?;
-                    }
-                }
-                Ok(())
-            }
-            UndoableAction::CameraAction(action) => {
-                match action {
-                    UndoableCameraAction::Speed(entity, speed) => {
-                        if let Ok(mut q) =
-                            world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            && let Some((cam, comp)) = q.get()
-                        {
-                            comp.settings.speed = *speed;
-                            comp.update(cam);
-                        }
-                    }
-                    UndoableCameraAction::Sensitivity(entity, sensitivity) => {
-                        if let Ok(mut q) =
-                            world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            && let Some((cam, comp)) = q.get()
-                        {
-                            comp.settings.sensitivity = *sensitivity;
-                            comp.update(cam);
-                        }
-                    }
-                    UndoableCameraAction::Fov(entity, fov) => {
-                        if let Ok(mut q) =
-                            world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            && let Some((cam, comp)) = q.get()
-                        {
-                            comp.settings.fov_y = *fov;
-                            comp.update(cam);
-                        }
-                    }
-                    UndoableCameraAction::Type(entity, camera_type) => {
-                        if let Ok(mut q) =
-                            world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
-                            && let Some((cam, comp)) = q.get()
-                        {
-                            comp.camera_type = *camera_type;
-                            comp.update(cam);
-                        }
-                    }
-                };
-                Ok(())
-            }
             UndoableAction::RemoveStartingCamera(old) => {
                 for (_i, comp) in &mut world.query::<&mut CameraComponent>() {
                     comp.starting_camera = false;
@@ -1747,36 +1507,23 @@ pub enum Signal {
     Paste(SceneEntity),
     Delete,
     Undo,
-    // ScriptAction(ScriptAction),
-    // not actions required because follow target is set through scripting.
-    // CameraAction(CameraAction),
     Play,
     StopPlaying,
-    AddComponent(hecs::Entity, EntityType),
-    RemoveComponent(hecs::Entity, Box<ComponentType>),
     CreateEntity,
     LogEntities,
     Spawn(PendingSpawnType),
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-// todo: deal with the Camera and create an implementation
-pub enum ComponentType {
-    Script(ScriptComponent),
-    Camera(Box<Camera>, CameraComponent),
-}
-
 #[derive(Clone)]
 pub struct PlayModeBackup {
     entities: Vec<(
-        hecs::Entity,
+        Entity,
         MeshRenderer,
         Transform,
         ModelProperties,
         Option<ScriptComponent>,
     )>,
-    camera_data: Vec<(hecs::Entity, Camera, CameraComponent)>,
+    camera_data: Vec<(Entity, Camera, CameraComponent)>,
 }
 
 #[derive(Debug)]
@@ -1817,13 +1564,6 @@ impl IsWorldLoadedYet {
 
     pub fn is_fully_loaded(&self) -> bool {
         self.project_loaded && self.scene_loaded
-    }
-
-    // I don't know whether this should be kept or removed, but
-    // im adding dead code just in case.
-    #[allow(dead_code)]
-    pub fn is_project_ready(&self) -> bool {
-        self.project_loaded
     }
 
     pub fn mark_project_loaded(&mut self) {

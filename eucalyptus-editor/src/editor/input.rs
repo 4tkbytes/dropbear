@@ -1,6 +1,6 @@
 use super::*;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
+    entity::{MeshRenderer},
     input::{Controller, Keyboard, Mouse},
 };
 use eucalyptus_core::states::Label;
@@ -133,20 +133,19 @@ impl Keyboard for Editor {
                             let query = self.world.query_one::<(
                                 &Label,
                                 &MeshRenderer,
-                                &Transform,
+                                &EntityTransform,
                                 &ModelProperties,
                             )>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((label, renderer, t, props)) = q.get() {
                                     let s_entity = SceneEntity {
-                                        model_path: renderer.handle().path.clone(),
                                         label: label.clone(),
-                                        transform: *t,
-                                        properties: props.clone(),
-                                        script: None,
-                                        camera: None,
-                                        children: None,
-                                        material_overrides: renderer.material_overrides().to_vec(),
+                                        components: vec![
+                                            Box::new(props.clone()),
+                                            Box::new(SerializedMeshRenderer::from_renderer(&renderer)),
+                                            Box::new(t.clone()),
+
+                                        ],
                                         entity_id: None,
                                     };
                                     self.signal = Signal::Copy(s_entity);

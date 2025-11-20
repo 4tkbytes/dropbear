@@ -2,7 +2,6 @@ use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
     RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,

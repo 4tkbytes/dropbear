@@ -1,10 +1,8 @@
-use crate::states::ModelProperties;
-use dropbear_engine::entity::{EntityTransform};
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::utils::ResourceReference;
 use parking_lot::Mutex;
 use std::sync::{Arc, LazyLock};
+use crate::scene::SceneEntity;
 
 /// All spawns that are waiting to be spawned in.
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
@@ -13,14 +11,7 @@ pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
 /// A spawn that's waiting to be added into the world.
 #[derive(Clone, Debug)]
 pub struct PendingSpawn {
-    /// A [`ResourceReference`] to the asset
-    pub asset_path: ResourceReference,
-    /// The name/label of the asset
-    pub asset_name: String,
-    /// The [`EntityTransform`] properties (position)
-    pub transform: EntityTransform,
-    /// The properties of a model, as specified in [`ModelProperties`]
-    pub properties: ModelProperties,
+    pub scene_entity: SceneEntity,
     /// An optional future handle to an object.
     ///
     /// If one is specified, it is assumed that the returned object is a [`MeshRenderer`](dropbear_engine::entity::MeshRenderer).

@@ -26,6 +26,11 @@ typedef struct {
 } Vector3D;
 
 typedef struct {
+    NativeTransform local;
+    NativeTransform world;
+} NativeEntityTransform;
+
+typedef struct {
     double position_x;
     double position_y;
     double position_z;
@@ -61,28 +66,16 @@ typedef struct {
 
 int dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
 
-int dropbear_get_world_transform(
+int dropbear_get_transform(
     const World* world_ptr,
     int64_t entity_id,
-    NativeTransform* out_transform
+    NativeEntityTransform* out_transform
 );
 
-int dropbear_commit_world_transform(
+int dropbear_set_transform(
     const World* world_ptr,
     int64_t entity_id,
-    const NativeTransform transform
-);
-
-int dropbear_get_local_transform(
-    const World* world_ptr,
-    int64_t entity_id,
-    NativeTransform* out_transform
-);
-
-int dropbear_commit_local_transform(
-    const World* world_ptr,
-    int64_t entity_id,
-    const NativeTransform transform
+    const NativeEntityTransform transform
 );
 
 // property management

@@ -27,7 +27,6 @@ use jni::sys::{
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use dropbear_engine::lighting::Light;
 use crate::hierarchy::EntityTransformExt;
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity

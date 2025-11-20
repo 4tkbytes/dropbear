@@ -25,8 +25,19 @@ pub struct EntityTransform {
 }
 
 impl EntityTransform {
+    /// Creates a new [EntityTransform] from a local and world [Transform]
     pub fn new(local: Transform, world: Transform) -> Self {
         Self { local, world }
+    }
+
+    /// Creates a new [EntityTransform] from a world [Transform] and a default local transform.
+    ///
+    /// This is best for situations where a local transform is not required.
+    pub fn new_from_world(world: Transform) -> Self {
+        Self {
+            world,
+            local: Transform::default()
+        }
     }
 
     /// Gets a reference to the local transform

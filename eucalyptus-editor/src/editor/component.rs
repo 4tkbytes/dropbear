@@ -1,9 +1,9 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
-use crate::editor::{EntityType, Signal, StaticallyKept, UndoableAction};
+use crate::editor::{Signal, StaticallyKept, UndoableAction};
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use dropbear_engine::utils::ResourceReference;
@@ -206,6 +206,21 @@ impl InspectableComponent for ModelProperties {
     }
 }
 
+impl InspectableComponent for EntityTransform {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        signal: &mut Signal,
+        _label: &mut String
+    ) {
+        self.local_mut().inspect(entity, cfg, ui, undo_stack, signal, &mut "Local Transform".to_string());
+        self.world_mut().inspect(entity, cfg, ui, undo_stack, signal, &mut "World Transform".to_string());
+    }
+}
+
 impl InspectableComponent for Transform {
     fn inspect(
         &mut self,
@@ -214,380 +229,388 @@ impl InspectableComponent for Transform {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         _signal: &mut Signal,
-        _label: &mut String,
+        label: &mut String,
     ) {
         ui.vertical(|ui| {
-            CollapsingHeader::new("Transform")
+            CollapsingHeader::new(label.clone())
                 .default_open(true)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Position:");
                     });
 
-                    ui.horizontal(|ui| {
-                        ui.label("X:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut self.position.x)
-                                .speed(0.1)
-                                .fixed_decimals(3),
-                        );
+                    ui.horizontal_wrapped(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("X:");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut self.position.x)
+                                    .speed(0.1)
+                                    .fixed_decimals(3),
+                            );
 
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed X transform change to undo stack");
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
                             }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Y:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut self.position.y)
-                                .speed(0.1)
-                                .fixed_decimals(3),
-                        );
 
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Y transform change to undo stack");
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed X transform change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
                             }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Y:");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut self.position.y)
+                                    .speed(0.1)
+                                    .fixed_decimals(3),
+                            );
 
-                    ui.horizontal(|ui| {
-                        ui.label("Z:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut self.position.z)
-                                .speed(0.1)
-                                .fixed_decimals(3),
-                        );
-
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Z transform change to undo stack");
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
                             }
-                            cfg.transform_in_progress = false;
-                        }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Y transform change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Z:");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut self.position.z)
+                                    .speed(0.1)
+                                    .fixed_decimals(3),
+                            );
+
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Z transform change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
                     });
+
                     if ui.button("Reset Position").clicked() {
-                        self.position = glam::DVec3::ZERO;
+                        self.position = DVec3::ZERO;
                     }
 
                     ui.add_space(5.0);
 
-                    ui.horizontal(|ui| {
-                        ui.label("Rotation:");
-                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Rotation:");
+                        });
 
-                    let cached_rotation = cfg.transform_rotation_cache.get(entity).copied();
+                        let cached_rotation = cfg.transform_rotation_cache.get(entity).copied();
 
-                    let mut rotation_deg: DVec3 = if cfg.transform_in_progress {
-                        cached_rotation.unwrap_or_else(|| {
+                        let mut rotation_deg: DVec3 = if cfg.transform_in_progress {
+                            cached_rotation.unwrap_or_else(|| {
+                                let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
+                                DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
+                            })
+                        } else {
                             let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
-                            DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
-                        })
-                    } else {
-                        let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
-                        let mut degrees =
-                            DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees());
+                            let mut degrees =
+                                DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees());
 
-                        if let Some(prev) = cached_rotation {
-                            degrees.x = reconcile_angle(degrees.x, prev.x);
-                            degrees.y = reconcile_angle(degrees.y, prev.y);
-                            degrees.z = reconcile_angle(degrees.z, prev.z);
-                        }
-
-                        degrees.x = wrap_angle_degrees(degrees.x);
-                        degrees.y = wrap_angle_degrees(degrees.y);
-                        degrees.z = wrap_angle_degrees(degrees.z);
-
-                        cfg.transform_rotation_cache.insert(*entity, degrees);
-                        degrees
-                    };
-
-                    let mut rotation_changed = false;
-
-                    ui.horizontal(|ui| {
-                        ui.label("X:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut rotation_deg.x)
-                                .speed(0.5)
-                                .suffix("°")
-                                .range(-180.0..=180.0)
-                                .fixed_decimals(2),
-                        );
-
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.changed() {
-                            rotation_changed = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed X rotation change to undo stack");
+                            if let Some(prev) = cached_rotation {
+                                degrees.x = reconcile_angle(degrees.x, prev.x);
+                                degrees.y = reconcile_angle(degrees.y, prev.y);
+                                degrees.z = reconcile_angle(degrees.z, prev.z);
                             }
-                            cfg.transform_in_progress = false;
+
+                            degrees.x = wrap_angle_degrees(degrees.x);
+                            degrees.y = wrap_angle_degrees(degrees.y);
+                            degrees.z = wrap_angle_degrees(degrees.z);
+
+                            cfg.transform_rotation_cache.insert(*entity, degrees);
+                            degrees
+                        };
+
+                        let mut rotation_changed = false;
+
+                        ui.horizontal(|ui| {
+                            ui.label("Pitch (X):");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut rotation_deg.x)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .range(-180.0..=180.0)
+                                    .fixed_decimals(2),
+                            );
+
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.changed() {
+                                rotation_changed = true;
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed X rotation change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Yaw (Y):");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut rotation_deg.y)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .range(-180.0..=180.0)
+                                    .fixed_decimals(2),
+                            );
+
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.changed() {
+                                rotation_changed = true;
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Y rotation change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Roll (Z):");
+                            let response = ui.add(
+                                egui::DragValue::new(&mut rotation_deg.z)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .range(-180.0..=180.0)
+                                    .fixed_decimals(2),
+                            );
+
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.changed() {
+                                rotation_changed = true;
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Z rotation change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        if rotation_changed {
+                            rotation_deg.x = wrap_angle_degrees(rotation_deg.x);
+                            rotation_deg.y = wrap_angle_degrees(rotation_deg.y);
+                            rotation_deg.z = wrap_angle_degrees(rotation_deg.z);
+
+                            cfg.transform_rotation_cache.insert(*entity, rotation_deg);
+                            self.rotation = glam::DQuat::from_euler(
+                                glam::EulerRot::YXZ,
+                                rotation_deg.x.to_radians(),
+                                rotation_deg.y.to_radians(),
+                                rotation_deg.z.to_radians(),
+                            );
                         }
                     });
 
-                    ui.horizontal(|ui| {
-                        ui.label("Y:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut rotation_deg.y)
-                                .speed(0.5)
-                                .suffix("°")
-                                .range(-180.0..=180.0)
-                                .fixed_decimals(2),
-                        );
-
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.changed() {
-                            rotation_changed = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Y rotation change to undo stack");
-                            }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Z:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut rotation_deg.z)
-                                .speed(0.5)
-                                .suffix("°")
-                                .range(-180.0..=180.0)
-                                .fixed_decimals(2),
-                        );
-
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.changed() {
-                            rotation_changed = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Z rotation change to undo stack");
-                            }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
-
-                    if rotation_changed {
-                        rotation_deg.x = wrap_angle_degrees(rotation_deg.x);
-                        rotation_deg.y = wrap_angle_degrees(rotation_deg.y);
-                        rotation_deg.z = wrap_angle_degrees(rotation_deg.z);
-
-                        cfg.transform_rotation_cache.insert(*entity, rotation_deg);
-                        self.rotation = glam::DQuat::from_euler(
-                            glam::EulerRot::YXZ,
-                            rotation_deg.x.to_radians(),
-                            rotation_deg.y.to_radians(),
-                            rotation_deg.z.to_radians(),
-                        );
-                    }
                     if ui.button("Reset Rotation").clicked() {
                         self.rotation = glam::DQuat::IDENTITY;
                         cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
                     }
                     ui.add_space(5.0);
 
-                    ui.horizontal(|ui| {
-                        ui.label("Scale:");
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
-                            if ui
-                                .button(lock_icon)
-                                .on_hover_text("Lock uniform scaling")
-                                .clicked()
-                            {
-                                cfg.scale_locked = !cfg.scale_locked;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Scale:");
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
+                                if ui
+                                    .button(lock_icon)
+                                    .on_hover_text("Lock uniform scaling")
+                                    .clicked()
+                                {
+                                    cfg.scale_locked = !cfg.scale_locked;
+                                }
+                            });
+                        });
+
+                        let mut scale_changed = false;
+                        let mut new_scale = self.scale;
+
+                        ui.horizontal(|ui| {
+                            ui.label("X:");
+                            let response = ui.add(
+                                DragValue::new(&mut new_scale.x)
+                                    .speed(0.01)
+                                    .fixed_decimals(3),
+                            );
+
+                            if response.drag_started() {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.changed() {
+                                scale_changed = true;
+                                if cfg.scale_locked {
+                                    let scale_factor = new_scale.x / self.scale.x;
+                                    new_scale.y = self.scale.y * scale_factor;
+                                    new_scale.z = self.scale.z * scale_factor;
+                                }
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed X scale change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
                             }
                         });
-                    });
 
-                    let mut scale_changed = false;
-                    let mut new_scale = self.scale;
-
-                    ui.horizontal(|ui| {
-                        ui.label("X:");
-                        let response = ui.add(
-                            egui::DragValue::new(&mut new_scale.x)
+                        ui.horizontal(|ui| {
+                            ui.label("Y:");
+                            let y_slider = egui::DragValue::new(&mut new_scale.y)
                                 .speed(0.01)
-                                .fixed_decimals(3),
-                        );
+                                .fixed_decimals(3);
 
-                        if response.drag_started() {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
+                            let response = ui.add_enabled(!cfg.scale_locked, y_slider);
 
-                        if response.changed() {
-                            scale_changed = true;
-                            if cfg.scale_locked {
-                                let scale_factor = new_scale.x / self.scale.x;
-                                new_scale.y = self.scale.y * scale_factor;
-                                new_scale.z = self.scale.z * scale_factor;
+                            if response.drag_started() && !cfg.scale_locked {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
                             }
-                        }
 
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed X scale change to undo stack");
+                            if response.changed() {
+                                scale_changed = true;
                             }
-                            cfg.transform_in_progress = false;
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Y scale change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Z:");
+                            let z_slider = egui::DragValue::new(&mut new_scale.z)
+                                .speed(0.01)
+                                .fixed_decimals(3);
+
+                            let response = ui.add_enabled(!cfg.scale_locked, z_slider);
+
+                            if response.drag_started() && !cfg.scale_locked {
+                                cfg.transform_old_entity = Some(*entity);
+                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_in_progress = true;
+                            }
+
+                            if response.changed() {
+                                scale_changed = true;
+                            }
+
+                            if response.drag_stopped() && cfg.transform_in_progress {
+                                if let Some(ent) = cfg.transform_old_entity.take()
+                                    && let Some(orig) = cfg.transform_original_transform.take()
+                                {
+                                    UndoableAction::push_to_undo(
+                                        undo_stack,
+                                        UndoableAction::Transform(ent, orig),
+                                    );
+                                    log::debug!("Pushed Z scale change to undo stack");
+                                }
+                                cfg.transform_in_progress = false;
+                            }
+                        });
+
+                        if scale_changed {
+                            self.scale = new_scale;
                         }
                     });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Y:");
-                        let y_slider = egui::DragValue::new(&mut new_scale.y)
-                            .speed(0.01)
-                            .fixed_decimals(3);
-
-                        let response = ui.add_enabled(!cfg.scale_locked, y_slider);
-
-                        if response.drag_started() && !cfg.scale_locked {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.changed() {
-                            scale_changed = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Y scale change to undo stack");
-                            }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Z:");
-                        let z_slider = egui::DragValue::new(&mut new_scale.z)
-                            .speed(0.01)
-                            .fixed_decimals(3);
-
-                        let response = ui.add_enabled(!cfg.scale_locked, z_slider);
-
-                        if response.drag_started() && !cfg.scale_locked {
-                            cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
-                            cfg.transform_in_progress = true;
-                        }
-
-                        if response.changed() {
-                            scale_changed = true;
-                        }
-
-                        if response.drag_stopped() && cfg.transform_in_progress {
-                            if let Some(ent) = cfg.transform_old_entity.take()
-                                && let Some(orig) = cfg.transform_original_transform.take()
-                            {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Transform(ent, orig),
-                                );
-                                log::debug!("Pushed Z scale change to undo stack");
-                            }
-                            cfg.transform_in_progress = false;
-                        }
-                    });
-
-                    if scale_changed {
-                        self.scale = new_scale;
-                    }
                     if ui.button("Reset Scale").clicked() {
-                        self.scale = glam::DVec3::ONE;
+                        self.scale = DVec3::ONE;
                     }
                     ui.add_space(5.0);
                 });
@@ -669,7 +692,7 @@ impl InspectableComponent for MeshRenderer {
                             if let Some(orig) = cfg.label_original.take() {
                                 UndoableAction::push_to_undo(
                                     undo_stack,
-                                    UndoableAction::Label(ent, orig, EntityType::Entity),
+                                    UndoableAction::Label(ent, orig),
                                 );
                                 log::debug!("Pushed label change to undo stack (immediate)");
                             }
@@ -997,7 +1020,7 @@ impl InspectableComponent for Light {
                             if let Some(orig) = cfg.label_original.take() {
                                 UndoableAction::push_to_undo(
                                     undo_stack,
-                                    UndoableAction::Label(ent, orig, EntityType::Light),
+                                    UndoableAction::Label(ent, orig),
                                 );
                                 log::debug!("Pushed label change to undo stack (immediate)");
                             }

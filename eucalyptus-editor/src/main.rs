@@ -1,4 +1,5 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// note to self: when it becomes release, remember to readd this back
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
@@ -22,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
             app_dirs2::app_root(app_dirs2::AppDataType::UserData, &eucalyptus_core::APP_INFO)
                 .expect("Failed to get app data directory")
                 .join("logs");
-        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+        fs::create_dir_all(&log_dir).expect("Failed to create log dir");
 
         let datetime_str = chrono::offset::Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_filename = format!("{}.{}.log", "eucalyptus-editor", datetime_str);

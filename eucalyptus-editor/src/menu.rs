@@ -1,4 +1,4 @@
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 use dropbear_engine::{
     future::{FutureHandle, FutureQueue},
     graphics::RenderContext,
@@ -7,7 +7,7 @@ use dropbear_engine::{
 };
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
-use eucalyptus_core::states::{PROJECT, ProjectConfig};
+use eucalyptus_core::states::PROJECT;
 use git2::Repository;
 use log::{self, debug};
 use rfd::FileDialog;
@@ -17,6 +17,7 @@ use tokio::sync::watch;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
+use eucalyptus_core::config::ProjectConfig;
 
 #[derive(Debug, Clone)]
 pub enum ProjectProgress {

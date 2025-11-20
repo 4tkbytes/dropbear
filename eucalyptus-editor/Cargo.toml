@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
+
 anyhow.workspace = true
 app_dirs2.workspace = true
 bincode.workspace = true
@@ -44,6 +45,7 @@ memory-stats.workspace = true
 env_logger.workspace = true
 colored.workspace = true
 chrono.workspace = true
+egui_ltreeview.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
@@ -53,6 +55,6 @@ default = ["editor"]
 editor = ["eucalyptus-core/editor"]
 
 [build-dependencies]
-anyhow = "1.0"
-app_dirs2 = "2.5"
-zip = "4.3"
+anyhow.workspace = true
+app_dirs2.workspace = true
+zip.workspace = true

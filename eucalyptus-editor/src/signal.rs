@@ -1,21 +1,23 @@
 use crate::editor::{
-    ComponentType, Editor, EditorState, EntityType, PendingSpawnType, Signal, UndoableAction,
+    Editor, EditorState, PendingSpawnType, Signal,
 };
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use egui::{Align2, Image};
+use egui::{Align2};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, Value};
+use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, SerializedMeshRenderer};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
+use eucalyptus_core::scene::SceneEntity;
+use eucalyptus_core::traits::SerializableComponent;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -23,10 +25,8 @@ pub trait SignalController {
 
 impl SignalController for Editor {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
-        let mut local_insert_script = false;
-        let mut local_insert_camera = (false, String::new());
-        let mut local_signal: Option<Signal> = None;
-        let mut show = true;
+        let local_signal: Option<Signal> = None;
+        let show = true;
 
         match &self.signal {
             Signal::None => {
@@ -36,10 +36,7 @@ impl SignalController for Editor {
             Signal::Copy(_) => Ok(()),
             Signal::Paste(scene_entity) => {
                 let spawn = PendingSpawn {
-                    asset_path: scene_entity.model_path.clone(),
-                    asset_name: scene_entity.label.to_string(),
-                    transform: scene_entity.transform,
-                    properties: scene_entity.properties.clone(),
+                    scene_entity: scene_entity.clone(),
                     handle: None,
                 };
                 push_pending_spawn(spawn);
@@ -442,213 +439,6 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::AddComponent(entity, e_type) => {
-                match e_type {
-                    EntityType::Entity => {
-                        if let Ok(mut q) = self.world.query_one::<(&MeshRenderer, &Label)>(*entity)
-                        {
-                            if let Some((_renderer, label)) = q.get() {
-                                let label_text = label.to_string();
-                                egui::Window::new(format!("Add component for {}", label_text))
-                                    .title_bar(true)
-                                    .open(&mut show)
-                                    .scroll([false, true])
-                                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                    .enabled(true)
-                                    .show(&graphics.get_egui_context(), |ui| {
-                                        if ui
-                                            .add_sized(
-                                                [ui.available_width(), 30.0],
-                                                egui::Button::new("Scripting"),
-                                            )
-                                            .clicked()
-                                        {
-                                            log::debug!(
-                                                "Adding scripting component to entity [{}]",
-                                                label_text
-                                            );
-                                            local_insert_script = true;
-                                            local_signal = Some(Signal::None);
-                                        }
-                                        if ui
-                                            .add_sized(
-                                                [ui.available_width(), 30.0],
-                                                egui::Button::new("Camera"),
-                                            )
-                                            .clicked()
-                                        {
-                                            log::debug!(
-                                                "Adding camera component to entity [{}]",
-                                                label_text
-                                            );
-
-                                            local_insert_camera = (true, label_text.clone());
-                                            local_signal = Some(Signal::None);
-                                        }
-                                    });
-                            }
-                        } else {
-                            log_once::warn_once!(
-                                "Failed to add component to entity: no entity component found"
-                            );
-                        }
-                        if local_insert_script {
-                            if let Err(e) =
-                                self.world.insert_one(*entity, ScriptComponent::default())
-                            {
-                                warn!("Failed to add scripting component to entity: {}", e);
-                            } else {
-                                success!("Added the scripting component");
-                            }
-                        }
-
-                        if local_insert_camera.0 {
-                            let camera = Camera::predetermined(
-                                graphics.clone(),
-                                Some(&format!("{} Camera", local_insert_camera.1)),
-                            );
-                            let component = CameraComponent::new();
-                            if let Err(e) = self.world.insert(*entity, (camera, component)) {
-                                warn!("Failed to add camera component to entity: {}", e);
-                            } else {
-                                success!("Added the camera component");
-                            }
-                        }
-                        Ok(())
-                    }
-                    EntityType::Light => {
-                        if let Ok(mut q) = self.world.query_one::<&Light>(*entity) {
-                            if let Some(light) = q.get() {
-                                let mut show = true;
-                                egui::Window::new(format!("Add component for {}", light.label))
-                                        .scroll([false, true])
-                                        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                        .enabled(true)
-                                        .open(&mut show)
-                                        .title_bar(true)
-                                        .show(&graphics.get_egui_context(), |ui| {
-                                            if ui
-                                                .add_sized(
-                                                    [ui.available_width(), 30.0],
-                                                    egui::Button::new("Scripting"),
-                                                )
-                                                .clicked()
-                                            {
-                                                log::debug!(
-                                                    "Adding scripting component to light [{}]",
-                                                    light.label
-                                                );
-
-                                                log::warn!("Its not really added, it's just a dummy button. To be implemented...");
-
-                                                success!(
-                                                    "Added the scripting component to light [{}]",
-                                                    light.label
-                                                );
-                                                self.signal = Signal::None;
-                                            }
-                                        });
-                                if !show {
-                                    self.signal = Signal::None;
-                                }
-                            }
-                            Ok(())
-                        } else {
-                            log_once::warn_once!(
-                                "Failed to add component to light: no light component found"
-                            );
-                            Ok(())
-                        }
-                    }
-                    EntityType::Camera => {
-                        {
-                            if let Ok(mut q) =
-                                self.world.query_one::<(&Camera, &CameraComponent)>(*entity)
-                            {
-                                if let Some((cam, _comp)) = q.get() {
-                                    let mut show = true;
-                                    egui::Window::new(format!("Add component for {}", cam.label))
-                                        .scroll([false, true])
-                                        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                                        .enabled(true)
-                                        .open(&mut show)
-                                        .title_bar(true)
-                                        .show(&graphics.get_egui_context(), |ui| {
-                                            egui_extras::install_image_loaders(ui.ctx());
-                                            ui.add(Image::from_bytes(
-                                                "bytes://theres_nothing.jpg",
-                                                include_bytes!(
-                                                    "../../resources/textures/theres_nothing.jpg"
-                                                ),
-                                            ));
-                                            ui.label("Theres nothing...");
-                                            // scripting could be planned???
-                                            // if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Scripting")).clicked() {
-                                            //     log::debug!("Adding scripting component to camera [{}]", cam.label);
-
-                                            //     success!("Added the scripting component to camera [{}]", cam.label);
-                                            //     self.signal = Signal::None;
-                                            // }
-                                        });
-                                    if !show {
-                                        self.signal = Signal::None;
-                                    }
-                                }
-                                Ok(())
-                            } else {
-                                log_once::warn_once!(
-                                    "Failed to add component to light: no light component found"
-                                );
-                                Ok(())
-                            }
-                        }
-                    }
-                }
-            }
-            Signal::RemoveComponent(entity, c_type) => match &**c_type {
-                ComponentType::Script(_) => {
-                    match self.world.remove_one::<ScriptComponent>(*entity) {
-                        Ok(component) => {
-                            success!("Removed script component from entity {:?}", entity);
-                            UndoableAction::push_to_undo(
-                                &mut self.undo_stack,
-                                UndoableAction::RemoveComponent(
-                                    *entity,
-                                    Box::new(ComponentType::Script(component)),
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            warn!("Failed to remove script component from entity: {}", e);
-                        }
-                    };
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-                ComponentType::Camera(_, _) => {
-                    match self.world.remove::<(Camera, CameraComponent)>(*entity) {
-                        Ok(component) => {
-                            success!("Removed camera component from entity {:?}", entity);
-                            UndoableAction::push_to_undo(
-                                &mut self.undo_stack,
-                                UndoableAction::RemoveComponent(
-                                    *entity,
-                                    Box::new(ComponentType::Camera(
-                                        Box::new(component.0),
-                                        component.1,
-                                    )),
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            warn!("Failed to remove script component from entity: {}", e);
-                            self.signal = Signal::None;
-                        }
-                    };
-                    self.signal = Signal::None;
-                    Ok(())
-                }
-            },
             Signal::CreateEntity => {
                 let mut show = true;
                 egui::Window::new("Add Entity")
@@ -768,7 +558,7 @@ impl SignalController for Editor {
             }
             Signal::Spawn(entity_type) => {
                 match entity_type {
-                    crate::editor::PendingSpawnType::Light => {
+                    PendingSpawnType::Light => {
                         let light = Light::new(
                             graphics.clone(),
                             LightComponent::default(),
@@ -779,33 +569,42 @@ impl SignalController for Editor {
                         self.light_spawn_queue.push(handle);
                         success!("Pushed light to queue");
                     }
-                    crate::editor::PendingSpawnType::Plane => {
-                        let transform = Transform::new();
-                        let mut props = ModelProperties::new();
-                        props.add_property("width".to_string(), Value::Float(500.0));
-                        props.add_property("height".to_string(), Value::Float(200.0));
-                        props.add_property("tiles_x".to_string(), Value::Int(500));
-                        props.add_property("tiles_z".to_string(), Value::Int(200));
-
-                        push_pending_spawn(PendingSpawn {
-                            asset_path: ResourceReference::from_reference(
-                                ResourceReferenceType::Plane,
-                            ),
-                            asset_name: "DefaultPlane".to_string(),
-                            transform,
-                            properties: props,
-                            handle: None,
-                        });
-                        success!("Pushed plane to queue");
+                    PendingSpawnType::Plane => {
+                        fatal!("Plane spawning is not yet supported, sorry! (system being remade)");
+                        // let transform = Transform::new();
+                        // let mut props = ModelProperties::new();
+                        // props.add_property("width".to_string(), Value::Float(500.0));
+                        // props.add_property("height".to_string(), Value::Float(200.0));
+                        // props.add_property("tiles_x".to_string(), Value::Int(500));
+                        // props.add_property("tiles_z".to_string(), Value::Int(200));
+                        //
+                        // push_pending_spawn(PendingSpawn {
+                        //     asset_path: ResourceReference::from_reference(
+                        //         ResourceReferenceType::Plane,
+                        //     ),
+                        //     asset_name: "DefaultPlane".to_string(),
+                        //     transform,
+                        //     properties: props,
+                        //     handle: None,
+                        // });
+                        // success!("Pushed plane to queue");
                     }
                     PendingSpawnType::Cube => {
+                        let mut components: Vec<Box<dyn SerializableComponent>> =
+                            Vec::new();
+                        components.push(Box::new(EntityTransform::default()));
+                        components.push(Box::new(SerializedMeshRenderer {
+                            handle: ResourceReference::from_reference(ResourceReferenceType::Cube),
+                            material_override: Vec::new(),
+                        }));
+                        components.push(Box::new(ModelProperties::new()));
+
                         let pending = PendingSpawn {
-                            asset_path: ResourceReference::from_bytes(include_bytes!(
-                                "../../resources/models/cube.glb"
-                            )),
-                            asset_name: "Default Cube".to_string(),
-                            transform: Default::default(),
-                            properties: Default::default(),
+                            scene_entity: SceneEntity {
+                                label: Label::from("Cube"),
+                                components,
+                                entity_id: None,
+                            },
                             handle: None,
                         };
                         push_pending_spawn(pending);
