@@ -26,11 +26,6 @@ typedef struct {
 } Vector3D;
 
 typedef struct {
-    NativeTransform local;
-    NativeTransform world;
-} NativeEntityTransform;
-
-typedef struct {
     double position_x;
     double position_y;
     double position_z;
@@ -42,6 +37,11 @@ typedef struct {
     double scale_y;
     double scale_z;
 } NativeTransform;
+
+typedef struct {
+    NativeTransform local;
+    NativeTransform world;
+} NativeEntityTransform;
 
 typedef struct {
     const char* label;

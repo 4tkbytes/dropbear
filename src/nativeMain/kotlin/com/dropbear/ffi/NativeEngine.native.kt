@@ -65,12 +65,12 @@ actual class NativeEngine {
     actual fun getTransform(entityId: EntityId): EntityTransform? {
         val world = worldHandle ?: return null
         memScoped {
-            val outTransform = alloc<NativeTransform>()
-            val result = dropbear_get_transform(
-                world_ptr = world.reinterpret(),
-                entity_id = entityId.id,
-                out_transform = outTransform.ptr
-            )
+//            val outTransform = alloc<NativeTransform>()
+//            val result = dropbear_get_transform(
+//                world_ptr = world.reinterpret(),
+//                entity_id = entityId.id,
+//                out_transform = outTransform.ptr
+//            )
 //            if (result == 0) {
 //                return Transform(
 //                    position = com.dropbear.math.Vector3D(
@@ -97,7 +97,7 @@ actual class NativeEngine {
         }
     }
 
-    actual fun propagateTransform(entityId: EntityId) {
+    actual fun propagateTransform(entityId: EntityId): Transform? {
         TODO("Not yet implemented")
     }
 
@@ -837,14 +837,6 @@ actual class NativeEngine {
     }
 
     actual fun getTextureName(textureHandle: Long): String? {
-        TODO("Not yet implemented")
-    }
-
-    actual fun getLastErrorMsg(): String? {
-        TODO("Not yet implemented")
-    }
-
-    actual fun getLastErrorMsgPtr(): Long {
         TODO("Not yet implemented")
     }
 

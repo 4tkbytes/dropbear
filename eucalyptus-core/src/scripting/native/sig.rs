@@ -19,3 +19,8 @@ pub type UpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f32) -> i32
 pub type DestroyTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
 /// CName: `dropbear_destroy_all`
 pub type DestroyAll = unsafe extern "C" fn() -> i32;
+
+/// CName: `dropbear_get_last_error_message`
+pub type GetLastErrorMessage = unsafe extern "C" fn() -> *const c_char;
+/// CName: `dropbear_set_last_error_message`
+pub type SetLastErrorMessage = unsafe extern "C" fn(msg: *const c_char);

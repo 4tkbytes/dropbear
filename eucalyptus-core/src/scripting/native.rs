@@ -12,6 +12,7 @@ use crate::scripting::native::sig::{
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::path::Path;
+use crate::scripting::error::LastErrorMessage;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -23,6 +24,10 @@ pub struct NativeLibrary {
     update_tag_fn: Symbol<'static, UpdateTagged>,
     destroy_all_fn: Symbol<'static, DestroyAll>,
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
+    
+    // err msg
+    pub(crate) get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage>,
+    pub(crate) set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage>,
 }
 
 impl NativeLibrary {
@@ -44,6 +49,10 @@ impl NativeLibrary {
                 std::mem::transmute(library.get::<DestroyAll>(b"dropbear_destroy_all\0")?);
             let destroy_tagged_fn: Symbol<'static, DestroyTagged> =
                 std::mem::transmute(library.get::<DestroyTagged>(b"dropbear_destroy_tagged\0")?);
+            let get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage> =
+                std::mem::transmute(library.get::<sig::GetLastErrorMessage>(b"dropbear_get_last_error_message\0")?);
+            let set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage> =
+                std::mem::transmute(library.get::<sig::SetLastErrorMessage>(b"dropbear_set_last_error_message\0")?);
 
             Ok(Self {
                 library,
@@ -53,6 +62,8 @@ impl NativeLibrary {
                 update_tag_fn,
                 destroy_all_fn,
                 destroy_tagged_fn,
+                get_last_err_msg_fn,
+                set_last_err_msg_fn,
             })
         }
     }
@@ -111,6 +122,29 @@ impl NativeLibrary {
         unsafe {
             let c_string: CString = CString::new(tag)?;
             (self.destroy_tagged_fn)(c_string.as_ptr());
+            Ok(())
+        }
+    }
+}
+
+impl LastErrorMessage for NativeLibrary {
+    fn get_last_error(&self) -> Option<String> {
+        unsafe {
+            let msg_ptr = (self.get_last_err_msg_fn)();
+            if msg_ptr.is_null() {
+                return None;
+            }
+
+            let c_str = std::ffi::CStr::from_ptr(msg_ptr);
+            c_str.to_str().ok().map(|s| s.to_string())
+        }
+    }
+
+    fn set_last_error(&self, msg: impl Into<String>) -> anyhow::Result<()> {
+        let msg = msg.into();
+        unsafe {
+            let c_string = CString::new(msg)?;
+            (self.set_last_err_msg_fn)(c_string.as_ptr());
             Ok(())
         }
     }

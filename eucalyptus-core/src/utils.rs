@@ -310,7 +310,6 @@ macro_rules! convert_ptr {
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
             );
-            crate::scripting::jni::error::set_last_error_message(&message);
             println!("{}", message);
             return $crate::ffi_error_return!();
         }
@@ -325,7 +324,6 @@ macro_rules! convert_ptr {
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
             );
-            crate::scripting::jni::error::set_last_error_message(&message);
             println!("{}", message);
             return $crate::ffi_error_return!();
         }
@@ -352,7 +350,6 @@ macro_rules! convert_jstring {
                         stringify!($jstring),
                         e
                     );
-                    crate::scripting::jni::error::set_last_error_message(&message);
                     println!("{}", message);
                     return $crate::ffi_error_return!();
                 }
@@ -363,7 +360,6 @@ macro_rules! convert_jstring {
                     stringify!($jstring),
                     e
                 );
-                crate::scripting::jni::error::set_last_error_message(&message);
                 println!("{}", message);
                 return $crate::ffi_error_return!();
             }
@@ -490,7 +486,6 @@ macro_rules! convert_jlong_to_entity {
                     stringify!($jlong),
                     $jlong
                 );
-                $crate::scripting::jni::error::set_last_error_message(&message);
                 println!("{}", message);
                 return $crate::ffi_error_return!();
             }

@@ -174,13 +174,6 @@ impl Scene for Editor {
         let cache_mutex_ptr = std::sync::LazyLock::force(&MODEL_CACHE) as *const _;
         ASSET_REGISTRY.add_pointer(PointerKind::Const("model_cache"), cache_mutex_ptr as usize);
 
-        let last_error_msg_ptr =
-            eucalyptus_core::scripting::jni::error::get_last_error_message_ptr();
-        ASSET_REGISTRY.add_pointer(
-            PointerKind::Const("last_error_msg"),
-            last_error_msg_ptr as usize,
-        );
-
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
         } else {

@@ -81,6 +81,10 @@ actual class NativeEngine {
         return JNINative.getTransform(worldHandle, entityId.id)
     }
 
+    actual fun propagateTransform(entityId: EntityId): Transform? {
+        return JNINative.propagateTransform(worldHandle, entityId.id)
+    }
+
     actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
         return JNINative.setTransform(worldHandle, entityId.id, transform)
     }
@@ -317,20 +321,7 @@ actual class NativeEngine {
         return JNINative.isTextureHandle(assetHandle, id)
     }
 
-    actual fun getLastErrorMsg(): String? {
-        val message = JNINative.getLastErrorMsg(assetHandle)
-        return if (message.isEmpty()) null else message
-    }
-
-    actual fun getLastErrorMsgPtr(): Long {
-        return JNINative.getLastErrMsgPtr(assetHandle)
-    }
-
     actual fun getAllTextures(entityHandle: Long): Array<String> {
         return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
-    }
-
-    actual fun propagateTransform(entityId: EntityId) {
-        JNINative.propagateTransform(worldHandle, entityId.id)
     }
 }

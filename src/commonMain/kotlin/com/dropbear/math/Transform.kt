@@ -9,6 +9,11 @@ class Transform(
     var rotation: QuaternionD,
     var scale: Vector3D
 ) {
+    /**
+     * Specific constructor for the individual raw primitive values.
+     *
+     * Primarily used in the JNI.
+     */
     constructor(px: Double, py: Double, pz: Double,
                 rx: Double, ry: Double, rz: Double, rw: Double,
                 sx: Double, sy: Double, sz: Double)

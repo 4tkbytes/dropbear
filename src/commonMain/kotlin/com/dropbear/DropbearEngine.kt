@@ -6,6 +6,7 @@ import com.dropbear.input.InputState
 import com.dropbear.logging.Logger
 
 internal var exceptionOnError: Boolean = false
+var lastErrorMessage: String? = null
 
 /**
  * The main engine. 
@@ -17,6 +18,10 @@ class DropbearEngine(val native: NativeEngine) {
     private var inputState: InputState? = null
 
     companion object {
+        fun getLastErrMsg(): String? {
+            return lastErrorMessage
+        }
+
         /**
          * Globally sets whether exceptions should be thrown when an error occurs.
          *
@@ -77,11 +82,4 @@ class DropbearEngine(val native: NativeEngine) {
      * This can be run in your update loop without consequences.
      */
     fun callExceptionOnError(toggle: Boolean) = DropbearEngine.callExceptionOnError(toggle)
-
-    /**
-     * Fetches the last error message during the native call. 
-     */
-    fun getLastErrorMsg(): String? = native.getLastErrorMsg()
-
-    fun getLastErrorMsgPtr(): Long = native.getLastErrorMsgPtr()
 }

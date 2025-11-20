@@ -3,7 +3,6 @@ package com.dropbear.ffi;
 import com.dropbear.Camera;
 import com.dropbear.EntityTransform;
 import com.dropbear.math.Transform;
-import org.jetbrains.annotations.Nullable;
 
 /**
  * Describes all the functions that are available in
@@ -39,7 +38,7 @@ public class JNINative {
 
     // transformations
     public static native EntityTransform getTransform(long handle, long entityHandle);
-    public static native void propagateTransform(long worldHandle, long id);
+    public static native Transform propagateTransform(long worldHandle, long id);
     public static native void setTransform(long worldHandle, long id, EntityTransform transform);
 
     // properties
@@ -68,7 +67,5 @@ public class JNINative {
     public static native float[] getLastMousePos(long inputHandle);
     public static native boolean isCursorHidden(long inputHandle);
     public static native void setCursorHidden(long inputHandle, long graphicsHandle, boolean hidden);
-    public static native String getLastErrorMsg(long assetHandle);
-    public static native long getLastErrMsgPtr(long assetHandle);
     public static native String[] getAllTextures(long worldHandle, long entityHandle);
 }

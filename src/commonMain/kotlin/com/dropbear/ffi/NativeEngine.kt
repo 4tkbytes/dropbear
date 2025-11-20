@@ -38,7 +38,7 @@ expect class NativeEngine {
     fun setCamera(camera: Camera);
 
     fun getTransform(entityId: EntityId): EntityTransform?
-    fun propagateTransform(entityId: EntityId)
+    fun propagateTransform(entityId: EntityId): Transform?
     fun setTransform(entityId: EntityId, transform: EntityTransform)
 
     // ------------------------ MODEL PROPERTIES -------------------------
@@ -74,8 +74,6 @@ expect class NativeEngine {
     fun isCursorHidden(): Boolean
     fun setCursorHidden(hidden: Boolean)
     fun getLastMousePos(): Vector2D?
-    fun getLastErrorMsg(): String?
-    fun getLastErrorMsgPtr(): Long
 //    fun getConnectedGamepads(): List<Gamepad>
 
     // -------------------------------------------------------------------

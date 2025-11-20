@@ -1,9 +1,5 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
-use crate::scripting::jni::error::{
-    clear_last_error_message, get_last_error_message, get_last_error_message_ptr,
-    set_last_error_message,
-};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
 };
@@ -311,20 +307,20 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     }
 }
 
-/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_propagateTransform
+/// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_propagateTransform
 ///   (JNIEnv *, jclass, jlong, jlong);`
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     world_handle: jlong,
     entity_id: jlong,
-) {
+) -> jobject {
     let world = world_handle as *mut World;
 
     if world.is_null() {
         println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] World pointer is null");
-        return;
+        return std::ptr::null_mut();
     }
 
     let world = unsafe { &mut *world };
@@ -333,12 +329,46 @@ pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
     if let Ok(mut q) = world.query_one::<&mut EntityTransform>(entity) {
         if let Some(entity_transform) = q.get() {
             let new_world = entity_transform.propagate(world, entity);
-            *entity_transform.world_mut() = new_world;
+
+            let transform_class = match env.find_class("com/dropbear/math/Transform") {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to find Transform class: {:?}", e);
+                    return std::ptr::null_mut();
+                }
+            };
+
+            let transform_obj = match env.new_object(
+                &transform_class,
+                "(DDDDDDDDDD)V",
+                &[
+                    new_world.position.x.into(),
+                    new_world.position.y.into(),
+                    new_world.position.z.into(),
+                    new_world.rotation.x.into(),
+                    new_world.rotation.y.into(),
+                    new_world.rotation.z.into(),
+                    new_world.rotation.w.into(),
+                    new_world.scale.x.into(),
+                    new_world.scale.y.into(),
+                    new_world.scale.z.into(),
+                ],
+            ) {
+                Ok(obj) => obj,
+                Err(e) => {
+                    println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to create Transform object: {:?}", e);
+                    return std::ptr::null_mut();
+                }
+            };
+
+            return transform_obj.into_raw();
         } else {
             println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to get entity transform");
+            std::ptr::null_mut()
         }
     } else {
         println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Entity does not have EntityTransform component");
+        std::ptr::null_mut()
     }
 }
 
@@ -2004,7 +2034,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
                 "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to query entity: {}",
                 e
             );
-            set_last_error_message(&message);
             println!("{}", message);
             return std::ptr::null_mut();
         }
@@ -2014,7 +2043,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
         Some(renderer) => renderer,
         None => {
             let message = "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Entity does not have a MeshRenderer component";
-            set_last_error_message(message);
             println!("{}", message);
             return std::ptr::null_mut();
         }
@@ -2054,7 +2082,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
                 "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to locate java/lang/String: {}",
                 e
             );
-            set_last_error_message(&message);
             println!("{}", message);
             return std::ptr::null_mut();
         }
@@ -2067,7 +2094,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
                 "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to allocate string array: {}",
                 e
             );
-            set_last_error_message(&message);
             println!("{}", message);
             return std::ptr::null_mut();
         }
@@ -2081,7 +2107,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
                     "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to create Java string: {}",
                     e
                 );
-                set_last_error_message(&message);
                 println!("{}", message);
                 return std::ptr::null_mut();
             }
@@ -2094,13 +2119,11 @@ pub fn Java_com_dropbear_ffi_JNINative_getAllTextures(
                 "[Java_com_dropbear_ffi_JNINative_getAllTextures] [ERROR] Failed to set array element: {}",
                 e
             );
-            set_last_error_message(&message);
             println!("{}", message);
             return std::ptr::null_mut();
         }
     }
 
-    clear_last_error_message();
     array.into_raw()
 }
 
@@ -2226,7 +2249,6 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve material '{}' on model '{}'",
                     target_identifier, renderer.model().label
                 );
-                set_last_error_message(&message);
                 println!("{}", message);
                 return;
             };
@@ -2421,54 +2443,4 @@ pub fn Java_com_dropbear_ffi_JNINative_getAsset(
         return asset_handle.raw() as jlong;
     };
     0 as jlong
-}
-
-/// `JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getLastErrorMsg
-///   (JNIEnv *, jclass, jlong);`
-#[unsafe(no_mangle)]
-pub fn Java_com_dropbear_ffi_JNINative_getLastErrorMsg(
-    env: JNIEnv,
-    _class: JClass,
-    asset_handle: jlong,
-) -> jstring {
-    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
-    if asset.get_pointer(Const("last_error_msg")).is_none() {
-        let ptr = get_last_error_message_ptr() as usize;
-        asset.add_pointer(Const("last_error_msg"), ptr);
-    }
-    let message = get_last_error_message();
-    match env.new_string(&message) {
-        Ok(java_string) => {
-            clear_last_error_message();
-            java_string.into_raw()
-        }
-        Err(e) => {
-            let fallback = format!(
-                "[Java_com_dropbear_ffi_JNINative_getLastErrorMsg] [ERROR] Failed to allocate Java string: {}",
-                e
-            );
-            println!("{}", fallback);
-            set_last_error_message(&fallback);
-            std::ptr::null_mut()
-        }
-    }
-}
-
-/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getLastErrMsgPtr
-///   (JNIEnv *, jclass, jlong);`
-#[unsafe(no_mangle)]
-pub fn Java_com_dropbear_ffi_JNINative_getLastErrMsgPtr(
-    _env: JNIEnv,
-    _class: JClass,
-    asset_handle: jlong,
-) -> jlong {
-    let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
-    let pointer = asset
-        .get_pointer(Const("last_error_msg"))
-        .unwrap_or_else(|| {
-            let ptr = get_last_error_message_ptr() as usize;
-            asset.add_pointer(Const("last_error_msg"), ptr);
-            ptr
-        });
-    pointer as jlong
 }

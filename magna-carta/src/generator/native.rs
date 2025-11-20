@@ -83,7 +83,7 @@ object ScriptManager {{
             Logger.debug("Native ScriptManager initialised")
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Native ScriptManager failed to initialise: ${{e.message}}")
+            dropbear_set_last_error("Native ScriptManager failed to initialise: ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -103,7 +103,7 @@ object ScriptManager {{
             Logger.debug("Loaded ${{instances.size}} script(s) for tag: '$tag'")
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Error loading systems for tag '$tag': ${{e.message}}")
+            dropbear_set_last_error("Error loading systems for tag '$tag': ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -119,7 +119,7 @@ object ScriptManager {{
             }}
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Error updating all systems: ${{e.message}}")
+            dropbear_set_last_error("Error updating all systems: ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -134,7 +134,7 @@ object ScriptManager {{
             }}
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Error updating systems for tag '$tag': ${{e.message}}")
+            dropbear_set_last_error("Error updating systems for tag '$tag': ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -151,7 +151,7 @@ object ScriptManager {{
             Logger.debug("Destroyed ${{instances.size}} script(s) for tag: '$tag'")
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Error destroying systems for tag '$tag': ${{e.message}}")
+            dropbear_set_last_error("Error destroying systems for tag '$tag': ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -169,7 +169,7 @@ object ScriptManager {{
             dropbearEngine = null
             return 0
         }} catch (e: Exception) {{
-            Logger.error("Error destroying scripts: ${{e.message}}")
+            dropbear_set_last_error("Error destroying scripts: ${{e.message}}")
             e.printStackTrace()
             return -1
         }}
@@ -205,7 +205,7 @@ object ScriptManager {{
 
         writeln!(output, "}}")?;
 
-        // ADD POINTERS HERE
+        // ADD CNAME FUNCTIONS HERE
         writeln!(
             output,
             r#"
@@ -242,6 +242,17 @@ fun dropbear_destroy(tag: String?): Int {{
 fun dropbear_destroy_all(): Int {{
     return ScriptManager.destroyAll()
 }}
+
+@CName("dropbear_get_last_error")
+fun dropbear_get_last_error(): String? {{
+    return com.dropbear.lastErrorMessage
+}}
+
+@CName("dropbear_set_last_error")
+fun dropbear_set_last_error(err: String?) {{
+    com.dropbear.lastErrorMessage = err
+}}
+
         "#
         )?;
 

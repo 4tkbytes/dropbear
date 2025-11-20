@@ -35,8 +35,8 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * 
      * This will update the entity's world transform based on its parent's world transform.
      */
-    fun propagate() {
-        engine.native.propagateTransform(id)
+    fun propagate(): Transform? {
+        return engine.native.propagateTransform(id)
     }
 
     /**
