@@ -14,8 +14,10 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_traits::component_registry::ComponentRegistry;
+use dropbear_traits::SerializableComponent;
 use crate::camera::{CameraComponent, CameraType};
-use crate::hierarchy::{Parent, SceneHierarchy};
+use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{CameraConfig, Label, LightConfig, ModelProperties, ScriptComponent, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
 use crate::utils::ResolveReference;
 
@@ -23,11 +25,34 @@ use crate::utils::ResolveReference;
 pub struct SceneEntity {
     #[serde(default)]
     pub label: Label,
+
     #[serde(default)]
-    pub components: Vec<Box<dyn dropbear_traits::SerializableComponent>>,
+    pub components: Vec<Box<dyn SerializableComponent>>,
 
     #[serde(skip)]
     pub entity_id: Option<hecs::Entity>,
+}
+
+impl SceneEntity {
+    pub fn from_world(
+        world: &hecs::World,
+        entity: hecs::Entity,
+        registry: &ComponentRegistry,
+    ) -> Option<Self> {
+        let label= if let Ok(mut q) = world.query_one::<&Label>(entity) && let Some(label) = q.get() {
+            label.clone()
+        } else {
+            return None;
+        };
+
+        let components = registry.extract_all_components(world, entity);
+
+        Some(Self {
+            label,
+            components,
+            entity_id: Some(entity),
+        })
+    }
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
@@ -74,6 +99,7 @@ impl SceneConfig {
         component: Box<dyn dropbear_traits::SerializableComponent>,
         builder: &mut hecs::EntityBuilder,
         graphics: Arc<SharedGraphicsContext>,
+        registry: Option<&ComponentRegistry>,
         label: &str,
     ) -> anyhow::Result<()> {
         if let Some(transform) = component.as_any().downcast_ref::<EntityTransform>() {
@@ -181,6 +207,14 @@ impl SceneConfig {
             builder.add(script.clone());
         } else if component.as_any().downcast_ref::<Parent>().is_some() {
             log::debug!("Skipping Parent component for '{}' - will be rebuilt from hierarchy_map", label);
+        } else if let Some(registry) = registry {
+            if !registry.deserialize_into_builder(component.as_ref(), builder)? {
+                log::warn!(
+                    "Unknown component type '{}' for entity '{}' - skipping",
+                    component.type_name(),
+                    label
+                );
+            }
         } else {
             log::warn!(
                 "Unknown component type '{}' for entity '{}' - skipping",
@@ -219,6 +253,7 @@ impl SceneConfig {
         &self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
+        registry: Option<&ComponentRegistry>,
         progress_sender: Option<UnboundedSender<WorldLoadingStatus>>,
     ) -> anyhow::Result<hecs::Entity> {
         if let Some(ref s) = progress_sender {
@@ -285,7 +320,14 @@ impl SceneConfig {
                     has_entity_transform = true;
                 }
                 
-                Self::load_component(component, &mut builder, graphics.clone(), &label_for_logs).await?;
+                Self::load_component(
+                    component,
+                    &mut builder,
+                    graphics.clone(),
+                    registry,
+                    &label_for_logs,
+                )
+                .await?;
             }
 
             let entity = world.spawn(builder.build());
@@ -356,11 +398,11 @@ impl SceneConfig {
 
             let mut local_insert_one: Option<hecs::Entity> = None;
 
-            match world.query_one::<&mut Parent>(parent_entity) {
+            match world.query_one::<&mut Children>(parent_entity) {
                 Ok(mut parent_query) => {
-                    if let Some(parent_component) = parent_query.get() {
-                        parent_component.clear();
-                        parent_component
+                    if let Some(child_component) = parent_query.get() {
+                        child_component.clear();
+                        child_component
                             .children_mut()
                             .extend(resolved_children.iter().copied());
                     } else {
@@ -378,7 +420,7 @@ impl SceneConfig {
             }
 
             if let Some(parent_entity) = local_insert_one
-                && let Err(e) = world.insert_one(parent_entity, Parent::new(resolved_children))
+                && let Err(e) = world.insert_one(parent_entity, Children::new(resolved_children))
             {
                 log::error!(
                     "Failed to attach Parent component to entity {:?}: {}",
@@ -401,6 +443,34 @@ impl SceneConfig {
 
             if !has_light {
                 log::info!("No lights in scene, spawning default light");
+
+                let legacy_lights: Vec<hecs::Entity> = world
+                    .query::<&Label>()
+                    .iter()
+                    .filter_map(|(entity, label)| {
+                        if label.as_str() == "Default Light" {
+                            Some(entity)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                for entity in legacy_lights {
+                    if let Err(err) = world.despawn(entity) {
+                        log::warn!(
+                            "Failed to remove legacy 'Default Light' entity {:?}: {}",
+                            entity,
+                            err
+                        );
+                    } else {
+                        log::debug!(
+                            "Removed legacy 'Default Light' placeholder entity {:?}",
+                            entity
+                        );
+                    }
+                }
+
                 if let Some(ref s) = progress_sender {
                     let _ = s.send(WorldLoadingStatus::LoadingEntity {
                         index: 0,
@@ -458,6 +528,34 @@ impl SceneConfig {
                     Ok(camera_entity)
                 } else {
                     log::info!("No debug camera found, creating viewport camera for editor");
+
+                    let legacy_cameras: Vec<hecs::Entity> = world
+                        .query::<&Label>()
+                        .iter()
+                        .filter_map(|(entity, label)| {
+                            if label.as_str() == "Viewport Camera" {
+                                Some(entity)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    for entity in legacy_cameras {
+                        if let Err(err) = world.despawn(entity) {
+                            log::warn!(
+                                "Failed to remove legacy 'Viewport Camera' entity {:?}: {}",
+                                entity,
+                                err
+                            );
+                        } else {
+                            log::debug!(
+                                "Removed legacy 'Viewport Camera' placeholder entity {:?}",
+                                entity
+                            );
+                        }
+                    }
+
                     if let Some(ref s) = progress_sender {
                         let _ = s.send(WorldLoadingStatus::LoadingEntity {
                             index: 0,
@@ -467,7 +565,8 @@ impl SceneConfig {
                     }
                     let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
                     let component = crate::camera::DebugCamera::new();
-                    let camera_entity = { world.spawn((camera, component)) };
+                    let label = Label::new("Viewport Camera");
+                    let camera_entity = { world.spawn((label, camera, component)) };
                     Ok(camera_entity)
                 }
             }

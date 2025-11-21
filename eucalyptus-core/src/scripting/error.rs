@@ -3,6 +3,7 @@ use crate::scripting::ScriptTarget;
 
 /// A trait implemented by the different script types ([ScriptTarget::JVM], [ScriptTarget::Native]) which allow
 /// for populating the last error and getting the contents of the last error.
+#[allow(dead_code)]
 pub trait LastErrorMessage {
     /// Fetches the last error message.
     ///

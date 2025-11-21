@@ -19,14 +19,14 @@ use dropbear_engine::{
     entity::{MeshRenderer, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
-    lighting::{Light, LightManager},
+    lighting::{LightManager},
     model::{ModelId, MODEL_CACHE},
     scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
-use eucalyptus_core::hierarchy::{Parent, SceneHierarchy};
+use eucalyptus_core::hierarchy::{Children, Parent, SceneHierarchy};
 use eucalyptus_core::states::{Label, SerializedMeshRenderer};
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
@@ -62,8 +62,8 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
 use dropbear_engine::entity::EntityTransform;
-use dropbear_engine::lighting::LightComponent;
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
+use eucalyptus_core::traits::component_registry::ComponentRegistry;
 use eucalyptus_core::traits::SerializableComponent;
 
 pub struct Editor {
@@ -144,6 +144,9 @@ pub struct Editor {
     // about
     show_about: bool,
     nerd_stats: NerdStats,
+
+    // component registry
+    component_registry: Arc<ComponentRegistry>,
 }
 
 impl Editor {
@@ -182,7 +185,47 @@ impl Editor {
             }
         });
 
-        let plugin_registry = PluginRegistry::new();
+        let mut plugin_registry = PluginRegistry::new();
+        let mut component_registry = ComponentRegistry::new();
+
+        fn register_components(plugin_registry: &mut PluginRegistry, component_registry: &mut ComponentRegistry) {
+            component_registry.register::<EntityTransform>();
+            component_registry.register::<ModelProperties>();
+            component_registry.register::<CameraConfig>();
+            component_registry.register::<LightConfig>();
+            component_registry.register::<ScriptComponent>();
+
+            component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
+                |renderer| {
+                    SerializedMeshRenderer {
+                        handle: renderer.handle().path.clone(),
+                        material_override: renderer.material_overrides().to_vec(),
+                    }
+                }
+            );
+
+            // register plugin defined structs
+            if let Err(e) = plugin_registry.load_plugins() {
+                fatal!("Failed to load plugins: {}", e);
+                return;
+            }
+
+            for p in plugin_registry.list_plugins() {
+                log::info!("Plugin {} has been loaded", p.display_name);
+            }
+
+            log::info!("Total plugins added: {}", plugin_registry.plugins.len());
+
+            for plugin in plugin_registry.list_plugins() {
+                if let Some(p) = plugin_registry.get_mut(&plugin.display_name) {
+                    p.register_component(component_registry);
+                    log::info!("Components for plugin [{}] has been registered to component registry", plugin.display_name);
+                }
+            }
+        }
+
+        register_components(&mut plugin_registry, &mut component_registry);
+        let component_registry = Arc::new(component_registry);
 
         Ok(Self {
             scene_command: SceneCommand::None,
@@ -235,6 +278,7 @@ impl Editor {
             pending_scene_creation: None,
             show_about: false,
             nerd_stats: NerdStats::default(),
+            component_registry,
         })
     }
 
@@ -272,66 +316,24 @@ impl Editor {
             .iter_mut()
             .find(|scene| scene.scene_name == target_scene_name)
             .ok_or_else(|| anyhow::anyhow!("Active scene '{}' is not loaded", target_scene_name))?;
-        
+
         scene.entities.clear();
         scene.hierarchy_map = SceneHierarchy::new();
+        log::debug!("Reset internal hierarchy map for scene {}", scene.scene_name);
 
-        let labels = self.world.query::<&Label>().iter().map(|(e, l)| (e, l.clone())).collect::<Vec<_>>();
+        let labels = self.world.query::<&Label>().iter()
+            .map(|(e, l)| (e, l.clone()))
+            .collect::<Vec<_>>();
 
         for (id, label) in labels {
             let entity_label = label.clone();
-            let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
 
-            if let Ok(transform) = self.world.get::<&EntityTransform>(id) {
-                components.push(Box::new(*transform));
-            }
+            let components = self.component_registry.extract_all_components(&self.world, id);
 
-            if let Ok(renderer) = self.world.get::<&MeshRenderer>(id) {
-                let serialized = SerializedMeshRenderer {
-                    handle: renderer.handle().path.clone(),
-                    material_override: renderer.material_overrides().to_vec(),
-                };
-                components.push(Box::new(serialized));
-            }
-
-            if let Ok(mut q) = self.world.query_one::<&ModelProperties>(id) && let Some(properties) = q.get() {
-                components.push(Box::new(properties.clone()));
-            }
-
-            if let Ok(mut camera_query) = self.world.query_one::<(&Camera, &CameraComponent)>(id)
-                && let Some((camera, component)) = camera_query.get()
-            {
-                let camera_config = CameraConfig::from_ecs_camera(camera, component);
-                components.push(Box::new(camera_config));
-            }
-
-            if let Ok(mut light_query) = self.world.query_one::<(&Light, &LightComponent, &EntityTransform)>(id) {
-                if let Some((light, light_component, entity_transform)) = light_query.get() {
-                    let light_config = LightConfig {
-                        label: light.cube_model.label.to_string(),
-                        transform: entity_transform.sync(),
-                        light_component: light_component.clone(),
-                        enabled: light_component.enabled,
-                        entity_id: Some(id),
-                    };
-                    components.push(Box::new(light_config));
-                }
-            }
-
-            if let Ok(mut q) = self.world.query_one::<&ScriptComponent>(id) && let Some(script) = q.get() {
-                components.push(Box::new(script.clone()));
-            }
-
-            let mut parent_component = None;
-
-            if let Ok(comp) = self.world.query_one_mut::<&Parent>(id) {
-                parent_component = Some(comp.clone());
-            }
-
-            if let Some(parent_component) = parent_component {
-                for &child_entity in parent_component.children() {
-                    if let Ok(child_label) = self.world.query_one_mut::<&Label>(child_entity) {
-                        scene.hierarchy_map.set_parent(child_label.clone(), entity_label.clone());
+            if let Ok(children_comp) = self.world.get::<&Children>(id) {
+                for &child_entity in children_comp.children() {
+                    if let Ok(child_label) = self.world.get::<&Label>(child_entity) {
+                        scene.hierarchy_map.set_parent(Label::new(child_label.as_str()), entity_label.clone());
                     } else {
                         log::warn!(
                             "Unable to resolve child entity {:?} for parent '{}' when saving scene",
@@ -480,7 +482,6 @@ impl Editor {
     /// It uses an unbounded sender to send messages back to the receiver so it can
     /// be used within threads.
     pub async fn load_project_config(
-        // &mut self,
         graphics: Arc<SharedGraphicsContext>,
         sender: Option<UnboundedSender<WorldLoadingStatus>>,
         world: &mut World,
@@ -488,6 +489,7 @@ impl Editor {
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
         dock_state: Arc<Mutex<DockState<EditorTab>>>,
+        component_registry: Arc<ComponentRegistry>,
     ) -> anyhow::Result<()> {
         {
             let config = PROJECT.read();
@@ -521,7 +523,12 @@ impl Editor {
         {
             if let Some(first_scene) = first_scene_opt {
                 let cam = first_scene
-                    .load_into_world(world, graphics, sender.clone())
+                    .load_into_world(
+                        world,
+                        graphics,
+                        Some(component_registry.as_ref()),
+                        sender.clone(),
+                    )
                     .await?;
                 let mut a_c = active_camera.lock();
                 *a_c = Some(cam);
@@ -661,6 +668,7 @@ impl Editor {
         let graphics_shared = graphics.shared.clone();
         let active_camera = self.active_camera.clone();
         let scene_name = scene.scene_name.clone();
+        let component_registry_clone = self.component_registry.clone();
 
         let handle = graphics.shared.future_queue.push(async move {
             let mut temp_world = World::new();
@@ -669,6 +677,7 @@ impl Editor {
                 .load_into_world(
                     &mut temp_world,
                     graphics_shared.clone(),
+                    Some(component_registry_clone.as_ref()),
                     Some(progress_sender.clone()),
                 )
                 .await;
@@ -1031,6 +1040,7 @@ impl Editor {
                         plugin_registry: &mut self.plugin_registry,
                         editor: editor_ptr,
                         build_logs: &mut self.build_logs,
+                        component_registry: &self.component_registry
                     },
                 );
         });

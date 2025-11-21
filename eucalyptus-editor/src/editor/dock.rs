@@ -18,6 +18,7 @@ use dropbear_engine::{
 };
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
+use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
 use indexmap::Equivalent;
 use eucalyptus_core::states::{Label};
 use log;
@@ -37,7 +38,9 @@ pub struct EditorTabViewer<'a> {
     pub editor_mode: &'a mut EditorState,
     pub active_camera: &'a mut Arc<Mutex<Option<Entity>>>,
     pub plugin_registry: &'a mut PluginRegistry,
+    pub component_registry: &'a ComponentRegistry,
     pub build_logs: &'a mut Vec<String>,
+
     // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
     pub editor: *mut Editor,
 }
@@ -253,12 +256,99 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
             }
             EditorTab::ModelEntityList => {
-                // todo: use egui_ltreeview to create a component graph
-                // egui_ltreeview::TreeView::new(egui::Id::new("model_entity_list")).show(ui, |builder| {
-                //     builder.dir()
-                //     // entity is entity.id()
-                //     // component is entity.id() * -100 *
-                // });
+                let (_response, action) = egui_ltreeview::TreeView::new(egui::Id::new("model_entity_list"))
+                    .show(ui, |builder| {
+                    let current_scene_name = {PROJECT.read().last_opened_scene.clone().unwrap_or("Scene".to_string())};
+                    builder.node(
+                        NodeBuilder::dir(u64::MAX)
+                            .label(format!("Scene: {}", current_scene_name))
+                            .context_menu(|ui| {
+                                if ui.button("New Empty Entity").clicked() {
+                                    self.world.spawn((Label::new("Blank Entity"), ));
+                                }
+                            })
+                    );
+                    // the root scene must be the biggest number possible to remove any ambiguity
+
+                    fn add_entity_to_tree(
+                        builder: &mut TreeViewBuilder<u64>,
+                        entity: Entity,
+                        world: &World,
+                        registry: &ComponentRegistry,
+                    ) -> anyhow::Result<()> {
+                        let entity_id = entity.id() as u64;
+                        let label = if let Ok(mut q) = world.query_one::<&Label>(entity) && let Some(label) = q.get() {
+                            label.clone()
+                        } else {
+                            anyhow::bail!("This entity [{}] is expected to contain Label", entity_id);
+                        };
+
+                        builder.node(
+                            NodeBuilder::dir(entity_id)
+                                .label(label.as_str())
+                                .context_menu(|ui| {
+                                    ui.menu_button("New", |ui| {
+                                        if ui.button("Child").clicked() {
+                                            // todo
+                                        }
+                                    });
+                                })
+                        );
+
+                        let components = registry.extract_all_components(world, entity);
+
+                        for (i, component) in components.iter().enumerate() {
+                            // todo: make this a uuid instead
+                            let component_id = entity_id.wrapping_mul(1_000_000).wrapping_add(i as u64);
+
+                            let component_name = component.type_name();
+
+                            builder.node(
+                                NodeBuilder::leaf(component_id)
+                                    .label(component_name)
+                                    .context_menu(|ui| {
+                                        if ui.button("Remove Component").clicked() {
+                                            // complete this
+                                        }
+                                    })
+                            );
+                        }
+
+                        if let Ok(children) = world.get::<&Children>(entity) {
+                            for &child in children.children() {
+                                if let Err(e) = add_entity_to_tree(builder, child, world, registry) {
+                                    log_once::error_once!("Failed to add child entity to tree, skipping: {}", e);
+                                    continue;
+                                }
+                            }
+                        }
+
+                        builder.close_dir();
+                        Ok(())
+                    }
+
+                    for (entity, ()) in self.world.query::<()>()
+                        .without::<&Parent>()
+                        .iter()
+                    {
+                        if let Err(e) = add_entity_to_tree(builder, entity, &self.world, &self.component_registry) {
+                            log_once::error_once!("Failed to add child entity to tree, skipping: {}", e);
+                        }
+                    }
+
+                    builder.close_dir();
+                });
+
+                for i in action {
+                    match i {
+                        egui_ltreeview::Action::SetSelected(_items) => {},
+                        egui_ltreeview::Action::Move(_drag_and_drop) => {},
+                        egui_ltreeview::Action::Drag(_drag_and_drop) => {},
+                        egui_ltreeview::Action::Activate(_activate) => {},
+                        egui_ltreeview::Action::DragExternal(_drag_and_drop_external) => {},
+                        egui_ltreeview::Action::MoveExternal(_drag_and_drop_external) => {},
+                    }
+                }
             }
             EditorTab::AssetViewer => {
                 // // todo: use egui_ltreeview to create a asset viewer
@@ -589,83 +679,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     });
             }
         }
-    }
-}
-
-pub(crate) fn import_object() -> anyhow::Result<()> {
-    let model_ext = vec!["glb", "fbx", "obj"];
-    let texture_ext = vec!["png"];
-
-    let files = rfd::FileDialog::new()
-        .add_filter("All Files", &["*"])
-        .add_filter("Model", &model_ext)
-        .add_filter("Texture", &texture_ext)
-        .pick_files();
-    if let Some(files) = files {
-        for file in files {
-            let ext = file.extension().unwrap().to_str().unwrap();
-            let mut copied = false;
-            for mde in model_ext.iter() {
-                if ext.contains(mde) {
-                    // copy over to models folder
-                    {
-                        let project = PROJECT.read();
-                        let models_dir = project
-                            .project_path
-                            .clone()
-                            .join("resources")
-                            .join("models");
-                        if !models_dir.exists() {
-                            std::fs::create_dir_all(&models_dir)?;
-                        }
-                        let dest = models_dir.join(file.file_name().unwrap());
-                        std::fs::copy(&file, &dest)?;
-                        log::info!("Copied model file to {:?}", dest);
-                        copied = true;
-                    }
-                }
-            }
-            for tex in texture_ext.iter() {
-                if ext.contains(tex) {
-                    // copy over to textures folder
-                    {
-                        let project = PROJECT.read();
-                        let textures_dir = project
-                            .project_path
-                            .clone()
-                            .join("resources")
-                            .join("textures");
-                        if !textures_dir.exists() {
-                            std::fs::create_dir_all(&textures_dir)?;
-                        }
-                        let dest = textures_dir.join(file.file_name().unwrap());
-                        std::fs::copy(&file, &dest)?;
-                        log::info!("Copied texture file to {:?}", dest);
-                        copied = true;
-                    }
-                }
-            }
-
-            if !copied {
-                {
-                    let project = PROJECT.read();
-                    // everything else copies over to resources root dir
-                    let resources_dir = project.project_path.clone().join("resources");
-                    if !resources_dir.exists() {
-                        std::fs::create_dir_all(&resources_dir)?;
-                    }
-                    let dest = resources_dir.join(file.file_name().unwrap());
-                    std::fs::copy(&file, &dest)?;
-                    log::info!("Copied other resource file to {:?}", dest);
-                }
-            }
-        }
-        // save it all to ensure the eucc recognises it
-        let mut proj = PROJECT.write();
-        proj.write_to_all()?;
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("File dialogue returned None"))
     }
 }
 

@@ -8,3 +8,7 @@ readme = "README.md"
 
 [dependencies]
 typetag.workspace = true
+hecs.workspace = true
+log.workspace = true
+dyn-hash.workspace = true
+anyhow.workspace = true

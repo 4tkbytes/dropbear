@@ -93,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
                 LevelFilter::Debug,
             )
             .filter(Some("eucalyptus_core"), LevelFilter::Debug)
+            .filter(Some("dropbear_traits"), LevelFilter::Debug)
             .init();
         log::info!("Initialised logger");
     }

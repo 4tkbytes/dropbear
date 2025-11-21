@@ -26,7 +26,9 @@ pub struct NativeLibrary {
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
     
     // err msg
+    #[allow(dead_code)]
     pub(crate) get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage>,
+    #[allow(dead_code)]
     pub(crate) set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage>,
 }
 

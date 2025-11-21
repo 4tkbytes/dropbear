@@ -48,6 +48,8 @@ impl Scene for Editor {
         let dock_state_shared = Arc::new(Mutex::new(self.dock_state.clone()));
         let dock_state_for_loading = dock_state_shared.clone();
 
+        let component_registry = self.component_registry.clone();
+
         let handle = graphics.shared.future_queue.push(async move {
             let mut temp_world = World::new();
             if let Err(e) = Self::load_project_config(
@@ -58,6 +60,7 @@ impl Scene for Editor {
                 active_camera_clone,
                 project_path_clone,
                 dock_state_for_loading,
+                component_registry
             )
             .await
             {
@@ -160,14 +163,6 @@ impl Scene for Editor {
             for &i in completed.iter().rev() {
                 log_once::debug_once!("Removing item {} from pending spawn list", i);
                 self.light_spawn_queue.remove(i);
-            }
-        }
-
-        if !self.plugin_registry.plugins_loaded {
-            if let Err(e) = self.plugin_registry.load_plugins() {
-                fatal!("Failed to load plugins: {}", e);
-            } else {
-                log::info!("Plugins loaded");
             }
         }
 
