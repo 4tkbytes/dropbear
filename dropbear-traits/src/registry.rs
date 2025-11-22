@@ -12,6 +12,7 @@ pub struct ComponentRegistry {
     deserializers: HashMap<TypeId, Box<dyn ComponentDeserializer>>,
     serializable_ids: HashMap<TypeId, u64>,
     id_to_serializable: HashMap<u64, TypeId>,
+    default_creators: HashMap<u64, Box<dyn Fn() -> Box<dyn SerializableComponent> + Send + Sync>>,
     next_component_id: u64,
 }
 
@@ -22,6 +23,7 @@ impl ComponentRegistry {
             deserializers: HashMap::new(),
             serializable_ids: HashMap::new(),
             id_to_serializable: HashMap::new(),
+            default_creators: HashMap::new(),
             next_component_id: 1,
         }
     }
@@ -38,6 +40,62 @@ impl ComponentRegistry {
         self.deserializers
             .insert(type_id, Box::new(DirectDeserializer::<T>::new()));
     }
+
+    pub fn register_with_default<T>(&mut self)
+    where
+        T: SerializableComponent + hecs::Component + Clone + Default + 'static,
+    {
+        self.register::<T>();
+        let id = self.id_for_type::<T>().unwrap();
+        self.default_creators
+            .insert(id, Box::new(|| Box::new(T::default())));
+    }
+
+    pub fn register_factory<T, F>(&mut self, factory: F)
+    where
+        T: SerializableComponent + hecs::Component + Clone + 'static,
+        F: Fn() -> Box<dyn SerializableComponent> + Send + Sync + 'static,
+    {
+        // Ensure registered first
+        if self.id_for_type::<T>().is_none() {
+            self.register::<T>();
+        }
+        let id = self.id_for_type::<T>().unwrap();
+        self.default_creators.insert(id, Box::new(factory));
+    }
+
+    pub fn create_default_component(
+        &self,
+        component_id: u64,
+    ) -> Option<Box<dyn SerializableComponent>> {
+        self.default_creators.get(&component_id).map(|f| f())
+    }
+
+    pub fn remove_component_by_id(&self, world: &mut World, entity: Entity, component_id: u64) {
+        if let Some(expected_type) = self.serializable_type_from_numeric(component_id) {
+            // Find the converter that produces this serializable type
+            for converter in self.converters.values() {
+                if converter.serializable_type_id() == expected_type {
+                    converter.remove_component(world, entity);
+                    // We can stop after finding one, assuming one-to-one mapping for removal
+                    // Or should we continue? Usually one component type per entity.
+                    // But multiple converters might produce same serializable type?
+                    // If so, we might try to remove all possible source components.
+                    // But usually it's 1:1.
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn iter_available_components(&self) -> impl Iterator<Item = (u64, &str)> {
+        self.default_creators.keys().filter_map(move |id| {
+            let type_id = self.id_to_serializable.get(id)?;
+            let deserializer = self.deserializers.get(type_id)?;
+            Some((*id, deserializer.serializable_type_name()))
+        })
+    }
+
 
     // Register a custom converter for special cases
     pub fn register_converter<From, To, F>(&mut self, converter_fn: F)

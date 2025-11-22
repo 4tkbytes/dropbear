@@ -92,10 +92,10 @@ impl Scene for Editor {
                     && let Some(loaded_dock_state) = dock_state_shared.try_lock()
                 {
                     self.dock_state = loaded_dock_state.clone();
-                    log::info!("Dock state updated from loaded config");
+                    log::debug!("Dock state updated from loaded config");
                 }
 
-                log::info!("World received");
+                log::debug!("World received");
             } else {
                 self.world_receiver = Some(receiver);
                 return;

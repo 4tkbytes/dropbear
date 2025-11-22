@@ -3,7 +3,7 @@ use app_dirs2::AppDataType;
 use egui::Ui;
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::states::PluginInfo;
-use eucalyptus_core::traits::component_registry::ComponentRegistry;
+use eucalyptus_core::traits::registry::ComponentRegistry;
 use indexmap::IndexMap;
 use libloading as lib;
 use std::fs::ReadDir;

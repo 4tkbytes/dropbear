@@ -27,11 +27,11 @@ use dropbear_engine::{
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
-use eucalyptus_core::hierarchy::{Children, Parent, SceneHierarchy};
+use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::{Label, SerializedMeshRenderer};
 use eucalyptus_core::traits::SerializableComponent;
-use eucalyptus_core::traits::component_registry::ComponentRegistry;
+use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -192,10 +192,10 @@ impl Editor {
             plugin_registry: &mut PluginRegistry,
             component_registry: &mut ComponentRegistry,
         ) {
-            component_registry.register::<EntityTransform>();
-            component_registry.register::<ModelProperties>();
-            component_registry.register::<LightConfig>();
-            component_registry.register::<ScriptComponent>();
+            component_registry.register_with_default::<EntityTransform>();
+            component_registry.register_with_default::<ModelProperties>();
+            component_registry.register_with_default::<LightConfig>();
+            component_registry.register_with_default::<ScriptComponent>();
 
             component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
                 |_, _, renderer| {

@@ -13,7 +13,7 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
 use dropbear_traits::SerializableComponent;
-use dropbear_traits::component_registry::ComponentRegistry;
+use dropbear_traits::registry::ComponentRegistry;
 use glam::{DQuat, DVec3};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use ron::ser::PrettyConfig;

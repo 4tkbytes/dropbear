@@ -1,4 +1,4 @@
-pub mod component_registry;
+pub mod registry;
 
 use anyhow::{Result, anyhow};
 use hecs::{Entity, EntityBuilder, World};
@@ -31,12 +31,15 @@ impl Clone for Box<dyn SerializableComponent> {
 pub trait ComponentConverter: Send + Sync {
     fn type_id(&self) -> TypeId;
     fn type_name(&self) -> &'static str;
+    fn serializable_type_id(&self) -> TypeId;
 
     fn extract_serializable(
         &self,
         world: &World,
         entity: Entity,
     ) -> Option<Box<dyn SerializableComponent>>;
+
+    fn remove_component(&self, world: &mut World, entity: Entity);
 }
 
 pub trait ComponentDeserializer: Send + Sync {
@@ -73,6 +76,10 @@ impl<T: SerializableComponent + hecs::Component + Clone + 'static> ComponentConv
         std::any::type_name::<T>()
     }
 
+    fn serializable_type_id(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
+
     fn extract_serializable(
         &self,
         world: &World,
@@ -84,6 +91,10 @@ impl<T: SerializableComponent + hecs::Component + Clone + 'static> ComponentConv
             return Some(ty.clone_boxed());
         }
         None
+    }
+
+    fn remove_component(&self, world: &mut World, entity: Entity) {
+        let _ = world.remove_one::<T>(entity);
     }
 }
 
@@ -126,6 +137,10 @@ where
         std::any::type_name::<From>()
     }
 
+    fn serializable_type_id(&self) -> TypeId {
+        TypeId::of::<To>()
+    }
+
     fn extract_serializable(
         &self,
         world: &World,
@@ -134,6 +149,10 @@ where
         let component = world.get::<&From>(entity).ok()?;
         (self.converter_fn)(world, entity, &component)
             .map(|converted| Box::new(converted) as Box<dyn SerializableComponent>)
+    }
+
+    fn remove_component(&self, world: &mut World, entity: Entity) {
+        let _ = world.remove_one::<From>(entity);
     }
 }
 
