@@ -7,13 +7,13 @@ pub mod utils;
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::scripting::error::LastErrorMessage;
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIVersion, JavaVM};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
-use crate::scripting::error::LastErrorMessage;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 
@@ -526,18 +526,15 @@ impl Drop for JavaContext {
     }
 }
 
-
 impl LastErrorMessage for JavaContext {
     fn get_last_error(&self) -> Option<String> {
         let mut env = self.jvm.attach_current_thread().ok()?;
 
         let dropbear_kt_class = env.find_class("com/dropbear/DropbearEngineKt").ok()?;
 
-        let field_value = env.get_static_field(
-            dropbear_kt_class,
-            "lastErrorMessage",
-            "Ljava/lang/String;",
-        ).ok()?;
+        let field_value = env
+            .get_static_field(dropbear_kt_class, "lastErrorMessage", "Ljava/lang/String;")
+            .ok()?;
 
         let jobj = field_value.l().ok()?;
 
@@ -559,13 +556,10 @@ impl LastErrorMessage for JavaContext {
 
         let jstring = env.new_string(&msg)?;
 
-        let static_field = env.get_static_field_id(&dropbear_kt_class, "lastErrorMessage", "Ljava/lang/String;")?;
+        let static_field =
+            env.get_static_field_id(&dropbear_kt_class, "lastErrorMessage", "Ljava/lang/String;")?;
 
-        env.set_static_field(
-            dropbear_kt_class,
-            static_field,
-            JValue::Object(&jstring)
-        )?;
+        env.set_static_field(dropbear_kt_class, static_field, JValue::Object(&jstring))?;
 
         Ok(())
     }

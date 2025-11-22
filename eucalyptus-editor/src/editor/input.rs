@@ -1,6 +1,6 @@
 use super::*;
 use dropbear_engine::{
-    entity::{MeshRenderer},
+    entity::MeshRenderer,
     input::{Controller, Keyboard, Mouse},
 };
 use eucalyptus_core::states::Label;
@@ -142,9 +142,10 @@ impl Keyboard for Editor {
                                         label: label.clone(),
                                         components: vec![
                                             Box::new(props.clone()),
-                                            Box::new(SerializedMeshRenderer::from_renderer(&renderer)),
+                                            Box::new(SerializedMeshRenderer::from_renderer(
+                                                &renderer,
+                                            )),
                                             Box::new(t.clone()),
-
                                         ],
                                         entity_id: None,
                                     };

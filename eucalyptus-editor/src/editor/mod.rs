@@ -13,21 +13,25 @@ use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::Receiver;
 use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
     camera::Camera,
     entity::{MeshRenderer, Transform},
     future::FutureHandle,
     graphics::{RenderContext, SharedGraphicsContext},
-    lighting::{LightManager},
-    model::{ModelId, MODEL_CACHE},
+    lighting::LightManager,
+    model::{MODEL_CACHE, ModelId},
     scene::SceneCommand,
 };
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::hierarchy::{Children, Parent, SceneHierarchy};
+use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::{Label, SerializedMeshRenderer};
+use eucalyptus_core::traits::SerializableComponent;
+use eucalyptus_core::traits::component_registry::ComponentRegistry;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -36,8 +40,8 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, LightConfig, ModelProperties, ScriptComponent, WorldLoadingStatus,
-        PROJECT, SCENES,
+        CameraConfig, EditorTab, LightConfig, ModelProperties, PROJECT, SCENES, ScriptComponent,
+        WorldLoadingStatus,
     },
     success, success_without_console,
     utils::ViewportMode,
@@ -49,10 +53,10 @@ use parking_lot::Mutex;
 use rfd::FileDialog;
 use std::path::Path;
 use std::{
-    collections::{HashMap},
+    collections::HashMap,
     fs,
     path::PathBuf,
-    sync::{Arc},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -61,10 +65,6 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::entity::EntityTransform;
-use eucalyptus_core::scene::{SceneConfig, SceneEntity};
-use eucalyptus_core::traits::component_registry::ComponentRegistry;
-use eucalyptus_core::traits::SerializableComponent;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -188,20 +188,36 @@ impl Editor {
         let mut plugin_registry = PluginRegistry::new();
         let mut component_registry = ComponentRegistry::new();
 
-        fn register_components(plugin_registry: &mut PluginRegistry, component_registry: &mut ComponentRegistry) {
+        fn register_components(
+            plugin_registry: &mut PluginRegistry,
+            component_registry: &mut ComponentRegistry,
+        ) {
             component_registry.register::<EntityTransform>();
             component_registry.register::<ModelProperties>();
-            component_registry.register::<CameraConfig>();
             component_registry.register::<LightConfig>();
             component_registry.register::<ScriptComponent>();
 
             component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
-                |renderer| {
-                    SerializedMeshRenderer {
+                |_, _, renderer| {
+                    Some(SerializedMeshRenderer {
                         handle: renderer.handle().path.clone(),
                         material_override: renderer.material_overrides().to_vec(),
-                    }
-                }
+                    })
+                },
+            );
+
+            component_registry.register_converter::<CameraComponent, CameraConfig, _>(
+                |world, entity, component| {
+                    let Ok(camera) = world.get::<&Camera>(entity) else {
+                        log::debug!(
+                            "Camera component without matching Camera found on entity {:?}",
+                            entity
+                        );
+                        return None;
+                    };
+
+                    Some(CameraConfig::from_ecs_camera(&camera, component))
+                },
             );
 
             // register plugin defined structs
@@ -219,7 +235,10 @@ impl Editor {
             for plugin in plugin_registry.list_plugins() {
                 if let Some(p) = plugin_registry.get_mut(&plugin.display_name) {
                     p.register_component(component_registry);
-                    log::info!("Components for plugin [{}] has been registered to component registry", plugin.display_name);
+                    log::info!(
+                        "Components for plugin [{}] has been registered to component registry",
+                        plugin.display_name
+                    );
                 }
             }
         }
@@ -319,21 +338,31 @@ impl Editor {
 
         scene.entities.clear();
         scene.hierarchy_map = SceneHierarchy::new();
-        log::debug!("Reset internal hierarchy map for scene {}", scene.scene_name);
+        log::debug!(
+            "Reset internal hierarchy map for scene {}",
+            scene.scene_name
+        );
 
-        let labels = self.world.query::<&Label>().iter()
+        let labels = self
+            .world
+            .query::<&Label>()
+            .iter()
             .map(|(e, l)| (e, l.clone()))
             .collect::<Vec<_>>();
 
         for (id, label) in labels {
             let entity_label = label.clone();
 
-            let components = self.component_registry.extract_all_components(&self.world, id);
+            let components = self
+                .component_registry
+                .extract_all_components(&self.world, id);
 
             if let Ok(children_comp) = self.world.get::<&Children>(id) {
                 for &child_entity in children_comp.children() {
                     if let Ok(child_label) = self.world.get::<&Label>(child_entity) {
-                        scene.hierarchy_map.set_parent(Label::new(child_label.as_str()), entity_label.clone());
+                        scene
+                            .hierarchy_map
+                            .set_parent(Label::new(child_label.as_str()), entity_label.clone());
                     } else {
                         log::warn!(
                             "Unable to resolve child entity {:?} for parent '{}' when saving scene",
@@ -887,17 +916,17 @@ impl Editor {
                             if let Ok(mut q) = query {
                                 if let Some((entity_label, renderer, transform, props)) = q.get() {
                                     let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
-                                    
+
                                     components.push(Box::new(*transform));
-                                    
+
                                     let serialized_renderer = SerializedMeshRenderer {
                                         handle: renderer.handle().path.clone(),
                                         material_override: renderer.material_overrides().to_vec(),
                                     };
                                     components.push(Box::new(serialized_renderer));
-                                    
+
                                     components.push(Box::new(props.clone()));
-                                    
+
                                     let s_entity = SceneEntity {
                                         label: entity_label.clone(),
                                         components,
@@ -1040,7 +1069,7 @@ impl Editor {
                         plugin_registry: &mut self.plugin_registry,
                         editor: editor_ptr,
                         build_logs: &mut self.build_logs,
-                        component_registry: &self.component_registry
+                        component_registry: &self.component_registry,
                     },
                 );
         });
@@ -1492,7 +1521,7 @@ impl UndoableAction {
                 } else {
                     anyhow::bail!("No entity found (with or without the Label property)");
                 }
-            },
+            }
             UndoableAction::RemoveStartingCamera(old) => {
                 for (_i, comp) in &mut world.query::<&mut CameraComponent>() {
                     comp.starting_camera = false;

@@ -1,6 +1,6 @@
+mod error;
 pub mod jni;
 pub mod native;
-mod error;
 
 use crate::input::InputState;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};

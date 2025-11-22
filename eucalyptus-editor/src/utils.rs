@@ -3,6 +3,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::scene::SceneCommand;
 use egui::Context;
 use egui_toast::{Toast, ToastOptions, Toasts};
+use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
 use eucalyptus_core::utils::ProjectProgress;
 use git2::Repository;
@@ -10,7 +11,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
-use eucalyptus_core::config::ProjectConfig;
 
 pub fn show_new_project_window<F>(
     ctx: &Context,

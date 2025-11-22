@@ -5,7 +5,7 @@ use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::NO_TEXTURE;
-use dropbear_engine::lighting::{Light, LightComponent, LightType};
+use dropbear_engine::lighting::{LightComponent, LightType};
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
@@ -214,10 +214,24 @@ impl InspectableComponent for EntityTransform {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         signal: &mut Signal,
-        _label: &mut String
+        _label: &mut String,
     ) {
-        self.local_mut().inspect(entity, cfg, ui, undo_stack, signal, &mut "Local Transform".to_string());
-        self.world_mut().inspect(entity, cfg, ui, undo_stack, signal, &mut "World Transform".to_string());
+        self.local_mut().inspect(
+            entity,
+            cfg,
+            ui,
+            undo_stack,
+            signal,
+            &mut "Local Transform".to_string(),
+        );
+        self.world_mut().inspect(
+            entity,
+            cfg,
+            ui,
+            undo_stack,
+            signal,
+            &mut "World Transform".to_string(),
+        );
     }
 }
 
@@ -489,16 +503,19 @@ impl InspectableComponent for Transform {
                     ui.horizontal_wrapped(|ui| {
                         ui.horizontal(|ui| {
                             ui.label("Scale:");
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
-                                if ui
-                                    .button(lock_icon)
-                                    .on_hover_text("Lock uniform scaling")
-                                    .clicked()
-                                {
-                                    cfg.scale_locked = !cfg.scale_locked;
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
+                                    if ui
+                                        .button(lock_icon)
+                                        .on_hover_text("Lock uniform scaling")
+                                        .clicked()
+                                    {
+                                        cfg.scale_locked = !cfg.scale_locked;
+                                    }
+                                },
+                            );
                         });
 
                         let mut scale_changed = false;
@@ -660,7 +677,7 @@ impl InspectableComponent for ScriptComponent {
     }
 }
 
-impl InspectableComponent for MeshRenderer {
+impl InspectableComponent for eucalyptus_core::states::Label {
     fn inspect(
         &mut self,
         entity: &mut Entity,
@@ -668,44 +685,53 @@ impl InspectableComponent for MeshRenderer {
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
         _signal: &mut Signal,
-        label: &mut String,
+        _label: &mut String,
+    ) {
+        ui.horizontal(|ui| {
+            ui.label("Name: ");
+
+            let resp = ui.text_edit_singleline(self.as_mut_string());
+
+            if resp.changed() {
+                if cfg.old_label_entity.is_none() {
+                    cfg.old_label_entity = Some(*entity);
+                    cfg.label_original = Some(self.to_string());
+                }
+                cfg.label_last_edit = Some(Instant::now());
+            }
+
+            if resp.lost_focus() {
+                if let Some(ent) = cfg.old_label_entity.take() {
+                    if ent == *entity {
+                        if let Some(orig) = cfg.label_original.take() {
+                            UndoableAction::push_to_undo(
+                                undo_stack,
+                                UndoableAction::Label(ent, orig),
+                            );
+                            log::debug!("Pushed label change to undo stack (immediate)");
+                        }
+                    } else {
+                        cfg.label_original = None;
+                    }
+                }
+                cfg.label_last_edit = None;
+            }
+        });
+    }
+}
+
+impl InspectableComponent for MeshRenderer {
+    fn inspect(
+        &mut self,
+        _entity: &mut Entity,
+        _cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        _undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
     ) {
         // label
         ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.label("Name: ");
-
-                let resp = ui.text_edit_singleline(label);
-
-                if resp.changed() {
-                    if cfg.old_label_entity.is_none() {
-                        cfg.old_label_entity = Some(*entity);
-                        cfg.label_original = Some(label.clone());
-                    }
-                    cfg.label_last_edit = Some(Instant::now());
-                    self.make_model_mut().label = label.clone();
-                }
-
-                if resp.lost_focus() {
-                    if let Some(ent) = cfg.old_label_entity.take() {
-                        if ent == *entity {
-                            if let Some(orig) = cfg.label_original.take() {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Label(ent, orig),
-                                );
-                                log::debug!("Pushed label change to undo stack (immediate)");
-                            }
-                        } else {
-                            cfg.label_original = None;
-                        }
-                    }
-                    cfg.label_last_edit = None;
-                }
-            });
-
-            ui.label(format!("Entity ID: {}", entity.id()));
-
             CollapsingHeader::new("Model").show(ui, |ui| {
                 let mut selected_model: Option<AssetHandle> = None;
 
@@ -986,51 +1012,6 @@ impl InspectableComponent for MeshRenderer {
                         });
                     }
                 });
-        });
-    }
-}
-
-impl InspectableComponent for Light {
-    fn inspect(
-        &mut self,
-        entity: &mut Entity,
-        cfg: &mut StaticallyKept,
-        ui: &mut Ui,
-        undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
-        _label: &mut String,
-    ) {
-        ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.label("Name: ");
-
-                let resp = ui.text_edit_singleline(&mut self.label);
-
-                if resp.changed() {
-                    if cfg.old_label_entity.is_none() {
-                        cfg.old_label_entity = Some(*entity);
-                        cfg.label_original = Some(self.label.clone().to_string());
-                    }
-                    cfg.label_last_edit = Some(Instant::now());
-                }
-
-                if resp.lost_focus() {
-                    if let Some(ent) = cfg.old_label_entity.take() {
-                        if ent == *entity {
-                            if let Some(orig) = cfg.label_original.take() {
-                                UndoableAction::push_to_undo(
-                                    undo_stack,
-                                    UndoableAction::Label(ent, orig),
-                                );
-                                log::debug!("Pushed label change to undo stack (immediate)");
-                            }
-                        } else {
-                            cfg.label_original = None;
-                        }
-                    }
-                    cfg.label_last_edit = None;
-                }
-            })
         });
     }
 }

@@ -1,25 +1,28 @@
+use crate::camera::{CameraComponent, CameraType};
+use crate::hierarchy::{Children, Parent, SceneHierarchy};
+use crate::states::{
+    CameraConfig, Label, LightConfig, ModelProperties, PROJECT, ScriptComponent,
+    SerializedMeshRenderer, WorldLoadingStatus,
+};
+use crate::utils::ResolveReference;
+use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::camera::{Camera, CameraBuilder};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::model::Model;
+use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_traits::SerializableComponent;
+use dropbear_traits::component_registry::ComponentRegistry;
+use glam::{DQuat, DVec3};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use ron::ser::PrettyConfig;
-use dropbear_engine::graphics::SharedGraphicsContext;
 use tokio::sync::mpsc::UnboundedSender;
-use dropbear_engine::camera::{Camera, CameraBuilder};
-use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use glam::{DQuat, DVec3};
-use dropbear_engine::lighting::{Light, LightComponent};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::model::Model;
-use dropbear_engine::utils::ResourceReferenceType;
-use dropbear_traits::component_registry::ComponentRegistry;
-use dropbear_traits::SerializableComponent;
-use crate::camera::{CameraComponent, CameraType};
-use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{CameraConfig, Label, LightConfig, ModelProperties, ScriptComponent, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
-use crate::utils::ResolveReference;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
@@ -39,7 +42,9 @@ impl SceneEntity {
         entity: hecs::Entity,
         registry: &ComponentRegistry,
     ) -> Option<Self> {
-        let label= if let Ok(mut q) = world.query_one::<&Label>(entity) && let Some(label) = q.get() {
+        let label = if let Ok(mut q) = world.query_one::<&Label>(entity)
+            && let Some(label) = q.get()
+        {
             label.clone()
         } else {
             return None;
@@ -56,7 +61,7 @@ impl SceneEntity {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct SceneSettings { /* *crickets* */ }
+pub struct SceneSettings {/* *crickets* */}
 
 impl SceneSettings {
     pub fn new() -> Self {
@@ -108,11 +113,17 @@ impl SceneConfig {
             let renderer = renderer.clone();
             let mut model = match &renderer.handle.ref_type {
                 ResourceReferenceType::None => {
-                    log::error!("Resource reference type is None for entity '{}', not supported, skipping", label);
+                    log::error!(
+                        "Resource reference type is None for entity '{}', not supported, skipping",
+                        label
+                    );
                     return Ok(());
                 }
                 ResourceReferenceType::Plane => {
-                    log::error!("Resource reference type is Plane for entity '{}', not supported (being remade), skipping", label);
+                    log::error!(
+                        "Resource reference type is Plane for entity '{}', not supported (being remade), skipping",
+                        label
+                    );
                     return Ok(());
                 }
                 ResourceReferenceType::File(reference) => {
@@ -130,11 +141,9 @@ impl SceneConfig {
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
 
-                    let model = Model::load_from_memory(
-                        graphics.clone(),
-                        bytes.clone(),
-                        Some(label),
-                    ).await?;
+                    let model =
+                        Model::load_from_memory(graphics.clone(), bytes.clone(), Some(label))
+                            .await?;
                     MeshRenderer::from_handle(model)
                 }
                 ResourceReferenceType::Cube => {
@@ -144,7 +153,8 @@ impl SceneConfig {
                         graphics.clone(),
                         include_bytes!("../../resources/models/cube.glb"),
                         Some(label),
-                    ).await?;
+                    )
+                    .await?;
                     MeshRenderer::from_handle(model)
                 }
             };
@@ -186,7 +196,7 @@ impl SceneConfig {
                     }
                 }
             }
-            
+
             builder.add(model);
         } else if let Some(props) = component.as_any().downcast_ref::<ModelProperties>() {
             builder.add(props.clone());
@@ -200,13 +210,17 @@ impl SceneConfig {
                 graphics.clone(),
                 light_conf.light_component.clone(),
                 light_conf.transform,
-                Some(label)
-            ).await;
+                Some(label),
+            )
+            .await;
             builder.add_bundle((light_conf.light_component.clone(), light));
         } else if let Some(script) = component.as_any().downcast_ref::<ScriptComponent>() {
             builder.add(script.clone());
         } else if component.as_any().downcast_ref::<Parent>().is_some() {
-            log::debug!("Skipping Parent component for '{}' - will be rebuilt from hierarchy_map", label);
+            log::debug!(
+                "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
+                label
+            );
         } else if let Some(registry) = registry {
             if !registry.deserialize_into_builder(component.as_ref(), builder)? {
                 log::warn!(
@@ -222,7 +236,7 @@ impl SceneConfig {
                 label
             );
         }
-        
+
         Ok(())
     }
 
@@ -291,7 +305,9 @@ impl SceneConfig {
 
         for (index, entity_config) in entity_configs {
             let SceneEntity {
-                label, components, entity_id: _,
+                label,
+                components,
+                entity_id: _,
             } = entity_config;
 
             let label_for_map = label.clone();
@@ -312,14 +328,18 @@ impl SceneConfig {
             let mut builder = hecs::EntityBuilder::new();
 
             builder.add(label_for_map.clone());
-            
+
             let mut has_entity_transform = false;
-            
+
             for component in components {
-                if component.as_any().downcast_ref::<EntityTransform>().is_some() {
+                if component
+                    .as_any()
+                    .downcast_ref::<EntityTransform>()
+                    .is_some()
+                {
                     has_entity_transform = true;
                 }
-                
+
                 Self::load_component(
                     component,
                     &mut builder,
@@ -331,17 +351,25 @@ impl SceneConfig {
             }
 
             let entity = world.spawn(builder.build());
-            
+
             if has_entity_transform {
-                if let Ok(mut query) = world.query_one::<(&EntityTransform, Option<&mut MeshRenderer>, Option<&mut Light>, Option<&mut LightComponent>)>(entity) {
-                    if let Some((entity_transform, renderer_opt, light_opt, light_comp_opt)) = query.get() {
+                if let Ok(mut query) = world.query_one::<(
+                    &EntityTransform,
+                    Option<&mut MeshRenderer>,
+                    Option<&mut Light>,
+                    Option<&mut LightComponent>,
+                )>(entity)
+                {
+                    if let Some((entity_transform, renderer_opt, light_opt, light_comp_opt)) =
+                        query.get()
+                    {
                         let transform = entity_transform.sync();
-                        
+
                         if let Some(renderer) = renderer_opt {
                             renderer.update(&transform);
                             log::debug!("Updated renderer transform for '{}'", label_for_logs);
                         }
-                        
+
                         if let (Some(light), Some(light_comp)) = (light_opt, light_comp_opt) {
                             light.update(light_comp, &transform);
                             log::debug!("Updated light transform for '{}'", label_for_logs);
@@ -362,14 +390,14 @@ impl SceneConfig {
         }
 
         let mut parent_children_map: HashMap<Label, Vec<Label>> = HashMap::new();
-        
+
         for entity_label in label_to_entity.keys() {
             let children: Vec<Label> = self.hierarchy_map.get_children(entity_label).to_vec();
             if !children.is_empty() {
                 parent_children_map.insert(entity_label.clone(), children);
             }
         }
-        
+
         for (parent_label, child_labels) in parent_children_map {
             let Some(&parent_entity) = label_to_entity.get(&parent_label) else {
                 log::warn!(
@@ -503,10 +531,7 @@ impl SceneConfig {
             }
         }
 
-        log::info!(
-            "Loaded {} entities from scene",
-            self.entities.len()
-        );
+        log::info!("Loaded {} entities from scene", self.entities.len());
         #[cfg(feature = "editor")]
         {
             let debug_camera = {

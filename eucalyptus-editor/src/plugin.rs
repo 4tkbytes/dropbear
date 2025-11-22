@@ -15,9 +15,9 @@ pub trait EditorPlugin: Send + Sync {
     fn display_name(&self) -> &str;
     fn ui(&mut self, ui: &mut Ui, editor: &mut Editor);
     fn tab_title(&self) -> &str;
-    
-    /// Allows you to register the struct [Self] as a component to the component registry. 
-    /// This will then be listed as an option for a potential component a user could add. 
+
+    /// Allows you to register the struct [Self] as a component to the component registry.
+    /// This will then be listed as an option for a potential component a user could add.
     fn register_component(&mut self, registry: &mut ComponentRegistry);
 }
 

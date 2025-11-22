@@ -6,13 +6,13 @@ pub mod sig;
 pub mod types;
 
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::scripting::error::LastErrorMessage;
 use crate::scripting::native::sig::{
     DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged,
 };
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::path::Path;
-use crate::scripting::error::LastErrorMessage;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -24,7 +24,7 @@ pub struct NativeLibrary {
     update_tag_fn: Symbol<'static, UpdateTagged>,
     destroy_all_fn: Symbol<'static, DestroyAll>,
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
-    
+
     // err msg
     #[allow(dead_code)]
     pub(crate) get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage>,
@@ -52,9 +52,15 @@ impl NativeLibrary {
             let destroy_tagged_fn: Symbol<'static, DestroyTagged> =
                 std::mem::transmute(library.get::<DestroyTagged>(b"dropbear_destroy_tagged\0")?);
             let get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage> =
-                std::mem::transmute(library.get::<sig::GetLastErrorMessage>(b"dropbear_get_last_error_message\0")?);
+                std::mem::transmute(
+                    library
+                        .get::<sig::GetLastErrorMessage>(b"dropbear_get_last_error_message\0")?,
+                );
             let set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage> =
-                std::mem::transmute(library.get::<sig::SetLastErrorMessage>(b"dropbear_set_last_error_message\0")?);
+                std::mem::transmute(
+                    library
+                        .get::<sig::SetLastErrorMessage>(b"dropbear_set_last_error_message\0")?,
+                );
 
             Ok(Self {
                 library,

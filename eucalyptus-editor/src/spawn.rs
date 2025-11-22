@@ -5,9 +5,9 @@ use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
-pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::scene::SceneEntity;
-use eucalyptus_core::states::{ModelProperties, SerializedMeshRenderer, ScriptComponent};
+pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
+use eucalyptus_core::states::{ModelProperties, ScriptComponent, SerializedMeshRenderer};
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
 use hecs::EntityBuilder;
@@ -40,7 +40,8 @@ impl PendingSpawnController for Editor {
                 spawn.scene_entity.label
             );
 
-            let serialized_renderer = component_cloned::<SerializedMeshRenderer>(&spawn.scene_entity);
+            let serialized_renderer =
+                component_cloned::<SerializedMeshRenderer>(&spawn.scene_entity);
 
             if serialized_renderer.is_none() && spawn.handle.is_none() {
                 log::debug!(
@@ -154,7 +155,8 @@ async fn load_renderer_from_serialized(
             MeshRenderer::from_path(graphics.clone(), &path, Some(&label)).await?
         }
         ResourceReferenceType::Bytes(bytes) => {
-            let model = Model::load_from_memory(graphics.clone(), bytes.clone(), Some(&label)).await?;
+            let model =
+                Model::load_from_memory(graphics.clone(), bytes.clone(), Some(&label)).await?;
             MeshRenderer::from_handle(model)
         }
         ResourceReferenceType::Plane => {
@@ -182,9 +184,7 @@ async fn load_renderer_from_serialized(
             ) {
                 let source_path = override_entry.source_model.resolve()?;
                 let label_hint = override_entry.source_model.as_uri();
-                if let Err(err) =
-                    Model::load(graphics.clone(), &source_path, label_hint).await
-                {
+                if let Err(err) = Model::load(graphics.clone(), &source_path, label_hint).await {
                     log::warn!(
                         "Failed to preload source model {:?} for override '{}': {}",
                         override_entry.source_model,

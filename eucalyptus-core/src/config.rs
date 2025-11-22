@@ -1,11 +1,13 @@
-use std::path::{Path, PathBuf};
-use ron::ser::PrettyConfig;
-use std::fs;
-use serde::{Deserialize, Serialize};
-use egui_dock::DockState;
-use chrono::Utc;
 use crate::scene::SceneConfig;
-use crate::states::{EditorSettings, EditorTab, File, Folder, Node, ResourceType, RESOURCES, SCENES, SOURCE};
+use crate::states::{
+    EditorSettings, EditorTab, File, Folder, Node, RESOURCES, ResourceType, SCENES, SOURCE,
+};
+use chrono::Utc;
+use egui_dock::DockState;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// The root config file, responsible for building and other metadata.
 ///

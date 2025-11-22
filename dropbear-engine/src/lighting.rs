@@ -1,12 +1,3 @@
-use dropbear_traits::SerializableComponent;
-use glam::{DMat4, DQuat, DVec3};
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
-use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
-    RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
-};
-use dropbear_macro::SerializableComponent;
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
@@ -14,6 +5,15 @@ use crate::{
     camera::Camera,
     entity::Transform,
     model::{self, Model, Vertex},
+};
+use dropbear_macro::SerializableComponent;
+use dropbear_traits::SerializableComponent;
+use glam::{DMat4, DQuat, DVec3};
+use std::fmt::{Display, Formatter};
+use std::sync::Arc;
+use wgpu::{
+    BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
+    RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
 };
 
 pub const MAX_LIGHTS: usize = 8;

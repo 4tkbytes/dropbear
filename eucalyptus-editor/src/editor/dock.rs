@@ -3,11 +3,7 @@ use crate::editor::{
     ViewportMode,
     console_error::{ConsoleItem, ErrorLevel},
 };
-use std::{
-    collections::{HashMap},
-    path::PathBuf,
-    sync::LazyLock,
-};
+use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
 
 use crate::editor::component::InspectableComponent;
 use crate::plugin::PluginRegistry;
@@ -16,11 +12,13 @@ use dropbear_engine::{
     entity::{MeshRenderer, Transform},
     lighting::{Light, LightComponent},
 };
-use egui::{self, CollapsingHeader, Margin, RichText};
+use egui::{self, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
+use eucalyptus_core::states::Label;
+use eucalyptus_core::traits::component_registry::ComponentRegistry;
+use hecs::{Entity, World};
 use indexmap::Equivalent;
-use eucalyptus_core::states::{Label};
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode};
@@ -51,6 +49,42 @@ pub struct DraggedAsset {
     pub path: ResourceReference,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ComponentNodeSelection {
+    pub node_id: u64,
+    entity_bits: u64,
+    pub component_type_id: u64,
+}
+
+impl ComponentNodeSelection {
+    pub fn entity(&self) -> Option<Entity> {
+        Entity::from_bits(self.entity_bits)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ComponentNodeKey {
+    entity_bits: u64,
+    component_type_id: u64,
+}
+
+impl ComponentNodeKey {
+    fn new(entity: Entity, component_type_id: u64) -> Self {
+        Self {
+            entity_bits: entity.to_bits().get(),
+            component_type_id,
+        }
+    }
+
+    fn as_selection(&self, node_id: u64) -> ComponentNodeSelection {
+        ComponentNodeSelection {
+            node_id,
+            entity_bits: self.entity_bits,
+            component_type_id: self.component_type_id,
+        }
+    }
+}
+
 pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
     LazyLock::new(|| Mutex::new(StaticallyKept::default()));
 
@@ -76,7 +110,49 @@ pub struct StaticallyKept {
     pub(crate) transform_original_transform: Option<Transform>,
 
     pub(crate) transform_in_progress: bool,
-    pub(crate) transform_rotation_cache: HashMap<hecs::Entity, glam::DVec3>,
+    pub(crate) transform_rotation_cache: HashMap<Entity, glam::DVec3>,
+
+    component_node_ids: HashMap<ComponentNodeKey, u64>,
+    component_node_lookup: HashMap<u64, ComponentNodeKey>,
+    next_component_node_id: u64,
+    pub(crate) last_component_lookup: Option<ComponentNodeSelection>,
+    pub(crate) pending_component_drag: Option<ComponentNodeSelection>,
+}
+
+impl StaticallyKept {
+    fn next_component_node_id(&mut self) -> u64 {
+        if self.next_component_node_id == 0 {
+            self.next_component_node_id = 1;
+        }
+        let id = self.next_component_node_id;
+        self.next_component_node_id = self.next_component_node_id.wrapping_add(1);
+        if self.next_component_node_id == 0 {
+            self.next_component_node_id = 1;
+        }
+        id
+    }
+
+    fn component_node_id(&mut self, entity: Entity, component_type_id: u64) -> u64 {
+        let key = ComponentNodeKey::new(entity, component_type_id);
+        if let Some(id) = self.component_node_ids.get(&key) {
+            *id
+        } else {
+            let id = self.next_component_node_id();
+            self.component_node_ids.insert(key, id);
+            self.component_node_lookup.insert(id, key);
+            id
+        }
+    }
+
+    fn component_selection(&self, node_id: u64) -> Option<ComponentNodeSelection> {
+        self.component_node_lookup
+            .get(&node_id)
+            .map(|key| key.as_selection(node_id))
+    }
+
+    fn remember_component_lookup(&mut self, selection: ComponentNodeSelection) {
+        self.last_component_lookup = Some(selection);
+    }
 }
 
 impl<'a> TabViewer for EditorTabViewer<'a> {
@@ -168,7 +244,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             .fit_to_exact_size([display_width, display_height].into()),
                     )
                 });
-                
+
                 let snapping = ui.input(|input| input.modifiers.shift);
 
                 // Note to self: fuck you >:(
@@ -256,17 +332,25 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
             }
             EditorTab::ModelEntityList => {
-                let (_response, action) = egui_ltreeview::TreeView::new(egui::Id::new("model_entity_list"))
-                    .show(ui, |builder| {
-                    let current_scene_name = {PROJECT.read().last_opened_scene.clone().unwrap_or("Scene".to_string())};
+                let (_response, action) = egui_ltreeview::TreeView::new(egui::Id::new(
+                    "model_entity_list",
+                ))
+                .show(ui, |builder| {
+                    let current_scene_name = {
+                        PROJECT
+                            .read()
+                            .last_opened_scene
+                            .clone()
+                            .unwrap_or("Scene".to_string())
+                    };
                     builder.node(
                         NodeBuilder::dir(u64::MAX)
                             .label(format!("Scene: {}", current_scene_name))
                             .context_menu(|ui| {
                                 if ui.button("New Empty Entity").clicked() {
-                                    self.world.spawn((Label::new("Blank Entity"), ));
+                                    self.world.spawn((Label::new("Blank Entity"),));
                                 }
-                            })
+                            }),
                     );
                     // the root scene must be the biggest number possible to remove any ambiguity
 
@@ -275,12 +359,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         entity: Entity,
                         world: &World,
                         registry: &ComponentRegistry,
+                        cfg: &mut StaticallyKept,
                     ) -> anyhow::Result<()> {
-                        let entity_id = entity.id() as u64;
-                        let label = if let Ok(mut q) = world.query_one::<&Label>(entity) && let Some(label) = q.get() {
+                        let entity_id = entity.to_bits().get();
+                        let label = if let Ok(mut q) = world.query_one::<&Label>(entity)
+                            && let Some(label) = q.get()
+                        {
                             label.clone()
                         } else {
-                            anyhow::bail!("This entity [{}] is expected to contain Label", entity_id);
+                            anyhow::bail!(
+                                "This entity [{}] is expected to contain Label",
+                                entity_id
+                            );
                         };
 
                         builder.node(
@@ -292,32 +382,46 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             // todo
                                         }
                                     });
-                                })
+                                }),
                         );
 
                         let components = registry.extract_all_components(world, entity);
 
-                        for (i, component) in components.iter().enumerate() {
-                            // todo: make this a uuid instead
-                            let component_id = entity_id.wrapping_mul(1_000_000).wrapping_add(i as u64);
-
+                        for component in components.iter() {
+                            let Some(component_type_id) =
+                                registry.id_for_component(component.as_ref())
+                            else {
+                                log_once::warn_once!(
+                                    "Component '{}' missing registry id, skipping tree entry",
+                                    component.type_name()
+                                );
+                                continue;
+                            };
+                            let component_node_id =
+                                cfg.component_node_id(entity, component_type_id);
                             let component_name = component.type_name();
+                            let display = format!("{} (id #{component_type_id})", component_name);
 
                             builder.node(
-                                NodeBuilder::leaf(component_id)
-                                    .label(component_name)
+                                NodeBuilder::leaf(component_node_id)
+                                    .label(display)
                                     .context_menu(|ui| {
                                         if ui.button("Remove Component").clicked() {
                                             // complete this
                                         }
-                                    })
+                                    }),
                             );
                         }
 
                         if let Ok(children) = world.get::<&Children>(entity) {
                             for &child in children.children() {
-                                if let Err(e) = add_entity_to_tree(builder, child, world, registry) {
-                                    log_once::error_once!("Failed to add child entity to tree, skipping: {}", e);
+                                if let Err(e) =
+                                    add_entity_to_tree(builder, child, world, registry, cfg)
+                                {
+                                    log_once::error_once!(
+                                        "Failed to add child entity to tree, skipping: {}",
+                                        e
+                                    );
                                     continue;
                                 }
                             }
@@ -327,12 +431,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         Ok(())
                     }
 
-                    for (entity, ()) in self.world.query::<()>()
-                        .without::<&Parent>()
-                        .iter()
-                    {
-                        if let Err(e) = add_entity_to_tree(builder, entity, &self.world, &self.component_registry) {
-                            log_once::error_once!("Failed to add child entity to tree, skipping: {}", e);
+                    for (entity, ()) in self.world.query::<()>().without::<&Parent>().iter() {
+                        if let Err(e) = add_entity_to_tree(
+                            builder,
+                            entity,
+                            &self.world,
+                            &self.component_registry,
+                            &mut cfg,
+                        ) {
+                            log_once::error_once!(
+                                "Failed to add child entity to tree, skipping: {}",
+                                e
+                            );
                         }
                     }
 
@@ -341,12 +451,20 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 for i in action {
                     match i {
-                        egui_ltreeview::Action::SetSelected(_items) => {},
-                        egui_ltreeview::Action::Move(_drag_and_drop) => {},
-                        egui_ltreeview::Action::Drag(_drag_and_drop) => {},
-                        egui_ltreeview::Action::Activate(_activate) => {},
-                        egui_ltreeview::Action::DragExternal(_drag_and_drop_external) => {},
-                        egui_ltreeview::Action::MoveExternal(_drag_and_drop_external) => {},
+                        egui_ltreeview::Action::SetSelected(items) => {
+                            self.handle_tree_selection(&mut cfg, &items);
+                        }
+                        egui_ltreeview::Action::Move(drag_and_drop) => {
+                            self.handle_tree_move(&mut cfg, &drag_and_drop);
+                        }
+                        egui_ltreeview::Action::Drag(drag_and_drop) => {
+                            self.handle_tree_drag(&mut cfg, &drag_and_drop);
+                        }
+                        egui_ltreeview::Action::Activate(activate) => {
+                            self.handle_tree_activate(&mut cfg, &activate);
+                        }
+                        egui_ltreeview::Action::DragExternal(_drag_and_drop_external) => {}
+                        egui_ltreeview::Action::MoveExternal(_drag_and_drop_external) => {}
                     }
                 }
             }
@@ -359,14 +477,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
                     let mut local_set_initial_camera = false;
-                    if let Ok(mut q) = self.world.query_one::<(
-                        &mut Label,
-                    )>(*entity)
-                    {
-                        if let Some((
-                            label,
-                        )) = q.get()
-                        {
+                    if let Ok(mut q) = self.world.query_one::<(&mut Label,)>(*entity) {
+                        if let Some((label,)) = q.get() {
+                            label.inspect(
+                                entity,
+                                &mut cfg,
+                                ui,
+                                self.undo_stack,
+                                self.signal,
+                                &mut String::new()
+                            );
+
+                            ui.label(format!("Entity ID: {}", entity.id()));
 
                             if let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(*entity)
                                 && let Some(e) = q.get()
@@ -378,7 +500,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    label.as_mut_string(),
+                                    &mut String::new(),
                                 );
                             }
 
@@ -392,7 +514,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui,
                                     self.undo_stack,
                                     self.signal,
-                                    label.as_mut_string(),
+                                    &mut String::new(),
                                 );
                             }
 
@@ -410,63 +532,80 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
                             }
 
-
-                            if let Ok(mut q) = self.world.query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) = self
+                                .world
+                                .query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
                                 && let Some((camera, camera_component)) = q.get()
                             {
-                                CollapsingHeader::new("Camera Components")
-                                    .default_open(true)
-                                    .show(ui, |ui| {
-                                        camera.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut String::new(),
+                                camera.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut String::new(),
+                                );
+
+                                camera_component.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut camera.label.clone(),
+                                );
+
+                                ui.separator();
+
+                                // camera controller
+                                ui.label("Camera Controls:");
+                                let mut active_camera = self.active_camera.lock();
+
+                                if active_camera.equivalent(&Some(*entity)) {
+                                    ui.label("Status: Currently viewing through camera");
+                                } else {
+                                    ui.label("Status: Not viewing through this camera");
+                                }
+
+                                if ui.button("Set as active camera").clicked() {
+                                    *active_camera = Some(*entity);
+                                    log::info!(
+                                        "Currently viewing from camera angle '{}'",
+                                        camera.label
+                                    );
+                                }
+
+                                if camera_component.starting_camera {
+                                    if ui.button("Stop making camera initial").clicked() {
+                                        log::debug!("'Stop making camera initial' button clicked");
+                                        camera_component.starting_camera = false;
+                                        success!("Removed {} from starting camera", camera.label);
+                                    }
+                                } else if ui.button("Set as initial camera").clicked() {
+                                    log::debug!("'Set as initial camera' button clicked");
+                                    if matches!(camera_component.camera_type, CameraType::Debug) {
+                                        warn!(
+                                            "Cannot set any cameras of type 'Debug' to initial camera"
                                         );
+                                    } else {
+                                        local_set_initial_camera = true
+                                    }
+                                }
+                            }
 
-                                        camera_component.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            &mut camera.label.clone(),
-                                        );
-
-                                        ui.separator();
-
-                                        // camera controller
-                                        ui.label("Camera Controls:");
-                                        let mut active_camera = self.active_camera.lock();
-
-                                        if active_camera.equivalent(&Some(*entity)) {
-                                            ui.label("Status: Currently viewing through camera");
-                                        } else {
-                                            ui.label("Status: Not viewing through this camera");
-                                        }
-
-                                        if ui.button("Set as active camera").clicked() {
-                                            *active_camera = Some(*entity);
-                                            log::info!("Currently viewing from camera angle '{}'", camera.label);
-                                        }
-
-                                        if camera_component.starting_camera {
-                                            if ui.button("Stop making camera initial").clicked() {
-                                                log::debug!("'Stop making camera initial' button clicked");
-                                                camera_component.starting_camera = false;
-                                                success!("Removed {} from starting camera", camera.label);
-                                            }
-                                        } else if ui.button("Set as initial camera").clicked() {
-                                            log::debug!("'Set as initial camera' button clicked");
-                                            if matches!(camera_component.camera_type, CameraType::Debug) {
-                                                warn!("Cannot set any cameras of type 'Debug' to initial camera");
-                                            } else {
-                                                local_set_initial_camera = true
-                                            }
-                                        }
-                                    });
+                            if let Ok(mut q) = self
+                                .world
+                                .query_one::<(&mut Light, &mut LightComponent)>(*entity)
+                                && let Some((_light, comp)) = q.get()
+                            {
+                                comp.inspect(
+                                    entity,
+                                    &mut cfg,
+                                    ui,
+                                    self.undo_stack,
+                                    self.signal,
+                                    &mut String::new(),
+                                );
                             }
 
                             if let Ok(mut q) = self.world.query_one::<&mut ScriptComponent>(*entity)
@@ -479,28 +618,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     self.undo_stack,
                                     self.signal,
                                     label.as_mut_string(),
-                                );
-                            }
-
-                            if let Ok(mut q) = self.world.query_one::<(&mut Light, &mut LightComponent)>(*entity)
-                                && let Some((light, comp)) = q.get()
-                            {
-                                light.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut String::new(),
-                                );
-
-                                comp.inspect(
-                                    entity,
-                                    &mut cfg,
-                                    ui,
-                                    self.undo_stack,
-                                    self.signal,
-                                    &mut light.label,
                                 );
                             }
 
@@ -678,6 +795,100 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
                     });
             }
+        }
+    }
+}
+
+impl<'a> EditorTabViewer<'a> {
+    fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {
+        for node_id in items {
+            self.resolve_tree_node(cfg, *node_id);
+        }
+    }
+
+    fn handle_tree_activate(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        activate: &egui_ltreeview::Activate<u64>,
+    ) {
+        self.handle_tree_selection(cfg, &activate.selected);
+    }
+
+    fn handle_tree_drag(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        drag: &egui_ltreeview::DragAndDrop<u64>,
+    ) {
+        if let Some(&node_id) = drag.source.first() {
+            if let Some(selection) = cfg.component_selection(node_id) {
+                cfg.pending_component_drag = Some(selection);
+                self.inspect_component_selection(cfg, selection);
+            }
+        }
+    }
+
+    fn handle_tree_move(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        drag: &egui_ltreeview::DragAndDrop<u64>,
+    ) {
+        let selection = cfg.pending_component_drag.take().or_else(|| {
+            drag.source
+                .first()
+                .and_then(|node_id| cfg.component_selection(*node_id))
+        });
+
+        if let Some(selection) = selection {
+            self.inspect_component_selection(cfg, selection);
+            if let Some(target_entity) = Self::entity_from_node_id(drag.target) {
+                log::info!(
+                    "Component id #{} ready to drop onto entity {:?}",
+                    selection.component_type_id,
+                    target_entity
+                );
+            }
+        }
+    }
+
+    fn resolve_tree_node(&mut self, cfg: &mut StaticallyKept, node_id: u64) {
+        if let Some(selection) = cfg.component_selection(node_id) {
+            self.inspect_component_selection(cfg, selection);
+        } else if let Some(entity) = Self::entity_from_node_id(node_id) {
+            *self.selected_entity = Some(entity);
+        }
+    }
+
+    fn inspect_component_selection(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        selection: ComponentNodeSelection,
+    ) {
+        cfg.remember_component_lookup(selection);
+        let component_id = selection.component_type_id;
+        let matches = self
+            .component_registry
+            .find_components_by_numeric_id(&*self.world, component_id);
+
+        if matches.is_empty() {
+            log::warn!("Component id #{} not found in world", component_id);
+            return;
+        }
+
+        for (entity, component) in matches {
+            log::debug!(
+                "Serializable component '{}' (id #{}) attached to entity {:?}",
+                component.type_name(),
+                component_id,
+                entity
+            );
+        }
+    }
+
+    fn entity_from_node_id(node_id: u64) -> Option<Entity> {
+        if node_id == u64::MAX {
+            None
+        } else {
+            Entity::from_bits(node_id)
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::camera::{CameraComponent, CameraType};
+use crate::hierarchy::EntityTransformExt;
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
@@ -23,7 +24,6 @@ use jni::sys::{
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use crate::hierarchy::EntityTransformExt;
 
 /// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getEntity
 ///   (JNIEnv *, jclass, jlong, jstring);`
@@ -101,7 +101,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
             Ok(c) => c,
             Err(_) => return JObject::null(),
         };
-        
+
         let world_transform_java = match env.new_object(
             &transform_class,
             "(DDDDDDDDDD)V",
@@ -165,7 +165,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
             &[
                 JValue::Object(&local_transform_java),
                 JValue::Object(&world_transform_java),
-            ]
+            ],
         ) {
             Ok(java_transform) => java_transform,
             Err(_) => {
@@ -174,7 +174,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
                 );
                 JObject::null()
             }
-        }
+        };
     }
 
     println!(
@@ -208,12 +208,10 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
         let get_number_field = |env: &mut JNIEnv, obj: &JObject, field_name: &str| -> f64 {
             match env.get_field(obj, field_name, "Ljava/lang/Number;") {
                 Ok(v) => match v.l() {
-                    Ok(num_obj) => {
-                        match env.call_method(&num_obj, "doubleValue", "()D", &[]) {
-                            Ok(result) => result.d().unwrap_or(0.0),
-                            Err(_) => 0.0,
-                        }
-                    }
+                    Ok(num_obj) => match env.call_method(&num_obj, "doubleValue", "()D", &[]) {
+                        Ok(result) => result.d().unwrap_or(0.0),
+                        Err(_) => 0.0,
+                    },
                     Err(_) => 0.0,
                 },
                 Err(_) => 0.0,
@@ -258,31 +256,47 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
         })
     };
 
-    let local_obj: JObject = match env.get_field(&entity_transform_obj, "local", "Lcom/dropbear/math/Transform;") {
+    let local_obj: JObject = match env.get_field(
+        &entity_transform_obj,
+        "local",
+        "Lcom/dropbear/math/Transform;",
+    ) {
         Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
         Err(_) => {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get local transform field");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get local transform field"
+            );
             return;
         }
     };
 
-    let world_obj: JObject = match env.get_field(&entity_transform_obj, "world", "Lcom/dropbear/math/Transform;") {
+    let world_obj: JObject = match env.get_field(
+        &entity_transform_obj,
+        "world",
+        "Lcom/dropbear/math/Transform;",
+    ) {
         Ok(v) => v.l().unwrap_or_else(|_| JObject::null()),
         Err(_) => {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get world transform field");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get world transform field"
+            );
             return;
         }
     };
 
     if local_obj.is_null() || world_obj.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] local or world transform is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] local or world transform is null"
+        );
         return;
     }
 
     let local_transform = match extract_transform(&mut env, &local_obj) {
         Some(t) => t,
         None => {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract local transform");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract local transform"
+            );
             return;
         }
     };
@@ -290,7 +304,9 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
     let world_transform = match extract_transform(&mut env, &world_obj) {
         Some(t) => t,
         None => {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract world transform");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to extract world transform"
+            );
             return;
         }
     };
@@ -300,10 +316,14 @@ pub fn Java_com_dropbear_ffi_JNINative_setTransform(
             *entity_transform.local_mut() = local_transform;
             *entity_transform.world_mut() = world_transform;
         } else {
-            println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get entity transform");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Failed to get entity transform"
+            );
         }
     } else {
-        println!("[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Entity does not have EntityTransform component");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_setTransform] [ERROR] Entity does not have EntityTransform component"
+        );
     }
 }
 
@@ -319,7 +339,9 @@ pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
     let world = world_handle as *mut World;
 
     if world.is_null() {
-        println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] World pointer is null");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] World pointer is null"
+        );
         return std::ptr::null_mut();
     }
 
@@ -333,7 +355,10 @@ pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
             let transform_class = match env.find_class("com/dropbear/math/Transform") {
                 Ok(c) => c,
                 Err(e) => {
-                    println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to find Transform class: {:?}", e);
+                    println!(
+                        "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to find Transform class: {:?}",
+                        e
+                    );
                     return std::ptr::null_mut();
                 }
             };
@@ -356,18 +381,25 @@ pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
             ) {
                 Ok(obj) => obj,
                 Err(e) => {
-                    println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to create Transform object: {:?}", e);
+                    println!(
+                        "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to create Transform object: {:?}",
+                        e
+                    );
                     return std::ptr::null_mut();
                 }
             };
 
             return transform_obj.into_raw();
         } else {
-            println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to get entity transform");
+            println!(
+                "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to get entity transform"
+            );
             std::ptr::null_mut()
         }
     } else {
-        println!("[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Entity does not have EntityTransform component");
+        println!(
+            "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Entity does not have EntityTransform component"
+        );
         std::ptr::null_mut()
     }
 }
@@ -2247,7 +2279,8 @@ pub fn Java_com_dropbear_ffi_JNINative_setTexture(
             let Some(target_material) = resolved_target_name else {
                 let message = format!(
                     "[Java_com_dropbear_ffi_JNINative_setTexture] [ERROR] Unable to resolve material '{}' on model '{}'",
-                    target_identifier, renderer.model().label
+                    target_identifier,
+                    renderer.model().label
                 );
                 println!("{}", message);
                 return;

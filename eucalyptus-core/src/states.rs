@@ -1,22 +1,22 @@
-use crate::traits::SerializableComponent;
 use crate::camera::{CameraComponent, CameraType};
+use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
+use crate::scene::SceneConfig;
+use crate::traits::SerializableComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
-use dropbear_engine::lighting::{LightComponent};
-use dropbear_engine::utils::{ResourceReference};
+use dropbear_engine::lighting::LightComponent;
+use dropbear_engine::utils::ResourceReference;
+use dropbear_macro::SerializableComponent;
 use egui::Ui;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
-use std::path::{PathBuf};
-use std::{fmt};
-use dropbear_macro::SerializableComponent;
-use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
-use crate::scene::SceneConfig;
+use std::path::PathBuf;
 
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
@@ -248,7 +248,6 @@ pub struct ModelProperties {
     pub custom_properties: Vec<Property>,
     pub next_id: u64,
 }
-
 
 impl ModelProperties {
     /// Creates a new [ModelProperties]
@@ -516,7 +515,7 @@ impl DerefMut for Label {
     }
 }
 
-/// A [MeshRenderer] that is serialized into a file to be stored as a value for config. 
+/// A [MeshRenderer] that is serialized into a file to be stored as a value for config.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, SerializableComponent)]
 pub struct SerializedMeshRenderer {
     pub handle: ResourceReference,
@@ -524,7 +523,7 @@ pub struct SerializedMeshRenderer {
 }
 
 impl SerializedMeshRenderer {
-    /// Creates a new [SerializedMeshRenderer] from an existing [MeshRenderer] by cloning data. 
+    /// Creates a new [SerializedMeshRenderer] from an existing [MeshRenderer] by cloning data.
     pub fn from_renderer(renderer: &MeshRenderer) -> Self {
         let handle = renderer.handle();
         Self {

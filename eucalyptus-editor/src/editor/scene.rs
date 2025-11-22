@@ -60,7 +60,7 @@ impl Scene for Editor {
                 active_camera_clone,
                 project_path_clone,
                 dock_state_for_loading,
-                component_registry
+                component_registry,
             )
             .await
             {

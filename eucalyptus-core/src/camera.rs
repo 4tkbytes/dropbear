@@ -1,9 +1,9 @@
+use crate::states::CameraConfig;
 use crate::traits::SerializableComponent;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
+use dropbear_macro::SerializableComponent;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
-use dropbear_macro::SerializableComponent;
-use crate::states::CameraConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, SerializableComponent)]
 pub struct CameraComponent {
@@ -52,7 +52,11 @@ impl From<CameraConfig> for CameraBuilder {
 
 impl From<CameraConfig> for CameraComponent {
     fn from(value: CameraConfig) -> Self {
-        let settings = CameraSettings::new(value.speed as f64, value.sensitivity as f64, value.fov as f64);
+        let settings = CameraSettings::new(
+            value.speed as f64,
+            value.sensitivity as f64,
+            value.fov as f64,
+        );
         Self {
             settings,
             camera_type: value.camera_type,

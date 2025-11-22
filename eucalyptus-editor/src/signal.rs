@@ -1,23 +1,23 @@
-use crate::editor::{
-    Editor, EditorState, PendingSpawnType, Signal,
-};
+use crate::editor::{Editor, EditorState, PendingSpawnType, Signal};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use egui::{Align2};
+use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
+use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
-use eucalyptus_core::states::{EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, SerializedMeshRenderer};
+use eucalyptus_core::states::{
+    EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, SerializedMeshRenderer,
+};
+use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
-use eucalyptus_core::scene::SceneEntity;
-use eucalyptus_core::traits::SerializableComponent;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -590,8 +590,7 @@ impl SignalController for Editor {
                         // success!("Pushed plane to queue");
                     }
                     PendingSpawnType::Cube => {
-                        let mut components: Vec<Box<dyn SerializableComponent>> =
-                            Vec::new();
+                        let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
                         components.push(Box::new(EntityTransform::default()));
                         components.push(Box::new(SerializedMeshRenderer {
                             handle: ResourceReference::from_reference(ResourceReferenceType::Cube),

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use dropbear_engine::entity::{EntityTransform, Transform};
 use crate::states::Label;
+use dropbear_engine::entity::{EntityTransform, Transform};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A component that tracks all child entities of a parent entity
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -107,16 +107,15 @@ impl Hierarchy {
 
     /// Get all children of an entity
     pub fn get_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
-        world.get::<&Children>(entity)
+        world
+            .get::<&Children>(entity)
             .map(|c| c.children().to_vec())
             .unwrap_or_default()
     }
 
     /// Get the parent of an entity
     pub fn get_parent(world: &hecs::World, entity: hecs::Entity) -> Option<hecs::Entity> {
-        world.get::<&Parent>(entity)
-            .ok()
-            .map(|p| p.parent())
+        world.get::<&Parent>(entity).ok().map(|p| p.parent())
     }
 
     /// Get all ancestors of an entity (parent, grandparent, etc.)
@@ -169,7 +168,8 @@ impl EntityTransformExt for EntityTransform {
                 let parent_world = parent_transform.world();
 
                 result = Transform {
-                    position: parent_world.position + parent_world.rotation * (result.position * parent_world.scale),
+                    position: parent_world.position
+                        + parent_world.rotation * (result.position * parent_world.scale),
                     rotation: parent_world.rotation * result.rotation,
                     scale: parent_world.scale * result.scale,
                 };
@@ -213,7 +213,11 @@ impl SceneHierarchy {
     }
 
     /// Apply this hierarchy to a world
-    pub fn apply_to_world(&self, world: &mut hecs::World, label_to_entity: &HashMap<Label, hecs::Entity>) {
+    pub fn apply_to_world(
+        &self,
+        world: &mut hecs::World,
+        label_to_entity: &HashMap<Label, hecs::Entity>,
+    ) {
         for (child_label, parent_label) in &self.parent_map {
             if let (Some(&child_entity), Some(&parent_entity)) = (
                 label_to_entity.get(child_label),

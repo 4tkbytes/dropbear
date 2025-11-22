@@ -36,7 +36,7 @@ impl EntityTransform {
     pub fn new_from_world(world: Transform) -> Self {
         Self {
             world,
-            local: Transform::default()
+            local: Transform::default(),
         }
     }
 

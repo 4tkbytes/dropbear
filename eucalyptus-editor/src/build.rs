@@ -1,9 +1,9 @@
 use clap::ArgMatches;
+use eucalyptus_core::config::ProjectConfig;
+use eucalyptus_core::states::{RuntimeData, SCENES, SOURCE};
 use std::path::Path;
 use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 use zip::write::SimpleFileOptions;
-use eucalyptus_core::config::ProjectConfig;
-use eucalyptus_core::states::{RuntimeData, SCENES, SOURCE};
 
 pub fn package(project_path: PathBuf, _sub_matches: &ArgMatches) -> anyhow::Result<()> {
     if !project_path.exists() {

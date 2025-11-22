@@ -7,7 +7,7 @@ use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
-use glam::{DVec3};
+use glam::DVec3;
 use hecs::World;
 use std::ffi::{CStr, c_char};
 

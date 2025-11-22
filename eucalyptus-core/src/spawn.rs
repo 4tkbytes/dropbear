@@ -1,8 +1,8 @@
+use crate::scene::SceneEntity;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use parking_lot::Mutex;
 use std::sync::{Arc, LazyLock};
-use crate::scene::SceneEntity;
 
 /// All spawns that are waiting to be spawned in.
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
