@@ -1,15 +1,16 @@
 use crate::editor::Editor;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
-use eucalyptus_core::states::{ModelProperties, Script, SerializedMeshRenderer};
+use eucalyptus_core::states::{Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
 use hecs::EntityBuilder;
@@ -127,18 +128,36 @@ impl PendingSpawnController for Editor {
                         }
                     }
                     Err(result) => {
-                        if let Ok(r) = result.downcast::<anyhow::Result<(Camera, CameraComponent)>>() {
-                            match Arc::try_unwrap(r) {
-                                Ok(Ok((camera, component))) => {
-                                    let _ = self.world.insert(*entity, (camera, component));
-                                    success!("Added Camera to entity {:?}", entity);
-                                    completed_components.push(index);
+                        match result.downcast::<anyhow::Result<(Camera, CameraComponent)>>() {
+                            Ok(r) => {
+                                match Arc::try_unwrap(r) {
+                                    Ok(Ok((camera, component))) => {
+                                        let _ = self.world.insert(*entity, (camera, component));
+                                        success!("Added Camera to entity {:?}", entity);
+                                        completed_components.push(index);
+                                    }
+                                    Ok(Err(e)) => {
+                                        fatal!("Failed to create Camera: {}", e);
+                                        completed_components.push(index);
+                                    }
+                                    Err(_) => {} // Still shared
                                 }
-                                Ok(Err(e)) => {
-                                    fatal!("Failed to create Camera: {}", e);
-                                    completed_components.push(index);
+                            }
+                            Err(result) => {
+                                if let Ok(r) = result.downcast::<anyhow::Result<(LightComponent, Light, LightConfig, Transform)>>() {
+                                    match Arc::try_unwrap(r) {
+                                        Ok(Ok((light_comp, engine_light, light_config, transform))) => {
+                                            let _ = self.world.insert(*entity, (light_comp, engine_light, light_config, transform));
+                                            success!("Added Light to entity {:?}", entity);
+                                            completed_components.push(index);
+                                        }
+                                        Ok(Err(e)) => {
+                                            fatal!("Failed to create Light: {}", e);
+                                            completed_components.push(index);
+                                        }
+                                        Err(_) => {} // Still shared
+                                    }
                                 }
-                                Err(_) => {} // Still shared
                             }
                         }
                     }

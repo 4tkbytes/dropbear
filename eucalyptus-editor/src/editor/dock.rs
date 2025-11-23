@@ -19,6 +19,7 @@ use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
     entity::{EntityTransform, MeshRenderer, Transform},
+    lighting::{Light as EngineLight, LightComponent},
 };
 use egui::{self, Margin, RichText};
 use egui_dock::TabViewer;
@@ -479,6 +480,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                                     *signal = Signal::AddComponent(entity, "MeshRenderer".to_string());
                                                 } else if name.contains("CameraComponent") || name.contains("Camera3D") {
                                                     *signal = Signal::AddComponent(entity, "CameraComponent".to_string());
+                                                } else if name.contains("Light") {
+                                                    *signal = Signal::AddComponent(entity, "Light".to_string());
                                                 } else {
                                                     if let Some(comp) = registry.create_default_component(id) {
                                                         let mut builder = EntityBuilder::new();
@@ -497,6 +500,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         let components = registry.extract_all_components(world, entity);
 
                         for component in components.iter() {
+                            if component.type_name().contains("EntityTransform") {
+                                continue;
+                            }
                             let Some(component_type_id) =
                                 registry.id_for_component(component.as_ref())
                             else {
@@ -710,9 +716,19 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             if let Ok(mut q) = self
                                 .world
-                                .query_one::<&mut Light>(*entity)
-                                && let Some(light) = q.get()
+                                .query_one::<(
+                                    &mut Light,
+                                    Option<&mut Transform>,
+                                    Option<&mut LightComponent>,
+                                    Option<&mut EngineLight>,
+                                )>(*entity)
+                                && let Some((light, mut transform_opt, light_comp_opt, engine_light_opt)) =
+                                    q.get()
                             {
+                                if let Some(transform) = transform_opt.as_deref() {
+                                    light.transform = *transform;
+                                }
+
                                 light.inspect(
                                     entity,
                                     &mut cfg,
@@ -721,6 +737,18 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     self.signal,
                                     &mut String::new(),
                                 );
+
+                                if let Some(transform) = transform_opt.as_deref_mut() {
+                                    *transform = light.transform;
+                                }
+
+                                if let Some(light_comp) = light_comp_opt {
+                                    *light_comp = light.light_component.clone();
+
+                                    if let Some(engine_light) = engine_light_opt {
+                                        engine_light.update(light_comp, &light.transform);
+                                    }
+                                }
                             }
 
                             if let Ok(mut q) = self.world.query_one::<&mut Script>(*entity)

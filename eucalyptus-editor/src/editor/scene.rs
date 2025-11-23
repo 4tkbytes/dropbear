@@ -467,7 +467,11 @@ impl Scene for Editor {
                 log_once::error_once!("No active camera found");
             }
         } else {
-            log_once::warn_once!("No render pipeline exists");
+            if self.is_world_loaded.is_fully_loaded() {
+                log_once::warn_once!("No render pipeline exists");
+            } else {
+                log_once::debug_once!("No render pipeline exists, but world not loaded yet");
+            }
         }
     }
 

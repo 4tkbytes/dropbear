@@ -216,6 +216,7 @@ impl SceneConfig {
             builder.add_bundle((light_conf.light_component.clone(), light));
             // Also add the Light config component itself so it can be inspected/saved
             builder.add(light_conf.clone());
+            builder.add(light_conf.transform);
         } else if let Some(script) = component.as_any().downcast_ref::<Script>() {
             builder.add(script.clone());
         } else if component.as_any().downcast_ref::<Parent>().is_some() {
@@ -524,7 +525,6 @@ impl SceneConfig {
                     rotation,
                     ..Default::default()
                 };
-                let entity_trans = EntityTransform::new(trans, Transform::default());
                 let light =
                     EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
 
@@ -540,7 +540,7 @@ impl SceneConfig {
                     world.spawn((
                         Label::from("Default Light"),
                         comp,
-                        entity_trans,
+                        trans,
                         light,
                         light_config,
                         ModelProperties::default(),

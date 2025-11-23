@@ -237,20 +237,22 @@ impl InspectableComponent for EntityTransform {
     }
 }
 
-impl InspectableComponent for Transform {
-    fn inspect(
-        &mut self,
-        entity: &mut Entity,
-        cfg: &mut StaticallyKept,
-        ui: &mut Ui,
-        undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
-        label: &mut String,
-    ) {
-        ui.vertical(|ui| {
-            CollapsingHeader::new(label.clone())
-                .default_open(true)
-                .show(ui, |ui| {
+fn inspect_transform(
+    transform: &mut Transform,
+    entity: &mut Entity,
+    cfg: &mut StaticallyKept,
+    ui: &mut Ui,
+    undo_stack: &mut Vec<UndoableAction>,
+    label: &str,
+    show_position: bool,
+    show_rotation: bool,
+    show_scale: bool,
+) {
+    ui.vertical(|ui| {
+        CollapsingHeader::new(label)
+            .default_open(true)
+            .show(ui, |ui| {
+                if show_position {
                     ui.horizontal(|ui| {
                         ui.label("Position:");
                     });
@@ -259,14 +261,14 @@ impl InspectableComponent for Transform {
                         ui.horizontal(|ui| {
                             ui.label("X:");
                             let response = ui.add(
-                                egui::DragValue::new(&mut self.position.x)
+                                egui::DragValue::new(&mut transform.position.x)
                                     .speed(0.1)
                                     .fixed_decimals(3),
                             );
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -286,14 +288,14 @@ impl InspectableComponent for Transform {
                         ui.horizontal(|ui| {
                             ui.label("Y:");
                             let response = ui.add(
-                                egui::DragValue::new(&mut self.position.y)
+                                egui::DragValue::new(&mut transform.position.y)
                                     .speed(0.1)
                                     .fixed_decimals(3),
                             );
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -314,14 +316,14 @@ impl InspectableComponent for Transform {
                         ui.horizontal(|ui| {
                             ui.label("Z:");
                             let response = ui.add(
-                                egui::DragValue::new(&mut self.position.z)
+                                egui::DragValue::new(&mut transform.position.z)
                                     .speed(0.1)
                                     .fixed_decimals(3),
                             );
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -341,11 +343,13 @@ impl InspectableComponent for Transform {
                     });
 
                     if ui.button("Reset Position").clicked() {
-                        self.position = DVec3::ZERO;
+                        transform.position = DVec3::ZERO;
                     }
 
                     ui.add_space(5.0);
+                }
 
+                if show_rotation {
                     ui.label("Rotation:");
 
                     ui.horizontal_wrapped(|ui| {
@@ -353,11 +357,11 @@ impl InspectableComponent for Transform {
 
                         let mut rotation_deg: DVec3 = if cfg.transform_in_progress {
                             cached_rotation.unwrap_or_else(|| {
-                                let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
+                                let (x, y, z) = transform.rotation.to_euler(glam::EulerRot::YXZ);
                                 DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
                             })
                         } else {
-                            let (x, y, z) = self.rotation.to_euler(glam::EulerRot::YXZ);
+                            let (x, y, z) = transform.rotation.to_euler(glam::EulerRot::YXZ);
                             let mut degrees =
                                 DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees());
 
@@ -389,7 +393,7 @@ impl InspectableComponent for Transform {
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -423,7 +427,7 @@ impl InspectableComponent for Transform {
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -457,7 +461,7 @@ impl InspectableComponent for Transform {
 
                             if response.drag_started() {
                                 cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
+                                cfg.transform_original_transform = Some(*transform);
                                 cfg.transform_in_progress = true;
                             }
 
@@ -485,7 +489,7 @@ impl InspectableComponent for Transform {
                             rotation_deg.z = wrap_angle_degrees(rotation_deg.z);
 
                             cfg.transform_rotation_cache.insert(*entity, rotation_deg);
-                            self.rotation = glam::DQuat::from_euler(
+                            transform.rotation = glam::DQuat::from_euler(
                                 glam::EulerRot::YXZ,
                                 rotation_deg.x.to_radians(),
                                 rotation_deg.y.to_radians(),
@@ -495,11 +499,13 @@ impl InspectableComponent for Transform {
                     });
 
                     if ui.button("Reset Rotation").clicked() {
-                        self.rotation = glam::DQuat::IDENTITY;
+                        transform.rotation = glam::DQuat::IDENTITY;
                         cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
                     }
                     ui.add_space(5.0);
+                }
 
+                if show_scale {
                     ui.horizontal(|ui| {
                         ui.label("Scale:");
                         let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
@@ -513,7 +519,7 @@ impl InspectableComponent for Transform {
                     });
 
                     let mut scale_changed = false;
-                    let mut new_scale = self.scale;
+                    let mut new_scale = transform.scale;
 
                     ui.horizontal(|ui| {
                         ui.label("X:");
@@ -525,16 +531,16 @@ impl InspectableComponent for Transform {
 
                         if response.drag_started() {
                             cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_original_transform = Some(*transform);
                             cfg.transform_in_progress = true;
                         }
 
                         if response.changed() {
                             scale_changed = true;
                             if cfg.scale_locked {
-                                let scale_factor = new_scale.x / self.scale.x;
-                                new_scale.y = self.scale.y * scale_factor;
-                                new_scale.z = self.scale.z * scale_factor;
+                                let scale_factor = new_scale.x / transform.scale.x;
+                                new_scale.y = transform.scale.y * scale_factor;
+                                new_scale.z = transform.scale.z * scale_factor;
                             }
                         }
 
@@ -562,7 +568,7 @@ impl InspectableComponent for Transform {
 
                         if response.drag_started() && !cfg.scale_locked {
                             cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_original_transform = Some(*transform);
                             cfg.transform_in_progress = true;
                         }
 
@@ -594,7 +600,7 @@ impl InspectableComponent for Transform {
 
                         if response.drag_started() && !cfg.scale_locked {
                             cfg.transform_old_entity = Some(*entity);
-                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_original_transform = Some(*transform);
                             cfg.transform_in_progress = true;
                         }
 
@@ -617,16 +623,40 @@ impl InspectableComponent for Transform {
                     });
 
                     if scale_changed {
-                        self.scale = new_scale;
+                        transform.scale = new_scale;
                     }
 
                     if ui.button("Reset Scale").clicked() {
-                        self.scale = DVec3::ONE;
+                        transform.scale = DVec3::ONE;
                     }
                     ui.add_space(5.0);
-                });
-        });
-        ui.separator();
+                }
+            });
+    });
+    ui.separator();
+}
+
+impl InspectableComponent for Transform {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        label: &mut String,
+    ) {
+        inspect_transform(
+            self,
+            entity,
+            cfg,
+            ui,
+            undo_stack,
+            label,
+            true,
+            true,
+            true,
+        );
     }
 }
 
@@ -1038,7 +1068,7 @@ impl InspectableComponent for LightComponent {
         _label: &mut String,
     ) {
         ui.vertical(|ui| {
-            CollapsingHeader::new("Component").show(ui, |ui| {
+            CollapsingHeader::new("Light").show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ComboBox::new("light_type", "Light Type")
                         // .width(ui.available_width())
@@ -1139,8 +1169,20 @@ impl InspectableComponent for Light {
         signal: &mut Signal,
         label: &mut String,
     ) {
-        self.transform.inspect(entity, cfg, ui, undo_stack, signal, label);
-        
+        let show_position = matches!(self.light_component.light_type, LightType::Point | LightType::Spot);
+
+        inspect_transform(
+            &mut self.transform,
+            entity,
+            cfg,
+            ui,
+            undo_stack,
+            label,
+            show_position,
+            true,
+            true,
+        );
+
         self.light_component.inspect(entity, cfg, ui, undo_stack, signal, label);
     }
 }

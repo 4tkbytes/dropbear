@@ -10,7 +10,7 @@ use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{
-    EditorTab, Label, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
+    EditorTab, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
 };
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -645,6 +645,31 @@ impl SignalController for Editor {
                     let handle = graphics.future_queue.push(Box::pin(future));
                     self.pending_components.push((*entity, handle));
                     success!("Queued Camera addition for entity {:?}", entity);
+                } else if component_name == "Light" {
+                    let graphics_clone = graphics.clone();
+                    let future = async move {
+                        let light_comp = LightComponent::default();
+                        let transform = Transform::default();
+                        let engine_light = EngineLight::new(
+                            graphics_clone,
+                            light_comp.clone(),
+                            transform,
+                            Some("New Light"),
+                        ).await;
+                        
+                        let light_config = Light {
+                            label: "New Light".to_string(),
+                            transform,
+                            light_component: light_comp.clone(),
+                            enabled: true,
+                            entity_id: None,
+                        };
+
+                        Ok::<(LightComponent, EngineLight, Light, Transform), anyhow::Error>((light_comp, engine_light, light_config, transform))
+                    };
+                    let handle = graphics.future_queue.push(Box::pin(future));
+                    self.pending_components.push((*entity, handle));
+                    success!("Queued Light addition for entity {:?}", entity);
                 } else {
                     warn!("Unknown component type for AddComponent signal: {}", component_name);
                 }
