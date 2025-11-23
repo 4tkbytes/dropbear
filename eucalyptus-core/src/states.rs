@@ -525,10 +525,33 @@ impl DerefMut for Label {
 }
 
 /// A [MeshRenderer] that is serialized into a file to be stored as a value for config.
-#[derive(Default, Debug, Clone, Serialize, Deserialize, SerializableComponent)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedMeshRenderer {
     pub handle: ResourceReference,
     pub material_override: Vec<MaterialOverride>,
+}
+
+#[typetag::serde]
+impl SerializableComponent for SerializedMeshRenderer {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn clone_boxed(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn type_name(&self) -> &'static str {
+        "SerializedMeshRenderer"
+    }
+
+    fn display_name(&self) -> String {
+        "MeshRenderer".to_string()
+    }
 }
 
 impl SerializedMeshRenderer {

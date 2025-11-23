@@ -158,7 +158,7 @@ pub trait EntityTransformExt {
 
 impl EntityTransformExt for EntityTransform {
     fn propagate(&self, world: &hecs::World, target_entity: hecs::Entity) -> Transform {
-        let mut result = self.local().clone();
+        let mut result = self.sync();
 
         let mut current = target_entity;
         while let Ok(parent_comp) = world.get::<&Parent>(current) {

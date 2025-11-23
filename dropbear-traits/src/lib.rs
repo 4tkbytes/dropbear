@@ -16,6 +16,12 @@ pub trait SerializableComponent: Send + Sync + Debug {
     fn type_name(&self) -> &'static str;
     /// Allows you to clone the dynamic object.
     fn clone_boxed(&self) -> Box<dyn SerializableComponent>;
+
+    /// Returns the display name of the component.
+    fn display_name(&self) -> String {
+        let type_name = self.type_name();
+        type_name.split("::").last().unwrap_or(type_name).to_string()
+    }
 }
 
 impl Clone for Box<dyn SerializableComponent> {

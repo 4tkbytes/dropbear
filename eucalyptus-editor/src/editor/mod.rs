@@ -1481,6 +1481,8 @@ impl Editor {
 pub enum UndoableAction {
     /// A change in transform. The entity + the old transform. Undoing will revert the transform
     Transform(hecs::Entity, Transform),
+    /// A change in EntityTransform. The entity + the old transform. Undoing will revert the transform
+    EntityTransform(hecs::Entity, EntityTransform),
     #[allow(dead_code)] // don't know why its considered dead code, todo: check the cause
     /// A spawn of the entity. Undoing will delete the entity
     Spawn(hecs::Entity),
@@ -1502,6 +1504,19 @@ impl UndoableAction {
                     if let Some(e_t) = q.get() {
                         *e_t = *transform;
                         log::debug!("Reverted transform");
+                        Ok(())
+                    } else {
+                        Err(anyhow::anyhow!("Unable to query the entity"))
+                    }
+                } else {
+                    Err(anyhow::anyhow!("Could not find an entity to query"))
+                }
+            }
+            UndoableAction::EntityTransform(entity, transform) => {
+                if let Ok(mut q) = world.query_one::<&mut EntityTransform>(*entity) {
+                    if let Some(e_t) = q.get() {
+                        *e_t = *transform;
+                        log::debug!("Reverted entity transform");
                         Ok(())
                     } else {
                         Err(anyhow::anyhow!("Unable to query the entity"))

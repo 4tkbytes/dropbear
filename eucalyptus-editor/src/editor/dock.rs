@@ -18,7 +18,7 @@ use crate::plugin::PluginRegistry;
 use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
+    entity::{EntityTransform, MeshRenderer, Transform},
 };
 use egui::{self, Margin, RichText};
 use egui_dock::TabViewer;
@@ -119,6 +119,7 @@ pub struct StaticallyKept {
 
     pub(crate) transform_old_entity: Option<hecs::Entity>,
     pub(crate) transform_original_transform: Option<Transform>,
+    pub(crate) entity_transform_original: Option<EntityTransform>,
 
     pub(crate) transform_in_progress: bool,
     pub(crate) transform_rotation_cache: HashMap<Entity, glam::DVec3>,
@@ -297,6 +298,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if !matches!(self.viewport_mode, ViewportMode::None)
                     && let Some(entity_id) = self.selected_entity
                 {
+                    let mut handled = false;
                     {
                         if let Ok(mut q) = self.world.query_one::<&mut Transform>(*entity_id)
                             && let Some(transform) = q.get()
@@ -335,6 +337,68 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         UndoableAction::Transform(*entity_id, cfg.old_pos),
                                     );
                                     log::debug!("Pushed transform action to stack");
+                                }
+                            }
+                            handled = true;
+                        }
+                    }
+
+                    if !handled {
+                        if let Ok(mut q) = self.world.query_one::<&mut EntityTransform>(*entity_id)
+                            && let Some(entity_transform) = q.get()
+                        {
+                            let was_focused = cfg.is_focused;
+                            cfg.is_focused = self.gizmo.is_focused();
+
+                            if cfg.is_focused && !was_focused {
+                                cfg.entity_transform_original = Some(*entity_transform);
+                            }
+
+                            let synced = entity_transform.sync();
+                            let gizmo_transform =
+                                transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                    synced.scale,
+                                    synced.rotation,
+                                    synced.position,
+                                );
+
+                            if let Some((_result, new_transforms)) =
+                                self.gizmo.interact(ui, &[gizmo_transform])
+                                && let Some(new_transform) = new_transforms.first()
+                            {
+                                let new_synced_pos: glam::DVec3 = new_transform.translation.into();
+                                let new_synced_rot: glam::DQuat = new_transform.rotation.into();
+                                let new_synced_scale: glam::DVec3 = new_transform.scale.into();
+
+                                let parent_transform = entity_transform.world();
+                                let parent_scale = parent_transform.scale;
+                                let parent_rot = parent_transform.rotation;
+                                let parent_pos = parent_transform.position;
+
+                                let safe_parent_scale = glam::DVec3::new(
+                                    if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
+                                    if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
+                                    if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
+                                );
+
+                                let local_transform = entity_transform.local_mut();
+                                local_transform.scale = new_synced_scale / safe_parent_scale;
+                                local_transform.rotation = parent_rot.inverse() * new_synced_rot;
+
+                                let delta_pos = new_synced_pos - parent_pos;
+                                let unrotated_delta = parent_rot.inverse() * delta_pos;
+                                local_transform.position = unrotated_delta / safe_parent_scale;
+                            }
+
+                            if was_focused && !cfg.is_focused {
+                                if let Some(original) = cfg.entity_transform_original {
+                                    if original != *entity_transform {
+                                        UndoableAction::push_to_undo(
+                                            self.undo_stack,
+                                            UndoableAction::EntityTransform(*entity_id, original),
+                                        );
+                                        log::debug!("Pushed entity transform action to stack");
+                                    }
                                 }
                             }
                         }
@@ -444,9 +508,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             };
                             let component_node_id =
                                 cfg.component_node_id(entity, component_type_id);
-                            let component_name = component.type_name();
-                            let short_name = component_name.split("::").last().unwrap_or(component_name);
-                            let display = format!("{} (id #{component_type_id})", short_name);
+                            let display = format!("{} (id #{component_type_id})", component.display_name());
 
                             builder.node(
                                 NodeBuilder::leaf(component_node_id)

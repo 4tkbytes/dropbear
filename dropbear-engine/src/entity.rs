@@ -144,7 +144,8 @@ impl Transform {
 #[derive(Clone)]
 /// A renderer for meshes and materials related to a model.
 ///
-/// It includes the instances as well as a handle
+/// It includes the instances as well as a handle. The reason for a handle is so the model being rendered can be swapped
+/// to something else without deleting the entire renderer. Also saves memory by rendering anything that has been loaded. 
 pub struct MeshRenderer {
     handle: LoadedModel,
     pub instance: Instance,

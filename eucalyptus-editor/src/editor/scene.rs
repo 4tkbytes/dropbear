@@ -5,13 +5,14 @@ use dropbear_engine::asset::{ASSET_REGISTRY, PointerKind};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
-    entity::{MeshRenderer, Transform},
+    entity::{EntityTransform, MeshRenderer, Transform},
     lighting::{Light, LightComponent},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
 use eucalyptus_core::logging;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
+use eucalyptus_core::hierarchy::{EntityTransformExt};
 use eucalyptus_core::window::poll;
 use log;
 use parking_lot::Mutex;
@@ -266,11 +267,41 @@ impl Scene for Editor {
             }
 
             {
+                let mut updates = Vec::new();
+                for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
+                    let final_transform = transform.propagate(&self.world, entity);
+                    updates.push((entity, final_transform));
+                }
+
+                for (entity, final_transform) in updates {
+                    if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
+                        renderer.update(&final_transform);
+                    }
+                }
+            }
+
+            {
                 let light_query = self
                     .world
                     .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
                 for (_, (light_component, transform, light)) in light_query {
                     light.update(light_component, transform);
+                }
+            }
+
+            {
+                let mut updates = Vec::new();
+                for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
+                    let final_transform = transform.propagate(&self.world, entity);
+                    updates.push((entity, final_transform));
+                }
+
+                for (entity, final_transform) in updates {
+                    if let Ok(mut q) = self.world.query_one::<(&mut LightComponent, &mut Light)>(entity) {
+                        if let Some((light_component, light)) = q.get() {
+                            light.update(light_component, &final_transform);
+                        }
+                    }
                 }
             }
         }

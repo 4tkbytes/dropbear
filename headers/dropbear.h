@@ -1,3 +1,19 @@
+/**
+ * dropbear-engine native header definitions. Created by 4tkbytes as part of the dropbear project. 
+ * 
+ * Primarily used for Kotlin/Native, however nothing is stopping you from implementing it to your own language. 
+ * Exports are located at `eucalyptus_core::scripting::native::exports`. 
+ * 
+ * Note: This does not include JNI definitions, only native exports from the eucalyptus-core dynamic library. 
+ *       For JNI definitions, take a look at `eucalyptus_core::scripting::jni::exports` or even better, take a 
+ *       look at the JNINative class for all JNI functions that exist. 
+ * 
+ * Warning: This header file is not always up to date with the existing JNI functions (some funcs may not be implemented),
+ *          So please open a issue if there is something missing, or help us by creating a PR implementing them. 
+ * 
+ * Licensed under MIT or Apache 2.0 depending on your mood. 
+ */
+
 #ifndef DROPBEAR_H
 #define DROPBEAR_H
 

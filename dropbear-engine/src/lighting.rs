@@ -3,7 +3,7 @@ use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
 use crate::{
     camera::Camera,
-    entity::Transform,
+    entity::{EntityTransform, Transform},
     model::{self, Model, Vertex},
 };
 use dropbear_macro::SerializableComponent;
@@ -431,6 +431,28 @@ impl LightManager {
             // if it fails to update, the cause it probably the ModelVertex or smth like that
             // note: its not.
             let instance = Instance::from_matrix(transform.matrix());
+
+            if let Some(instance_buffer) = &light.instance_buffer {
+                let instance_raw = instance.to_raw();
+                graphics.queue.write_buffer(
+                    instance_buffer,
+                    0,
+                    bytemuck::cast_slice(&[instance_raw]),
+                );
+            }
+
+            if light_component.enabled && light_index < MAX_LIGHTS {
+                light_array.lights[light_index] = *light.uniform();
+                light_index += 1;
+            }
+        }
+
+        for (_, (light_component, transform, light)) in world
+            .query::<(&LightComponent, &EntityTransform, &mut Light)>()
+            .iter()
+        {
+            let sync_transform = transform.sync();
+            let instance = Instance::from_matrix(sync_transform.matrix());
 
             if let Some(instance_buffer) = &light.instance_buffer {
                 let instance_raw = instance.to_raw();
