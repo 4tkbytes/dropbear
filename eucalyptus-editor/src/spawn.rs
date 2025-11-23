@@ -1,13 +1,15 @@
 use crate::editor::Editor;
 use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
+use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
-use eucalyptus_core::states::{ModelProperties, ScriptComponent, SerializedMeshRenderer};
+use eucalyptus_core::states::{ModelProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
 use hecs::EntityBuilder;
@@ -105,6 +107,49 @@ impl PendingSpawnController for Editor {
             spawn_list.remove(i);
         }
 
+        let mut completed_components = Vec::new();
+        for (index, (entity, handle)) in self.pending_components.iter().enumerate() {
+            if let Some(result) = queue.exchange_owned(handle) {
+                match result.downcast::<anyhow::Result<MeshRenderer>>() {
+                    Ok(r) => {
+                        match Arc::try_unwrap(r) {
+                            Ok(Ok(renderer)) => {
+                                let _ = self.world.insert_one(*entity, renderer);
+                                let _ = self.world.insert_one(*entity, EntityTransform::default());
+                                success!("Added MeshRenderer to entity {:?}", entity);
+                                completed_components.push(index);
+                            }
+                            Ok(Err(e)) => {
+                                fatal!("Failed to load MeshRenderer: {}", e);
+                                completed_components.push(index);
+                            }
+                            Err(_) => {} // Still shared
+                        }
+                    }
+                    Err(result) => {
+                        if let Ok(r) = result.downcast::<anyhow::Result<(Camera, CameraComponent)>>() {
+                            match Arc::try_unwrap(r) {
+                                Ok(Ok((camera, component))) => {
+                                    let _ = self.world.insert(*entity, (camera, component));
+                                    success!("Added Camera to entity {:?}", entity);
+                                    completed_components.push(index);
+                                }
+                                Ok(Err(e)) => {
+                                    fatal!("Failed to create Camera: {}", e);
+                                    completed_components.push(index);
+                                }
+                                Err(_) => {} // Still shared
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for &i in completed_components.iter().rev() {
+            self.pending_components.remove(i);
+        }
+
         Ok(())
     }
 }
@@ -132,8 +177,12 @@ impl Editor {
             builder.add(props);
         }
 
-        if let Some(script) = component_cloned::<ScriptComponent>(scene_entity) {
+        if let Some(script) = component_cloned::<Script>(scene_entity) {
             builder.add(script);
+        }
+
+        if let Some(camera) = component_cloned::<CameraComponent>(scene_entity) {
+            builder.add(camera);
         }
 
         self.world.spawn(builder.build());

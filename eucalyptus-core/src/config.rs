@@ -152,6 +152,68 @@ impl ProjectConfig {
             fs::create_dir_all(scene_folder)?;
         }
 
+        fn deal_with_bad_scene(
+            path: &Path,
+            e: &anyhow::Error,
+            project_root: &Path,
+        ) -> Option<SceneConfig> {
+            #[cfg(feature = "editor")]
+            {
+                let msg = format!(
+                    "Failed to load scene file: {:?}\n\nError: {}\n\nWould you like to backup the corrupted file and create a new blank scene?\n(Select 'No' to exit the application)",
+                    path.file_name().unwrap_or_default(),
+                    e
+                );
+
+                let should_recover = rfd::MessageDialog::new()
+                    .set_title("Scene loading error")
+                    .set_description(&msg)
+                    .set_buttons(rfd::MessageButtons::YesNo)
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+
+                match should_recover {
+                    rfd::MessageDialogResult::Yes | rfd::MessageDialogResult::Ok => {
+                        let backup_path = path.with_extension("eucs.bak");
+                        log::info!("Backing up bad scene to {:?}", backup_path);
+                        if let Err(err) = fs::rename(path, &backup_path) {
+                            log::error!("Failed to backup scene: {}", err);
+                            rfd::MessageDialog::new()
+                                .set_title("Backup Error")
+                                .set_description(&format!("Failed to backup file: {}", err))
+                                .show();
+                            std::process::exit(1);
+                        }
+
+                        let name = path
+                            .file_stem()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
+                        let new_scene = SceneConfig::new(name, path.to_path_buf());
+
+                        if let Err(err) = new_scene.write_to(project_root) {
+                            log::error!("Failed to write new scene: {}", err);
+                            rfd::MessageDialog::new()
+                                .set_title("Write Error")
+                                .set_description(&format!("Failed to create new scene file: {}", err))
+                                .show();
+                            std::process::exit(1);
+                        }
+
+                        return Some(new_scene);
+                    },
+                    _ => {
+                        std::process::exit(1);
+                    }
+                }
+            }
+            #[cfg(not(feature = "editor"))]
+            {
+                panic!("Failed to load scene {:?}: {}", path, e);
+            }
+        }
+
         for scene_entry in fs::read_dir(scene_folder)? {
             let scene_entry = scene_entry?;
             let path = scene_entry.path();
@@ -167,10 +229,14 @@ impl ProjectConfig {
                             if io_err.kind() == std::io::ErrorKind::NotFound {
                                 log::warn!("Scene file {:?} not found", path);
                             } else {
-                                panic!("Failed to load scene file {:?}: {}", path, e);
+                                if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
+                                    scene_configs.push(scene);
+                                }
                             }
                         } else {
-                            panic!("Failed to load scene file {:?}: {}", path, e);
+                            if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
+                                scene_configs.push(scene);
+                            }
                         }
                     }
                 }

@@ -6,7 +6,7 @@ use crate::input::InputState;
 use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
-use crate::states::ScriptComponent;
+use crate::states::Script;
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;
@@ -274,7 +274,7 @@ impl ScriptManager {
     fn rebuild_entity_tag_database(&mut self, world: &World) {
         let mut new_map: HashMap<String, Vec<Entity>> = HashMap::new();
 
-        for (entity, script) in world.query::<&ScriptComponent>().iter() {
+        for (entity, script) in world.query::<&Script>().iter() {
             for tag in &script.tags {
                 new_map.entry(tag.clone()).or_default().push(entity);
             }

@@ -7,7 +7,7 @@ package com.dropbear
  * the `magna-carta` manifest generator tool. 
  * 
  * The tags correspond to the tags provided to the entity
- * with the ScriptComponent. 
+ * with the Script. 
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)

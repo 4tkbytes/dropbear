@@ -141,18 +141,16 @@ impl Display for ResourceType {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone, SerializableComponent)]
-pub struct ScriptComponent {
+pub struct Script {
     pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, SerializableComponent)]
-pub struct CameraConfig {
+pub struct Camera3D {
     pub label: String,
+    pub transform: Transform,
     pub camera_type: CameraType,
 
-    pub eye: [f64; 3],
-    pub target: [f64; 3],
-    pub up: [f64; 3],
     pub aspect: f64,
     pub fov: f32,
     pub near: f32,
@@ -164,13 +162,11 @@ pub struct CameraConfig {
     pub starting_camera: bool,
 }
 
-impl Default for CameraConfig {
+impl Default for Camera3D {
     fn default() -> Self {
         let default = CameraComponent::new();
         Self {
-            eye: [0.0, 1.0, 2.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
+            transform: Transform::default(),
             aspect: 16.0 / 9.0,
             fov: 45.0,
             near: 0.1,
@@ -184,18 +180,31 @@ impl Default for CameraConfig {
     }
 }
 
-impl CameraConfig {
+impl Camera3D {
     pub fn from_ecs_camera(
         camera: &Camera,
         component: &CameraComponent,
-        // follow_target: Option<&CameraFollowTarget>,
     ) -> Self {
+        let position = glam::DVec3::from_array(camera.eye.to_array());
+        let target = glam::DVec3::from_array(camera.target.to_array());
+        let up = glam::DVec3::from_array(camera.up.to_array());
+        
+        let rotation = if (target - position).length_squared() > 0.0001 {
+             glam::DQuat::from_mat4(&glam::DMat4::look_at_lh(position, target, up))
+        } else {
+             glam::DQuat::IDENTITY
+        };
+
+        let transform = Transform {
+            position: position,
+            rotation: rotation,
+            scale: glam::DVec3::ONE,
+        };
+
         Self {
-            eye: camera.position().to_array(),
-            target: camera.target.to_array(),
+            transform,
             label: camera.label.clone(),
             camera_type: component.camera_type,
-            up: camera.up.to_array(),
             aspect: camera.aspect,
             fov: camera.settings.fov_y as f32,
             near: camera.znear as f32,
@@ -361,7 +370,7 @@ impl Default for ModelProperties {
 
 // A serializable configuration struct for the [Light] type
 #[derive(Debug, Serialize, Deserialize, Clone, SerializableComponent)]
-pub struct LightConfig {
+pub struct Light {
     pub label: String,
     pub transform: Transform,
     pub light_component: LightComponent,
@@ -371,7 +380,7 @@ pub struct LightConfig {
     pub entity_id: Option<hecs::Entity>,
 }
 
-impl Default for LightConfig {
+impl Default for Light {
     fn default() -> Self {
         Self {
             label: "New Light".to_string(),

@@ -2,7 +2,7 @@ use crate::editor::{Editor, EditorState, PendingSpawnType, Signal};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
@@ -10,7 +10,7 @@ use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{
-    EditorTab, Label, ModelProperties, PROJECT, ScriptComponent, SerializedMeshRenderer,
+    EditorTab, Label, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
 };
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -496,10 +496,10 @@ impl SignalController for Editor {
                     TypeId::of::<CameraComponent>()
                 );
                 log::info!(
-                    "typeid of ScriptComponent: {:?}",
-                    TypeId::of::<ScriptComponent>()
+                    "typeid of Script: {:?}",
+                    TypeId::of::<Script>()
                 );
-                log::info!("typeid of Light: {:?}", TypeId::of::<Light>());
+                log::info!("typeid of EngineLight: {:?}", TypeId::of::<EngineLight>());
                 log::info!(
                     "typeid of LightComponent: {:?}",
                     TypeId::of::<LightComponent>()
@@ -538,12 +538,12 @@ impl SignalController for Editor {
                             log::info!(" |- CameraComponent");
                         }
 
-                        if TypeId::of::<ScriptComponent>() == j {
-                            log::info!(" |- ScriptComponent");
+                        if TypeId::of::<Script>() == j {
+                            log::info!(" |- Script");
                         }
 
-                        if TypeId::of::<Light>() == j {
-                            log::info!(" |- Light");
+                        if TypeId::of::<EngineLight>() == j {
+                            log::info!(" |- EngineLight");
                         }
 
                         if TypeId::of::<LightComponent>() == j {
@@ -559,7 +559,7 @@ impl SignalController for Editor {
             Signal::Spawn(entity_type) => {
                 match entity_type {
                     PendingSpawnType::Light => {
-                        let light = Light::new(
+                        let light = EngineLight::new(
                             graphics.clone(),
                             LightComponent::default(),
                             Transform::new(),
@@ -620,6 +620,63 @@ impl SignalController for Editor {
                 }
                 self.signal = Signal::None;
                 return Ok(());
+            }
+            Signal::AddComponent(entity, component_name) => {
+                if component_name == "MeshRenderer" {
+                    let graphics_clone = graphics.clone();
+                    let future = async move {
+                        let model= dropbear_engine::model::Model::load_from_memory(
+                            graphics_clone.clone(),
+                            include_bytes!("../../resources/models/cube.glb"),
+                            Some("Cube"),
+                        ).await?;
+                        Ok::<MeshRenderer, anyhow::Error>(dropbear_engine::entity::MeshRenderer::from_handle(model))
+                    };
+                    let handle = graphics.future_queue.push(Box::pin(future));
+                    self.pending_components.push((*entity, handle));
+                    success!("Queued MeshRenderer addition for entity {:?}", entity);
+                } else if component_name == "CameraComponent" {
+                    let graphics_clone = graphics.clone();
+                    let future = async move {
+                        let camera = Camera::predetermined(graphics_clone, Some("New Camera"));
+                        let component = CameraComponent::new();
+                        Ok::<(Camera, CameraComponent), anyhow::Error>((camera, component))
+                    };
+                    let handle = graphics.future_queue.push(Box::pin(future));
+                    self.pending_components.push((*entity, handle));
+                    success!("Queued Camera addition for entity {:?}", entity);
+                } else {
+                    warn!("Unknown component type for AddComponent signal: {}", component_name);
+                }
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::LoadModel(entity, uri) => {
+                let graphics_clone = graphics.clone();
+                let uri_clone = uri.clone();
+                let future = async move {
+                    let path = if uri_clone.starts_with("euca://") {
+                        let path_str = uri_clone.trim_start_matches("euca://");
+                        let project_path = PROJECT.read().project_path.clone();
+                        project_path.join(path_str)
+                    } else {
+                        PathBuf::from(&uri_clone)
+                    };
+                    
+                    let model = dropbear_engine::model::Model::load(
+                        graphics_clone,
+                        &path,
+                        Some(&uri_clone)
+                    ).await?;
+                    
+                    Ok::<MeshRenderer, anyhow::Error>(dropbear_engine::entity::MeshRenderer::from_handle(model))
+                };
+                
+                let handle = graphics.future_queue.push(Box::pin(future));
+                self.pending_components.push((*entity, handle));
+                success!("Queued model load for entity {:?} from '{}'", entity, uri);
+                self.signal = Signal::None;
+                Ok(())
             }
         }?;
         if !show {

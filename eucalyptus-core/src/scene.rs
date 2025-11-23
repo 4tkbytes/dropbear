@@ -1,7 +1,7 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{
-    CameraConfig, Label, LightConfig, ModelProperties, PROJECT, ScriptComponent,
+    Camera3D, Label, Light, ModelProperties, PROJECT, Script,
     SerializedMeshRenderer, WorldLoadingStatus,
 };
 use crate::utils::ResolveReference;
@@ -9,7 +9,7 @@ use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::Model;
 use dropbear_engine::utils::ResourceReferenceType;
 use dropbear_traits::SerializableComponent;
@@ -200,13 +200,13 @@ impl SceneConfig {
             builder.add(model);
         } else if let Some(props) = component.as_any().downcast_ref::<ModelProperties>() {
             builder.add(props.clone());
-        } else if let Some(camera_comp) = component.as_any().downcast_ref::<CameraConfig>() {
+        } else if let Some(camera_comp) = component.as_any().downcast_ref::<Camera3D>() {
             let cam_builder = CameraBuilder::from(camera_comp.clone());
             let comp = CameraComponent::from(camera_comp.clone());
             let camera = Camera::new(graphics.clone(), cam_builder, Some(label));
             builder.add_bundle((camera, comp));
-        } else if let Some(light_conf) = component.as_any().downcast_ref::<LightConfig>() {
-            let light = Light::new(
+        } else if let Some(light_conf) = component.as_any().downcast_ref::<Light>() {
+            let light = EngineLight::new(
                 graphics.clone(),
                 light_conf.light_component.clone(),
                 light_conf.transform,
@@ -214,7 +214,9 @@ impl SceneConfig {
             )
             .await;
             builder.add_bundle((light_conf.light_component.clone(), light));
-        } else if let Some(script) = component.as_any().downcast_ref::<ScriptComponent>() {
+            // Also add the Light config component itself so it can be inspected/saved
+            builder.add(light_conf.clone());
+        } else if let Some(script) = component.as_any().downcast_ref::<Script>() {
             builder.add(script.clone());
         } else if component.as_any().downcast_ref::<Parent>().is_some() {
             log::debug!(
@@ -356,7 +358,7 @@ impl SceneConfig {
                 if let Ok(mut query) = world.query_one::<(
                     &EntityTransform,
                     Option<&mut MeshRenderer>,
-                    Option<&mut Light>,
+                    Option<&mut EngineLight>,
                     Option<&mut LightComponent>,
                 )>(entity)
                 {
@@ -411,6 +413,13 @@ impl SceneConfig {
             for child_label in child_labels {
                 if let Some(&child_entity) = label_to_entity.get(&child_label) {
                     resolved_children.push(child_entity);
+                    if let Err(e) = world.insert_one(child_entity, Parent::new(parent_entity)) {
+                        log::error!(
+                            "Failed to attach Parent component to child entity {:?}: {}",
+                            child_entity,
+                            e
+                        );
+                    }
                 } else {
                     log::warn!(
                         "Unable to resolve child '{}' for parent '{}'",
@@ -461,7 +470,7 @@ impl SceneConfig {
         {
             let mut has_light = false;
             if world
-                .query::<(&LightComponent, &Light)>()
+                .query::<(&LightComponent, &EngineLight)>()
                 .iter()
                 .next()
                 .is_some()
@@ -517,7 +526,15 @@ impl SceneConfig {
                 };
                 let entity_trans = EntityTransform::new(trans, Transform::default());
                 let light =
-                    Light::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
+                    EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
+
+                let light_config = Light {
+                    label: "Default Light".to_string(),
+                    transform: trans,
+                    light_component: comp.clone(),
+                    enabled: true,
+                    entity_id: None,
+                };
 
                 {
                     world.spawn((
@@ -525,6 +542,7 @@ impl SceneConfig {
                         comp,
                         entity_trans,
                         light,
+                        light_config,
                         ModelProperties::default(),
                     ));
                 }

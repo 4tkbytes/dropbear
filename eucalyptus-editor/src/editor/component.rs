@@ -8,7 +8,8 @@ use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::lighting::{LightComponent, LightType};
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
-use eucalyptus_core::states::{ModelProperties, Property, ScriptComponent, Value};
+use eucalyptus_core::states::{Camera3D, Light, ModelProperties, Property, Script, Value};
+use eucalyptus_core::camera::CameraType;
 use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
@@ -203,6 +204,7 @@ impl InspectableComponent for ModelProperties {
                     }
                 });
             });
+        ui.separator();
     }
 }
 
@@ -344,11 +346,9 @@ impl InspectableComponent for Transform {
 
                     ui.add_space(5.0);
 
-                    ui.horizontal_wrapped(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Rotation:");
-                        });
+                    ui.label("Rotation:");
 
+                    ui.horizontal_wrapped(|ui| {
                         let cached_rotation = cfg.transform_rotation_cache.get(entity).copied();
 
                         let mut rotation_deg: DVec3 = if cfg.transform_in_progress {
@@ -500,142 +500,137 @@ impl InspectableComponent for Transform {
                     }
                     ui.add_space(5.0);
 
-                    ui.horizontal_wrapped(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Scale:");
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
-                                    if ui
-                                        .button(lock_icon)
-                                        .on_hover_text("Lock uniform scaling")
-                                        .clicked()
-                                    {
-                                        cfg.scale_locked = !cfg.scale_locked;
-                                    }
-                                },
-                            );
-                        });
-
-                        let mut scale_changed = false;
-                        let mut new_scale = self.scale;
-
-                        ui.horizontal(|ui| {
-                            ui.label("X:");
-                            let response = ui.add(
-                                DragValue::new(&mut new_scale.x)
-                                    .speed(0.01)
-                                    .fixed_decimals(3),
-                            );
-
-                            if response.drag_started() {
-                                cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
-                                cfg.transform_in_progress = true;
-                            }
-
-                            if response.changed() {
-                                scale_changed = true;
-                                if cfg.scale_locked {
-                                    let scale_factor = new_scale.x / self.scale.x;
-                                    new_scale.y = self.scale.y * scale_factor;
-                                    new_scale.z = self.scale.z * scale_factor;
-                                }
-                            }
-
-                            if response.drag_stopped() && cfg.transform_in_progress {
-                                if let Some(ent) = cfg.transform_old_entity.take()
-                                    && let Some(orig) = cfg.transform_original_transform.take()
-                                {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed X scale change to undo stack");
-                                }
-                                cfg.transform_in_progress = false;
-                            }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Y:");
-                            let y_slider = egui::DragValue::new(&mut new_scale.y)
-                                .speed(0.01)
-                                .fixed_decimals(3);
-
-                            let response = ui.add_enabled(!cfg.scale_locked, y_slider);
-
-                            if response.drag_started() && !cfg.scale_locked {
-                                cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
-                                cfg.transform_in_progress = true;
-                            }
-
-                            if response.changed() {
-                                scale_changed = true;
-                            }
-
-                            if response.drag_stopped() && cfg.transform_in_progress {
-                                if let Some(ent) = cfg.transform_old_entity.take()
-                                    && let Some(orig) = cfg.transform_original_transform.take()
-                                {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Y scale change to undo stack");
-                                }
-                                cfg.transform_in_progress = false;
-                            }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Z:");
-                            let z_slider = egui::DragValue::new(&mut new_scale.z)
-                                .speed(0.01)
-                                .fixed_decimals(3);
-
-                            let response = ui.add_enabled(!cfg.scale_locked, z_slider);
-
-                            if response.drag_started() && !cfg.scale_locked {
-                                cfg.transform_old_entity = Some(*entity);
-                                cfg.transform_original_transform = Some(*self);
-                                cfg.transform_in_progress = true;
-                            }
-
-                            if response.changed() {
-                                scale_changed = true;
-                            }
-
-                            if response.drag_stopped() && cfg.transform_in_progress {
-                                if let Some(ent) = cfg.transform_old_entity.take()
-                                    && let Some(orig) = cfg.transform_original_transform.take()
-                                {
-                                    UndoableAction::push_to_undo(
-                                        undo_stack,
-                                        UndoableAction::Transform(ent, orig),
-                                    );
-                                    log::debug!("Pushed Z scale change to undo stack");
-                                }
-                                cfg.transform_in_progress = false;
-                            }
-                        });
-
-                        if scale_changed {
-                            self.scale = new_scale;
+                    ui.horizontal(|ui| {
+                        ui.label("Scale:");
+                        let lock_icon = if cfg.scale_locked { "🔒" } else { "🔓" };
+                        if ui
+                            .button(lock_icon)
+                            .on_hover_text("Lock uniform scaling")
+                            .clicked()
+                        {
+                            cfg.scale_locked = !cfg.scale_locked;
                         }
                     });
+
+                    let mut scale_changed = false;
+                    let mut new_scale = self.scale;
+
+                    ui.horizontal(|ui| {
+                        ui.label("X:");
+                        let response = ui.add(
+                            DragValue::new(&mut new_scale.x)
+                                .speed(0.01)
+                                .fixed_decimals(3),
+                        );
+
+                        if response.drag_started() {
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_in_progress = true;
+                        }
+
+                        if response.changed() {
+                            scale_changed = true;
+                            if cfg.scale_locked {
+                                let scale_factor = new_scale.x / self.scale.x;
+                                new_scale.y = self.scale.y * scale_factor;
+                                new_scale.z = self.scale.z * scale_factor;
+                            }
+                        }
+
+                        if response.drag_stopped() && cfg.transform_in_progress {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed X scale change to undo stack");
+                            }
+                            cfg.transform_in_progress = false;
+                        }
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Y:");
+                        let y_slider = egui::DragValue::new(&mut new_scale.y)
+                            .speed(0.01)
+                            .fixed_decimals(3);
+
+                        let response = ui.add_enabled(!cfg.scale_locked, y_slider);
+
+                        if response.drag_started() && !cfg.scale_locked {
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_in_progress = true;
+                        }
+
+                        if response.changed() {
+                            scale_changed = true;
+                        }
+
+                        if response.drag_stopped() && cfg.transform_in_progress {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Y scale change to undo stack");
+                            }
+                            cfg.transform_in_progress = false;
+                        }
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Z:");
+                        let z_slider = egui::DragValue::new(&mut new_scale.z)
+                            .speed(0.01)
+                            .fixed_decimals(3);
+
+                        let response = ui.add_enabled(!cfg.scale_locked, z_slider);
+
+                        if response.drag_started() && !cfg.scale_locked {
+                            cfg.transform_old_entity = Some(*entity);
+                            cfg.transform_original_transform = Some(*self);
+                            cfg.transform_in_progress = true;
+                        }
+
+                        if response.changed() {
+                            scale_changed = true;
+                        }
+
+                        if response.drag_stopped() && cfg.transform_in_progress {
+                            if let Some(ent) = cfg.transform_old_entity.take()
+                                && let Some(orig) = cfg.transform_original_transform.take()
+                            {
+                                UndoableAction::push_to_undo(
+                                    undo_stack,
+                                    UndoableAction::Transform(ent, orig),
+                                );
+                                log::debug!("Pushed Z scale change to undo stack");
+                            }
+                            cfg.transform_in_progress = false;
+                        }
+                    });
+
+                    if scale_changed {
+                        self.scale = new_scale;
+                    }
+
                     if ui.button("Reset Scale").clicked() {
                         self.scale = DVec3::ONE;
                     }
                     ui.add_space(5.0);
                 });
         });
+        ui.separator();
     }
 }
 
-impl InspectableComponent for ScriptComponent {
+impl InspectableComponent for Script {
     fn inspect(
         &mut self,
         _entity: &mut Entity,
@@ -723,11 +718,11 @@ impl InspectableComponent for eucalyptus_core::states::Label {
 impl InspectableComponent for MeshRenderer {
     fn inspect(
         &mut self,
-        _entity: &mut Entity,
+        entity: &mut Entity,
         _cfg: &mut StaticallyKept,
         ui: &mut Ui,
         _undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
+        signal: &mut Signal,
         _label: &mut String,
     ) {
         // label
@@ -795,6 +790,21 @@ impl InspectableComponent for MeshRenderer {
                             }
                         }
                     });
+
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("URI:");
+                    let id = ui.make_persistent_id("mesh_renderer_uri_input");
+                    let mut uri_string = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
+                    
+                    ui.text_edit_singleline(&mut uri_string);
+                    
+                    if ui.button("Load").clicked() {
+                        *signal = Signal::LoadModel(*entity, uri_string.clone());
+                    }
+                    
+                    ui.data_mut(|d| d.insert_temp(id, uri_string));
+                });
 
                 if let Some(model) = selected_model {
                     log::debug!("Attempting to set asset handle for model: {:?}", model);
@@ -1013,6 +1023,7 @@ impl InspectableComponent for MeshRenderer {
                     }
                 });
         });
+        ui.separator();
     }
 }
 
@@ -1114,5 +1125,85 @@ impl InspectableComponent for LightComponent {
                 }
             });
         });
+        ui.separator();
+    }
+}
+
+impl InspectableComponent for Light {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        signal: &mut Signal,
+        label: &mut String,
+    ) {
+        self.transform.inspect(entity, cfg, ui, undo_stack, signal, label);
+        
+        self.light_component.inspect(entity, cfg, ui, undo_stack, signal, label);
+    }
+}
+
+impl InspectableComponent for Camera3D {
+    fn inspect(
+        &mut self,
+        entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        undo_stack: &mut Vec<UndoableAction>,
+        signal: &mut Signal,
+        label: &mut String,
+    ) {
+        self.transform.inspect(entity, cfg, ui, undo_stack, signal, label);
+
+        ui.vertical(|ui| {
+            CollapsingHeader::new("Camera Settings")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Type");
+                        ComboBox::from_id_salt("camera_type")
+                            .selected_text(format!("{:?}", self.camera_type))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.camera_type, CameraType::Normal, "Normal");
+                                ui.selectable_value(&mut self.camera_type, CameraType::Debug, "Debug");
+                                ui.selectable_value(&mut self.camera_type, CameraType::Player, "Player");
+                            });
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("FOV");
+                        ui.add(egui::Slider::new(&mut self.fov, 1.0..=179.0).suffix("°"));
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Near Plane");
+                        ui.add(egui::DragValue::new(&mut self.near).speed(0.1).range(0.01..=1000.0));
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Far Plane");
+                        ui.add(egui::DragValue::new(&mut self.far).speed(1.0).range(0.1..=10000.0));
+                    });
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Speed");
+                        ui.add(egui::DragValue::new(&mut self.speed).speed(0.1));
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Sensitivity");
+                        ui.add(egui::DragValue::new(&mut self.sensitivity).speed(0.01));
+                    });
+
+                    ui.separator();
+
+                    ui.checkbox(&mut self.starting_camera, "Starting Camera");
+                });
+        });
+        ui.separator();
     }
 }

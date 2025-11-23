@@ -1,4 +1,4 @@
-use crate::states::CameraConfig;
+use crate::states::Camera3D;
 use crate::traits::SerializableComponent;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use dropbear_macro::SerializableComponent;
@@ -21,7 +21,7 @@ impl Default for CameraComponent {
 impl CameraComponent {
     pub fn new() -> Self {
         Self {
-            settings: CameraSettings::new(5.0, 0.1, 60.0),
+            settings: CameraSettings::new(1.0, 0.1, 60.0),
             camera_type: CameraType::Normal,
             starting_camera: false,
         }
@@ -32,12 +32,14 @@ impl CameraComponent {
     }
 }
 
-impl From<CameraConfig> for CameraBuilder {
-    fn from(value: CameraConfig) -> Self {
+impl From<Camera3D> for CameraBuilder {
+    fn from(value: Camera3D) -> Self {
+        let forward = value.transform.rotation * DVec3::Z;
+        let up = value.transform.rotation * DVec3::Y;
         Self {
-            eye: value.eye.into(),
-            target: value.target.into(),
-            up: value.up.into(),
+            eye: value.transform.position,
+            target: value.transform.position + forward,
+            up,
             aspect: value.aspect,
             znear: value.near as f64,
             zfar: value.far as f64,
@@ -50,8 +52,8 @@ impl From<CameraConfig> for CameraBuilder {
     }
 }
 
-impl From<CameraConfig> for CameraComponent {
-    fn from(value: CameraConfig) -> Self {
+impl From<Camera3D> for CameraComponent {
+    fn from(value: Camera3D) -> Self {
         let settings = CameraSettings::new(
             value.speed as f64,
             value.sensitivity as f64,

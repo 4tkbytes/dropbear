@@ -19,12 +19,13 @@ use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::{
     entity::{MeshRenderer, Transform},
-    lighting::{Light, LightComponent},
 };
 use egui::{self, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::states::{Label, PROJECT};
+use eucalyptus_core::states::{
+    Label, Light, ModelProperties, PROJECT, Script,
+};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::hierarchy::{Children, Hierarchy, Parent};
 use hecs::{Entity, EntityBuilder, World};
@@ -370,6 +371,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         world: &mut World,
                         registry: &ComponentRegistry,
                         cfg: &mut StaticallyKept,
+                        signal: &mut Signal,
                     ) -> anyhow::Result<()> {
                         let entity_id = entity.to_bits().get();
                         let label = if let Ok(mut q) = world.query_one::<&Label>(entity)
@@ -394,14 +396,31 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             ui.close();
                                         }
                                     });
-                                    ui.menu_button("Add Component", |ui| {
+                                    ui.menu_button("Add", |ui| {
+                                        log_once::debug_once!("Available components: ");
                                         for (id, name) in registry.iter_available_components() {
+                                            log_once::debug_once!("id: {}, name: {}", id, name);
+                                            if name.contains("EntityTransform") {
+                                                continue;
+                                            }
                                             let short_name = name.split("::").last().unwrap_or(name);
-                                            if ui.button(short_name).clicked() {
-                                                if let Some(comp) = registry.create_default_component(id) {
-                                                    let mut builder = EntityBuilder::new();
-                                                    if let Ok(_) = registry.deserialize_into_builder(comp.as_ref(), &mut builder) {
-                                                        let _ = world.insert(entity, builder.build());
+                                            let display_name = if short_name == "SerializedMeshRenderer" {
+                                                "MeshRenderer"
+                                            } else {
+                                                short_name
+                                            };
+
+                                            if ui.button(display_name).clicked() {
+                                                if name.contains("MeshRenderer") {
+                                                    *signal = Signal::AddComponent(entity, "MeshRenderer".to_string());
+                                                } else if name.contains("CameraComponent") || name.contains("Camera3D") {
+                                                    *signal = Signal::AddComponent(entity, "CameraComponent".to_string());
+                                                } else {
+                                                    if let Some(comp) = registry.create_default_component(id) {
+                                                        let mut builder = EntityBuilder::new();
+                                                        if let Ok(_) = registry.deserialize_into_builder(comp.as_ref(), &mut builder) {
+                                                            let _ = world.insert(entity, builder.build());
+                                                        }
                                                     }
                                                 }
                                                 ui.close();
@@ -449,7 +468,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                         for child in children_entities {
                             if let Err(e) =
-                                add_entity_to_tree(builder, child, world, registry, cfg)
+                                add_entity_to_tree(builder, child, world, registry, cfg, signal)
                             {
                                 log_once::error_once!(
                                     "Failed to add child entity to tree, skipping: {}",
@@ -472,6 +491,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             &mut self.world,
                             &self.component_registry,
                             &mut cfg,
+                            self.signal,
                         ) {
                             log_once::error_once!(
                                 "Failed to add child entity to tree, skipping: {}",
@@ -520,6 +540,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             );
 
                             ui.label(format!("Entity ID: {}", entity.id()));
+
+                            ui.separator();
 
                             if let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(*entity)
                                 && let Some(e) = q.get()
@@ -626,10 +648,10 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                             if let Ok(mut q) = self
                                 .world
-                                .query_one::<(&mut Light, &mut LightComponent)>(*entity)
-                                && let Some((_light, comp)) = q.get()
+                                .query_one::<&mut Light>(*entity)
+                                && let Some(light) = q.get()
                             {
-                                comp.inspect(
+                                light.inspect(
                                     entity,
                                     &mut cfg,
                                     ui,
@@ -639,7 +661,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
                             }
 
-                            if let Ok(mut q) = self.world.query_one::<&mut ScriptComponent>(*entity)
+                            if let Ok(mut q) = self.world.query_one::<&mut Script>(*entity)
                                 && let Some(script) = q.get()
                             {
                                 script.inspect(
@@ -1343,8 +1365,6 @@ struct FsEntry {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
-// todo: provide a purpose to RemoveComponent
 pub enum EditorTabMenuAction {
     ImportResource,
     RefreshAssets,

@@ -40,7 +40,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        CameraConfig, EditorTab, LightConfig, ModelProperties, PROJECT, SCENES, ScriptComponent,
+        Camera3D, EditorTab, Light, ModelProperties, PROJECT, SCENES, Script,
         WorldLoadingStatus,
     },
     success, success_without_console,
@@ -118,6 +118,7 @@ pub struct Editor {
     // handles for futures
     pub world_load_handle: Option<FutureHandle>,
     pub(crate) light_spawn_queue: Vec<FutureHandle>,
+    pub(crate) pending_components: Vec<(hecs::Entity, FutureHandle)>,
     pub world_receiver: Option<oneshot::Receiver<hecs::World>>,
 
     // building
@@ -194,8 +195,10 @@ impl Editor {
         ) {
             component_registry.register_with_default::<EntityTransform>();
             component_registry.register_with_default::<ModelProperties>();
-            component_registry.register_with_default::<LightConfig>();
-            component_registry.register_with_default::<ScriptComponent>();
+            component_registry.register_with_default::<Light>();
+            component_registry.register_with_default::<Script>();
+            component_registry.register_with_default::<SerializedMeshRenderer>();
+            component_registry.register_with_default::<Camera3D>();
 
             component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
                 |_, _, renderer| {
@@ -206,7 +209,7 @@ impl Editor {
                 },
             );
 
-            component_registry.register_converter::<CameraComponent, CameraConfig, _>(
+            component_registry.register_converter::<CameraComponent, Camera3D, _>(
                 |world, entity, component| {
                     let Ok(camera) = world.get::<&Camera>(entity) else {
                         log::debug!(
@@ -216,7 +219,7 @@ impl Editor {
                         return None;
                     };
 
-                    Some(CameraConfig::from_ecs_camera(&camera, component))
+                    Some(Camera3D::from_ecs_camera(&camera, component))
                 },
             );
 
@@ -279,6 +282,7 @@ impl Editor {
             current_state: WorldLoadingStatus::Idle,
             world_load_handle: None,
             light_spawn_queue: vec![],
+            pending_components: vec![],
             world_receiver: None,
             progress_rx: None,
             handle_created: None,
@@ -1184,15 +1188,15 @@ impl Editor {
                     properties.clone_from(original_properties);
                 }
 
-                let has_script = self.world.get::<&ScriptComponent>(*entity_id).is_ok();
+                let has_script = self.world.get::<&Script>(*entity_id).is_ok();
                 match (has_script, original_script) {
                     (true, Some(original)) => {
-                        if let Ok(mut script) = self.world.get::<&mut ScriptComponent>(*entity_id) {
+                        if let Ok(mut script) = self.world.get::<&mut Script>(*entity_id) {
                             *script = original.clone();
                         }
                     }
                     (true, None) => {
-                        let _ = self.world.remove_one::<ScriptComponent>(*entity_id);
+                        let _ = self.world.remove_one::<Script>(*entity_id);
                     }
                     (false, Some(original)) => {
                         let _ = self.world.insert_one(*entity_id, original.clone());
@@ -1231,7 +1235,7 @@ impl Editor {
         {
             let script = self
                 .world
-                .query_one::<&ScriptComponent>(entity_id)
+                .query_one::<&Script>(entity_id)
                 .ok()
                 .and_then(|mut s| s.get().cloned());
             entities.push((
@@ -1410,7 +1414,7 @@ impl Editor {
 
             let mut script_entities = Vec::new();
             {
-                for (entity_id, script) in self.world.query::<&ScriptComponent>().iter() {
+                for (entity_id, script) in self.world.query::<&Script>().iter() {
                     script_entities.push((entity_id, script.clone()));
                 }
             }
@@ -1551,6 +1555,8 @@ pub enum Signal {
     CreateEntity,
     LogEntities,
     Spawn(PendingSpawnType),
+    AddComponent(hecs::Entity, String),
+    LoadModel(hecs::Entity, String),
 }
 
 #[derive(Clone)]
@@ -1560,7 +1566,7 @@ pub struct PlayModeBackup {
         MeshRenderer,
         Transform,
         ModelProperties,
-        Option<ScriptComponent>,
+        Option<Script>,
     )>,
     camera_data: Vec<(Entity, Camera, CameraComponent)>,
 }
