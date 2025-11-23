@@ -33,7 +33,7 @@ use hecs::{Entity, EntityBuilder, World};
 use indexmap::Equivalent;
 use log;
 use parking_lot::Mutex;
-use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode};
+use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, GizmoOrientation};
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -45,6 +45,7 @@ pub struct EditorTabViewer<'a> {
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut Signal,
     pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
+    pub gizmo_orientation: &'a mut GizmoOrientation,
     pub editor_mode: &'a mut EditorState,
     pub active_camera: &'a mut Arc<Mutex<Option<Entity>>>,
     pub plugin_registry: &'a mut PluginRegistry,
@@ -289,7 +290,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             projection_matrix: camera.proj_mat.into(),
                             viewport: image_rect,
                             modes: *self.gizmo_mode,
-                            orientation: transform_gizmo_egui::GizmoOrientation::Global,
+                            orientation: *self.gizmo_orientation,
                             snapping,
                             snap_distance: 1.0,
                             ..Default::default()
@@ -300,7 +301,68 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     && let Some(entity_id) = self.selected_entity
                 {
                     let mut handled = false;
+
+                    if let Ok(mut q) = self.world.query_one::<&mut EntityTransform>(*entity_id)
+                        && let Some(entity_transform) = q.get()
                     {
+                        let was_focused = cfg.is_focused;
+                        cfg.is_focused = self.gizmo.is_focused();
+
+                        if cfg.is_focused && !was_focused {
+                            cfg.entity_transform_original = Some(*entity_transform);
+                        }
+
+                        let synced = entity_transform.sync();
+                        let gizmo_transform =
+                            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                                synced.scale,
+                                synced.rotation,
+                                synced.position,
+                            );
+
+                        if let Some((_result, new_transforms)) =
+                            self.gizmo.interact(ui, &[gizmo_transform])
+                            && let Some(new_transform) = new_transforms.first()
+                        {
+                            let new_synced_pos: glam::DVec3 = new_transform.translation.into();
+                            let new_synced_rot: glam::DQuat = new_transform.rotation.into();
+                            let new_synced_scale: glam::DVec3 = new_transform.scale.into();
+
+                            let parent_transform = entity_transform.world();
+                            let parent_scale = parent_transform.scale;
+                            let parent_rot = parent_transform.rotation;
+                            let parent_pos = parent_transform.position;
+
+                            let safe_parent_scale = glam::DVec3::new(
+                                if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
+                                if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
+                                if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
+                            );
+
+                            let local_transform = entity_transform.local_mut();
+                            local_transform.scale = new_synced_scale / safe_parent_scale;
+                            local_transform.rotation = parent_rot.inverse() * new_synced_rot;
+
+                            let delta_pos = new_synced_pos - parent_pos;
+                            let unrotated_delta = parent_rot.inverse() * delta_pos;
+                            local_transform.position = unrotated_delta / safe_parent_scale;
+                        }
+
+                        if was_focused && !cfg.is_focused {
+                            if let Some(original) = cfg.entity_transform_original {
+                                if original != *entity_transform {
+                                    UndoableAction::push_to_undo(
+                                        self.undo_stack,
+                                        UndoableAction::EntityTransform(*entity_id, original),
+                                    );
+                                    log::debug!("Pushed entity transform action to stack");
+                                }
+                            }
+                        }
+                        handled = true;
+                    }
+
+                    if !handled {
                         if let Ok(mut q) = self.world.query_one::<&mut Transform>(*entity_id)
                             && let Some(transform) = q.get()
                         {
@@ -338,68 +400,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         UndoableAction::Transform(*entity_id, cfg.old_pos),
                                     );
                                     log::debug!("Pushed transform action to stack");
-                                }
-                            }
-                            handled = true;
-                        }
-                    }
-
-                    if !handled {
-                        if let Ok(mut q) = self.world.query_one::<&mut EntityTransform>(*entity_id)
-                            && let Some(entity_transform) = q.get()
-                        {
-                            let was_focused = cfg.is_focused;
-                            cfg.is_focused = self.gizmo.is_focused();
-
-                            if cfg.is_focused && !was_focused {
-                                cfg.entity_transform_original = Some(*entity_transform);
-                            }
-
-                            let synced = entity_transform.sync();
-                            let gizmo_transform =
-                                transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                                    synced.scale,
-                                    synced.rotation,
-                                    synced.position,
-                                );
-
-                            if let Some((_result, new_transforms)) =
-                                self.gizmo.interact(ui, &[gizmo_transform])
-                                && let Some(new_transform) = new_transforms.first()
-                            {
-                                let new_synced_pos: glam::DVec3 = new_transform.translation.into();
-                                let new_synced_rot: glam::DQuat = new_transform.rotation.into();
-                                let new_synced_scale: glam::DVec3 = new_transform.scale.into();
-
-                                let parent_transform = entity_transform.world();
-                                let parent_scale = parent_transform.scale;
-                                let parent_rot = parent_transform.rotation;
-                                let parent_pos = parent_transform.position;
-
-                                let safe_parent_scale = glam::DVec3::new(
-                                    if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
-                                    if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
-                                    if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
-                                );
-
-                                let local_transform = entity_transform.local_mut();
-                                local_transform.scale = new_synced_scale / safe_parent_scale;
-                                local_transform.rotation = parent_rot.inverse() * new_synced_rot;
-
-                                let delta_pos = new_synced_pos - parent_pos;
-                                let unrotated_delta = parent_rot.inverse() * delta_pos;
-                                local_transform.position = unrotated_delta / safe_parent_scale;
-                            }
-
-                            if was_focused && !cfg.is_focused {
-                                if let Some(original) = cfg.entity_transform_original {
-                                    if original != *entity_transform {
-                                        UndoableAction::push_to_undo(
-                                            self.undo_stack,
-                                            UndoableAction::EntityTransform(*entity_id, original),
-                                        );
-                                        log::debug!("Pushed entity transform action to stack");
-                                    }
                                 }
                             }
                         }
@@ -719,13 +719,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 .query_one::<(
                                     &mut Light,
                                     Option<&mut Transform>,
+                                    Option<&mut EntityTransform>,
                                     Option<&mut LightComponent>,
                                     Option<&mut EngineLight>,
                                 )>(*entity)
-                                && let Some((light, mut transform_opt, light_comp_opt, engine_light_opt)) =
-                                    q.get()
+                                && let Some((
+                                    light,
+                                    mut transform_opt,
+                                    mut entity_transform_opt,
+                                    light_comp_opt,
+                                    engine_light_opt,
+                                )) = q.get()
                             {
-                                if let Some(transform) = transform_opt.as_deref() {
+                                if let Some(entity_transform) = entity_transform_opt.as_deref() {
+                                    light.transform = entity_transform.sync();
+                                } else if let Some(transform) = transform_opt.as_deref() {
                                     light.transform = *transform;
                                 }
 
@@ -738,7 +746,30 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     &mut String::new(),
                                 );
 
-                                if let Some(transform) = transform_opt.as_deref_mut() {
+                                if let Some(entity_transform) = entity_transform_opt.as_deref_mut() {
+                                    let parent_transform = entity_transform.world();
+                                    let parent_rot = parent_transform.rotation;
+                                    let parent_scale = parent_transform.scale;
+                                    let parent_pos = parent_transform.position;
+
+                                    let new_world_pos = light.transform.position;
+                                    let new_world_rot = light.transform.rotation;
+                                    let new_world_scale = light.transform.scale;
+
+                                    let safe_parent_scale = glam::DVec3::new(
+                                        if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
+                                        if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
+                                        if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
+                                    );
+
+                                    let local_transform = entity_transform.local_mut();
+                                    local_transform.scale = new_world_scale / safe_parent_scale;
+                                    local_transform.rotation = parent_rot.inverse() * new_world_rot;
+
+                                    let delta_pos = new_world_pos - parent_pos;
+                                    let unrotated_delta = parent_rot.inverse() * delta_pos;
+                                    local_transform.position = unrotated_delta / safe_parent_scale;
+                                } else if let Some(transform) = transform_opt.as_deref_mut() {
                                     *transform = light.transform;
                                 }
 

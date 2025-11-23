@@ -190,7 +190,7 @@ impl Camera3D {
         let up = glam::DVec3::from_array(camera.up.to_array());
         
         let rotation = if (target - position).length_squared() > 0.0001 {
-             glam::DQuat::from_mat4(&glam::DMat4::look_at_lh(position, target, up))
+             glam::DQuat::from_mat4(&glam::DMat4::look_at_lh(position, target, up)).inverse()
         } else {
              glam::DQuat::IDENTITY
         };

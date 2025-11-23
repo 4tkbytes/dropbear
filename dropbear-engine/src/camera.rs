@@ -102,6 +102,11 @@ impl Camera {
         label: Option<&str>,
     ) -> Self {
         let uniform = CameraUniform::new();
+
+        let dir = (builder.target - builder.eye).normalize();
+        let pitch = dir.y.clamp(-1.0, 1.0).asin();
+        let yaw = dir.z.atan2(dir.x);
+
         let mut camera = Self {
             eye: builder.eye,
             target: builder.target,
@@ -113,8 +118,8 @@ impl Camera {
             buffer: None,
             layout: None,
             bind_group: None,
-            yaw: 0.0,
-            pitch: 0.0,
+            yaw,
+            pitch,
             settings: builder.settings,
             label: if let Some(l) = label {
                 l.to_string()

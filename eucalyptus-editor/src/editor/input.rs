@@ -7,7 +7,7 @@ use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
-use transform_gizmo_egui::GizmoMode;
+use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
@@ -241,6 +241,22 @@ impl Keyboard for Editor {
             KeyCode::KeyP => {
                 if !is_playing && ctrl_pressed {
                     self.signal = Signal::Play
+                } else {
+                    self.input_state.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyL => {
+                if matches!(self.viewport_mode, ViewportMode::Gizmo) && !is_playing {
+                    info!("GizmoOrientation set to Local");
+                    self.gizmo_orientation = GizmoOrientation::Local;
+                } else {
+                    self.input_state.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::KeyW => {
+                if matches!(self.viewport_mode, ViewportMode::Gizmo) && !is_playing {
+                    info!("GizmoOrientation set to Global");
+                    self.gizmo_orientation = GizmoOrientation::Global;
                 } else {
                     self.input_state.pressed_keys.insert(key);
                 }

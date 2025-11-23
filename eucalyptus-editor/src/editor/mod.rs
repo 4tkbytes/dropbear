@@ -61,7 +61,7 @@ use std::{
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode};
+use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::CursorGrabMode;
 use winit::{keyboard::KeyCode, window::Window};
@@ -99,6 +99,7 @@ pub struct Editor {
     // redo_stack: Vec<UndoableAction>,
     pub(crate) editor_state: EditorState,
     pub gizmo_mode: EnumSet<GizmoMode>,
+    pub gizmo_orientation: GizmoOrientation,
 
     pub(crate) script_manager: ScriptManager,
     pub play_mode_backup: Option<PlayModeBackup>,
@@ -273,6 +274,7 @@ impl Editor {
             script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
+            gizmo_orientation: GizmoOrientation::Global,
             play_mode_backup: None,
             input_state: Box::new(InputState::new()),
             light_manager: LightManager::new(),
@@ -1069,6 +1071,7 @@ impl Editor {
                         signal: &mut self.signal,
                         active_camera: &mut self.active_camera,
                         gizmo_mode: &mut self.gizmo_mode,
+                        gizmo_orientation: &mut self.gizmo_orientation,
                         editor_mode: &mut self.editor_state,
                         plugin_registry: &mut self.plugin_registry,
                         editor: editor_ptr,

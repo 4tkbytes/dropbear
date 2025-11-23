@@ -35,7 +35,12 @@ impl CameraComponent {
 impl From<Camera3D> for CameraBuilder {
     fn from(value: Camera3D) -> Self {
         let forward = value.transform.rotation * DVec3::Z;
-        let up = value.transform.rotation * DVec3::Y;
+        let up = if matches!(value.camera_type, CameraType::Debug | CameraType::Normal) {
+            DVec3::Y
+        } else {
+            value.transform.rotation * DVec3::Y
+        };
+
         Self {
             eye: value.transform.position,
             target: value.transform.position + forward,
