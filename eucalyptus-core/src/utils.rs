@@ -367,6 +367,21 @@ macro_rules! convert_jstring {
     }};
 }
 
+/// A convenient macro for returning from a function when you cbb to add a specific return value.
+///
+/// # Usage
+/// ```
+/// use anyhow::anyhow;
+///
+/// fn some_native_function() -> i32 {
+///     let error_value = anyhow!("This is an error. Uh oh!");
+///     let Ok(val) = error_value else {
+///         return eucalyptus_core::ffi_error_return!();
+///         // eucalyptus_core::ffi_error_return!("Optional message")
+///         // this expands out to `return -1`
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! ffi_error_return {
     () => {{
@@ -411,7 +426,7 @@ macro_rules! ffi_error_return {
         impl ErrorValue for u8 {
             fn error_value() -> Self {
                 0
-            } // most likely a char or a jboolean
+            }
         }
 
         impl ErrorValue for u16 {
@@ -462,9 +477,24 @@ macro_rules! ffi_error_return {
             }
         }
 
-        // todo: implement other types
-
         ErrorValue::error_value()
+    }};
+
+    ($($arg:tt)*) => {{
+        println!(
+            "[{}] [ERROR] {}",
+            {
+                fn type_name_of<T>(_: T) -> &'static str {
+                    std::any::type_name::<T>()
+                }
+                type_name_of(|| {})
+                    .rsplit("::")
+                    .find(|s| !s.starts_with("{{"))
+                    .unwrap_or("unknown")
+            },
+            format!($($arg)*)
+        );
+        $crate::ffi_error_return!()
     }};
 }
 

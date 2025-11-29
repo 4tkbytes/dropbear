@@ -3,6 +3,7 @@ package com.dropbear.ffi
 import com.dropbear.Camera
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
+import com.dropbear.EntityRef
 import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
@@ -323,5 +324,54 @@ actual class NativeEngine {
 
     actual fun getAllTextures(entityHandle: Long): Array<String> {
         return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
+    }
+
+    actual fun getChildren(entityId: EntityId): Array<EntityRef>? {
+        val result = JNINative.getChildren(worldHandle, entityId.id)
+        // i shouldn't expect it to return null unless an error, otherwise it must
+        // return an empty array
+        if (result == null) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to query for all children for entity ${entityId.id}")
+            } else {
+                return null
+            }
+        } else {
+            val entityRefs = mutableListOf<EntityRef>()
+            result.forEach { e ->
+                entityRefs.add(EntityRef(EntityId(e)))
+            }
+            return entityRefs.toTypedArray() // must be an array so it cannot be mutated
+        }
+    }
+
+    actual fun getChildByLabel(entityId: EntityId, label: String): EntityRef? {
+        val result = JNINative.getChildByLabel(worldHandle, entityId.id, label)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get child by label $entityId $label")
+            } else {
+                null
+            }
+        } else if (result == -2L) {
+            null
+        } else {
+            EntityRef(EntityId(result))
+        }
+    }
+
+    actual fun getParent(entityId: EntityId): EntityRef? {
+        val result = JNINative.getParent(worldHandle, entityId.id)
+        return if (result == -1L) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("Unable to get parent of entity $entityId")
+            } else {
+                null
+            }
+        } else if (result == -2L) {
+            null
+        } else {
+            EntityRef(EntityId(result))
+        }
     }
 }

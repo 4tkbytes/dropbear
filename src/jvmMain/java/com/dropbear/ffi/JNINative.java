@@ -41,6 +41,11 @@ public class JNINative {
     public static native Transform propagateTransform(long worldHandle, long id);
     public static native void setTransform(long worldHandle, long id, EntityTransform transform);
 
+    // hierarchy
+    public static native long[] getChildren(long worldHandle, long entityId);
+    public static native long getChildByLabel(long worldHandle, long entityId, String label);
+    public static native long getParent(long worldHandle, long entityId);
+
     // properties
     public static native String getStringProperty(long worldHandle, long entityHandle, String label);
     public static native int getIntProperty(long worldHandle, long entityHandle, String label);

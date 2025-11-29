@@ -13,7 +13,8 @@ import com.dropbear.math.Transform
  * The ECS system the dropbear engine uses is `hecs` ECS, which is a Rust crate that has blazing fast
  * querying systems. The id passed is just a primitive integer value that points to the entity in the world.
  *
- * @property id The unique identifier of the entity as set by `hecs::World`
+ * @property id The unique identifier of the entity as set by `hecs::World`. This value changes dynamically during different
+ *              playthroughs, so it is recommended not to store this value.
  */
 class EntityRef(val id: EntityId = EntityId(0L)) {
     lateinit var engine: DropbearEngine
@@ -164,5 +165,51 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      */
     fun setTextureOverride(materialName: String, textureHandle: TextureHandle) {
         engine.native.setTextureOverride(id.id, materialName, textureHandle)
+    }
+
+    /**
+     * Fetches all direct children available to that entity. It does not go any deeper than that level.
+     *
+     * It will return `null` if there was an error, or an empty array if no children have been found.
+     *
+     * # Example
+     * ```
+     * |- cat
+     * |    |- wizard_hat
+     * |    |    |- pom_pom
+     * ```
+     *
+     * By running [getChildren] on `cat`, it will return `[ wizard_hat ]`, not `pom_pom`.
+     */
+    fun getChildren(): Array<EntityRef>? {
+        return engine.native.getChildren(id)
+    }
+
+    /**
+     * Fetches a direct child by a specific label.
+     *
+     * Returns `null` if an error occurred or no child exists, otherwise the entity.
+     */
+    fun getChildByLabel(label: String): EntityRef? {
+        return engine.native.getChildByLabel(id, label)
+    }
+
+    /**
+     * Fetches the parent of this entity.
+     *
+     * Returns `null` if no parent exists. If it exists, it will return the [EntityRef] of that parent.
+     *
+     * # Note
+     * You will see in the editor something like this:
+     * ```
+     * Scene_name
+     * |- cat
+     * |- bat
+     * ```
+     *
+     * Calling [getParent] on `cat` will return `null`, as the Scene is not an entity.
+     */
+    fun getParent(): EntityRef? {
+        return engine.native.getParent(id)
     }
 }

@@ -1,5 +1,7 @@
+#![allow(non_snake_case)]
+
 use crate::camera::{CameraComponent, CameraType};
-use crate::hierarchy::EntityTransformExt;
+use crate::hierarchy::{Children, EntityTransformExt, Parent};
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::utils::{
     create_vector3, extract_vector3, java_button_to_rust, new_float_array,
@@ -18,9 +20,7 @@ use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::JNIEnv;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{
-    JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jobjectArray, jstring,
-};
+use jni::sys::{JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jobjectArray, jstring, jlongArray};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -389,7 +389,7 @@ pub fn Java_com_dropbear_ffi_JNINative_propagateTransform(
                 }
             };
 
-            return transform_obj.into_raw();
+            transform_obj.into_raw()
         } else {
             println!(
                 "[Java_com_dropbear_ffi_JNINative_propagateTransform] [ERROR] Failed to get entity transform"
@@ -2476,4 +2476,99 @@ pub fn Java_com_dropbear_ffi_JNINative_getAsset(
         return asset_handle.raw() as jlong;
     };
     0 as jlong
+}
+
+/// `JNIEXPORT jlongArray JNICALL Java_com_dropbear_ffi_JNINative_getChildren
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getChildren(
+    env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+) -> jlongArray {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = convert_jlong_to_entity!(entity_id);
+
+    let entities = if let Ok(mut q) = world.query_one::<&Children>(entity) && let Some(children) = q.get() {
+        let children = children.children();
+        let mut array = vec![];
+        for child in children {
+            array.push(child.to_bits().get() as i64);
+        }
+        array
+    } else {
+        vec![]
+    };
+
+    let array = match env.new_long_array(entities.len() as i32) {
+        Ok(array) => array,
+        Err(e) => {
+            return crate::ffi_error_return!("Unable to create a new long array: {}", e);
+        }
+    };
+
+    if let Err(e) = env.set_long_array_region(&array, 0, &entities) {
+        return crate::ffi_error_return!("Unable to populate long array: {}", e);
+    }
+
+    array.into_raw()
+}
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getChildByLabel
+///   (JNIEnv *, jclass, jlong, jlong, jstring);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getChildByLabel(
+    mut env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+    label: JString,
+) -> jlong {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = convert_jlong_to_entity!(entity_id);
+    let target = convert_jstring!(env, label);
+
+    if let Ok(mut q) = world.query_one::<&Children>(entity) && let Some(children) = q.get() {
+        for child in children.children() {
+            if let Ok(label) = world.get::<&Label>(entity) {
+                if label.as_str() == target {
+                    return child.to_bits().get() as jlong;
+                }
+            } else {
+                // skip if error or no entity
+                continue;
+            }
+        }
+
+    } else {
+        // no children exist for the entity
+        return -2 as jlong;
+    };
+
+    // no children exist with that label
+    -2 as jlong
+}
+
+/// `JNIEXPORT jlong JNICALL Java_com_dropbear_ffi_JNINative_getParent
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getParent(
+    _env: JNIEnv,
+    _class: JClass,
+    world_handle: jlong,
+    entity_id: jlong,
+) -> jlong {
+    let world = convert_ptr!(world_handle, WorldPtr => World);
+    let entity = convert_jlong_to_entity!(entity_id);
+
+    if let Ok(mut q) = world.query_one::<&Parent>(entity) {
+        if let Some(parent) = q.get() {
+            parent.parent().to_bits().get() as jlong
+        } else {
+            -2 as jlong
+        }
+    } else {
+        crate::ffi_error_return!("No entity exists")
+    }
 }

@@ -2,6 +2,7 @@ package com.dropbear.ffi
 
 import com.dropbear.Camera
 import com.dropbear.EntityId
+import com.dropbear.EntityRef
 import com.dropbear.EntityTransform
 import com.dropbear.asset.AssetHandle
 import com.dropbear.asset.ModelHandle
@@ -40,6 +41,10 @@ expect class NativeEngine {
     fun getTransform(entityId: EntityId): EntityTransform?
     fun propagateTransform(entityId: EntityId): Transform?
     fun setTransform(entityId: EntityId, transform: EntityTransform)
+
+    fun getChildren(entityId: EntityId): Array<EntityRef>?
+    fun getChildByLabel(entityId: EntityId, label: String): EntityRef?
+    fun getParent(entityId: EntityId): EntityRef? 
 
     // ------------------------ MODEL PROPERTIES -------------------------
 
