@@ -8,6 +8,7 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::runtime::RuntimeSettings;
 
 /// The root config file, responsible for building and other metadata.
 ///
@@ -21,8 +22,13 @@ pub struct ProjectConfig {
     pub date_last_accessed: String,
     #[serde(default)]
     pub dock_layout: Option<DockState<EditorTab>>,
+
     #[serde(default)]
     pub editor_settings: EditorSettings,
+
+    #[serde(default)]
+    pub runtime_settings: RuntimeSettings,
+
     #[serde(default)]
     pub last_opened_scene: Option<String>,
 }
@@ -42,6 +48,7 @@ impl ProjectConfig {
             editor_settings: Default::default(),
             dock_layout: None,
             last_opened_scene: None,
+            runtime_settings: Default::default(),
         };
         let _ = result.load_config_to_memory();
         result

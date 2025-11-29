@@ -6,6 +6,8 @@ use std::path::Path;
 
 pub const EUCA_SCHEME: &str = "euca://";
 
+pub const INTERNAL_MODELS: &[&str] = &["cube"];
+
 /// Converts any supported resource reference into the canonical `euca://` form.
 ///
 /// The function trims whitespace, normalizes path separators, ensures the scheme

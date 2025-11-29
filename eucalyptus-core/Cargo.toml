@@ -12,6 +12,7 @@ crate-type = ["rlib", "dylib"]
 [dependencies]
 dropbear-traits = { path = "../dropbear-traits" }
 dropbear-macro = { path = "../dropbear-macro" }
+magna-carta = { path = "../magna-carta" }
 
 anyhow.workspace = true
 bincode.workspace = true

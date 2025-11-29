@@ -18,6 +18,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
+/// A global "singleton" that contains the configuration of a project.  
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
 

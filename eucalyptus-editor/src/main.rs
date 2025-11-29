@@ -115,33 +115,14 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("package")
-                .about("Package a eucalyptus project, which compiles the runtime and the resource .eupak file")
+            Command::new("read")
+                .about("Reads a .eupak file")
                 .arg(
-                    Arg::new("project")
-                        .help("Path to the .eucp project file")
-                        .value_name("PROJECT_FILE")
-                        .required(true),
-                ),
-        )
-        .subcommand(Command::new("read")
-            .about("Reads and displays the contents of a .eupak file for debugging")
-            .arg(
                     Arg::new("eupak_file")
-                        .help("Path to the .eupak file")
-                        .value_name("RESOURCE_FILE")
-                        .required(true),
+                        .help("Path to the .eupak data file")
+                        .value_name("EUPAK_FILE")
+                        .required(true)
                 ),
-        )
-        .subcommand(Command::new("health").about("Check the health of the eucalyptus installation"))
-        .subcommand(Command::new("compile")
-            .about("Compiles a project's script into WebAssembly, primarily used for testing")
-            .arg(
-                Arg::new("project")
-                    .help("Path to the .eucp project file")
-                    .value_name("PROJECT_FILE")
-                    .required(true),
-            )
         )
         .get_matches();
 
@@ -152,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
                 None => match find_eucp_file() {
                     Ok(path) => path,
                     Err(e) => {
-                        eprintln!("Error: {}", e);
+                        log::error!("Error: {}", e);
                         std::process::exit(1);
                     }
                 },
@@ -160,51 +141,13 @@ async fn main() -> anyhow::Result<()> {
 
             build::build(project_path)?;
         }
-        Some(("package", sub_matches)) => {
-            let project_path = match sub_matches.get_one::<String>("project") {
-                Some(path) => PathBuf::from(path),
-                None => match find_eucp_file() {
-                    Ok(path) => path,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    }
-                },
-            };
-
-            build::package(project_path, sub_matches)?;
-        }
-        Some(("health", _)) => {
-            build::health()?;
-        }
         Some(("read", sub_matches)) => {
-            let project_path = match sub_matches.get_one::<String>("eupak_file") {
+            let eupak = match sub_matches.get_one::<String>("eupak_file") {
                 Some(path) => PathBuf::from(path),
-                None => match find_eucp_file() {
-                    Ok(path) => path,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    }
-                },
+                None => {log::error!("Eupak file returned none"); std::process::exit(1)},
             };
 
-            crate::build::read_from_eupak(project_path)?;
-        }
-        Some(("compile", sub_matches)) => {
-            let _project_path = match sub_matches.get_one::<String>("project") {
-                Some(path) => PathBuf::from(path),
-                None => match find_eucp_file() {
-                    Ok(path) => path,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    }
-                },
-            };
-
-            println!("\"Compile\" command not implemented yet");
-            // crate::build::compile(project_path).await?;
+            build::read(eupak)?;
         }
         None => {
             let config = WindowConfiguration {

@@ -760,8 +760,16 @@ impl InspectableComponent for MeshRenderer {
             CollapsingHeader::new("Model").show(ui, |ui| {
                 let mut selected_model: Option<AssetHandle> = None;
 
+                let selected_text = if let Some(uri) = self.handle().path.as_uri()
+                    && uri == "euca://internal/dropbear/models/cube"
+                {
+                    "Cube".to_string()
+                } else {
+                    self.handle().label.clone()
+                };
+
                 ComboBox::from_id_salt("model_dropdown")
-                    .selected_text(format!("{}", self.handle().label))
+                    .selected_text(selected_text)
                     .width(ui.available_width())
                     .show_ui(ui, |ui| {
                         let iter = ASSET_REGISTRY.iter_model();

@@ -11,7 +11,7 @@ use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::Model;
-use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_traits::SerializableComponent;
 use dropbear_traits::registry::ComponentRegistry;
 use glam::{DQuat, DVec3};
@@ -60,15 +60,19 @@ impl SceneEntity {
     }
 }
 
+/// The specific settings of a scene.
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneSettings {/* *crickets* */}
 
 impl SceneSettings {
+    /// Creates a new [`SceneSettings`] config. 
     pub fn new() -> Self {
         Self {}
     }
 }
 
+/// Specifies the configuration of a scene, such as its entities, hierarchies and any settings that 
+/// may be necessary. 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     #[serde(default)]
@@ -127,16 +131,34 @@ impl SceneConfig {
                     return Ok(());
                 }
                 ResourceReferenceType::File(reference) => {
-                    let path = &renderer.handle.resolve()?;
+                    if reference == "euca://internal/dropbear/models/cube" {
+                        log::info!("Loading entity from internal cube reference");
+                        let mut loaded_model = Model::load_from_memory(
+                            graphics.clone(),
+                            include_bytes!("../../resources/models/cube.glb"),
+                            Some(label),
+                        )
+                        .await?;
 
-                    log::debug!(
-                        "Path for entity {} is {} from reference {}",
-                        label,
-                        path.display(),
-                        reference
-                    );
+                        let model = loaded_model.make_mut();
+                        model.path =
+                            ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
 
-                    MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
+                        loaded_model.refresh_registry();
+
+                        MeshRenderer::from_handle(loaded_model)
+                    } else {
+                        let path = &renderer.handle.resolve()?;
+
+                        log::debug!(
+                            "Path for entity {} is {} from reference {}",
+                            label,
+                            path.display(),
+                            reference
+                        );
+
+                        MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
+                    }
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
@@ -149,13 +171,19 @@ impl SceneConfig {
                 ResourceReferenceType::Cube => {
                     log::info!("Loading entity from cube");
 
-                    let model = Model::load_from_memory(
+                    let mut loaded_model = Model::load_from_memory(
                         graphics.clone(),
                         include_bytes!("../../resources/models/cube.glb"),
                         Some(label),
                     )
                     .await?;
-                    MeshRenderer::from_handle(model)
+
+                    let model = loaded_model.make_mut();
+                    model.path = ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+
+                    loaded_model.refresh_registry();
+
+                    MeshRenderer::from_handle(loaded_model)
                 }
             };
 

@@ -625,12 +625,22 @@ impl SignalController for Editor {
                 if component_name == "MeshRenderer" {
                     let graphics_clone = graphics.clone();
                     let future = async move {
-                        let model= dropbear_engine::model::Model::load_from_memory(
+                        let mut loaded_model = dropbear_engine::model::Model::load_from_memory(
                             graphics_clone.clone(),
                             include_bytes!("../../resources/models/cube.glb"),
                             Some("Cube"),
-                        ).await?;
-                        Ok::<MeshRenderer, anyhow::Error>(dropbear_engine::entity::MeshRenderer::from_handle(model))
+                        )
+                        .await?;
+
+                        let model = loaded_model.make_mut();
+                        model.path =
+                            ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+
+                        loaded_model.refresh_registry();
+
+                        Ok::<MeshRenderer, anyhow::Error>(
+                            dropbear_engine::entity::MeshRenderer::from_handle(loaded_model),
+                        )
                     };
                     let handle = graphics.future_queue.push(Box::pin(future));
                     self.pending_components.push((*entity, handle));
@@ -680,21 +690,42 @@ impl SignalController for Editor {
                 let graphics_clone = graphics.clone();
                 let uri_clone = uri.clone();
                 let future = async move {
-                    let path = if uri_clone.starts_with("euca://") {
-                        let path_str = uri_clone.trim_start_matches("euca://");
-                        let project_path = PROJECT.read().project_path.clone();
-                        project_path.join(path_str)
+                    if uri_clone == "euca://internal/dropbear/models/cube" {
+                        let mut loaded_model = dropbear_engine::model::Model::load_from_memory(
+                            graphics_clone,
+                            include_bytes!("../../resources/models/cube.glb"),
+                            Some("Cube"),
+                        )
+                        .await?;
+
+                        let model = loaded_model.make_mut();
+                        model.path = ResourceReference::from_euca_uri(&uri_clone)?;
+
+                        loaded_model.refresh_registry();
+
+                        Ok::<MeshRenderer, anyhow::Error>(
+                            dropbear_engine::entity::MeshRenderer::from_handle(loaded_model),
+                        )
                     } else {
-                        PathBuf::from(&uri_clone)
-                    };
-                    
-                    let model = dropbear_engine::model::Model::load(
-                        graphics_clone,
-                        &path,
-                        Some(&uri_clone)
-                    ).await?;
-                    
-                    Ok::<MeshRenderer, anyhow::Error>(dropbear_engine::entity::MeshRenderer::from_handle(model))
+                        let path = if uri_clone.starts_with("euca://") {
+                            let path_str = uri_clone.trim_start_matches("euca://");
+                            let project_path = PROJECT.read().project_path.clone();
+                            project_path.join(path_str)
+                        } else {
+                            PathBuf::from(&uri_clone)
+                        };
+
+                        let model = dropbear_engine::model::Model::load(
+                            graphics_clone,
+                            &path,
+                            Some(&uri_clone),
+                        )
+                        .await?;
+
+                        Ok::<MeshRenderer, anyhow::Error>(
+                            dropbear_engine::entity::MeshRenderer::from_handle(model),
+                        )
+                    }
                 };
                 
                 let handle = graphics.future_queue.push(Box::pin(future));

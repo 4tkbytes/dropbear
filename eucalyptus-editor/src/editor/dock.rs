@@ -989,8 +989,29 @@ impl<'a> EditorTabViewer<'a> {
             Self::build_resource_branch(builder, &project_root);
             Self::build_scripts_branch(builder, &project_root);
             Self::build_scene_branch(builder, &project_root);
+            Self::build_internal_models_branch(builder);
             builder.close_dir();
         });
+    }
+
+    fn build_internal_models_branch(builder: &mut TreeViewBuilder<u64>) {
+        let label = "euca://internal";
+        builder.node(Self::dir_node_labeled(label, "internal"));
+
+        let dropbear_label = "euca://internal/dropbear";
+        builder.node(Self::dir_node_labeled(dropbear_label, "dropbear"));
+
+        let models_label = "euca://internal/dropbear/models";
+        builder.node(Self::dir_node_labeled(models_label, "models"));
+
+        for model_name in dropbear_engine::utils::INTERNAL_MODELS {
+            let model_uri = format!("euca://internal/dropbear/models/{}", model_name);
+            builder.node(Self::leaf_node_labeled(&model_uri, model_name));
+        }
+
+        builder.close_dir(); // close models
+        builder.close_dir(); // close dropbear
+        builder.close_dir(); // close internal
     }
 
     fn build_resource_branch(builder: &mut TreeViewBuilder<u64>, project_root: &Path) {

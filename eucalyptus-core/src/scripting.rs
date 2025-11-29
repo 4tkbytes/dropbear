@@ -303,6 +303,7 @@ fn get_gradle_command(project_root: impl AsRef<Path>) -> String {
     }
 }
 
+/// Asynchronously builds a project for the JVM using gradle. 
 pub async fn build_jvm(
     project_root: impl AsRef<Path>,
     status_sender: Sender<BuildStatus>,
@@ -419,4 +420,128 @@ pub async fn build_jvm(
 
     let _ = status_sender.send(BuildStatus::Completed);
     Ok(jar_path)
+}
+
+/// Asynchronously builds a project for Kotlin/Native using gradle.
+pub async fn build_native(
+    project_root: impl AsRef<Path>,
+    status_sender: Sender<BuildStatus>,
+) -> anyhow::Result<PathBuf> {
+    let project_root = project_root.as_ref();
+
+    if !project_root.exists() {
+        let err = format!("Project root does not exist: {:?}", project_root);
+        let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+        return Err(anyhow::anyhow!(err));
+    }
+
+    let _ = status_sender.send(BuildStatus::Building("Copying core library...".to_string()));
+    let libs_dir = project_root.join("libs");
+    if !libs_dir.exists() {
+        std::fs::create_dir_all(&libs_dir).context("Failed to create libs directory")?;
+    }
+
+    let (lib_name, lib_ext) = if cfg!(target_os = "windows") {
+        ("eucalyptus_core", "dll")
+    } else if cfg!(target_os = "macos") {
+        ("libeucalyptus_core", "dylib")
+    } else {
+        ("libeucalyptus_core", "so")
+    };
+
+    let lib_filename = format!("{}.{}", lib_name, lib_ext);
+    
+    let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
+    let exe_dir = current_exe.parent().context("Failed to get executable directory")?;
+    let source_lib_path = exe_dir.join(&lib_filename);
+
+    if source_lib_path.exists() {
+        std::fs::copy(&source_lib_path, libs_dir.join(&lib_filename))
+            .context(format!("Failed to copy {} to libs", lib_filename))?;
+    } else {
+        let cwd_lib_path = std::env::current_dir()?.join(&lib_filename);
+        if cwd_lib_path.exists() {
+             std::fs::copy(&cwd_lib_path, libs_dir.join(&lib_filename))
+                .context(format!("Failed to copy {} to libs", lib_filename))?;
+        } else {
+             let err = format!("Could not find core library {} to copy", lib_filename);
+             let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+             return Err(anyhow::anyhow!(err));
+        }
+    }
+
+    let _ = status_sender.send(BuildStatus::Started);
+
+    let gradle_cmd = get_gradle_command(project_root);
+    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} build", gradle_cmd)));
+
+    let mut child = Command::new(&gradle_cmd)
+        .current_dir(project_root)
+        .args(["--console=plain", "build"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context(format!("Failed to spawn `{} build`", gradle_cmd))?;
+
+    let stdout = child.stdout.take().expect("Stdout was piped");
+    let stderr = child.stderr.take().expect("Stderr was piped");
+
+    let tx_out = status_sender.clone();
+    let stdout_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            let _ = tx_out.send(BuildStatus::Building(line));
+        }
+    });
+
+    let tx_err = status_sender.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            let _ = tx_err.send(BuildStatus::Building(line));
+        }
+    });
+
+    let status = child
+        .wait()
+        .await
+        .context("Failed to wait for gradle process")?;
+
+    let _ = tokio::join!(stdout_task, stderr_task);
+
+    if !status.success() {
+        let code = status.code().unwrap_or(-1);
+        let err_msg = format!("Gradle build failed with exit code {}", code);
+        let _ = status_sender.send(BuildStatus::Failed(err_msg.clone()));
+        return Err(anyhow::anyhow!(err_msg));
+    }
+
+    let output_dir = project_root.join("build/bin/nativeLib/releaseShared");
+    if !output_dir.exists() {
+        let err = format!("Build succeeded but output directory missing: {:?}", output_dir);
+        let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+        return Err(anyhow::anyhow!(err));
+    }
+
+    let mut found_lib = None;
+    if let Ok(entries) = std::fs::read_dir(&output_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext == lib_ext {
+                    found_lib = Some(path);
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Some(lib_path) = found_lib {
+        let _ = status_sender.send(BuildStatus::Completed);
+        Ok(lib_path)
+    } else {
+        let err = format!("No .{} file found in {:?}", lib_ext, output_dir);
+        let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+        Err(anyhow::anyhow!(err))
+    }
 }

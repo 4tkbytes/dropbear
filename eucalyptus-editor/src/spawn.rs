@@ -6,7 +6,7 @@ use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::Model;
-use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
@@ -218,9 +218,25 @@ async fn load_renderer_from_serialized(
             "Renderer for '{}' does not specify an asset reference",
             label
         ),
-        ResourceReferenceType::File(_) => {
-            let path = renderer.handle.resolve()?;
-            MeshRenderer::from_path(graphics.clone(), &path, Some(&label)).await?
+        ResourceReferenceType::File(reference) => {
+            if reference == "euca://internal/dropbear/models/cube" {
+                let mut loaded_model = Model::load_from_memory(
+                    graphics.clone(),
+                    include_bytes!("../../resources/models/cube.glb"),
+                    Some(&label),
+                )
+                .await?;
+
+                let model = loaded_model.make_mut();
+                model.path = ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+
+                loaded_model.refresh_registry();
+
+                MeshRenderer::from_handle(loaded_model)
+            } else {
+                let path = renderer.handle.resolve()?;
+                MeshRenderer::from_path(graphics.clone(), &path, Some(&label)).await?
+            }
         }
         ResourceReferenceType::Bytes(bytes) => {
             let model =
@@ -231,13 +247,19 @@ async fn load_renderer_from_serialized(
             anyhow::bail!("Procedural planes are not supported in pending spawns yet");
         }
         ResourceReferenceType::Cube => {
-            let model = Model::load_from_memory(
+            let mut loaded_model = Model::load_from_memory(
                 graphics.clone(),
                 include_bytes!("../../resources/models/cube.glb"),
                 Some(&label),
             )
             .await?;
-            MeshRenderer::from_handle(model)
+
+            let model = loaded_model.make_mut();
+            model.path = ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+
+            loaded_model.refresh_registry();
+
+            MeshRenderer::from_handle(loaded_model)
         }
     };
 
